@@ -18,11 +18,12 @@
 <div class="навигация-проб">
   <a href="#о01">01 · Эмоджи — отдельным сообщением</a>
   <a href="#о05">02 · Эмоджи — в текст</a>
-  <a href="#о02">03 · Галерея</a>
+  <a href="#о02">03 · Галерея — системная</a>
   <a href="#о03">04 · Скрепка</a>
   <a href="#о04">05 · Голос</a>
   <a href="#о06">06 · Карта</a>
   <a href="#о07">07 · Ссылка</a>
+  <a href="#о08">08 · Скрепка в группе</a>
 </div>
 
 <!-- ── Эмоджи, пусто ─────────────────────────────────────────────────────── -->
@@ -103,40 +104,34 @@
 
 <!-- ── Галерея ───────────────────────────────────────────────────────────── -->
 <div class="проба" id="о02">
-  <div class="шапка-пробы"><span class="номер">03</span><span class="опис">Галерея — выбрать несколько, каждое уйдёт отдельным сообщением</span></div>
+  <div class="шапка-пробы"><span class="номер">03</span><span class="опис">Галерея — системная галерея телефона (2026-10-17, В20)</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
-        <div class="строка-ввода">
-          <span class="кн-ред"><span class="полосы"><i></i><i></i><i></i></span></span>
-          <div class="пилюля"><div class="набор пусто">Сообщение…</div><span class="серая">🙂</span><span class="серая нажата">🖼</span><span class="серая">📎</span></div>
-          <span class="кн-отпр">🎙</span>
+        <div class="зона-1 подокно" style="background:#ffffff">
+          <span class="икона">✕</span>
+          <div class="тянуть"><div class="имя обрез" style="font-size:14px">Выберите фото</div><div class="трет">окно системы, не TIMA</div></div>
+          <span class="кн" style="min-height:32px;padding:0 14px">Добавить (2)</span>
         </div>
-        <div class="область">
-          <div class="область-шапка"><span class="вкладка-обл тек">Недавние</span><span class="вкладка-обл">Вся галерея ›</span></div>
-          <a class="закрыть" href="окно-ввода.html#п01">✕</a>
-          <div class="область-тело">
-            <div class="сетка-фото">
-              <div class="плитка камера"><span style="font-size:20px">📷</span>Камера</div>
-              <div class="плитка" style="background:linear-gradient(135deg,#b8d99a,#5f8f3a)"><span class="выбор да">1</span></div>
-              <div class="плитка" style="background:linear-gradient(135deg,#ffe29a,#e08a2c)"><span class="выбор"></span></div>
-              <div class="плитка" style="background:linear-gradient(135deg,#a9c7f0,#3c6db3)"><span class="выбор да">2</span></div>
-              <div class="плитка" style="background:linear-gradient(135deg,#e6c3e6,#8a4f9e)"><span class="выбор"></span></div>
-              <div class="плитка" style="background:linear-gradient(135deg,#d6d6d6,#6e6e6e)"><span class="выбор"></span></div>
-            </div>
+        <div style="padding:8px">
+          <div class="сетка-фото">
+            <div class="плитка" style="background:linear-gradient(135deg,#b8d99a,#5f8f3a)"><span class="выбор да">1</span></div>
+            <div class="плитка" style="background:linear-gradient(135deg,#ffe29a,#e08a2c)"><span class="выбор"></span></div>
+            <div class="плитка" style="background:linear-gradient(135deg,#a9c7f0,#3c6db3)"><span class="выбор да">2</span></div>
+            <div class="плитка" style="background:linear-gradient(135deg,#e6c3e6,#8a4f9e)"><span class="выбор"></span></div>
+            <div class="плитка" style="background:linear-gradient(135deg,#d6d6d6,#6e6e6e)"><span class="выбор"></span></div>
+            <div class="плитка" style="background:linear-gradient(135deg,#f6d0c4,#c0573a)"><span class="выбор"></span></div>
           </div>
-          <div class="область-низ"><span class="трет" style="flex:1">2 фото · уйдут двумя сообщениями</span><span class="кн" style="min-height:32px;padding:0 14px">Отправить 2</span></div>
         </div>
       </div>
-      <div class="трет">выбрано два</div>
+      <div class="трет">выбор фото Android (Photo Picker) — вид рисует система</div>
     </div>
     <div class="разбор-пробы">
       <ul>
-        <li><b>Первая плитка — камера</b>: снять и сразу отправить.</li>
-        <li><b>Нажатие отмечает</b> номером в кружке — порядок отправки. Отдельной кнопки «выбрать» нет: выбор и есть первое нажатие.</li>
-        <li><b>«Отправить N»</b> появляется внизу, когда отмечено хоть одно; <b>каждое фото — отдельным сообщением</b> вне пузыря. Ужатие по ПФ (большая сторона 1280), превью делает принявший клиент.</li>
-        <li><b>«Вся галерея ›»</b> — системный выбор фото, если нужного нет среди последних.</li>
-        <li>Подпись к фото здесь не пишется: текст — отдельным сообщением, картинка внутрь текста — через редактор.</li>
+        <li><b>Серая Галерея в пузыре открывает системную галерею</b> — ту же, что «Картинка» в скрепке. Своей сетки фото на месте клавиатуры нет: для неё нужен доступ ко всем фото телефона, а Google Play его ограничивает.</li>
+        <li><b>Разрешение не спрашивается</b>: TIMA получает только отмеченные фото. Вид окна — системный, здесь он нарисован условно.</li>
+        <li><b>Порядок отметок — порядок отправки</b>; в личной переписке каждое фото уходит отдельным сообщением вне пузыря, ужатое по ПФ (1280), превью делает принявший клиент.</li>
+        <li><b>В группе и канале</b> выбранное фото ложится <b>внутрь</b> сообщения картинкой одного размера (§3.2) — вне пузыря там ничего нет (<a href="#о08">08</a>).</li>
       </ul>
     </div>
   </div>
@@ -186,6 +181,47 @@
       Свой список «последних файлов» не рисуется: на Android с версии 11 приложение без особого
       разрешения не видит чужие файлы. Последние показывает системное окно выбора. Запреты
       (исполняемые, <code>.html</code>, <code>.svg</code>, больше 10 МБ) проверяются <b>после</b> выбора — отказ с причиной.
+    </div>
+  </div>
+</div>
+
+<!-- ── Голос ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="о04">
+  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">Голос — запись в области, не удержанием кнопки</span> <span class="вопрос-метка">как понято</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="строка-ввода">
+          <span class="кн-ред"><span class="полосы"><i></i><i></i><i></i></span></span>
+          <div class="пилюля"><div class="набор пусто">Сообщение…</div><span class="серая">🙂</span><span class="серая">🖼</span><span class="серая">📎</span></div>
+          <span class="кн-отпр" style="outline:3px solid var(--акцент-мягкий)">🎙</span>
+        </div>
+        <div class="область" style="align-items:center;justify-content:center;gap:12px">
+          <a class="закрыть" href="окно-ввода.html#п01">✕</a>
+          <div style="font-size:22px;font-weight:800;letter-spacing:-0.02em">0:07</div>
+          <div style="display:flex;gap:3px;align-items:center;height:30px">
+            <i style="width:3px;height:10px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:22px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:14px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:28px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:18px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:8px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:20px;background:var(--чёрный-12);border-radius:2px"></i><i style="width:3px;height:12px;background:var(--чёрный-12);border-radius:2px"></i>
+          </div>
+          <div style="display:flex;gap:28px;align-items:center">
+            <span class="икона" title="Удалить">🗑</span>
+            <span style="width:64px;height:64px;border-radius:50%;background:#c62828;display:flex;align-items:center;justify-content:center"><i style="width:20px;height:20px;border-radius:4px;background:#fff"></i></span>
+            <span class="икона жив" title="Отправить">➤</span>
+          </div>
+          <div class="трет">идёт запись · стоп — послушать перед отправкой</div>
+        </div>
+      </div>
+      <div class="трет">запись голосового</div>
+    </div>
+    <div class="разбор-пробы">
+      «Все четыре кнопки убирают клавиатуру и открывают область» — четвёртой понята кнопка
+      голосового. Поэтому запись — <b>в области</b>, а не удержанием кнопки:
+      <ul>
+        <li>нажали микрофон — запись пошла сразу, время и волна;</li>
+        <li><b>стоп</b> — послушать перед отправкой, <b>корзина</b> — удалить, <b>зелёная</b> — отправить;</li>
+        <li>крестик или нажатие вне области — запись удаляется (с вопросом, если длиннее 3 с).</li>
+      </ul>
+      Удержание без отрыва пальца удобно для коротких фраз, но длинную запись держать трудно и легко
+      сорвать. Если четвёртая кнопка имелась в виду другая — поправлю.
     </div>
   </div>
 </div>
@@ -273,43 +309,41 @@
   </div>
 </div>
 
-<!-- ── Голос ─────────────────────────────────────────────────────────────── -->
-<div class="проба" id="о04">
-  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">Голос — запись в области, не удержанием кнопки</span> <span class="вопрос-метка">как понято</span></div>
+<!-- ── Скрепка в группе ───────────────────────────────────────────────────── -->
+<div class="проба" id="о08">
+  <div class="шапка-пробы"><span class="номер">08</span><span class="опис">Группа и канал — кнопки те же, файл указывается ссылкой (2026-10-17, В18)</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
         <div class="строка-ввода">
           <span class="кн-ред"><span class="полосы"><i></i><i></i><i></i></span></span>
-          <div class="пилюля"><div class="набор пусто">Сообщение…</div><span class="серая">🙂</span><span class="серая">🖼</span><span class="серая">📎</span></div>
-          <span class="кн-отпр" style="outline:3px solid var(--акцент-мягкий)">🎙</span>
+          <div class="пилюля"><div class="набор пусто">Сообщение в группу…</div><span class="серая">🙂</span><span class="серая">🖼</span><span class="серая нажата">📎</span></div>
+          <span class="кн-отпр">🎙</span>
         </div>
-        <div class="область" style="align-items:center;justify-content:center;gap:12px">
-          <a class="закрыть" href="окно-ввода.html#п01">✕</a>
-          <div style="font-size:22px;font-weight:800;letter-spacing:-0.02em">0:07</div>
-          <div style="display:flex;gap:3px;align-items:center;height:30px">
-            <i style="width:3px;height:10px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:22px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:14px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:28px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:18px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:8px;background:var(--навигация);border-radius:2px"></i><i style="width:3px;height:20px;background:var(--чёрный-12);border-radius:2px"></i><i style="width:3px;height:12px;background:var(--чёрный-12);border-radius:2px"></i>
+        <div class="область" style="height:auto">
+          <div class="область-шапка"><span class="вкладка-обл тек">Видео — ссылкой</span></div>
+          <a class="закрыть" href="#о03">✕</a>
+          <div class="свойства" style="gap:10px">
+            <div class="по-умолч" style="font-size:11.5px;color:var(--чёрный-70)">В группе файлы не хранятся на сервере TIMA. Укажите, где лежит видео: облако или другое место в сети.</div>
+            <div class="ввод" style="min-height:36px;color:var(--текст)">https://disk.yandex.ru/i/отпуск-2026</div>
+            <div><span class="ссылка-кн">🎬 <span class="домен">disk.yandex.ru</span><span class="путь-ссылки">/i/отпуск-20…</span></span></div>
+            <div style="display:flex;justify-content:flex-end"><span class="кн" style="min-height:32px;padding:0 14px">Вставить</span></div>
           </div>
-          <div style="display:flex;gap:28px;align-items:center">
-            <span class="икона" title="Удалить">🗑</span>
-            <span style="width:64px;height:64px;border-radius:50%;background:#c62828;display:flex;align-items:center;justify-content:center"><i style="width:20px;height:20px;border-radius:4px;background:#fff"></i></span>
-            <span class="икона жив" title="Отправить">➤</span>
-          </div>
-          <div class="трет">идёт запись · стоп — послушать перед отправкой</div>
         </div>
       </div>
-      <div class="трет">запись голосового</div>
+      <div class="трет">нажато «Видео» в скрепке группы</div>
     </div>
     <div class="разбор-пробы">
-      «Все четыре кнопки убирают клавиатуру и открывают область» — четвёртой понята кнопка
-      голосового. Поэтому запись — <b>в области</b>, а не удержанием кнопки:
+      <b>Кнопки в группе и канале есть, вставка ограничена</b> (заказчик 2026-10-17): всё, что в личной
+      переписке ушло бы файлом, здесь вставляется <b>ссылкой</b>.
       <ul>
-        <li>нажали микрофон — запись пошла сразу, время и волна;</li>
-        <li><b>стоп</b> — послушать перед отправкой, <b>корзина</b> — удалить, <b>зелёная</b> — отправить;</li>
-        <li>крестик или нажатие вне области — запись удаляется (с вопросом, если длиннее 3 с).</li>
+        <li><b>Файл, Документ, Аудио, Видео</b> — просят указать файл вне телефона: в облаке или другом месте сети. Получается кнопка-ссылка со значком вида (видео, аудио, документ).</li>
+        <li><b>Карта</b> — ссылкой на точку в картах.</li>
+        <li><b>Ссылка</b> — как везде.</li>
+        <li><b>Картинка и Камера</b> — картинкой <b>внутрь</b> сообщения, одного размера (§3.2), живёт по правилам сообщения.</li>
       </ul>
-      Удержание без отрыва пальца удобно для коротких фраз, но длинную запись держать трудно и легко
-      сорвать. Если четвёртая кнопка имелась в виду другая — поправлю.
+      Не сказано и нарисовано как вопрос: <b>Контакты</b> (карточка — не файл; разрешить как в личной?) и
+      <b>голосовое</b> (звук вне пузыря в группе запрещён; запись — тоже только ссылкой?).
     </div>
   </div>
 </div>
