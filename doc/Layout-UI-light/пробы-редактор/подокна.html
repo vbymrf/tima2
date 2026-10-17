@@ -6,7 +6,7 @@
 <div class="лист-док">
 
 <div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-редактор / подокна.html</div>
-<h1>Пробы: Эмоджи, Галерея, Файл, Голос</h1>
+<h1>Пробы: Эмоджи, Галерея, Скрепка, Голос</h1>
 <p class="подзаголовок">
   Кнопка убирает клавиатуру и открывает на её месте свою область той же высоты — переписка
   над ней не прыгает. <b>Закрыть</b> — крестик в правом верхнем углу или нажатие вне области
@@ -19,8 +19,10 @@
   <a href="#о01">01 · Эмоджи — отдельным сообщением</a>
   <a href="#о05">02 · Эмоджи — в текст</a>
   <a href="#о02">03 · Галерея</a>
-  <a href="#о03">04 · Файл</a>
+  <a href="#о03">04 · Скрепка</a>
   <a href="#о04">05 · Голос</a>
+  <a href="#о06">06 · Карта</a>
+  <a href="#о07">07 · Ссылка</a>
 </div>
 
 <!-- ── Эмоджи, пусто ─────────────────────────────────────────────────────── -->
@@ -140,9 +142,9 @@
   </div>
 </div>
 
-<!-- ── Файл ──────────────────────────────────────────────────────────────── -->
+<!-- ── Скрепка ───────────────────────────────────────────────────────────── -->
 <div class="проба" id="о03">
-  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">Файл — последние, запреты видны сразу</span></div>
+  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">Скрепка — девять пунктов, каждый открывает своё</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
@@ -152,25 +154,120 @@
           <span class="кн-отпр">🎙</span>
         </div>
         <div class="область">
-          <div class="область-шапка"><span class="вкладка-обл тек">Последние</span><span class="вкладка-обл">Файлы телефона ›</span></div>
+          <div class="область-шапка"><span class="вкладка-обл тек">Прикрепить</span></div>
           <a class="закрыть" href="окно-ввода.html#п01">✕</a>
           <div class="область-тело">
-            <div class="файл"><span class="знак-файла">PDF</span><div class="тянуть"><div class="имя обрез">смета-июль.pdf</div><div class="трет">2,4 МБ · вчера</div></div><span class="отметка да"></span></div>
-            <div class="файл"><span class="знак-файла">DOC</span><div class="тянуть"><div class="имя обрез">договор-аренды.docx</div><div class="трет">310 КБ · 12 окт.</div></div><span class="отметка"></span></div>
-            <div class="файл нельзя"><span class="знак-файла">APK</span><div class="тянуть"><div class="имя обрез">setup.apk</div><div class="трет">нельзя: исполняемый файл</div></div></div>
-            <div class="файл нельзя"><span class="знак-файла">MP4</span><div class="тянуть"><div class="имя обрез">отпуск.mp4</div><div class="трет">нельзя: больше 10 МБ</div></div></div>
+            <div class="сетка-скрепки">
+              <a class="ярлык" href="#о03"><span class="круг-ярлыка" style="--я:#5b73c9">📄</span><span>Файл</span></a>
+              <a class="ярлык" href="#о03"><span class="круг-ярлыка" style="--я:#3d8bd9">📑</span><span>Документ</span></a>
+              <a class="ярлык" href="#о03"><span class="круг-ярлыка" style="--я:#8ac44a">🖼</span><span>Картинка</span></a>
+              <a class="ярлык" href="#о03"><span class="круг-ярлыка" style="--я:#3b3b3b">📷</span><span>Камера</span></a>
+              <a class="ярлык" href="#о03"><span class="круг-ярлыка" style="--я:#e08a2c">🎵</span><span>Аудио</span></a>
+              <a class="ярлык" href="#о03"><span class="круг-ярлыка" style="--я:#c62828">🎬</span><span>Видео</span></a>
+              <a class="ярлык" href="#о03"><span class="круг-ярлыка" style="--я:#3bb300">👤</span><span>Контакты</span></a>
+              <a class="ярлык" href="#о06"><span class="круг-ярлыка" style="--я:#febb02">📍</span><span>Карта</span></a>
+              <a class="ярлык" href="#о07"><span class="круг-ярлыка" style="--я:#616161">🔗</span><span>Ссылка</span></a>
+            </div>
           </div>
-          <div class="область-низ"><span class="трет" style="flex:1">до 10 МБ · хранится, пока не заберут</span><span class="кн" style="min-height:32px;padding:0 14px">Отправить 1</span></div>
         </div>
       </div>
-      <div class="трет">выбран один</div>
+      <div class="трет">скрепка нажата · каждое уходит отдельным сообщением, до 10 МБ</div>
+    </div>
+    <div class="разбор-пробы">
+      <b>Ярлычок и название — отдельный нажимаемый элемент</b>: круг с значком (круг — «нажми», язык формы
+      макета) и подпись под ним. Девять пунктов — сетка 3 × 3, без прокрутки, все под большим пальцем.
+      <ul>
+        <li><b>Файл</b> — любой файл; <b>Документ</b> — то же окно выбора, но только документы (PDF, Word, Excel, текст).</li>
+        <li><b>Картинка</b> — системная галерея; <b>Камера</b> — системная камера: снял — фото вернулось в TIMA.</li>
+        <li><b>Аудио</b>, <b>Видео</b> — системный выбор только аудио или только видео.</li>
+        <li><b>Контакты</b> — системная книга контактов, один человек — карточка с именем и номером.</li>
+        <li><b>Карта</b> и <b>Ссылка</b> — свои маленькие шаги прямо здесь (<a href="#о06">06</a>, <a href="#о07">07</a>).</li>
+      </ul>
+      Свой список «последних файлов» не рисуется: на Android с версии 11 приложение без особого
+      разрешения не видит чужие файлы. Последние показывает системное окно выбора. Запреты
+      (исполняемые, <code>.html</code>, <code>.svg</code>, больше 10 МБ) проверяются <b>после</b> выбора — отказ с причиной.
+    </div>
+  </div>
+</div>
+
+<!-- ── Карта ─────────────────────────────────────────────────────────────── -->
+<div class="проба" id="о06">
+  <div class="шапка-пробы"><span class="номер">06</span><span class="опис">Карта — координаты, открываются в Яндекс или Google Картах</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="область" style="height:auto">
+          <div class="область-шапка"><span class="вкладка-обл тек">Местонахождение</span></div>
+          <a class="закрыть" href="#о03">✕</a>
+          <div class="свойства" style="gap:10px">
+            <div class="файл" style="border:none;padding:0">
+              <span class="круг-ярлыка" style="--я:#febb02;width:40px;height:40px;flex:0 0 40px;font-size:18px">📍</span>
+              <div class="тянуть"><div class="имя">Моё местоположение</div><div class="трет">55,75580, 37,61730 · точность ±12 м</div></div>
+              <span class="кн" style="min-height:32px;padding:0 14px">Отправить</span>
+            </div>
+            <div class="свойство"><span class="ярл">Открывать в</span><div class="образцы"><span class="выбор-чип тек">Яндекс Карты</span><span class="выбор-чип">Google Карты</span></div></div>
+            <div class="файл" style="border:none;padding:0">
+              <span class="круг-ярлыка" style="--я:#616161;width:40px;height:40px;flex:0 0 40px;font-size:16px">🗺</span>
+              <div class="тянуть"><div class="имя">Выбрать точку в картах ›</div><div class="трет">откроются карты; «Поделиться» → TIMA вернёт точку сюда</div></div>
+            </div>
+            <div class="по-умолч">Карты выбираются один раз и запоминаются; у получателя — свой выбор.</div>
+          </div>
+        </div>
+      </div>
+      <div class="трет">после нажатия «Карта»</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-2"><div class="поток">
+          <div class="реплика"><div class="вне" style="align-items:flex-start">
+            <div class="файл-вне" style="flex-direction:column;align-items:stretch;gap:8px;width:240px">
+              <div style="display:flex;gap:10px;align-items:center"><span class="круг-ярлыка" style="--я:#febb02;width:34px;height:34px;flex:0 0 34px;font-size:15px">📍</span><div class="тянуть"><div class="имя" style="font-size:12.5px">Местонахождение</div><div class="трет">55,75580, 37,61730</div></div></div>
+              <div style="display:flex;gap:6px"><span class="кн тихая" style="min-height:30px;padding:0 10px;font-size:11.5px">Яндекс Карты</span><span class="кн тихая" style="min-height:30px;padding:0 10px;font-size:11.5px">Google Карты</span></div>
+            </div>
+            <span class="время">12:50</span></div></div>
+          <div class="реплика"><div class="вне" style="align-items:flex-start">
+            <div class="файл-вне"><span class="круг-ярлыка" style="--я:#3bb300;width:34px;height:34px;flex:0 0 34px;font-size:15px">👤</span><div class="тянуть"><div class="имя обрез" style="font-size:12.5px">Сергей Петров</div><div class="трет">+7 916 123-45-67</div></div><span class="кн" style="min-height:28px;padding:0 10px;font-size:11px">Написать</span></div>
+            <span class="время">12:51</span></div></div>
+        </div></div>
+      </div>
+      <div class="трет">у получателя: карта и контакт</div>
     </div>
     <div class="разбор-пробы">
       <ul>
-        <li><b>Последние файлы</b> телефона, отметка справа; <b>«Файлы телефона ›»</b> — системный выбор.</li>
-        <li><b>Запреты видны до выбора</b>, серым и с причиной: исполняемые, <code>.html</code>, <code>.svg</code> (§3.3, §6.1) и больше предела сервера (сейчас 10 МБ). Предел приходит с сервера.</li>
-        <li>Подпись внизу говорит главное правило почтальона: файл лежит на сервере, пока его не заберут (час, неделя — §6.1).</li>
-        <li>Каждый файл — отдельным сообщением вне пузыря.</li>
+        <li><b>Моё местоположение</b> — координаты с телефона и точность; «Отправить» — карточка отдельным сообщением.</li>
+        <li><b>Карты не рисуем.</b> В карточке только координаты и две кнопки — нажатие открывает выбранные карты на этой точке. Картинка карты потребовала бы ключ сервиса карт и запрос к нему, а получатель всё равно откроет карты.</li>
+        <li><b>Открывать в</b> — Яндекс или Google, выбор запоминается. Нет приложения карт — откроется сайт карт в браузере.</li>
+        <li><b>Выбрать точку в картах</b> — карты открываются, человек ставит точку и нажимает в картах «Поделиться» → TIMA; приложение достаёт координаты из ссылки.</li>
+        <li><b>Контакт</b> у получателя — имя и номер; номер есть в TIMA — «Написать», нет — «Пригласить».</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ссылка ────────────────────────────────────────────────────────────── -->
+<div class="проба" id="о07">
+  <div class="шапка-пробы"><span class="номер">07</span><span class="опис">Ссылка — адрес и три вида из §3.1</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="область" style="height:auto">
+          <div class="область-шапка"><span class="вкладка-обл тек">Ссылка</span></div>
+          <a class="закрыть" href="#о03">✕</a>
+          <div class="свойства" style="gap:10px">
+            <div class="ввод" style="min-height:36px;color:var(--текст)">https://yandex.ru/maps/213/moscow/</div>
+            <div class="свойство"><span class="ярл">Вид</span><div class="образцы"><span class="выбор-чип">без оформления</span><span class="выбор-чип тек">кнопка</span><span class="выбор-чип">карточка</span></div></div>
+            <div><span class="ссылка-кн">🔗 <span class="домен">yandex.ru</span><span class="путь-ссылки">/maps/213/mosc…</span></span></div>
+            <div style="display:flex;justify-content:flex-end"><span class="кн" style="min-height:32px;padding:0 14px">Отправить</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="трет">ссылка из буфера подставлена сама</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>Адрес подставляется сам</b>, если в буфере ссылка; иначе поле с клавиатурой.</li>
+        <li><b>Три вида</b> (§3.1): без оформления; кнопка — наша картинка, домен крупно, путь обрезан, сети нет; карточка — название, описание и картинка со страницы, запрос делает отправитель.</li>
+        <li>Ниже — как увидит собеседник. Уходит отдельным сообщением; внутрь текста ссылку вставляет редактор.</li>
       </ul>
     </div>
   </div>
