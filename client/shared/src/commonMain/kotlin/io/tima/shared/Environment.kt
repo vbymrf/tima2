@@ -569,6 +569,10 @@ class Network(
     override val history: io.tima.core.network.HistoryApi =
         io.tima.core.network.HistoryApi(link.route, link.client, token = { token() })
 
+    /** Удаление у всех (Решения §8). */
+    override val removal: io.tima.domain.chat.RemoteDelete =
+        io.tima.core.network.MessageRemovalOverHttp(link.route, link.client, token = { token() })
+
     /**
      * То же самое под именем порта групп.
      *
@@ -789,6 +793,13 @@ class Environment private constructor(
         codec = TextBodyCodec,
         keys = UuidDedupKeys,
     )
+
+    /** Удаление в базе устройства: у себя и пометка «удалено у всех» (Решения §8). */
+    val removal: io.tima.core.database.SqlMessageRemoval = io.tima.core.database.SqlMessageRemoval(db)
+
+    /** Подборка сообщений на устройстве (Решения §11.2). */
+    val picks: io.tima.domain.chat.MessagePicks =
+        io.tima.domain.chat.MessagePicks(io.tima.core.database.SqlPicks(db), nowMs = { msNow() })
 
     /**
      * Правка своего сообщения (ADR-0045): та же очередь, те же ключи, исходное — из ленты.

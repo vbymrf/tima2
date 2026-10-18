@@ -154,6 +154,10 @@ fun ChatScreen(
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
     /** Человек подтвердил сужение, о последствиях которого его предупредили. */
     onNarrowConfirm: () -> Unit = {},
+    /** Подтвердил «Удалить у всех» (Решения §8). */
+    onDeleteConfirm: () -> Unit = {},
+    /** Отменил правку — полоса «Изменение» уходит (ADR-0045). `null` — полосы нет. */
+    onEditCancel: (() -> Unit)? = null,
     /**
      * Унести чужую запись к себе на страницу: `(messageId, круг записи)`.
      *
@@ -191,6 +195,8 @@ fun ChatScreen(
      * повторяет сама (заказчик 2026-09-19).
      */
     onFailed: ((ChatLine) -> Unit)? = null,
+    /** Нажатие на отправленное — меню сообщения (Решения §11.1). `null` — меню нет. */
+    onMenu: ((ChatLine) -> Unit)? = null,
     /** Как называть авторов в группе — «Вид» набора сообществ. */
     authorLook: PersonLook = PersonLook.DEFAULT,
     /** Владелец группы — его полоса салатовая, темы. `null` — неизвестен: все по порядку. */
@@ -300,6 +306,7 @@ fun ChatScreen(
             lostKeys = state.lostKeys,
             onThread = onThread,
             onFailed = onFailed,
+            onMenu = onMenu,
             invite = invite,
             onInvite = onInvite,
         )
@@ -331,8 +338,17 @@ fun ChatScreen(
                 onClose = onCloseMessage,
                 // Подтверждение появляется только у предупреждения: у остальных заметок
                 // подтверждать нечего, и кнопка там означала бы действие без действия.
-                onConfirm = if (it is ChatNotice.NarrowWarning) onNarrowConfirm else null,
+                onConfirm = when (it) {
+                    is ChatNotice.NarrowWarning -> onNarrowConfirm
+                    is ChatNotice.DeleteAsk -> onDeleteConfirm
+                    else -> null
+                },
             )
+        }
+
+        // Полоса правки над строкой ввода (ADR-0045): видно, что отправка исправит, а не напишет.
+        if (state.editing > 0 && onEditCancel != null) {
+            EditBar(onCancel = onEditCancel)
         }
 
         InputZone(
@@ -379,6 +395,8 @@ private fun Feed(
     lostKeys: Set<Long> = emptySet(),
     onThread: ((Long) -> Unit)? = null,
     onFailed: ((ChatLine) -> Unit)? = null,
+    /** Нажатие на отправленное — меню сообщения (Решения §11.1). `null` — меню нет. */
+    onMenu: ((ChatLine) -> Unit)? = null,
     invite: (ChatLine) -> CallInvite? = { null },
     onInvite: (ChatLine) -> Unit = {},
 ) =
@@ -461,6 +479,7 @@ private fun Feed(
                 avatarLook = avatarLook,
                 onAuthor = onAuthor,
                 onFailed = onFailed,
+                onMenu = onMenu,
             )
         }
     }
@@ -518,6 +537,8 @@ private fun Reply(
     lostKeys: Set<Long> = emptySet(),
     onThread: ((Long) -> Unit)? = null,
     onFailed: ((ChatLine) -> Unit)? = null,
+    /** Нажатие на отправленное — меню сообщения (Решения §11.1). `null` — меню нет. */
+    onMenu: ((ChatLine) -> Unit)? = null,
 ) {
     // Служебная строка — не реплика: у неё нет автора, стороны и времени отправки. Пузырь
     // приписал бы ей всё это разом, поэтому она идёт полосой по центру.
@@ -545,8 +566,12 @@ private fun Reply(
         line.outgoing && onFailed != null
     // Над репликой с аватаром — прежний зазор 12: аватар выступает в него вверх (2026-10-07).
     val withAvatar = !line.outgoing && !continuation && author != null
+    // Отправленное — меню (Решения §11.1): своё и чужое, кроме удалённого и нечитаемого — с ними
+    // делать нечего. Номер обязателен: все пункты меню ссылаются на сообщение по нему.
+    val menu = !failed && onMenu != null && line.serverId > 0 && !line.deleted &&
+        line.display != MessageDisplay.UNREADABLE && line.text != null
     Column(
-        (if (failed) Modifier.clickable { onFailed!!(line) } else Modifier)
+        (if (failed) Modifier.clickable { onFailed!!(line) } else if (menu) Modifier.clickable { onMenu!!(line) } else Modifier)
             .then(if (withAvatar) Modifier.padding(top = TimaSpacing.about3 / 2) else Modifier),
     ) {
         Bubbled(
@@ -609,6 +634,8 @@ private fun Bubbled(
     look = look,
     onAvatar = onAvatar,
     bottom = {
+        // Исправленное (ADR-0045): пометка у времени — у всех, кто видит сообщение.
+        if (line.edits > 0) Tertiary(Tima.words.chat.edited, lineOne = true)
         Tertiary(time(line.atMs), lineOne = true)
         markOf(line.display, line.atMs, LocalChatReceipt.current)?.let { Mark(it) }
         // Метка круга — рядом со временем, а не поверх текста: цвет несёт метка, а не
@@ -619,6 +646,8 @@ private fun Bubbled(
     val text = line.text
     val rich = line.rich
     when {
+        // Удалено у всех (Решения §8): строка осталась, содержимого нет.
+        line.deleted -> Chip(Tima.words.chat.deleted, kind = ChipKind.Quiet)
         // Оформленное (ПЛАН-(РС) РС4) — блоками; обычное — текстом, как было.
         text != null && rich != null -> RichBody(rich)
         text != null -> Caption(text, fontSize = TimaType.sz4)
@@ -803,6 +832,32 @@ private fun InputZone(
     }
 }
 
+/** Подтверждение «Удалить у всех» и сужения в полосе сообщения — метки для сценариев. */
+const val DELETE_CONFIRM_TAG = "msg:delete.confirm"
+const val NARROW_CONFIRM_TAG = "chat:narrow.confirm"
+
+/** Метка полосы правки и её «✕». */
+const val EDIT_BAR_TAG = "chat:editing"
+const val EDIT_CANCEL_TAG = "chat:editing.cancel"
+
+/** Полоса «Изменение» над строкой ввода: идёт правка, ✕ — отменить (ADR-0045). */
+@Composable
+private fun EditBar(onCancel: () -> Unit) {
+    val colors = Tima.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.softAccent)
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+            .testTag(EDIT_BAR_TAG),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Caption(Tima.words.chat.editing, fontSize = TimaType.sz5, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(EDIT_CANCEL_TAG))
+    }
+}
+
 /**
  * Сообщение о беде: единственное на весь экран, и это не случайно.
  *
@@ -859,6 +914,8 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> 
 
             is ChatNotice.Narrowed -> words.narrowed(trouble.circle)
             is ChatNotice.NarrowRefused -> trouble.text
+            is ChatNotice.Said -> trouble.text
+            is ChatNotice.DeleteAsk -> words.deleteForAllAsk
         }
         Caption(
             text,
@@ -866,7 +923,14 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> 
             weight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
         )
-        onConfirm?.let { Chip(words.narrow, kind = ChipKind.Selected, onClick = it) }
+        onConfirm?.let {
+            Chip(
+                if (trouble is ChatNotice.DeleteAsk) words.menuDeleteForAll else words.narrow,
+                kind = ChipKind.Selected,
+                onClick = it,
+                modifier = Modifier.testTag(if (trouble is ChatNotice.DeleteAsk) DELETE_CONFIRM_TAG else NARROW_CONFIRM_TAG),
+            )
+        }
         ButtonCircle(onClick = onClose) { Arrow(Side.Right, color = colors.text2) }
     }
 }

@@ -6,6 +6,12 @@ import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
 import io.tima.core.words.ChatWords
 import io.tima.domain.chat.ChatLine
+import io.tima.domain.chat.DeleteMessage
+import io.tima.domain.chat.DeleteResult
+import io.tima.domain.chat.EditMessage
+import io.tima.domain.chat.EditResult
+import io.tima.domain.chat.MessagePicks
+import io.tima.domain.chat.PickResult
 import io.tima.domain.chat.HealGroupKey
 import io.tima.domain.chat.HealStep
 import io.tima.domain.chat.MessageCircle
@@ -145,6 +151,14 @@ class ChatStore(
      * помнит вызывающий; и в личной, и в группе (заказчик 2026-10-06). `null` — сами не просим.
      */
     private val autoAskAllowed: (suspend () -> Boolean)? = null,
+    /** Правка своего (ADR-0045). `null` — «Изменить» нечем: так собирают экран в проверках. */
+    private val edit: EditMessage? = null,
+    /** Удаление своего: у себя и у всех (Решения §8). `null` — нечем. */
+    private val deleter: DeleteMessage? = null,
+    /** Подборка сообщений (Решения §11.2). `null` — нечем. */
+    private val picks: MessagePicks? = null,
+    /** Чья подборка у этой переписки — `MessagePicks.levelOf`. */
+    private val pickLevel: String = MessagePicks.SELF,
 ) {
 
     /** Сами уже просили в этой переписке — один запрос, не на каждое обновление списка. */
@@ -414,7 +428,110 @@ class ChatStore(
         _state.value = _state.value.copy(pendingNarrow = null, notice = null)
     }
 
+    // ── Меню сообщения (Решения §11.1) ─────────────────────────────────────────
+
+    /**
+     * «Изменить»: в строку ввода — набранный текст со знаками (с прежними правками), над ней —
+     * полоса «Изменение». Отправка уйдёт правкой. Нечем выразить знаками (таблица, ряд) —
+     * сказать, что такое правит редактор.
+     */
+    fun editStarted(line: ChatLine) {
+        val port = edit ?: return
+        if (line.edits >= EditMessage.MAX_EDITS) {
+            _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.editLimit))
+            return
+        }
+        scope.launch {
+            val source = withContext(io) { port.source(chatId, line.serverId) }
+            _state.value = if (source == null) {
+                _state.value.copy(notice = ChatNotice.Said(words().chat.editInEditor))
+            } else {
+                _state.value.copy(draft = source, editing = line.serverId, notice = null)
+            }
+        }
+    }
+
+    /** Правку отменили: строка ввода пустеет, полоса уходит. */
+    fun editCancelled() {
+        _state.value = _state.value.copy(draft = "", editing = 0)
+    }
+
+    private fun editPressed(serverId: Long): SendMessageResult {
+        val port = edit ?: return SendMessageResult.Empty
+        val outcome = port.edit(chatId, serverId, _state.value.draft)
+        val w = words().chat
+        _state.value = when (outcome) {
+            is EditResult.Queued, is EditResult.AlreadyQueued, EditResult.Same ->
+                _state.value.copy(draft = "", editing = 0, notice = null)
+            EditResult.Empty -> _state.value.copy(notice = null)
+            EditResult.Structure -> _state.value.copy(notice = ChatNotice.Said(w.editStructure))
+            EditResult.Limit -> _state.value.copy(notice = ChatNotice.Said(w.editLimit), editing = 0)
+            is EditResult.TooLarge -> _state.value.copy(notice = ChatNotice.TooLarge(outcome.bytes, outcome.limit))
+            EditResult.NotSent, EditResult.Missing, EditResult.NotMine ->
+                _state.value.copy(notice = ChatNotice.Said(w.editInEditor), editing = 0)
+        }
+        return when (outcome) {
+            is EditResult.Queued -> SendMessageResult.Queued(outcome.dedupKey)
+            is EditResult.AlreadyQueued -> SendMessageResult.AlreadyQueued(outcome.dedupKey)
+            else -> SendMessageResult.Empty
+        }
+    }
+
+    /** «Удалить у себя» — только на устройстве, без вопросов: у остальных всё остаётся. */
+    fun deleteForMe(line: ChatLine) {
+        val port = deleter ?: return
+        if (_state.value.editing == line.serverId) editCancelled()
+        scope.launch { withContext(io) { port.forMe(chatId, line.dedupKey, line.serverId) } }
+    }
+
+    /** «Удалить у всех» — сначала вопрос: вернуть нельзя. */
+    fun deleteForAllAsked(line: ChatLine) {
+        if (deleter == null || line.serverId <= 0) return
+        _state.value = _state.value.copy(notice = ChatNotice.DeleteAsk(line.serverId))
+    }
+
+    fun deleteForAllConfirmed() {
+        val ask = _state.value.notice as? ChatNotice.DeleteAsk ?: return
+        val port = deleter ?: return
+        _state.value = _state.value.copy(notice = null)
+        if (_state.value.editing == ask.serverId) editCancelled()
+        scope.launch {
+            val result = withContext(io) { port.forAll(chatId, ask.serverId, _state.value.group) }
+            val w = words().chat
+            val said = when (result) {
+                DeleteResult.Deleted -> null
+                DeleteResult.NotSent -> w.deleteRefused("not_sent")
+                DeleteResult.Offline -> w.deleteOffline
+                is DeleteResult.Refused -> w.deleteRefused(result.code)
+            }
+            if (said != null) _state.value = _state.value.copy(notice = ChatNotice.Said(said))
+        }
+    }
+
+    /** «Добавить в Подборку» — ссылка на сообщение на этом устройстве. */
+    fun picked(line: ChatLine) {
+        val port = picks ?: return
+        scope.launch {
+            val result = withContext(io) { port.add(pickLevel, chatId, line.serverId) }
+            val w = words().chat
+            val said = when (result) {
+                PickResult.Added -> w.picked
+                PickResult.Already -> w.pickedAlready
+                PickResult.Full -> w.picksFull
+                PickResult.NotSent -> w.deleteRefused("not_sent")
+            }
+            _state.value = _state.value.copy(notice = ChatNotice.Said(said))
+        }
+    }
+
+    /** Сказать человеку одно предложение — «Текст скопирован» и подобное. */
+    fun said(text: String) {
+        _state.value = _state.value.copy(notice = ChatNotice.Said(text))
+    }
+
     fun sendPressed(): SendMessageResult {
+        // Идёт правка — отправка уходит правкой исходного, а не новым сообщением (ADR-0045).
+        _state.value.editing.takeIf { it > 0 }?.let { return editPressed(it) }
         val text = _state.value.draft
         // Круг едет в очередь вместе с сообщением: решение «нужен ли ключ» принимается
         // при отправке, а она может случиться после перезапуска.
@@ -518,6 +635,8 @@ data class ChatState(
     val lines: List<ChatLine> = emptyList(),
     /** Набранное, но не отправленное. Живёт до подтверждения постановки в очередь. */
     val draft: String = "",
+    /** Серверный номер исправляемого (ADR-0045); 0 — правки нет, отправка — новое сообщение. */
+    val editing: Long = 0,
     val notice: ChatNotice? = null,
     /** Запрос ключа в пути: второе нажатие не шлёт вторую просьбу чужим устройствам. */
     val expectKey: Boolean = false,
@@ -632,6 +751,12 @@ sealed interface ChatNotice {
     data class Narrowed(val circle: String) : ChatNotice
 
     data class NarrowRefused(val text: String) : ChatNotice
+
+    /** Одно предложение человеку, уже словами: «Текст скопирован», отказ правки и подобное. */
+    data class Said(val text: String) : ChatNotice
+
+    /** Подтвердить «Удалить у всех»: вернуть нельзя (Решения §8). */
+    data class DeleteAsk(val serverId: Long) : ChatNotice
 }
 
 /**

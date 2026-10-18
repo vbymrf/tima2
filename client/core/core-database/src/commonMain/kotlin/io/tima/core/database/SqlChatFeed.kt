@@ -107,6 +107,8 @@ class SqlChatFeed(
         // разобрать тело кодеком. Любой из шагов может не удаться, и тогда текста нет —
         // строка остаётся в переписке нечитаемой. Одна испорченная запись не должна
         // лишать человека всей истории. Разбор один — и текст, и оформление (ПЛАН-(РС) РС4).
+        // Удалённое у всех: читать нечего, правок нет — только строка «Сообщение удалено».
+        if (deleted != 0L) return toLine(null).copy(deleted = true)
         val open = openBody(direction, state, body_enc, system)
         val edits = if (open == null) emptyList() else editsFrom(all)
         val decoded = open?.let { if (edits.isEmpty()) codec.decodeLine(it) else codec.decodeEdited(it, edits) }

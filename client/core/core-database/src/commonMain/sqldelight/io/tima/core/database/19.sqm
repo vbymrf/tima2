@@ -1,0 +1,14 @@
+-- Схема 19 → 20: меню сообщения (заказчик 2026-10-18 — сразу со всеми пунктами).
+--
+-- «Удалить у всех» оставляет строку «Сообщение удалено» — пометка, а не пропажа: человек видел
+-- сообщение и должен видеть, что его убрали. «Добавить в Подборку» — ссылки на сообщения,
+-- живут на устройстве (Решения §11.2).
+ALTER TABLE messages ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE picks (
+    level_key TEXT    NOT NULL,
+    chat_id   TEXT    NOT NULL,
+    server_id INTEGER NOT NULL,
+    added_at  INTEGER NOT NULL,
+    PRIMARY KEY (level_key, chat_id, server_id)
+);

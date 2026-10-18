@@ -78,6 +78,8 @@ object PopupCode {
     const val CHAT_MENU = "chat.menu"
     const val CHAT_FAILED = "chat.failed"
     const val CHAT_COLOR = "chat.color"
+    /** Меню отправленного сообщения (Решения §11.1). */
+    const val CHAT_MESSAGE = "chat.message"
 }
 
 /**

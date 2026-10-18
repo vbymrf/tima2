@@ -97,6 +97,12 @@ class ReceiveHarness(private val inbox: Inbox) {
                 decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
+            // Удаление у всех — так же: правка местной записи, предмет проверки другой.
+            is EventStreamProtocol.Decision.MessageDeleted -> {
+                aboutKeys += "deleted:${decision.chatId}:${decision.messageId}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
+            }
+
             // Повтор: кадр уже проходил. Наружу не отдаём — только подтверждаем заново,
             // как это делает живой канал: не подтвердить значит получать его вечно.
             is EventStreamProtocol.Decision.Seen -> {

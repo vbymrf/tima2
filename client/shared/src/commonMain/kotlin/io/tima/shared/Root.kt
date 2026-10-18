@@ -101,6 +101,7 @@ import io.tima.feature.auth.DeviceScreen
 import io.tima.feature.auth.EntryScreen
 import io.tima.feature.chat.ChatStore
 import io.tima.feature.chat.FailedMessageSheet
+import io.tima.feature.chat.MessageMenuSheet
 import io.tima.domain.chat.DeadMessages
 import io.tima.feature.chat.ChatsState
 import io.tima.feature.chat.ChatsStore
@@ -4374,6 +4375,11 @@ private fun Chat(
                 val now = msNow()
                 (now - last >= CHAT_KEYS_AGAIN_MS).also { if (it) runCatching { environment.settings.put(key, now.toString()) } }
             },
+            // Меню сообщения (Решения §11.1): правка, удаление у себя и у всех, подборка.
+            edit = environment.edit,
+            deleter = io.tima.domain.chat.DeleteMessage(environment.removal, network.removal),
+            picks = environment.picks,
+            pickLevel = io.tima.domain.chat.MessagePicks.levelOf(chatId, group),
         )
     }
     val state by store.state.collectAsState()
@@ -4402,6 +4408,11 @@ private fun Chat(
     LaunchedEffect(chatId, group) { if (group) onOpened(chatId) }
     if (group && onWatchGroupCall != null) LaunchedEffect(chatId) { onWatchGroupCall() }
     var failed by remember { mutableStateOf<ChatLine?>(null) }
+    // Меню отправленного сообщения (Решения §11.1): на какое сообщение нажали.
+    var menuFor by remember { mutableStateOf<ChatLine?>(null) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val shareOut = remember { io.tima.core.contacts.platformInvite() }
+    val copiedWord = Tima.words.chat.copied
     // Выбран круг, которого у группы этого вида нет (остался с прежней сборки или от
     // другой группы) — сбросить на первый допустимый, иначе отправка получит 400.
     LaunchedEffect(kind, state.level) {
@@ -4413,6 +4424,7 @@ private fun Chat(
     InnerPopup(PopupCode.CHAT_MENU, chatMenu)
     InnerPopup(PopupCode.CHAT_FAILED, failed != null)
     InnerPopup(PopupCode.CHAT_COLOR, myColor)
+    InnerPopup(PopupCode.CHAT_MESSAGE, menuFor != null)
     var myColorTrouble by remember { mutableStateOf<String?>(null) }
     // Отправители, чья личность отменена владельцем (ДУ6, Р30) — из настроек аккаунта.
     // Поток запомнен: `settings.all()` каждый раз новый, и подписка без remember снималась и
@@ -4502,6 +4514,9 @@ private fun Chat(
         // доступом, а не чтением. Выключен — реплики выглядят как обычно.
         onNarrow = if (group) { messageId, was, to -> store.narrowAsked(messageId, was, to) } else null,
         onNarrowConfirm = store::narrowConfirmed,
+        onDeleteConfirm = store::deleteForAllConfirmed,
+        onEditCancel = store::editCancelled,
+        onMenu = { line -> menuFor = line },
         // Показ доступности — только в группе: в личной переписке круга нет.
         onCircles = if (group) store::circlesShown else null,
         // «Добавить себе» ведёт на свою страницу — то есть в другое окно. Оттого перенос
@@ -4561,6 +4576,45 @@ private fun Chat(
             },
             // Повтор — только у отказанного: ждущее очередь повторяет сама.
             onRetry = if (waiting) null else ({ store.retryDead(line.dedupKey); failed = null }),
+        )
+    }
+    // Меню сообщения — после экрана, как и лист неотправленного: что позже, то сверху.
+    menuFor?.let { line ->
+        val text = line.text
+        val close = { menuFor = null }
+        MessageMenuSheet(
+            text = text?.take(160),
+            own = line.outgoing,
+            onClose = close,
+            // Ответ — следующим срезом РС7 (ответ уходит в подписанном reply_to).
+            onReply = null,
+            onEdit = if (line.edits < io.tima.domain.chat.EditMessage.MAX_EDITS) {
+                { store.editStarted(line); close() }
+            } else {
+                null
+            },
+            onDeleteForMe = { store.deleteForMe(line); close() },
+            onDeleteForAll = { store.deleteForAllAsked(line); close() },
+            // Наружу — текст без знаков (Решения §11.5). Нечем поделиться (ПК) — копия в буфер.
+            onShare = text?.let { t ->
+                {
+                    if (!shareOut.share(t)) {
+                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(t))
+                        store.said(copiedWord)
+                    }
+                    close()
+                }
+            },
+            onCopy = text?.let { t ->
+                { clipboard.setText(androidx.compose.ui.text.AnnotatedString(t)); store.said(copiedWord); close() }
+            },
+            onPick = { store.picked(line); close() },
+            // Перенести себе — из группы и только выносимые круги (К2): личная переписка шифр.
+            onCarry = if (group && CarryToPage.canCarry(line.level)) {
+                { onCarry(line.serverId, line.level); close() }
+            } else {
+                null
+            },
         )
     }
     if (chatMenu && group && onMoveToShelf != null) {

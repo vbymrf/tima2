@@ -534,6 +534,8 @@ class Receiver(
                 cursor = null,
                 onGroupKeys = { decision -> aboutKeys(decision) },
                 onLevelNarrowed = { decision -> aboutLevel(decision) },
+                // Удалили у всех (Решения §8): «Сообщение удалено», содержимое и правки стёрты.
+                onMessageDeleted = { decision -> environment.removal.markDeleted(decision.chatId, decision.messageId) },
                 onComment = { decision -> aboutComment(decision) },
                 onStoreChanged = { decision -> onStoreChanged(decision.kind, decision.revision) },
                 onCall = { decision -> aboutCall(decision) },

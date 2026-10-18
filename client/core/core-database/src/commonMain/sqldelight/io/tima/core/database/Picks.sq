@@ -1,0 +1,21 @@
+-- Подборка сообщений (doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §11.2): ссылки, а не копии; своя у
+-- верхнего уровня; на устройстве; до 20 на уровень. Слово в слово как в 19.sqm.
+CREATE TABLE picks (
+    level_key TEXT    NOT NULL,
+    chat_id   TEXT    NOT NULL,
+    server_id INTEGER NOT NULL,
+    added_at  INTEGER NOT NULL,
+    PRIMARY KEY (level_key, chat_id, server_id)
+);
+
+hasPick:
+SELECT count(*) FROM picks WHERE level_key = ? AND chat_id = ? AND server_id = ?;
+
+countPicks:
+SELECT count(*) FROM picks WHERE level_key = ?;
+
+addPick:
+INSERT OR IGNORE INTO picks(level_key, chat_id, server_id, added_at) VALUES (?, ?, ?, ?);
+
+picksOf:
+SELECT * FROM picks WHERE level_key = ? ORDER BY added_at DESC;

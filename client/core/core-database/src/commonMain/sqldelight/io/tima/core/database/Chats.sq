@@ -127,7 +127,8 @@ WHERE m.local_id = (
     SELECT x.local_id FROM messages x
     -- Правка — не последняя строка в списке (ADR-0045).
     WHERE x.chat_id = m.chat_id AND x.edit_of = 0
-    ORDER BY COALESCE(x.server_ts, x.client_ts) DESC, x.local_id DESC
+    -- Удалённое — последней строкой, только когда другого нет: превью читать в нём нечего.
+    ORDER BY x.deleted, COALESCE(x.server_ts, x.client_ts) DESC, x.local_id DESC
     LIMIT 1
 )
 ORDER BY last_at DESC, m.local_id DESC

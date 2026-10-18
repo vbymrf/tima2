@@ -54,6 +54,9 @@ interface ChatPorts {
     /** История личных переписок и просьба о их ключах («сообщение недоступно, запросить»). */
     val history: io.tima.core.network.HistoryApi
 
+    /** Удаление сообщения у всех (Решения §8). */
+    val removal: io.tima.domain.chat.RemoteDelete
+
     /**
      * Сверка книги: кто из этих номеров в TIMa (Д4).
      *

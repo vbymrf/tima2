@@ -228,6 +228,18 @@ class EventStreamProtocol {
         ) : Decision
 
         /**
+         * Сообщение удалили у всех (Решения §8): строка становится «Сообщение удалено»,
+         * содержимое и правки стираются. [chatId] — переписка или группа: сервер называет
+         * `chat_id` у личной и `group_id` у группы, а строка в базе одна на оба вида.
+         */
+        data class MessageDeleted(
+            val chatId: String,
+            val messageId: Long,
+            val by: String,
+            val eventId: Long?,
+        ) : Decision
+
+        /**
          * Нам звонят (`call.incoming`).
          *
          * **Звонок — не сообщение, и курсор он не двигает.** Событие живое: через минуту
@@ -628,6 +640,16 @@ class EventStreamProtocol {
                     Decision.Skip("message.level_narrowed без обязательных полей", eventId)
                 } else {
                     Decision.LevelNarrowed(groupId, messageId, level, json.string("by") ?: "", eventId)
+                }
+            }
+
+            "message.deleted" -> {
+                val chatId = json.string("chat_id") ?: json.string("group_id")
+                val messageId = json["message_id"]?.jsonPrimitive?.longOrNull
+                if (chatId == null || messageId == null) {
+                    Decision.Skip("message.deleted без обязательных полей", eventId)
+                } else {
+                    Decision.MessageDeleted(chatId, messageId, json.string("by") ?: "", eventId)
                 }
             }
 

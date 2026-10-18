@@ -1381,6 +1381,37 @@ interface ChatWords {
     val sendAgain: String
     val deleteMessage: String
     val reportProblem: String
+
+    // ── Меню сообщения (doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §11.1; заказчик 2026-10-18) ──
+    val menuReply: String
+    /** Своё: одна кнопка с выбором — изменить, удалить у себя, удалить у всех. */
+    val menuChange: String
+    val menuEdit: String
+    val menuDeleteForMe: String
+    val menuDeleteForAll: String
+    val menuShare: String
+    val menuCopy: String
+    val menuPick: String
+    val menuCarry: String
+    /** Пометка у исправленного (ADR-0045). */
+    val edited: String
+    /** Полоса над строкой ввода: идёт правка. */
+    val editing: String
+    /** Полоса над строкой ввода: идёт ответ. */
+    val replyingTo: String
+    /** Строка удалённого у всех (Решения §8). */
+    val deleted: String
+    val copied: String
+    val picked: String
+    val pickedAlready: String
+    val picksFull: String
+    val editStructure: String
+    val editInEditor: String
+    val editLimit: String
+    /** Подтверждение «Удалить у всех»: вернуть нельзя. */
+    val deleteForAllAsk: String
+    val deleteOffline: String
+    fun deleteRefused(code: String): String
     /** Причина отказа словами по коду сервера; незнакомый код — `null`, покажется сам код. */
     fun failReason(code: String): String?
     val moveToSection: String
@@ -3398,10 +3429,41 @@ object RussianWords : Words {
         override val sendAgain = "Отправить ещё раз"
         override val deleteMessage = "Удалить"
         override val reportProblem = "Сообщить о проблеме"
+        override val menuReply = "Ответить"
+        override val menuChange = "Изменить или удалить"
+        override val menuEdit = "Изменить"
+        override val menuDeleteForMe = "Удалить у себя"
+        override val menuDeleteForAll = "Удалить у всех"
+        override val menuShare = "Поделиться"
+        override val menuCopy = "Скопировать текст"
+        override val menuPick = "Добавить в Подборку"
+        override val menuCarry = "Перенести себе"
+        override val edited = "изменено"
+        override val editing = "Изменение"
+        override val replyingTo = "Ответ"
+        override val deleted = "Сообщение удалено"
+        override val copied = "Текст скопирован"
+        override val picked = "Добавлено в Подборку"
+        override val pickedAlready = "Уже в Подборке"
+        override val picksFull = "В Подборке уже 20 сообщений — лишнее убирается в редакторе"
+        override val editStructure = "Правка меняет только текст: строки, заголовки и списки остаются"
+        override val editInEditor = "Такое сообщение правится в редакторе"
+        override val editLimit = "Сообщение уже исправлено три раза"
+        override val deleteForAllAsk = "Удалить у всех? Вернуть будет нельзя"
+        override val deleteOffline = "Нет связи — сообщение не удалено"
+        override fun deleteRefused(code: String) = when (code) {
+            "not_allowed" -> "Удалить у всех может только автор"
+            else -> "Не удалено: $code"
+        }
         override fun failReason(code: String): String? = when (code) {
             "level_in_private" -> "в личной группе такого круга нет — только «Зашифровано» и «Всем и всегда»"
             "secret_in_public" -> "публичная группа не шифруется — выберите открытый круг"
             "banned" -> "вы заблокированы в этой группе"
+            "edit_limit" -> "у сообщения уже три правки"
+            "edit_closed" -> "ключ сменился — исправить уже нельзя"
+            "edit_not_author" -> "исправить может только автор"
+            "edit_missing" -> "исправляемого сообщения больше нет"
+            "edit_of_edit" -> "правку не правят — правится исходное"
             "payload_too_large" -> "сообщение слишком большое"
             "bad_level" -> "круг вне допустимых"
             "unknown_gk_version" -> "сервер не знает нашей версии ключа группы"

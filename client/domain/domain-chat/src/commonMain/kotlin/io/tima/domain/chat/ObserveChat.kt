@@ -146,6 +146,8 @@ data class ChatLine(
      * [rich] уже с правками. [EditMessage.MAX_EDITS] — «Изменить» прячется.
      */
     val edits: Int = 0,
+    /** Удалено у всех (Решения §8): на экране «Сообщение удалено», меню нет. */
+    val deleted: Boolean = false,
 )
 
 /**

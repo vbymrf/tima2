@@ -65,6 +65,8 @@ class EventStream(
          * где переписки нет вовсе (проверки транспорта).
          */
         onLevelNarrowed: suspend (EventStreamProtocol.Decision.LevelNarrowed) -> Unit = {},
+        /** Сообщение удалили у всех (Решения §8). По умолчанию ничего — как сужение круга. */
+        onMessageDeleted: suspend (EventStreamProtocol.Decision.MessageDeleted) -> Unit = {},
         /**
          * Кто-то прокомментировал нашу запись (ADR-0024). По умолчанию ничего: канал
          * обязан работать и там, где страницы нет вовсе.
@@ -189,6 +191,14 @@ class EventStream(
                         // смысле, что событие доставлено тому, кто им занимается.
                         is EventStreamProtocol.Decision.LevelNarrowed -> {
                             onLevelNarrowed(decision)
+                            decision.eventId?.let {
+                                last = it
+                                send(Frame.Text(protocol.ackFrame(it)))
+                            }
+                        }
+
+                        is EventStreamProtocol.Decision.MessageDeleted -> {
+                            onMessageDeleted(decision)
                             decision.eventId?.let {
                                 last = it
                                 send(Frame.Text(protocol.ackFrame(it)))
