@@ -37,4 +37,19 @@ class EditorScreenTest {
         val b = capture("редактор-выделение", 360, 640, dark = true) { screen(chosen)() }
         assertTrue(a.difference(b) > 0.0)
     }
+
+    @Test
+    fun ряд_из_ячеек_в_редакторе() {
+        val doc = ComposedDoc(
+            listOf(
+                ComposedItem.Text("до ряда"),
+                ComposedItem.Row(listOf(io.tima.domain.chat.ComposedCell(40, "слева"), io.tima.domain.chat.ComposedCell(60, "справа"))),
+            ),
+        )
+        val model = EditorModel(doc)
+        model.select(io.tima.domain.chat.Spot(1, 1))
+        val a = capture("редактор-ряд", 360, 640, dark = false) { screen(model)() }
+        val b = capture("редактор", 360, 640, dark = false) { screen(EditorModel(ComposedDoc.of("до ряда")))() }
+        assertTrue(a.difference(b) > 0.0)
+    }
 }

@@ -4667,6 +4667,8 @@ private fun Chat(
         fun put(widget: io.tima.domain.chat.ComposedWidget) = editorModel.insert(io.tima.domain.chat.ComposedItem.Widget(widget))
         // Картинка внутри сообщения (Решения §3): под ширину ряда 720, без превью, хранится, пока живёт сообщение.
         val editorUploads = remember { SealedUploads { network.media } }
+        // Исходные файлы картинок черновика (Решения §3): сменилась ширина места — картинка заново из исходного.
+        val editorSources = remember { mutableMapOf<String, ByteArray>() }
         val editorPicture = io.tima.core.media.rememberPhotosPicker(1) { list ->
             val picked = list.firstOrNull() ?: return@rememberPhotosPicker
             scope.launch {
@@ -4676,6 +4678,7 @@ private fun Chat(
                     editorNotice = ew.pictureFailed
                 } else {
                     editorNotice = null
+                    editorSources[up.first] = picked.bytes
                     put(io.tima.domain.chat.ComposedWidget.Image(io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", prepared.width, prepared.height, prepared.full.size.toLong())))
                 }
             }
@@ -4698,7 +4701,32 @@ private fun Chat(
             preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
             problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
             onBack = store::editorBack,
-            onSend = { doc -> store.sendComposed(doc) },
+            onSend = { doc ->
+                scope.launch {
+                    // Картинка в ячейке уже ряда — под её ширину (720 × доля), из исходного файла.
+                    val fitted = doc.copy(
+                        items = doc.items.map { item ->
+                            if (item !is io.tima.domain.chat.ComposedItem.Row) return@map item
+                            item.copy(
+                                cells = item.cells.map { cell ->
+                                    val target = io.tima.core.media.PhotoPrep.INLINE_SIDE * cell.width / 100
+                                    cell.copy(
+                                        widgets = cell.widgets.map { w ->
+                                            val source = (w as? io.tima.domain.chat.ComposedWidget.Image)?.media?.takeIf { it.width > target }?.let { editorSources[it.mediaId] }
+                                            if (source == null) return@map w
+                                            val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(source, target) }
+                                            val up = prepared?.let { editorUploads.upload(it.full, "image/jpeg", null, null) }
+                                            if (prepared == null || up == null) w
+                                            else io.tima.domain.chat.ComposedWidget.Image(io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", prepared.width, prepared.height, prepared.full.size.toLong()))
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                    store.sendComposed(fitted)
+                }
+            },
             notice = editorNotice,
             // Раздел «Вставка» (Решения §10.4): виджет встаёт после куска, где курсор.
             onButton = { key ->

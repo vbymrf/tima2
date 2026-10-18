@@ -35,6 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
@@ -78,6 +80,10 @@ object EditorTags {
     fun paragraph(kind: ParagraphKind) = "editor:paragraph.${kind.name.lowercase()}"
     fun text(index: Int) = "editor:text.$index"
     fun item(index: Int) = "editor:item.$index"
+    fun cell(index: Int, cell: Int) = "editor:cell.$index.$cell"
+    fun cellText(index: Int, cell: Int) = "editor:cell.$index.$cell.text"
+    /** Виджет: во всю ширину — `editor:widget.N`, в ячейке — `editor:widget.N.C.W`. */
+    fun spot(s: io.tima.domain.chat.Spot) = if (s.cell < 0) "editor:widget.${s.item}" else "editor:widget.${s.item}.${s.cell}.${s.widget}"
 }
 
 /** Разделы редактора и кнопки ленты (Решения §10.2) — ключи подписей `EditorWords.button`. */
@@ -194,6 +200,16 @@ fun EditorScreen(
                 model.paste(text)
             }
             "marks" -> { model.toggleMarks(); hint = if (model.doc.marks) w.marksOn else w.marksOff }
+            // Раздел «Разметка» (§10.2–§10.3).
+            "row" -> model.layout(io.tima.domain.chat.ComposedLayout::addRow)
+            "table" -> model.insert(ComposedItem.Text(TABLE_TEMPLATE))
+            "cellAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addCell)
+            "cellRemove" -> model.layout(io.tima.domain.chat.ComposedLayout::removeCell)
+            "merge" -> model.layout(io.tima.domain.chat.ComposedLayout::merge)
+            "split" -> model.layout(io.tima.domain.chat.ComposedLayout::split)
+            "up" -> model.layout { d, s -> io.tima.domain.chat.ComposedLayout.shift(d, s, -1) }
+            "down" -> model.layout { d, s -> io.tima.domain.chat.ComposedLayout.shift(d, s, 1) }
+            "delete" -> model.layout(io.tima.domain.chat.ComposedLayout::removeAt)
             else -> if (onButton?.invoke(key) != true) hint = w.soon
         }
     }
@@ -241,16 +257,26 @@ fun EditorScreen(
         if (model.hasSelection) SelectionStrip { kind -> model.inline(kind) }
 
         // ── Сообщение ──
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(TimaSpacing.about3)) {
+        val drag = rememberEditorDrag()
+        drag.forget(doc.items.size)
+        Box(
+            Modifier.weight(1f).fillMaxWidth()
+                .onGloballyPositioned { drag.origin = it.boundsInRoot().topLeft },
+        ) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), enabled = drag.from == null).padding(TimaSpacing.about3)) {
                 if (showPreview) {
                     Bubble(my = true, modifier = Modifier.testTag(EditorTags.PREVIEW)) {
                         preview(doc)?.let { RichBody(it) } ?: Caption(doc.firstLine, fontSize = TimaType.sz4)
                     }
                 } else {
-                    doc.items.forEachIndexed { i, item -> EditorItemView(model, i, item, typingMarks.takeIf { doc.marks }, preview) }
+                    doc.items.forEachIndexed { i, item ->
+                        Box(Modifier.fillMaxWidth().onGloballyPositioned { drag.item(i, it.boundsInRoot()) }) {
+                            EditorItemView(model, i, item, typingMarks.takeIf { doc.marks }, preview, drag)
+                        }
+                    }
                 }
             }
+            DragGhost(drag)
         }
         if (trouble.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().background(colors.alarm.copy(alpha = 0.12f)).padding(TimaSpacing.about3).testTag(EditorTags.PROBLEMS)) {
@@ -271,11 +297,22 @@ fun EditorScreen(
     }
 }
 
-private fun selectedKind(model: EditorModel): String = when (model.doc.items.getOrNull(model.focus)) {
-    is ComposedItem.Row -> "row"
-    is ComposedItem.Widget -> "widget"
-    else -> "text"
+private fun selectedKind(model: EditorModel): String {
+    val s = model.spot
+    return when (model.doc.items.getOrNull(s.item)) {
+        is ComposedItem.Row -> when {
+            s.widget >= 0 -> "widget"
+            s.cell >= 0 && s.widget == -1 -> "cell"
+            s.cell >= 0 -> "text"
+            else -> "row"
+        }
+        is ComposedItem.Widget -> "widget"
+        else -> "text"
+    }
 }
+
+/** «Таблица» — заготовка быстрым оформлением: две колонки, строка заголовка и одна строка. */
+private const val TABLE_TEMPLATE = "|  |  |\n|---|---|\n|  |  |"
 
 @Composable
 private fun HeaderGlyph(glyph: String, enabled: Boolean, tag: String, onClick: () -> Unit) {
@@ -406,9 +443,9 @@ private fun SelectionStrip(onMark: (InlineKind) -> Unit) {
 
 /** Кусок документа: текст набирается здесь же, остальное — как увидит получатель, нажатием выбирается. */
 @Composable
-private fun EditorItemView(model: EditorModel, index: Int, item: ComposedItem, marks: TypingMarks?, preview: (ComposedDoc) -> RichContent?) {
+private fun EditorItemView(model: EditorModel, index: Int, item: ComposedItem, marks: TypingMarks?, preview: (ComposedDoc) -> RichContent?, drag: EditorDrag) {
     val colors = Tima.colors
-    val chosen = index == model.focus
+    val chosen = model.spot == io.tima.domain.chat.Spot(index)
     when (item) {
         is ComposedItem.Text -> {
             val value = if (chosen) model.field else androidx.compose.ui.text.input.TextFieldValue(item.source)
@@ -423,17 +460,8 @@ private fun EditorItemView(model: EditorModel, index: Int, item: ComposedItem, m
                     .testTag(EditorTags.text(index)),
             )
         }
-        else -> {
-            Box(
-                Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                    .then(if (chosen) Modifier.border(2.dp, colors.navigation, RoundedCornerShape(8.dp)) else Modifier)
-                    .clickable { model.select(index) }
-                    .padding(4.dp)
-                    .testTag(EditorTags.item(index)),
-            ) {
-                preview(ComposedDoc(listOf(item), marks = model.doc.marks))?.let { RichBody(it) }
-            }
-        }
+        is ComposedItem.Widget -> EditorWidget(item.widget, io.tima.domain.chat.Spot(index), model.spot == io.tima.domain.chat.Spot(index), model, drag, preview)
+        is ComposedItem.Row -> EditorRow(item, index, model, drag, marks, preview)
     }
 }
 

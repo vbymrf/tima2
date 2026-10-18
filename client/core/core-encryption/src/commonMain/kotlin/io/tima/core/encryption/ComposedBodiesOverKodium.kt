@@ -111,7 +111,10 @@ object ComposedBodiesOverKodium : ComposedBodies {
                     ),
                 )
             }
-            is ComposedItem.Row -> listOf(MarkupBlock(type = BlockType.FLEX, style = item.style, children = item.cells.map(::cell)))
+            // Пустые ячейки не уходят (Решения §10.3), ширины оставшихся — снова 100.
+            is ComposedItem.Row -> listOf(
+                MarkupBlock(type = BlockType.FLEX, style = item.style, children = io.tima.domain.chat.ComposedLayout.compact(item).cells.map(::cell)),
+            )
         }
 
         /** Ячейка — один узел: из текста берётся только оформление внутри строки. */

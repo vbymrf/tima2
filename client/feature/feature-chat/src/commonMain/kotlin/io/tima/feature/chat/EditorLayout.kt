@@ -1,0 +1,253 @@
+package io.tima.feature.chat
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import io.tima.core.ui.Caption
+import io.tima.core.ui.Tima
+import io.tima.core.ui.TimaType
+import io.tima.domain.chat.ComposedCell
+import io.tima.domain.chat.ComposedDoc
+import io.tima.domain.chat.ComposedItem
+import io.tima.domain.chat.ComposedWidget
+import io.tima.domain.chat.Drop
+import io.tima.domain.chat.RichContent
+import io.tima.domain.chat.Spot
+import io.tima.domain.chat.TypingMarks
+import kotlin.math.roundToInt
+
+/**
+ * Перенос в редакторе (Решения §10.3): палец — долгое нажатие и вести, мышь — за ручку. Куда
+ * опустили — решают запомненные границы ячеек и кусков в координатах окна.
+ */
+@Stable
+class EditorDrag {
+    var from by mutableStateOf<Spot?>(null)
+        private set
+    var at by mutableStateOf(Offset.Zero)
+        private set
+
+    /** Верхний левый угол окна редактора — чтобы рисовать переносимое под пальцем. */
+    var origin = Offset.Zero
+    private val cells = mutableStateMapOf<Pair<Int, Int>, Rect>()
+    private val items = mutableStateMapOf<Int, Rect>()
+
+    fun cell(item: Int, cell: Int, r: Rect) { cells[item to cell] = r }
+    fun item(item: Int, r: Rect) { items[item] = r }
+
+    /** Документ сменился — прежние границы уже не про него. */
+    fun forget(count: Int) {
+        items.keys.filter { it >= count }.forEach(items::remove)
+        cells.keys.filter { it.first >= count }.forEach(cells::remove)
+    }
+
+    fun start(spot: Spot, point: Offset) { from = spot; at = point }
+    fun move(by: Offset) { at += by }
+    fun cancel() { from = null }
+
+    /** Опустили: в ячейку под пальцем, иначе между кусками — выше или ниже середины ближайшего. */
+    fun target(count: Int): Drop {
+        cells.entries.firstOrNull { it.value.contains(at) }?.let { return Drop.IntoCell(it.key.first, it.key.second) }
+        val hit = items.entries.sortedBy { it.key }.firstOrNull { at.y < it.value.bottom }
+            ?: return Drop.Between(count)
+        return Drop.Between(if (at.y < hit.value.center.y) hit.key else hit.key + 1)
+    }
+
+    /** Переносимое — то, что под пальцем: подсветить цель. */
+    fun over(item: Int, cell: Int): Boolean = from != null && cells[item to cell]?.contains(at) == true
+}
+
+@Composable
+internal fun rememberEditorDrag() = remember { EditorDrag() }
+
+/** Жест переноса: долгое нажатие (палец) или ручка (мышь, сразу). */
+private fun Modifier.draggable(drag: EditorDrag, spot: Spot, corner: () -> Offset, onDrop: (Spot, Drop) -> Unit, count: () -> Int, longPress: Boolean): Modifier =
+    pointerInput(spot, longPress) {
+        val start: (Offset) -> Unit = { off -> drag.start(spot, corner() + off) }
+        val end: () -> Unit = {
+            val from = drag.from
+            if (from != null) onDrop(from, drag.target(count()))
+            drag.cancel()
+        }
+        if (longPress) {
+            detectDragGesturesAfterLongPress(onDragStart = start, onDrag = { c, d -> c.consume(); drag.move(d) }, onDragEnd = end, onDragCancel = drag::cancel)
+        } else {
+            detectDragGestures(onDragStart = start, onDrag = { c, d -> c.consume(); drag.move(d) }, onDragEnd = end, onDragCancel = drag::cancel)
+        }
+    }
+
+/** Виджет в редакторе: как увидит получатель, нажатие — выбрать, ручка и долгое нажатие — перенос. */
+@Composable
+internal fun EditorWidget(
+    widget: ComposedWidget,
+    spot: Spot,
+    chosen: Boolean,
+    model: EditorModel,
+    drag: EditorDrag,
+    preview: (ComposedDoc) -> RichContent?,
+) {
+    val colors = Tima.colors
+    var corner by remember { mutableStateOf(Offset.Zero) }
+    val onDrop: (Spot, Drop) -> Unit = { from, to -> model.drop(from, to) }
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp)
+            .then(if (chosen) Modifier.border(2.dp, colors.navigation, RoundedCornerShape(8.dp)) else Modifier)
+            .onGloballyPositioned { corner = it.boundsInRoot().topLeft }
+            .draggable(drag, spot, { corner }, onDrop, { model.doc.items.size }, longPress = true)
+            .clickable { model.select(spot) }
+            .padding(4.dp)
+            .testTag(EditorTags.spot(spot)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f)) {
+            preview(ComposedDoc(listOf(ComposedItem.Widget(widget)), marks = model.doc.marks))?.let { RichBody(it) }
+        }
+        // Ручка — для мыши: тянуть сразу, без долгого нажатия.
+        Caption(
+            "⠿",
+            fontSize = 18.sp,
+            color = colors.text3,
+            modifier = Modifier.padding(start = 4.dp)
+                .draggable(drag, spot, { corner }, onDrop, { model.doc.items.size }, longPress = false)
+                .testTag(EditorTags.spot(spot) + ".handle"),
+        )
+    }
+}
+
+/** Ряд в редакторе: ячейки по ширинам, в каждой — текст (один узел) и виджеты друг под другом. */
+@Composable
+internal fun EditorRow(
+    row: ComposedItem.Row,
+    index: Int,
+    model: EditorModel,
+    drag: EditorDrag,
+    marks: TypingMarks?,
+    preview: (ComposedDoc) -> RichContent?,
+) {
+    val colors = Tima.colors
+    val spot = model.spot
+    Row(
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(vertical = 4.dp)
+            .then(if (spot == Spot(index)) Modifier.border(2.dp, colors.navigation, RoundedCornerShape(8.dp)) else Modifier)
+            .testTag(EditorTags.item(index)),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        row.cells.forEachIndexed { c, cell ->
+            EditorCell(cell, index, c, model, drag, marks, preview, Modifier.weight(cell.width.coerceAtLeast(1).toFloat()).fillMaxHeight())
+        }
+    }
+}
+
+@Composable
+private fun EditorCell(
+    cell: ComposedCell,
+    index: Int,
+    c: Int,
+    model: EditorModel,
+    drag: EditorDrag,
+    marks: TypingMarks?,
+    preview: (ComposedDoc) -> RichContent?,
+    modifier: Modifier,
+) {
+    val colors = Tima.colors
+    val spot = model.spot
+    val cellChosen = spot.item == index && spot.cell == c
+    val textSpot = Spot(index, c, Spot.TEXT)
+    val border = when {
+        drag.over(index, c) -> colors.confirmed
+        cellChosen && spot.widget == -1 -> colors.navigation
+        else -> colors.line
+    }
+    Column(
+        modifier
+            .border(if (cellChosen || drag.over(index, c)) 2.dp else 1.dp, border, RoundedCornerShape(6.dp))
+            .onGloballyPositioned { drag.cell(index, c, it.boundsInRoot()) }
+            .clickable { model.select(Spot(index, c)) }
+            .padding(4.dp)
+            .testTag(EditorTags.cell(index, c)),
+    ) {
+        Caption("${cell.width}%", fontSize = 9.sp, color = colors.text3)
+        val value = if (spot == textSpot) model.field else TextFieldValue(cell.text)
+        BasicTextField(
+            value = value,
+            onValueChange = { v -> model.changedCell(index, c, v) },
+            textStyle = TextStyle(fontSize = TimaType.sz5, color = colors.text),
+            cursorBrush = SolidColor(colors.navigation),
+            visualTransformation = rememberTypingView(marks),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp)
+                .onFocusChanged { if (it.isFocused) model.focusedCell(index, c) }
+                .testTag(EditorTags.cellText(index, c)),
+        )
+        // Написанное в ячейке — виджет «Текст» с ручкой: его можно унести в другую ячейку (§10.3).
+        if (cell.text.isNotBlank()) {
+            var corner by remember { mutableStateOf(Offset.Zero) }
+            Caption(
+                "⠿",
+                fontSize = 14.sp,
+                color = colors.text3,
+                modifier = Modifier.align(Alignment.End)
+                    .onGloballyPositioned { corner = it.boundsInRoot().topLeft }
+                    .draggable(drag, textSpot, { corner }, { from, to -> model.drop(from, to) }, { model.doc.items.size }, longPress = false)
+                    .testTag(EditorTags.cellText(index, c) + ".handle"),
+            )
+        }
+        cell.widgets.forEachIndexed { w, widget ->
+            EditorWidget(widget, Spot(index, c, w), spot == Spot(index, c, w), model, drag, preview)
+        }
+    }
+}
+
+/** Переносимое под пальцем — тень, чтобы было видно, что тянется. */
+@Composable
+internal fun DragGhost(drag: EditorDrag) {
+    if (drag.from == null) return
+    val colors = Tima.colors
+    val p = drag.at - drag.origin
+    Box(
+        Modifier.offset { IntOffset(p.x.roundToInt() - 20, p.y.roundToInt() - 20) }
+            .size(40.dp)
+            .background(colors.navigation.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+            .testTag("editor:drag"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Caption("⠿", fontSize = 18.sp, color = colors.onAccent)
+    }
+}

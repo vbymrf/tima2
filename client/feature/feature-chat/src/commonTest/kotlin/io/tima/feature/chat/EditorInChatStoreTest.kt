@@ -176,4 +176,24 @@ class EditorInChatStoreTest {
         m.paste("новый")
         assertEquals("новый", (m.doc.items[2] as ComposedItem.Text).source, "курсор на виджете — текст новым куском после него")
     }
+
+    @Test
+    fun модель_ряды_ячейки_и_перенос() {
+        val m = EditorModel(ComposedDoc.of("a"))
+        m.layout(io.tima.domain.chat.ComposedLayout::addRow)
+        assertEquals(io.tima.domain.chat.Spot(1, 0), m.spot, "курсор — в первой ячейке нового ряда")
+        m.insert(ComposedItem.Widget(ComposedWidget.Emoji("🎉")))
+        val row = m.doc.items[1] as ComposedItem.Row
+        assertEquals(listOf<ComposedWidget>(ComposedWidget.Emoji("🎉")), row.cells[0].widgets, "виджет — в выбранную ячейку")
+        m.focusedCell(1, 1)
+        m.changedCell(1, 1, TextFieldValue("правая", TextRange(0, 6)))
+        m.inline(InlineKind.BOLD)
+        assertEquals("**правая**", (m.doc.items[1] as ComposedItem.Row).cells[1].text)
+        m.drop(io.tima.domain.chat.Spot(1, 0, 0), io.tima.domain.chat.Drop.IntoCell(1, 1))
+        val moved = m.doc.items[1] as ComposedItem.Row
+        assertTrue(moved.cells[0].widgets.isEmpty())
+        assertEquals(1, moved.cells[1].widgets.size)
+        m.undo()
+        assertEquals(1, (m.doc.items[1] as ComposedItem.Row).cells[0].widgets.size, "перенос отменяется")
+    }
 }
