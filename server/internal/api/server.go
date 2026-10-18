@@ -336,6 +336,7 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 			Kind:            uint32(meta.GetKind()),
 			CreatedAtUnixMs: meta.GetCreatedAtUnixMs(),
 			ReplyTo:         meta.GetReplyTo(),
+			EditOf:          meta.GetEditOf(),
 		},
 			env.GetEncryptedPayload(),
 			append(append([]byte{}, env.GetEscrow().GetMlkemCt()...), env.GetEscrow().GetWrappedMessageKey()...),
@@ -402,6 +403,12 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 				return
 			}
 		}
+		if meta.GetEditOf() != 0 {
+			if _, code, msg, status := checkEdit(r.Context(), deps.store, false, meta.GetChatId(), int64(meta.GetEditOf()), id.UserID, 0); code != "" {
+				writeErr(w, status, code, msg)
+				return
+			}
+		}
 		clientMsgID := r.Header.Get("X-Client-Msg-Id") // дедупликация повторной отправки (api-overview: client_msg_id)
 		if clientMsgID == "" {
 			writeErr(w, http.StatusBadRequest, "no_client_msg_id", "нужен заголовок X-Client-Msg-Id (UUID)")
@@ -425,6 +432,7 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 			RatchetEnvelope:    env.GetRatchetEnvelope(),
 			Signature:          env.GetSignature(),
 			KeyCommitment:      env.GetKeyCommitment(),
+			EditOf:             meta.GetEditOf(),
 			WrappedKeys:        wrapped,
 		})
 		if errors.Is(err, store.ErrDuplicate) {
@@ -451,7 +459,7 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 			if err != nil {
 				continue
 			}
-			deps.notifier.Device(r.Context(), wk.GetRecipient(), "message.new", map[string]any{
+			event := map[string]any{
 				"chat_id":    meta.GetChatId(),
 				"message_id": meta.GetMessageId(),
 				// Кто прислал — открыто, он и так в конверте: по нему /users/me/news не
@@ -459,7 +467,13 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 				"sender_id":          meta.GetSenderId(),
 				"envelope":           base64.RawURLEncoding.EncodeToString(raw),
 				"sender_profile_rev": senderRev,
-			})
+			}
+			// Правка едет тем же событием и в той же полосе — порядок с исходным важен, — но
+			// помечена: ни уведомления, ни счёта нового (ADR-0045 §5).
+			if meta.GetEditOf() != 0 {
+				event["edit_of"] = meta.GetEditOf()
+			}
+			deps.notifier.Device(r.Context(), wk.GetRecipient(), "message.new", event)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -474,8 +488,15 @@ func validateEnvelope(env *pb.Envelope) string {
 	// Принимаем и старую версию: пока в пути есть сообщения от необновлённых
 	// клиентов, отказ означал бы их потерю. Отзовём приём v1 отдельным релизом,
 	// когда все перейдут (двухфазная выкатка, ADR-0013).
-	case env.GetFormatVersion() != timacrypto.FormatVersion && env.GetFormatVersion() != timacrypto.FormatVersionLegacy:
+	case env.GetFormatVersion() != timacrypto.FormatVersion && env.GetFormatVersion() != timacrypto.FormatVersionLegacy &&
+		env.GetFormatVersion() != timacrypto.FormatVersionEdit:
 		return "неподдерживаемый format_version"
+	// Версия 3 — только правка, и правка — только версия 3 (ADR-0045): номер исходного обязан
+	// стоять под подписью, иначе его переносят на другое сообщение того же автора.
+	case env.GetFormatVersion() == timacrypto.FormatVersionEdit && env.GetMeta().GetEditOf() == 0:
+		return "format_version 3 — только у правки: нужен edit_of"
+	case env.GetFormatVersion() != timacrypto.FormatVersionEdit && env.GetMeta().GetEditOf() != 0:
+		return "edit_of бывает только в конверте версии 3"
 	// Сервер не знает message_key и проверить ЗНАЧЕНИЕ обязательства не может —
 	// но обязан требовать его наличия и правильной длины. Само значение защищено
 	// подписью: оно входит в canonical_bytes.
@@ -563,6 +584,7 @@ func personalMessageItem(m store.StoredMessage, deviceID string) (personalItem, 
 			Kind:            pb.ContentKind(m.Kind),
 			CreatedAtUnixMs: m.CreatedAtUnixMs,
 			ReplyTo:         m.ReplyTo,
+			EditOf:          m.EditOf,
 		},
 		EncryptedPayload: m.EncryptedPayload,
 		KeyCommitment:    m.KeyCommitment,

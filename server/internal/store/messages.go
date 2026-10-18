@@ -22,6 +22,7 @@ type Message struct {
 	ReplyTo            uint64
 	FormatVersion      int32
 	KeyCommitment      []byte // обязательство по ключу (ADR-0013); nil в конвертах v1
+	EditOf             uint64 // номер исправляемого сообщения (ADR-0045); 0 — не правка
 	EncryptedPayload   []byte
 	EscrowMlkemCt      []byte
 	EscrowWrappedKey   []byte
@@ -45,12 +46,12 @@ func (s *Store) SaveMessage(ctx context.Context, m Message) error {
 			chat_id, message_id, client_msg_id, sender_id, sender_device, kind,
 			created_at_unix_ms, reply_to, format_version, encrypted_payload,
 			escrow_mlkem_ct, escrow_wrapped_key, escrow_key_version,
-			sender_ephemeral_pub, ratchet_envelope, signature, key_commitment
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NULLIF($15,''::bytea),$16,NULLIF($17,''::bytea))`,
+			sender_ephemeral_pub, ratchet_envelope, signature, key_commitment, edit_of
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NULLIF($15,''::bytea),$16,NULLIF($17,''::bytea),$18)`,
 		m.ChatID, m.MessageID, m.ClientMsgID, m.SenderID, m.SenderDevice, m.Kind,
 		m.CreatedAtUnixMs, m.ReplyTo, m.FormatVersion, m.EncryptedPayload,
 		m.EscrowMlkemCt, m.EscrowWrappedKey, m.EscrowKeyVersion,
-		m.SenderEphemeralPub, m.RatchetEnvelope, m.Signature, m.KeyCommitment)
+		m.SenderEphemeralPub, m.RatchetEnvelope, m.Signature, m.KeyCommitment, int64(m.EditOf))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation: дедуп или переиспользование message_id
@@ -89,7 +90,7 @@ func (s *Store) ListMessages(ctx context.Context, chatID, deviceID string, befor
 		       m.created_at_unix_ms, m.reply_to, m.format_version, m.encrypted_payload,
 		       m.escrow_mlkem_ct, m.escrow_wrapped_key, m.escrow_key_version,
 		       m.sender_ephemeral_pub, COALESCE(m.ratchet_envelope, ''::bytea), m.signature, COALESCE(m.key_commitment, ''::bytea),
-		       k.wrapped, k.sender_ephemeral_pub
+		       m.edit_of, k.wrapped, k.sender_ephemeral_pub
 		FROM personal_messages m
 		JOIN personal_message_keys k
 		  ON k.chat_id = m.chat_id AND k.message_id = m.message_id AND k.recipient = $2
@@ -109,7 +110,7 @@ func (s *Store) ListMessages(ctx context.Context, chatID, deviceID string, befor
 			&sm.CreatedAtUnixMs, &sm.ReplyTo, &sm.FormatVersion, &sm.EncryptedPayload,
 			&sm.EscrowMlkemCt, &sm.EscrowWrappedKey, &sm.EscrowKeyVersion,
 			&sm.SenderEphemeralPub, &sm.RatchetEnvelope, &sm.Signature, &sm.KeyCommitment,
-			&sm.WrappedKeyForDevice, &sm.WrapEphemeral,
+			&sm.EditOf, &sm.WrappedKeyForDevice, &sm.WrapEphemeral,
 		); err != nil {
 			return nil, err
 		}

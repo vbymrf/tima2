@@ -68,6 +68,7 @@ func (s *Store) AckedDeliveries(ctx context.Context, deviceID, userID string, up
 		   AND e.event_id > COALESCE((SELECT cursor FROM sync_cursors WHERE device_id = $1), 0)
 		   AND e.event_id <= $3
 		   AND pm.sender_id <> $2::uuid
+		   AND pm.edit_of = 0 -- правка — не доставка нового (ADR-0045)
 		 GROUP BY 1, 2`, deviceID, userID, upTo)
 	if err != nil {
 		if isBadUUID(err) {
@@ -302,7 +303,7 @@ func (s *Store) ListStates(ctx context.Context, userID string, after int64) ([]S
 		                AND NOT p.deleted AND p.author_id <> $1 LIMIT 100) x)
 		         ELSE (SELECT count(*) FROM (SELECT 1 FROM group_messages m
 		              WHERE m.group_id = t.entity_id AND m.message_id > COALESCE(r.read_id, 0)
-		                AND m.sender_id <> $1 LIMIT 100) x)
+		                AND m.sender_id <> $1 AND m.edit_of = 0 LIMIT 100) x)
 		       END,
 		       false
 		  FROM entity_tops t

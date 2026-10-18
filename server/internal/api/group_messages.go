@@ -77,6 +77,8 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			// KeyCommitment — обязательство по ключу группы (ADR-0013 для групп): есть — подпись
 			// версии 2 и только у зашифрованного; нет — версия 1.
 			KeyCommitment string `json:"key_commitment,omitempty"`
+			// EditOf — номер исправляемого сообщения (ADR-0045): есть — подпись версии 3.
+			EditOf int64 `json:"edit_of,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, maxEnvelopeBytes+64<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -106,7 +108,7 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			}
 			commitment = c
 		}
-		if req.ThreadRoot < 0 || req.ReplyTo < 0 || req.GKVersion < 0 {
+		if req.ThreadRoot < 0 || req.ReplyTo < 0 || req.GKVersion < 0 || req.EditOf < 0 {
 			writeErr(w, http.StatusBadRequest, "bad_refs", "thread_root/reply_to/gk_version не могут быть отрицательными")
 			return
 		}
@@ -209,12 +211,26 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			GKVersion:       uint32(req.GKVersion),
 		}
 		cb := timacrypto.GroupMessageCanonicalBytes(meta, payload)
-		if commitment != nil {
+		switch {
+		case req.EditOf > 0:
+			cb = timacrypto.GroupMessageCanonicalBytesV3(meta, uint64(req.EditOf), payload, commitment)
+		case commitment != nil:
 			cb = timacrypto.GroupMessageCanonicalBytesV2(meta, payload, commitment)
 		}
 		if !timacrypto.VerifyEnvelopeSignature(signingPub, cb, signature) {
 			writeErr(w, http.StatusForbidden, "bad_signature", "подпись сообщения не прошла проверку")
 			return
+		}
+
+		if req.EditOf > 0 {
+			target, code, msg, status := checkEdit(r.Context(), deps.store, true, groupID, req.EditOf, id.UserID, req.GKVersion)
+			if code != "" {
+				writeErr(w, status, code, msg)
+				return
+			}
+			// Уровень правки — уровень исходного, что бы ни прислал клиент: текст правки — тот же
+			// круг. Зашифрованность уже сошлась — версия ключа та же, что у исходного.
+			level = target.Level
 		}
 
 		msg := store.GroupMessage{
@@ -230,6 +246,7 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			CreatedAtUnixMs: req.CreatedAtUnixMs,
 			Signature:       signature,
 			KeyCommitment:   commitment,
+			EditOf:          req.EditOf,
 			Level:           level,
 		}
 		messageID, duplicate, err := deps.store.SaveGroupMessage(r.Context(), msg)
@@ -286,7 +303,10 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 		for _, dev := range devices {
 			deps.notifier.Device(r.Context(), dev, "message.group", eventPayload)
 		}
-		raiseTops(r.Context(), deps.store, deps.notifier, "group", groupID, topsUsers, messageID, req.CreatedAtUnixMs)
+		// Правка — не последняя строка в списке (ADR-0045 §5): вершину не поднимает.
+		if req.EditOf == 0 {
+			raiseTops(r.Context(), deps.store, deps.notifier, "group", groupID, topsUsers, messageID, req.CreatedAtUnixMs)
+		}
 
 		// Инвариант ADR-0017 §2: в группе, где в эту эпоху была отправка, последняя версия
 		// GK обязана быть завёрнута на текущую эпоху. Отправка только что произошла — самое
@@ -331,6 +351,9 @@ func groupMessageJSON(m store.GroupMessage) map[string]any {
 	}
 	if len(m.KeyCommitment) > 0 {
 		out["key_commitment"] = b64.EncodeToString(m.KeyCommitment)
+	}
+	if m.EditOf != 0 {
+		out["edit_of"] = m.EditOf
 	}
 	return out
 }

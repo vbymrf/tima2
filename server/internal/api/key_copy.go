@@ -240,6 +240,7 @@ func storedEnvelope(m store.StoredMessage, recipient string) ([]byte, error) {
 			Kind:            pb.ContentKind(m.Kind),
 			CreatedAtUnixMs: m.CreatedAtUnixMs,
 			ReplyTo:         m.ReplyTo,
+			EditOf:          m.EditOf,
 		},
 		EncryptedPayload: m.EncryptedPayload,
 		KeyCommitment:    m.KeyCommitment,

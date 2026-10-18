@@ -17,6 +17,7 @@ import (
 // MessageStore — что личным сообщениям нужно от хранилища: четыре метода.
 type MessageStore interface {
 	SaveMessage(ctx context.Context, m store.Message) error
+	EditTarget(ctx context.Context, group bool, container string, messageID int64) (store.EditTarget, error)
 	ProfileRevs(ctx context.Context, ids []string) (map[string]int32, error)
 	ListMessages(ctx context.Context, chatID, deviceID string, before uint64, limit int) ([]store.StoredMessage, error)
 	SigningKey(ctx context.Context, deviceID, userID string) ([]byte, error)

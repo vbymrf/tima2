@@ -36,6 +36,7 @@ type GroupStore interface {
 
 	// Сообщения группы
 	SaveGroupMessage(ctx context.Context, m store.GroupMessage) (int64, bool, error)
+	EditTarget(ctx context.Context, group bool, container string, messageID int64) (store.EditTarget, error)
 	ListGroupMessages(ctx context.Context, groupID string, threadRoot, before int64, limit int, maxLevel int16) ([]store.GroupMessage, error)
 	AskForLevel(ctx context.Context, groupID, userID string, level int16) (string, error)
 	GrantLevel(ctx context.Context, groupID, userID string, level int16, untilEpoch, grantedBy string, grant bool) error

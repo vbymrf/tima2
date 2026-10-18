@@ -81,9 +81,13 @@ func countNews(events []store.DeviceEvent, userID string) int {
 		}
 		var head struct {
 			SenderID string `json:"sender_id"`
+			EditOf   int64  `json:"edit_of"`
 		}
 		_ = json.Unmarshal(e.Payload, &head)
 		if head.SenderID != "" && head.SenderID == userID {
+			continue
+		}
+		if head.EditOf != 0 { // правка — не новое сообщение (ADR-0045 §5)
 			continue
 		}
 		n++
