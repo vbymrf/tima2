@@ -106,6 +106,52 @@ object QuickMarkdown {
         return b.build()
     }
 
+    /**
+     * Строка ввода: что из набранного показать серым знаком и что — оформленным (Решения §7).
+     * Набранный текст при этом не меняется: знаки остаются знаками, стереть их можно как угодно.
+     */
+    fun typing(text: String): List<TypingMark> {
+        val out = mutableListOf<TypingMark>()
+        var offset = 0
+        var inCode = false
+        for (line in text.split('\n')) {
+            val lead = line.length - line.trimStart().length
+            val trimmed = line.trimStart()
+            when {
+                trimmed.trimEnd() == "```" -> {
+                    out += TypingMark(TypingKind.MARKER, offset, offset + line.length)
+                    inCode = !inCode
+                }
+                inCode -> out += TypingMark(TypingKind.CODE, offset, offset + line.length)
+                trimmed.trimEnd() == "---" || trimmed.trimEnd() == "***" ->
+                    out += TypingMark(TypingKind.MARKER, offset, offset + line.length)
+                HEADING.matches(trimmed) -> {
+                    val hashes = trimmed.indexOf(' ') + 1
+                    out += TypingMark(TypingKind.MARKER, offset + lead, offset + lead + hashes)
+                    out += TypingMark(TypingKind.HEADING, offset + lead + hashes, offset + line.length)
+                    Inline.typing(trimmed.substring(hashes), offset + lead + hashes, out)
+                }
+                trimmed.startsWith("-->") -> {
+                    out += TypingMark(TypingKind.MARKER, offset + lead, offset + lead + 3)
+                    out += TypingMark(TypingKind.QUOTE, offset + lead + 3, offset + line.length)
+                    Inline.typing(trimmed.substring(3), offset + lead + 3, out)
+                }
+                LIST_ITEM.matches(line) -> {
+                    out += TypingMark(TypingKind.MARKER, offset + lead, offset + lead + 2)
+                    Inline.typing(line.substring(lead + 2), offset + lead + 2, out)
+                }
+                else -> Inline.typing(line, offset, out)
+            }
+            offset += line.length + 1
+        }
+        return out
+    }
+
+    /** Отрезок строки ввода в координатах набранного текста. */
+    data class TypingMark(val kind: TypingKind, val start: Int, val end: Int)
+
+    enum class TypingKind { MARKER, BOLD, ITALIC, UNDERLINE, STRIKE, HIGHLIGHT, CODE, MENTION, HASHTAG, HEADING, QUOTE }
+
     private val HEADING = Regex("^(#{1,3}) (.*)$")
     private val LIST_ITEM = Regex("^( *)- (.*)$")
     private val TABLE_SEPARATOR = Regex("^\\s*\\|?\\s*:?-{3,}:?\\s*(\\|\\s*:?-{3,}:?\\s*)*\\|?\\s*$")
@@ -261,9 +307,11 @@ object QuickMarkdown {
 
         private sealed interface Tok
         private class Chars(val text: String) : Tok
-        private class Code(val text: String) : Tok
-        private class Tag(val type: EntityType, val text: String, val attribute: String) : Tok
-        private class Mark(val raw: String, val type: EntityType, val canOpen: Boolean, val canClose: Boolean) : Tok {
+
+        /** [at] — позиция открывающего апострофа в набранном. */
+        private class Code(val text: String, val at: Int) : Tok
+        private class Tag(val type: EntityType, val text: String, val attribute: String, val at: Int) : Tok
+        private class Mark(val raw: String, val type: EntityType, val canOpen: Boolean, val canClose: Boolean, val at: Int) : Tok {
             var pairedWith: Mark? = null
             var opener = false
         }
@@ -290,7 +338,46 @@ object QuickMarkdown {
             return out.toString() to spans.sortedWith(compareBy({ it.start }, { -it.end }))
         }
 
-        private fun tokenize(src: String): List<Tok> {
+        /**
+         * Отрезки в координатах **набранного** текста — для строки ввода, где знаки видны серым, а
+         * текст уже оформлен (Решения §7). Знак пары, апострофы кода, обратная косая экранирования —
+         * [TypingKind.MARKER]; между парными знаками — их оформление.
+         */
+        fun typing(src: String, offset: Int, out: MutableList<TypingMark>) {
+            val escapes = mutableListOf<Int>()
+            val toks = tokenize(src, escapes)
+            pair(toks)
+            for (e in escapes) out += TypingMark(TypingKind.MARKER, offset + e, offset + e + 1)
+            for (t in toks) when (t) {
+                is Code -> {
+                    val end = t.at + 1 + t.text.length
+                    out += TypingMark(TypingKind.MARKER, offset + t.at, offset + t.at + 1)
+                    out += TypingMark(TypingKind.CODE, offset + t.at + 1, offset + end)
+                    out += TypingMark(TypingKind.MARKER, offset + end, offset + end + 1)
+                }
+                is Tag -> out += TypingMark(
+                    if (t.type == EntityType.HASHTAG) TypingKind.HASHTAG else TypingKind.MENTION,
+                    offset + t.at, offset + t.at + t.text.length,
+                )
+                is Mark -> if (t.pairedWith != null) {
+                    out += TypingMark(TypingKind.MARKER, offset + t.at, offset + t.at + t.raw.length)
+                    if (t.opener) {
+                        val close = t.pairedWith!!
+                        val kind = when (t.type) {
+                            EntityType.BOLD -> TypingKind.BOLD
+                            EntityType.ITALIC -> TypingKind.ITALIC
+                            EntityType.UNDERLINE -> TypingKind.UNDERLINE
+                            EntityType.STRIKETHROUGH -> TypingKind.STRIKE
+                            else -> TypingKind.HIGHLIGHT
+                        }
+                        out += TypingMark(kind, offset + t.at + t.raw.length, offset + close.at)
+                    }
+                }
+                is Chars -> Unit
+            }
+        }
+
+        private fun tokenize(src: String, escapes: MutableList<Int>? = null): List<Tok> {
             val toks = mutableListOf<Tok>()
             val buf = StringBuilder()
             fun flush() { if (buf.isNotEmpty()) { toks += Chars(buf.toString()); buf.clear() } }
@@ -299,7 +386,7 @@ object QuickMarkdown {
                 val c = src[i]
                 val wordStart = i == 0 || src[i - 1].isWhitespace() || src[i - 1] in "([{\"'«"
                 // Экранирование: знак после `\` — текст.
-                if (c == '\\' && i + 1 < src.length && src[i + 1] in ESCAPABLE) { buf.append(src[i + 1]); i += 2; continue }
+                if (c == '\\' && i + 1 < src.length && src[i + 1] in ESCAPABLE) { escapes?.add(i); buf.append(src[i + 1]); i += 2; continue }
                 // Голый адрес: внутри разметки нет.
                 if (wordStart) {
                     val url = URL.find(src.substring(i))
@@ -308,19 +395,19 @@ object QuickMarkdown {
                 // Код: до парного обратного апострофа, внутри разметки нет.
                 if (c == '`') {
                     val close = src.indexOf('`', i + 1)
-                    if (close > i + 1) { flush(); toks += Code(src.substring(i + 1, close)); i = close + 1; continue }
+                    if (close > i + 1) { flush(); toks += Code(src.substring(i + 1, close), i); i = close + 1; continue }
                 }
                 if (wordStart && c == '#') {
                     val tag = WORD.find(src.substring(i + 1))
                     if (tag != null) {
-                        flush(); toks += Tag(EntityType.HASHTAG, "#" + tag.value, tag.value.lowercase()); i += 1 + tag.value.length
+                        flush(); toks += Tag(EntityType.HASHTAG, "#" + tag.value, tag.value.lowercase(), i); i += 1 + tag.value.length
                         continue
                     }
                 }
                 if (wordStart && c == '@') {
                     val nick = NICK.find(src.substring(i + 1))?.value?.trimEnd('.')
                     if (!nick.isNullOrEmpty()) {
-                        flush(); toks += Tag(EntityType.MENTION, "@$nick", nick); i += 1 + nick.length
+                        flush(); toks += Tag(EntityType.MENTION, "@$nick", nick, i); i += 1 + nick.length
                         continue
                     }
                 }
@@ -332,7 +419,7 @@ object QuickMarkdown {
                     val canOpen = after != null && !after.isWhitespace()
                     val canClose = before != null && !before.isWhitespace()
                     if (canOpen || canClose) {
-                        flush(); toks += Mark(mark, type, canOpen, canClose); i += mark.length; continue
+                        flush(); toks += Mark(mark, type, canOpen, canClose, i); i += mark.length; continue
                     }
                     buf.append(mark); i += mark.length; continue
                 }

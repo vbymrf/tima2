@@ -107,6 +107,8 @@ const val CHAT_SEND_TAG: String = "chat:send"
 fun ChatScreen(
     /** Отправители, чья личность отменена владельцем (ДУ6, Р30). */
     cancelledSenders: Set<String> = emptySet(),
+    /** Строка ввода: знаки серым, текст оформлен (ПЛАН-(РС) РС5); `null` — обычное поле. */
+    typingMarks: io.tima.domain.chat.TypingMarks? = null,
     state: ChatState,
     /** Имя собеседника в шапке. Над сообщениями его нет: в личной переписке подписей нет. */
     peer: String,
@@ -337,6 +339,7 @@ fun ChatScreen(
             typed = state.draft,
             onSet = onSet,
             onSend = onSend,
+            typingMarks = typingMarks,
             circle = circle,
             onCircle = onCircle,
             circles = circles,
@@ -729,6 +732,7 @@ private fun InputZone(
     typed: String,
     onSet: (String) -> Unit,
     onSend: () -> Unit,
+    typingMarks: io.tima.domain.chat.TypingMarks? = null,
     circle: MessageCircle? = null,
     onCircle: ((MessageCircle) -> Unit)? = null,
     circles: List<MessageCircle> = MessageCircle.entries,
@@ -789,6 +793,7 @@ private fun InputZone(
                 onValueChange = onSet,
                 textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
                 cursorBrush = SolidColor(colors.navigation),
+                visualTransformation = rememberTypingView(typingMarks),
                 modifier = Modifier.fillMaxWidth().testTag(CHAT_INPUT_TAG),
             )
         }

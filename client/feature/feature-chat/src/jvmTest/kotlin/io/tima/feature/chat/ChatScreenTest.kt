@@ -62,6 +62,24 @@ class ChatScreenTest {
     }
 
     @Test
+    fun знаки_в_строке_ввода_серым_а_текст_оформлен() {
+        // ПЛАН-(РС) РС5: вид меняется, набранное — нет.
+        val marks = io.tima.domain.chat.TypingMarks { text ->
+            if (text != "**жирный**") emptyList() else listOf(
+                io.tima.domain.chat.TypingSpan(io.tima.domain.chat.TypingStyle.MARKER, 0, 2),
+                io.tima.domain.chat.TypingSpan(io.tima.domain.chat.TypingStyle.BOLD, 2, 8),
+                io.tima.domain.chat.TypingSpan(io.tima.domain.chat.TypingStyle.MARKER, 8, 10),
+            )
+        }
+        val state = ChatState(draft = "**жирный**")
+        val plain = capture("чат-ввод-без-знаков", WIDTH, HEIGHT, dark = false) { screen(state) }
+        val styled = capture("чат-ввод-знаки", WIDTH, HEIGHT, dark = false) {
+            ChatScreen(typingMarks = marks, state = state, peer = "Аня", caption = "в сети", onSet = {}, onSend = {}, onBack = {})
+        }
+        assertTrue(plain.difference(styled) > 0.0, "строка ввода нарисована без оформления")
+    }
+
+    @Test
     fun экран_рисуется_в_обеих_темах() {
         val snapshots = bothThemes("чат", WIDTH, HEIGHT) { screen(chat()) }
         val difference = snapshots.getValue("светлая").difference(snapshots.getValue("тёмная"))

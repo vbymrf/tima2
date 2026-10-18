@@ -166,6 +166,36 @@ class QuickMarkdownTest {
     }
 
     @Test
+    fun строка_ввода_знаки_серым_текст_оформлен() {
+        // Решения §7: в строке ввода знаки видны, текст уже оформлен; набранное не меняется.
+        val marks = QuickMarkdown.typing("**ж** ++ч++")
+        val kinds = marks.map { Triple(it.kind, it.start, it.end) }.toSet()
+        assertEquals(
+            setOf(
+                Triple(QuickMarkdown.TypingKind.MARKER, 0, 2), Triple(QuickMarkdown.TypingKind.BOLD, 2, 3),
+                Triple(QuickMarkdown.TypingKind.MARKER, 3, 5), Triple(QuickMarkdown.TypingKind.MARKER, 6, 8),
+                Triple(QuickMarkdown.TypingKind.UNDERLINE, 8, 9), Triple(QuickMarkdown.TypingKind.MARKER, 9, 11),
+            ),
+            kinds,
+        )
+    }
+
+    @Test
+    fun строка_ввода_заголовок_и_вторая_строка() {
+        val marks = QuickMarkdown.typing("# Поход\nсбор `9:00`")
+        assertTrue(QuickMarkdown.TypingMark(QuickMarkdown.TypingKind.MARKER, 0, 2) in marks)
+        assertTrue(QuickMarkdown.TypingMark(QuickMarkdown.TypingKind.HEADING, 2, 7) in marks)
+        // Вторая строка начинается с 8: «сбор » — 5 знаков, апостроф на 13.
+        assertTrue(QuickMarkdown.TypingMark(QuickMarkdown.TypingKind.MARKER, 13, 14) in marks)
+        assertTrue(QuickMarkdown.TypingMark(QuickMarkdown.TypingKind.CODE, 14, 18) in marks)
+    }
+
+    @Test
+    fun строка_ввода_знак_без_пары_не_серый() {
+        assertEquals(emptyList(), QuickMarkdown.typing("на C++ и a == b"))
+    }
+
+    @Test
     fun тире_в_начале_строки_становится_списком() {
         // §7: «- » как тире в диалоге превращается в список; вернуть — стиранием сразу после.
         val c = parse("- Привет")

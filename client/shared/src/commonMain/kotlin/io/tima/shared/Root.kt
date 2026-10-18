@@ -4460,6 +4460,8 @@ private fun Chat(
     }
     ChatScreen(
         cancelledSenders = cancelledSenders,
+        // Знаки быстрого оформления в строке ввода — серым, текст оформлен (ПЛАН-(РС) РС5).
+        typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
         state = state,
         receipt = receipts[chatId],
         onPerson = onPerson,

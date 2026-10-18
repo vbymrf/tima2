@@ -61,3 +61,17 @@ data class TableCell(
     /** Слита с верхней (`up`) или левой (`left`) — своего текста нет. */
     val merge: String? = null,
 )
+
+/**
+ * Строка ввода: какие отрезки набранного показать серым знаком, а какие — уже оформленными
+ * (ПЛАН-(РС) РС5, Решения §7). Набранный текст не меняется: знаки остаются знаками. Реализует
+ * `core-encryption` тем же разбором, что уходит в сообщение, — разойтись им негде.
+ */
+fun interface TypingMarks {
+    fun of(text: String): List<TypingSpan>
+}
+
+/** Отрезок набранного текста. */
+data class TypingSpan(val style: TypingStyle, val start: Int, val end: Int)
+
+enum class TypingStyle { MARKER, BOLD, ITALIC, UNDERLINE, STRIKE, HIGHLIGHT, CODE, MENTION, HASHTAG, HEADING, QUOTE }
