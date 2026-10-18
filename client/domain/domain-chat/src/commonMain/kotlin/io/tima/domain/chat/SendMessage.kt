@@ -204,6 +204,15 @@ interface MessageBodyCodec {
      */
     fun editSource(body: ByteArray, edits: List<ByteArray>): String? = null
 
+    /**
+     * Что открыть в редакторе для правки того, что знаками не выразить (ряд, виджет). `null` —
+     * не выражается и документом: такое сообщение не правится.
+     */
+    fun editDoc(body: ByteArray, edits: List<ByteArray>): ComposedDoc? = null
+
+    /** Тело правки из редактора: меняются только тексты, строение то же (Решения §8). */
+    fun encodeEditDoc(body: ByteArray, edits: List<ByteArray>, doc: ComposedDoc): EditBody = EditBody.Unsupported
+
     /** Набранное с ответом на сообщение. По умолчанию ответ не знает — уходит как набранное. */
     fun encodeReply(text: String, marks: Boolean, reply: ReplyTarget): ByteArray =
         if (marks) encodeTyped(text) else encodeText(text)

@@ -541,12 +541,44 @@ class ChatStore(
         }
         scope.launch {
             val source = withContext(io) { port.source(chatId, line.serverId) }
-            _state.value = if (source == null) {
-                _state.value.copy(notice = ChatNotice.Said(words().chat.editInEditor))
+            if (source != null) {
+                _state.value = _state.value.copy(draft = source, editing = line.serverId, replyTo = null, notice = null)
+                return@launch
+            }
+            // Знаками не выразить (ряд, виджет) — правка в редакторе (заказчик 2026-10-18: «Редактор
+            // не открывает»). Документом тоже не выразить — сказать, что править нельзя.
+            val doc = withContext(io) { port.document(chatId, line.serverId) }
+            _state.value = if (doc == null) {
+                _state.value.copy(notice = ChatNotice.Said(words().chat.editImpossible))
             } else {
-                _state.value.copy(draft = source, editing = line.serverId, replyTo = null, notice = null)
+                _state.value.copy(editorOpen = true, editDoc = doc, editing = line.serverId, replyTo = null, notice = null, droppedComposed = null)
             }
         }
+    }
+
+    /**
+     * «Отправить» в редакторе правки: уходит правкой исходного — только тексты, строение то же.
+     * Ушло или менять нечего — окно закрывается; строение изменилось, пусто, велико — остаётся открытым,
+     * причину скажет редактор; остальные отказы — словами в переписке.
+     */
+    fun editorEditSend(doc: ComposedDoc): EditResult? {
+        val port = edit ?: return null
+        val id = _state.value.editing.takeIf { it > 0 && _state.value.editDoc != null } ?: return null
+        val result = port.editDoc(chatId, id, doc)
+        val w = words().chat
+        val closed = _state.value.copy(editorOpen = false, editDoc = null, editing = 0)
+        _state.value = when (result) {
+            is EditResult.Queued, is EditResult.AlreadyQueued, EditResult.Same -> closed.copy(notice = null)
+            EditResult.Limit -> closed.copy(notice = ChatNotice.Said(w.editLimit))
+            EditResult.NotSent, EditResult.Missing, EditResult.NotMine -> closed.copy(notice = ChatNotice.Said(w.editImpossible))
+            EditResult.Empty, EditResult.Structure, is EditResult.TooLarge -> _state.value
+        }
+        return result
+    }
+
+    /** «‹» в редакторе правки: правка отменена, черновиком она не становится. */
+    fun editorEditCancelled() {
+        _state.value = _state.value.copy(editorOpen = false, editDoc = null, editing = 0)
     }
 
     /** Правку отменили: строка ввода пустеет, полоса уходит. */
@@ -758,7 +790,7 @@ class ChatStore(
      * ничего: иначе отправленное вернулось бы черновиком.
      */
     fun editorDraft(doc: ComposedDoc) {
-        if (!_state.value.editorOpen) return
+        if (!_state.value.editorOpen || _state.value.editDoc != null) return
         val kept = doc.takeUnless { it.isEmpty }
         _state.value = _state.value.copy(composed = kept)
         keepComposed(kept)
@@ -1097,6 +1129,8 @@ data class ChatState(
     val composed: ComposedDoc? = null,
     /** Редактор открыт поверх переписки. */
     val editorOpen: Boolean = false,
+    /** Редактор открыт правкой своего сообщения (ряд, виджет): документ исходного с правками. */
+    val editDoc: ComposedDoc? = null,
     /** Сброшено корзиной — ещё 5 секунд можно «Вернуть». */
     val droppedComposed: ComposedDoc? = null,
     /** Серверный номер исправляемого (ADR-0045); 0 — правки нет, отправка — новое сообщение. */

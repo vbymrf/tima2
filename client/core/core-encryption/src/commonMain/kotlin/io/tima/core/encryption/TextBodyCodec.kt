@@ -81,6 +81,26 @@ object TextBodyCodec : MessageBodyCodec {
         return EditBody.Changes(MessageEdits.encode(changes))
     }
 
+    /**
+     * Документ редактора для правки (заказчик 2026-10-18): только если он собирается обратно в то же
+     * строение — иначе правка из него не прошла бы, а человек правил бы впустую.
+     */
+    override fun editDoc(body: ByteArray, edits: List<ByteArray>): io.tima.domain.chat.ComposedDoc? {
+        val current = edited(body, edits)?.let(MessageReplies::detach) ?: return null
+        val doc = ComposedFromContent.doc(current) ?: return null
+        val back = ComposedBodiesOverKodium.content(doc)
+        return doc.takeIf { MessageEdits.diff(current, back)?.isEmpty() == true }
+    }
+
+    override fun encodeEditDoc(body: ByteArray, edits: List<ByteArray>, doc: io.tima.domain.chat.ComposedDoc): EditBody {
+        val current = edited(body, edits)?.let(MessageReplies::detach) ?: return EditBody.Unsupported
+        val next = ComposedBodiesOverKodium.content(doc)
+        if (MarkupRules.check(next, strict = true).isNotEmpty()) return EditBody.Structure
+        val changes = MessageEdits.diff(current, next) ?: return EditBody.Structure
+        if (changes.isEmpty()) return EditBody.Same
+        return EditBody.Changes(MessageEdits.encode(changes))
+    }
+
     private fun edited(body: ByteArray, edits: List<ByteArray>): MessageContent? {
         val original = decode(body).getOrNull() ?: return null
         return MessageEdits.apply(original, edits.mapNotNull { MessageEdits.decode(it).getOrNull() })

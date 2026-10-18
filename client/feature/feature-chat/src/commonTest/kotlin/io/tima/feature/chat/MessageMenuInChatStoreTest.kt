@@ -53,7 +53,19 @@ class MessageMenuInChatStoreTest {
             "↩${reply.messageId}:$text".encodeToByteArray()
     }
 
-    private fun store(scope: kotlinx.coroutines.CoroutineScope) = ChatStore(
+    /** Ряд знаками не выразить: строке ввода — ничего, редактору — документ из двух кусков. */
+    private val rowCodec = object : MessageBodyCodec by codec {
+        override fun editSource(body: ByteArray, edits: List<ByteArray>): String? = null
+        override fun editDoc(body: ByteArray, edits: List<ByteArray>) =
+            io.tima.domain.chat.ComposedDoc(listOf(io.tima.domain.chat.ComposedItem.Text("было"), io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Emoji("🎉"))))
+        override fun encodeEditDoc(body: ByteArray, edits: List<ByteArray>, doc: io.tima.domain.chat.ComposedDoc): EditBody = when {
+            doc.items.size != 2 -> EditBody.Structure
+            (doc.items[0] as io.tima.domain.chat.ComposedItem.Text).source == "было" -> EditBody.Same
+            else -> EditBody.Changes((doc.items[0] as io.tima.domain.chat.ComposedItem.Text).source.encodeToByteArray())
+        }
+    }
+
+    private fun store(scope: kotlinx.coroutines.CoroutineScope, editCodec: MessageBodyCodec = codec) = ChatStore(
         io = kotlinx.coroutines.Dispatchers.Unconfined,
         chatId = "chat-1",
         observe = ObserveChat(ChatFeed { _, _ -> stream }),
@@ -62,7 +74,7 @@ class MessageMenuInChatStoreTest {
         edit = EditMessage(
             queue = EditQueue { _, _, body, _, editOf -> edits += editOf to body.decodeToString(); true },
             bodies = { _, _ -> EditOriginal("было".encodeToByteArray(), emptyList(), -1, own = true) },
-            codec = codec,
+            codec = editCodec,
             keys = DedupKeys { "e-1" },
         ),
         deleter = DeleteMessage(
@@ -100,6 +112,43 @@ class MessageMenuInChatStoreTest {
         assertEquals(emptyList(), sent, "правка не уходит новым сообщением")
         assertEquals(0L, store.state.value.editing)
         assertEquals("", store.state.value.draft)
+    }
+
+    /** Заказчик 2026-10-18: «При попытке изменить сообщение — пишет "правится в редакторе". Редактор не открывает». */
+    @Test
+    fun изменить_ряд_открывает_редактор_и_уходит_правкой() = runTest {
+        val store = store(backgroundScope, rowCodec)
+        store.editStarted(mine)
+        runCurrent()
+        val s = store.state.value
+        assertEquals(true, s.editorOpen, "редактор открыт")
+        assertEquals(2, s.editDoc!!.items.size)
+        assertEquals(42L, s.editing)
+
+        val grown = s.editDoc!!.copy(items = s.editDoc!!.items + io.tima.domain.chat.ComposedItem.Text("ещё"))
+        assertIs<io.tima.domain.chat.EditResult.Structure>(store.editorEditSend(grown))
+        assertEquals(true, store.state.value.editorOpen, "строение изменилось — окно остаётся, причину скажет редактор")
+
+        val changed = io.tima.domain.chat.ComposedDoc(listOf(io.tima.domain.chat.ComposedItem.Text("стало"), s.editDoc!!.items[1]))
+        assertIs<io.tima.domain.chat.EditResult.Queued>(store.editorEditSend(changed))
+        assertEquals(listOf(42L to "стало"), edits)
+        assertEquals(emptyList(), sent, "правка не уходит новым сообщением")
+        assertEquals(false, store.state.value.editorOpen)
+        assertEquals(0L, store.state.value.editing)
+        assertEquals(null, store.state.value.composed, "правка черновиком не становится")
+    }
+
+    @Test
+    fun отмена_правки_в_редакторе() = runTest {
+        val store = store(backgroundScope, rowCodec)
+        store.editStarted(mine)
+        runCurrent()
+        store.editorDraft(store.state.value.editDoc!!)
+        store.editorEditCancelled()
+        assertEquals(false, store.state.value.editorOpen)
+        assertEquals(0L, store.state.value.editing)
+        assertEquals(null, store.state.value.composed)
+        assertEquals(emptyList(), edits)
     }
 
     @Test

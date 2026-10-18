@@ -1229,6 +1229,7 @@ object SpanishWords : Words {
         override val picksFull = "La Selección ya tiene 20 mensajes: quite algunos en el editor"
         override val editStructure = "Una edición cambia solo el texto: filas, títulos y listas se mantienen"
         override val editInEditor = "Este mensaje se edita en el editor"
+        override val editImpossible = "Este mensaje no se puede editar"
         override val editLimit = "El mensaje ya se ha editado tres veces"
         override val deleteForAllAsk = "¿Eliminar para todos? No se podrá deshacer"
         override val deleteOffline = "Sin conexión: el mensaje no se eliminó"

@@ -193,6 +193,8 @@ fun EditorScreen(
     /** Файлы, перетащенные в редактор (ПК); `null` — не принимаем. */
     onFiles: ((List<io.tima.core.media.PickedFile>) -> Unit)? = null,
     onDraft: ((ComposedDoc) -> Unit)? = null,
+    /** Название в шапке; `null` — «Редактор». Правка своего сообщения — «Изменение». */
+    title: String? = null,
 ) {
     val colors = Tima.colors
     val w = Tima.words.editor
@@ -307,7 +309,7 @@ fun EditorScreen(
                 Modifier.weight(1f).heightIn(min = 48.dp).clickable { showPreview = !showPreview }.testTag(EditorTags.TITLE),
                 verticalArrangement = Arrangement.Center,
             ) {
-                Caption(w.title, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
+                Caption(title ?: w.title, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
                 if (showPreview) Tertiary(w.previewOn, lineOne = true)
             }
             HeaderGlyph("↶", model.canUndo, EditorTags.UNDO) { model.undo() }

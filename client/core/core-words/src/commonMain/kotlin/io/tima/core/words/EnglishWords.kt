@@ -1229,6 +1229,7 @@ object EnglishWords : Words {
         override val picksFull = "Picks already hold 20 messages — remove some in the editor"
         override val editStructure = "An edit changes text only: lines, headings and lists stay"
         override val editInEditor = "This message is edited in the editor"
+        override val editImpossible = "This message can't be edited"
         override val editLimit = "The message has been edited three times already"
         override val deleteForAllAsk = "Delete for everyone? This cannot be undone"
         override val deleteOffline = "No connection — the message was not deleted"

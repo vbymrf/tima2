@@ -1425,6 +1425,8 @@ interface ChatWords {
     val picksFull: String
     val editStructure: String
     val editInEditor: String
+    /** Сообщение не выражается ни строкой ввода, ни редактором (фото альбомом и подобное). */
+    val editImpossible: String
     val editLimit: String
     /** Подтверждение «Удалить у всех»: вернуть нельзя. */
     val deleteForAllAsk: String
@@ -3514,6 +3516,7 @@ object RussianWords : Words {
         override val picksFull = "В Подборке уже 20 сообщений — лишнее убирается в редакторе"
         override val editStructure = "Правка меняет только текст: строки, заголовки и списки остаются"
         override val editInEditor = "Такое сообщение правится в редакторе"
+        override val editImpossible = "Это сообщение изменить нельзя"
         override val editLimit = "Сообщение уже исправлено три раза"
         override val deleteForAllAsk = "Удалить у всех? Вернуть будет нельзя"
         override val deleteOffline = "Нет связи — сообщение не удалено"

@@ -37,6 +37,46 @@ class EditsTest {
         assertIs<EditBody.Structure>(TextBodyCodec.encodeEdit(original, emptyList(), "# Поход\nСбор\n- зонт", marks = true))
     }
 
+    /**
+     * Ряд и виджеты знаками не выразить — правка в редакторе (заказчик 2026-10-18): документ из
+     * сообщения собирается обратно в то же строение; меняются тексты, а добавленный кусок — отказ.
+     */
+    @Test
+    fun ряд_с_виджетами_правится_в_редакторе() {
+        val doc = io.tima.domain.chat.ComposedDoc(
+            listOf(
+                io.tima.domain.chat.ComposedItem.Text("# Поход\nСбор **в 9:00**"),
+                io.tima.domain.chat.ComposedItem.Row(
+                    listOf(
+                        io.tima.domain.chat.ComposedCell(40, "слева *так*", style = mapOf("background" to "amber-soft")),
+                        io.tima.domain.chat.ComposedCell(60, "", widgets = listOf(io.tima.domain.chat.ComposedWidget.Emoji("🎉"))),
+                    ),
+                ),
+                io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Place(47.2, 39.7, "вход")),
+                io.tima.domain.chat.ComposedItem.Text("конец", mapOf("align" to "center")),
+            ),
+        )
+        val body = ComposedBodiesOverKodium.encode(doc)!!
+        assertNull(TextBodyCodec.editSource(body, emptyList()), "строкой ввода не выразить")
+        val opened = assertNotNull(TextBodyCodec.editDoc(body, emptyList()), "редактор открывает сообщение")
+        assertEquals(4, opened.items.size)
+        assertIs<EditBody.Same>(TextBodyCodec.encodeEditDoc(body, emptyList(), opened))
+
+        val row = opened.items[1] as io.tima.domain.chat.ComposedItem.Row
+        val changed = opened.copy(
+            items = opened.items.toMutableList().apply {
+                set(1, row.copy(cells = row.cells.mapIndexed { i, c -> if (i == 0) c.copy(text = "слева *иначе*") else c }))
+            },
+        )
+        val edit = assertIs<EditBody.Changes>(TextBodyCodec.encodeEditDoc(body, emptyList(), changed))
+        assertEquals(true, TextBodyCodec.decodeEdited(body, listOf(edit.body))!!.text.contains("слева иначе"))
+        // Вторая правка — от исходного с первой.
+        assertNotNull(TextBodyCodec.editDoc(body, listOf(edit.body)))
+
+        val grown = opened.copy(items = opened.items + io.tima.domain.chat.ComposedItem.Text("ещё"))
+        assertIs<EditBody.Structure>(TextBodyCodec.encodeEditDoc(body, emptyList(), grown), "добавленный кусок — другое строение")
+    }
+
     @Test
     fun простое_сообщение_правится_простым_текстом() {
         val original = TextBodyCodec.encodeTyped("просто")
@@ -68,6 +108,18 @@ class EditsTest {
     @Test
     fun таблицу_строкой_ввода_не_правят() {
         assertNull(TextBodyCodec.editSource(TextBodyCodec.encodeTyped("| a | b |\n|---|---|\n| 1 | 2 |"), emptyList()))
+    }
+
+    /** Таблицу правит редактор: знаками, со слитой ячейкой и выравниванием; меняется текст ячейки. */
+    @Test
+    fun таблицу_правит_редактор() {
+        val body = TextBodyCodec.encodeTyped("до\n| a | **b** |\n|---|:---:|\n| 1 | << |\n| x\\|y | 3 |")
+        val opened = assertNotNull(TextBodyCodec.editDoc(body, emptyList()))
+        assertIs<EditBody.Same>(TextBodyCodec.encodeEditDoc(body, emptyList(), opened))
+        val table = opened.items.first { (it as? io.tima.domain.chat.ComposedItem.Text)?.source?.startsWith("|") == true } as io.tima.domain.chat.ComposedItem.Text
+        val changed = opened.copy(items = opened.items.map { if (it === table) table.copy(source = table.source.replace("| 1 |", "| 7 |")) else it })
+        val edit = assertIs<EditBody.Changes>(TextBodyCodec.encodeEditDoc(body, emptyList(), changed))
+        assertEquals(true, TextBodyCodec.decodeEdited(body, listOf(edit.body))!!.text.contains("7"))
     }
 
     @Test

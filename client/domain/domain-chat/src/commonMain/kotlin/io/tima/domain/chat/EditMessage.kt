@@ -23,14 +23,41 @@ class EditMessage(
         return codec.editSource(original.body, original.edits)
     }
 
+    /**
+     * Что открыть в редакторе: сообщение, которое строкой ввода не выразить (ряд, виджет). `null` —
+     * не своё, правок уже три или документом не выражается.
+     */
+    fun document(chatId: String, serverId: Long): ComposedDoc? {
+        val original = bodies.original(chatId, serverId) ?: return null
+        if (!original.own || original.edits.size >= MAX_EDITS) return null
+        return codec.editDoc(original.body, original.edits)
+    }
+
     fun edit(chatId: String, serverId: Long, typed: String, marks: Boolean = true): EditResult {
+        if (typed.isBlank()) return checked(chatId, serverId) ?: EditResult.Empty
+        return queued(chatId, serverId) { original -> codec.encodeEdit(original.body, original.edits, typed, marks) }
+    }
+
+    /** Правка из редактора: те же правила, что у строки ввода; меняются только тексты. */
+    fun editDoc(chatId: String, serverId: Long, doc: ComposedDoc): EditResult {
+        if (doc.isEmpty) return checked(chatId, serverId) ?: EditResult.Empty
+        return queued(chatId, serverId) { original -> codec.encodeEditDoc(original.body, original.edits, doc) }
+    }
+
+    /** Отказ до тела правки: не отправлено, нет, не своё, правок уже три. `null` — можно. */
+    private fun checked(chatId: String, serverId: Long): EditResult? {
         require(chatId.isNotBlank()) { "chatId пустой" }
         if (serverId <= 0) return EditResult.NotSent
         val original = bodies.original(chatId, serverId) ?: return EditResult.Missing
         if (!original.own) return EditResult.NotMine
         if (original.edits.size >= MAX_EDITS) return EditResult.Limit
-        if (typed.isBlank()) return EditResult.Empty
-        val body = when (val e = codec.encodeEdit(original.body, original.edits, typed, marks)) {
+        return null
+    }
+
+    private fun queued(chatId: String, serverId: Long, encode: (EditOriginal) -> EditBody): EditResult {
+        checked(chatId, serverId)?.let { return it }
+        val original = bodies.original(chatId, serverId) ?: return EditResult.Missing
+        val body = when (val e = encode(original)) {
             is EditBody.Changes -> e.body
             EditBody.Same -> return EditResult.Same
             EditBody.Structure -> return EditResult.Structure

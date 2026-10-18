@@ -4877,7 +4877,10 @@ private fun Chat(
     // Редактор поверх переписки (Решения §10). Модель живёт, пока окно открыто: закрыли — документ
     // ушёл черновиком в store, следующее открытие начнёт историю заново.
     if (state.editorOpen) {
-        val editorModel = remember { io.tima.feature.chat.EditorModel(state.composed ?: io.tima.domain.chat.ComposedDoc()) }
+        // Правка своего сообщения (ряд, виджет) — документ исходного; иначе собранный черновик.
+        val editingDoc = remember { state.editDoc != null }
+        val cw = Tima.words.chat
+        val editorModel = remember { io.tima.feature.chat.EditorModel(state.editDoc ?: state.composed ?: io.tima.domain.chat.ComposedDoc()) }
         val ew = Tima.words.editor
         var editorNotice by remember { mutableStateOf<String?>(null) }
         var editorAsk by remember { mutableStateOf<String?>(null) }
@@ -4914,17 +4917,35 @@ private fun Chat(
         }
         io.tima.feature.chat.EditorScreen(
             model = editorModel,
-            levels = kind?.circles ?: listOf(io.tima.domain.chat.MessageCircle.Secret),
+            // Правка уходит уровнем исходного — уровень не выбирается.
+            levels = if (editingDoc) emptyList() else kind?.circles ?: listOf(io.tima.domain.chat.MessageCircle.Secret),
+            title = if (editingDoc) Tima.words.chat.editing else null,
             defaultLevel = state.level,
             typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
             preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
             problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
             onBack = { doc ->
-                store.editorBack(doc)
-                Journal.note(LogCode.EDITOR, "закрыт", "рядов" to doc.rows)
+                if (editingDoc) {
+                    store.editorEditCancelled()
+                    Journal.note(LogCode.EDITOR, "правка отменена")
+                } else {
+                    store.editorBack(doc)
+                    Journal.note(LogCode.EDITOR, "закрыт", "рядов" to doc.rows)
+                }
             },
             onDraft = store::editorDraft,
-            onSend = { doc ->
+            onSend = send@{ doc ->
+                if (editingDoc) {
+                    when (val r = store.editorEditSend(doc)) {
+                        io.tima.domain.chat.EditResult.Structure -> editorNotice = cw.editStructure
+                        io.tima.domain.chat.EditResult.Empty -> editorNotice = cw.editImpossible
+                        is io.tima.domain.chat.EditResult.TooLarge -> editorNotice = cw.editImpossible
+                        is io.tima.domain.chat.EditResult.Queued -> Journal.note(LogCode.EDITOR, "правка отправлена", "рядов" to doc.rows)
+                        null -> Unit
+                        else -> Journal.note(LogCode.EDITOR, "правка", "исход" to r::class.simpleName.orEmpty())
+                    }
+                    return@send
+                }
                 scope.launch {
                     // Картинка в ячейке уже ряда — под её ширину (720 × доля), из исходного файла.
                     val fitted = doc.copy(
