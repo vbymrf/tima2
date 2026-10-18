@@ -108,6 +108,8 @@ object EditorTags {
     fun spot(s: io.tima.domain.chat.Spot) = if (s.cell < 0) "editor:widget.${s.item}" else "editor:widget.${s.item}.${s.cell}.${s.widget}"
     /** Рамка между столбцами ряда N: `editor:border.N.B`. */
     fun border(item: Int, boundary: Int) = "editor:border.$item.$boundary"
+    /** Линейка рамок над выбранным рядом N. */
+    fun ruler(item: Int) = "editor:ruler.$item"
     const val GRID = "editor:grid"
 }
 

@@ -200,19 +200,22 @@ internal fun EditorRow(
         // Ряд редактора никто не спрашивает «какой ты высоты по содержимому» — подсостав здесь можно.
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
             val gridPx = constraints.maxWidth
-            SpanGrid(columns, widths, spans, gap, Modifier.fillMaxWidth()) { c ->
-                val (w, _) = spans[c]
-                val percent = (c % columns until c % columns + w).sumOf { widths.getOrElse(it) { 0 } }
-                EditorCell(row.cells[c], index, c, percent, model, drag, marks, preview, Modifier)
-            }
-            // Рамки между столбцами — у выбранного ряда: иначе они перехватывали бы нажатия по ячейкам.
-            if (spot.item == index && columns > 1 && gridPx > 0) {
-                Box(Modifier.matchParentSize()) {
-                    val free = gridPx - gapPx * (columns - 1)
-                    for (boundary in 1 until columns) {
-                        val x = free * widths.take(boundary).sum() / 100f + gapPx * (boundary - 1) + gapPx / 2
-                        ColumnBorder(x, boundary, gridPx, index, model)
+            Column(Modifier.fillMaxWidth()) {
+                // Рамки — линейкой над рядом, как в Word: не режут слитые ячейки и не перехватывают
+                // нажатия по ячейкам. Только у выбранного ряда.
+                if (spot.item == index && columns > 1 && gridPx > 0) {
+                    Box(Modifier.fillMaxWidth().height(RULER).testTag(EditorTags.ruler(index))) {
+                        val free = gridPx - gapPx * (columns - 1)
+                        for (boundary in 1 until columns) {
+                            val x = free * widths.take(boundary).sum() / 100f + gapPx * (boundary - 1) + gapPx / 2
+                            ColumnBorder(x, boundary, gridPx, index, model)
+                        }
                     }
+                }
+                SpanGrid(columns, widths, spans, gap, Modifier.fillMaxWidth()) { c ->
+                    val (w, _) = spans[c]
+                    val percent = (c % columns until c % columns + w).sumOf { widths.getOrElse(it) { 0 } }
+                    EditorCell(row.cells[c], index, c, percent, model, drag, marks, preview, Modifier)
                 }
             }
         }
@@ -246,9 +249,12 @@ private fun ColumnBorder(x: Float, boundary: Int, gridPx: Int, item: Int, model:
             .testTag(EditorTags.border(item, boundary)),
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.width(4.dp).fillMaxHeight().background(colors.navigation, RoundedCornerShape(2.dp)))
+        Box(Modifier.width(6.dp).fillMaxHeight().padding(vertical = 2.dp).background(colors.navigation, RoundedCornerShape(3.dp)))
     }
 }
+
+/** Высота линейки рамок над выбранным рядом. */
+private val RULER = 22.dp
 
 @Composable
 private fun EditorCell(
