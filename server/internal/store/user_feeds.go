@@ -60,6 +60,12 @@ type FeedItem struct {
 	Kind         int32
 	// CommentsClosed — обсуждение этой записи выключено (ADR-0024 §6).
 	CommentsClosed bool
+	// Unavailable — принесённая запись, чей оригинал удалён или сужен: вместо содержимого
+	// строка «Недоступно» (ПЛАН-(РС) РС3, один механизм доступа по ссылке). Бывает, только
+	// если просили заглушки.
+	Unavailable bool
+	// OriginalLevel — уровень оригинала, если он есть; -100 — оригинала нет.
+	OriginalLevel int16
 }
 
 // FeedOf — канал-лента этого человека.
@@ -212,6 +218,10 @@ func (s *Store) CarryToFeed(
 // оригинала сужен до «по разрешению» — строки нет. Так и выполняются обещания ADR-0019 §7:
 // «удалил оригинал — исчезло везде», «сузил доступ — подействовало везде». Проверка живёт
 // в запросе, а не в обработчике: обойти её тогда нечем.
+//
+// **stubs** (2026-10-18, один механизм доступа по ссылке): такая строка не пропадает, а
+// приходит заглушкой — `Unavailable`, без содержимого оригинала, с его уровнем, если он есть.
+// Содержимое по-прежнему не отдаётся: проверка та же, меняется только «пропасть» на «недоступно».
 func (s *Store) ListFeed(
 	ctx context.Context,
 	channelID string,
@@ -219,6 +229,7 @@ func (s *Store) ListFeed(
 	limit int,
 	maxLevel int16,
 	viewerID string,
+	stubs bool,
 ) ([]FeedItem, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
@@ -237,7 +248,11 @@ func (s *Store) ListFeed(
 		       COALESCE(p.ref_message_id, 0),
 		       COALESCE(g.title, sc.title, ''),
 		       COALESCE(o.payload, ''::bytea), COALESCE(o.signature, ''::bytea),
-		       COALESCE(o.sender_device::text, ''), COALESCE(o.kind, 0)
+		       COALESCE(o.sender_device::text, ''), COALESCE(o.kind, 0),
+		       (p.ref_container_id IS NULL
+		        OR (p.ref_kind = 'group'   AND o.message_id IS NOT NULL AND o.level   BETWEEN 0 AND 2)
+		        OR (p.ref_kind = 'channel' AND src.post_id  IS NOT NULL AND src.level BETWEEN 0 AND 2)) AS available,
+		       COALESCE(o.level, src.level, -100)::smallint AS original_level
 		  FROM channel_posts p
 		  LEFT JOIN group_messages o
 		         ON p.ref_kind = 'group' AND o.group_id = p.ref_container_id
@@ -253,11 +268,11 @@ func (s *Store) ListFeed(
 		 WHERE p.channel_id = $1 AND p.post_id < $2 AND NOT p.deleted
 		   AND p.parent_post_id IS NULL
 		   AND (p.level <= $4 OR fg.user_id IS NOT NULL)
-		   AND (p.ref_container_id IS NULL
+		   AND ($6::boolean OR (p.ref_container_id IS NULL
 		        OR (p.ref_kind = 'group'   AND o.message_id IS NOT NULL AND o.level   BETWEEN 0 AND 2)
-		        OR (p.ref_kind = 'channel' AND src.post_id  IS NOT NULL AND src.level BETWEEN 0 AND 2))
+		        OR (p.ref_kind = 'channel' AND src.post_id  IS NOT NULL AND src.level BETWEEN 0 AND 2)))
 		 ORDER BY p.post_id DESC
-		 LIMIT $3`, channelID, before, limit, maxLevel, viewerID)
+		 LIMIT $3`, channelID, before, limit, maxLevel, viewerID, stubs)
 	if err != nil {
 		return nil, err
 	}
@@ -265,11 +280,17 @@ func (s *Store) ListFeed(
 	var out []FeedItem
 	for rows.Next() {
 		var it FeedItem
+		var available bool
 		if err := rows.Scan(&it.PostID, &it.Level, &it.CreatedAtUnixMs, &it.CommentsClosed, &it.Text, &it.Nodes,
 			&it.AuthorID, &it.CarriedBy, &it.RefKind, &it.RefContainerID,
 			&it.RefMessageID, &it.SourceTitle,
-			&it.Payload, &it.Signature, &it.SenderDevice, &it.Kind); err != nil {
+			&it.Payload, &it.Signature, &it.SenderDevice, &it.Kind, &available, &it.OriginalLevel); err != nil {
 			return nil, err
+		}
+		if !available {
+			// Заглушка: содержимое оригинала не отдаётся ни в каком виде.
+			it.Unavailable = true
+			it.Text, it.Nodes, it.Payload, it.Signature, it.SenderDevice, it.Kind = "", nil, nil, nil, "", 0
 		}
 		out = append(out, it)
 	}

@@ -48,7 +48,12 @@ func RegisterMedia(mux *http.ServeMux, st MediaStore, blobs func() *blob.Client,
 }
 
 const (
-	maxMediaBytes  = 2 << 30 // 2 GB — лимит presigned PUT (Caddy: request_body max_size 2GB)
+	// Предел файла: 10 МБ, себе — 50 МБ (заказчик 2026-10-16…18, doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §6);
+	// прежние 2 ГБ сняты. Здесь — верхняя граница, 50 МБ: кому файл, ручка загрузки пока не знает.
+	// Предел 10 МБ для чужого получателя проверяется там, где получатель известен, — у почтальона
+	// (ПЛАН-(ПФ) ПФ4, ПЛАН-(РС) РС3). У Caddy перед s3 остаётся max_size 2GB — предел
+	// держит эта ручка: больше 50 МБ ссылка на загрузку не выдаётся.
+	maxMediaBytes  = 50 << 20
 	maxChunks      = 1024
 	uploadURLTTL   = 15 * time.Minute
 	downloadURLTTL = 10 * time.Minute // media-storage.md §2

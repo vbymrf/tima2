@@ -527,51 +527,62 @@ func listMessages(deps messagesDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		b64 := base64.RawURLEncoding
-		type item struct {
-			MessageID  uint64 `json:"message_id"`
-			Envelope   string `json:"envelope"`                 // base64url(protobuf Envelope) с единственной обёрткой устройства
-			WrappedKey string `json:"wrapped_key"`              // base64url — дублирует обёртку из конверта для удобства
-			WrapEph    string `json:"wrap_ephemeral,omitempty"` // эфемерал обёртки восстановления (иначе — sender_ephemeral_pub конверта)
-		}
-		out := make([]item, 0, len(msgs))
+		out := make([]personalItem, 0, len(msgs))
 		for _, m := range msgs {
-			env := &pb.Envelope{
-				FormatVersion: uint32(m.FormatVersion),
-				Meta: &pb.Metadata{
-					MessageId:       m.MessageID,
-					ChatId:          m.ChatID,
-					SenderId:        m.SenderID,
-					SenderDevice:    m.SenderDevice,
-					Kind:            pb.ContentKind(m.Kind),
-					CreatedAtUnixMs: m.CreatedAtUnixMs,
-					ReplyTo:         m.ReplyTo,
-				},
-				EncryptedPayload: m.EncryptedPayload,
-				KeyCommitment:    m.KeyCommitment,
-				Escrow: &pb.EscrowBlob{
-					MlkemCt:           m.EscrowMlkemCt,
-					WrappedMessageKey: m.EscrowWrappedKey,
-					EscrowKeyVersion:  uint32(m.EscrowKeyVersion),
-				},
-				SenderEphemeralPub: m.SenderEphemeralPub,
-				RatchetEnvelope:    m.RatchetEnvelope,
-				Signature:          m.Signature,
-				WrappedKeys:        []*pb.WrappedKey{{Recipient: deviceID, Wrapped: m.WrappedKeyForDevice}},
-			}
-			raw, err := proto.Marshal(env)
+			it, err := personalMessageItem(m, deviceID)
 			if err != nil {
 				log.Printf("listMessages: marshal: %v", err)
 				writeErr(w, http.StatusInternalServerError, "internal", "ошибка сериализации")
 				return
-			}
-			it := item{MessageID: m.MessageID, Envelope: b64.EncodeToString(raw), WrappedKey: b64.EncodeToString(m.WrappedKeyForDevice)}
-			if len(m.WrapEphemeral) == 32 {
-				it.WrapEph = b64.EncodeToString(m.WrapEphemeral)
 			}
 			out = append(out, it)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"messages": out})
 	}
+}
+
+// personalItem — личное сообщение в выдаче: конверт с единственной обёрткой запросившего
+// устройства. Общее для истории и для выдачи одного сообщения по номеру.
+type personalItem struct {
+	MessageID  uint64 `json:"message_id"`
+	Envelope   string `json:"envelope"`                 // base64url(protobuf Envelope) с единственной обёрткой устройства
+	WrappedKey string `json:"wrapped_key"`              // base64url — дублирует обёртку из конверта для удобства
+	WrapEph    string `json:"wrap_ephemeral,omitempty"` // эфемерал обёртки восстановления (иначе — sender_ephemeral_pub конверта)
+}
+
+func personalMessageItem(m store.StoredMessage, deviceID string) (personalItem, error) {
+	b64 := base64.RawURLEncoding
+	env := &pb.Envelope{
+		FormatVersion: uint32(m.FormatVersion),
+		Meta: &pb.Metadata{
+			MessageId:       m.MessageID,
+			ChatId:          m.ChatID,
+			SenderId:        m.SenderID,
+			SenderDevice:    m.SenderDevice,
+			Kind:            pb.ContentKind(m.Kind),
+			CreatedAtUnixMs: m.CreatedAtUnixMs,
+			ReplyTo:         m.ReplyTo,
+		},
+		EncryptedPayload: m.EncryptedPayload,
+		KeyCommitment:    m.KeyCommitment,
+		Escrow: &pb.EscrowBlob{
+			MlkemCt:           m.EscrowMlkemCt,
+			WrappedMessageKey: m.EscrowWrappedKey,
+			EscrowKeyVersion:  uint32(m.EscrowKeyVersion),
+		},
+		SenderEphemeralPub: m.SenderEphemeralPub,
+		RatchetEnvelope:    m.RatchetEnvelope,
+		Signature:          m.Signature,
+		WrappedKeys:        []*pb.WrappedKey{{Recipient: deviceID, Wrapped: m.WrappedKeyForDevice}},
+	}
+	raw, err := proto.Marshal(env)
+	if err != nil {
+		return personalItem{}, err
+	}
+	it := personalItem{MessageID: m.MessageID, Envelope: b64.EncodeToString(raw), WrappedKey: b64.EncodeToString(m.WrappedKeyForDevice)}
+	if len(m.WrapEphemeral) == 32 {
+		it.WrapEph = b64.EncodeToString(m.WrapEphemeral)
+	}
+	return it, nil
 }

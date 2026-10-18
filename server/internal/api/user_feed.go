@@ -77,7 +77,7 @@ type FeedStore interface {
 	// Источником переноса стал ещё и канал (К2): право спрашивается у него — подписка
 	// и круг, а не роль в группе.
 	GetChannel(ctx context.Context, channelID string) (store.Channel, error)
-	ListFeed(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16, viewerID string) ([]store.FeedItem, error)
+	ListFeed(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16, viewerID string, stubs bool) ([]store.FeedItem, error)
 
 	// Поимённое разрешение на свою запись (К4): владелец называет, кому она открыта,
 	// бессрочно или до даты.
@@ -381,7 +381,10 @@ func writeFeedLevels(
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
 	id, _ := auth.FromContext(r.Context())
-	items, err := st.ListFeed(r.Context(), channelID, before, limit, maxLevel, id.UserID)
+	// stubs=1 — перенесённое с исчезнувшим или суженным оригиналом приходит заглушкой, а не
+	// пропадает (ПЛАН-(РС) РС3). Новый необязательный параметр: без него — как было.
+	stubs := r.URL.Query().Get("stubs") == "1"
+	items, err := st.ListFeed(r.Context(), channelID, before, limit, maxLevel, id.UserID, stubs)
 	if err != nil {
 		log.Printf("writeFeed: %v", err)
 		writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -399,6 +402,19 @@ func writeFeedLevels(
 	b64 := base64.RawURLEncoding
 	out := make([]map[string]any, 0, len(items))
 	for _, it := range items {
+		if it.Unavailable {
+			stub := map[string]any{
+				"post_id": it.PostID, "level": it.Level, "created_at_unix_ms": it.CreatedAtUnixMs,
+				"author_id": it.AuthorID, "carried_by": it.CarriedBy,
+				"ref_kind": it.RefKind, "ref_container_id": it.RefContainerID, "ref_message_id": it.RefMessageID,
+				"source_title": it.SourceTitle, "unavailable": true,
+			}
+			if it.OriginalLevel > -100 {
+				stub["original_level"] = it.OriginalLevel
+			}
+			out = append(out, stub)
+			continue
+		}
 		out = append(out, map[string]any{
 			// Разговор один на запись: у принесённой ссылки своих комментариев нет,
 			// они лежат у оригинала (ADR-0024 §3). Здесь считаются комментарии этой

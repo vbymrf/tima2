@@ -335,6 +335,21 @@ func groupMessageJSON(m store.GroupMessage) map[string]any {
 	return out
 }
 
+// readerMaxLevel — граница выдачи для просящего: роль плюс поимённое разрешение, если оно есть
+// и не истекло. Одна на историю и на выдачу одного сообщения по номеру.
+func readerMaxLevel(deps groupsDeps, r *http.Request, role string) int16 {
+	max := maxLevelFor(role)
+	if role != "" && max < levelByGrant {
+		id, _ := auth.FromContext(r.Context())
+		if granted, err := deps.store.GrantedLevelFor(r.Context(), r.PathValue("groupID"), id.UserID); err != nil {
+			log.Printf("readerMaxLevel: grant: %v", err)
+		} else if granted > max {
+			max = granted
+		}
+	}
+	return max
+}
+
 // listGroupMessages — GET /groups/{groupID}/messages?before=&limit=&thread=.
 func listGroupMessages(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -366,16 +381,7 @@ func listGroupMessages(deps groupsDeps) http.HandlerFunc {
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
-		// Граница выдачи: роль плюс поимённое разрешение, если оно есть и не истекло.
-		max := maxLevelFor(role)
-		if role != "" && max < levelByGrant {
-			id, _ := auth.FromContext(r.Context())
-			if granted, err := deps.store.GrantedLevelFor(r.Context(), r.PathValue("groupID"), id.UserID); err != nil {
-				log.Printf("listGroupMessages: grant: %v", err)
-			} else if granted > max {
-				max = granted
-			}
-		}
+		max := readerMaxLevel(deps, r, role)
 		msgs, err := deps.store.ListGroupMessages(r.Context(), r.PathValue("groupID"), thread, before, limit, max)
 		if err != nil {
 			log.Printf("listGroupMessages: %v", err)

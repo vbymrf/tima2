@@ -72,6 +72,7 @@ func RegisterChannels(mux *http.ServeMux, st ChannelStore, n *Notifier, requireD
 	mux.HandleFunc("DELETE /api/v1/channels/{channelID}/subscribe", requireDevice(unsubscribeChannel(st)))
 	mux.HandleFunc("POST /api/v1/channels/{channelID}/posts", requireDevice(postToChannel(st, n)))
 	mux.HandleFunc("GET /api/v1/channels/{channelID}/posts", requireDevice(listChannelPosts(st)))
+	mux.HandleFunc("GET /api/v1/channels/{channelID}/posts/{postID}", requireDevice(getChannelPost(st)))
 
 	// Разговор под записью. Тот же набор обслуживает и ленту человека: она сделана
 	// каналом, и комментарий к её записи лежит в ней же.
@@ -322,6 +323,26 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 
 // listChannelPosts — GET /channels/{id}/posts: лента. Публичный канал читают все;
 // приватный (позже) — только подписчики.
+// channelPostItem — запись канала в выдаче. Общая для ленты канала и для выдачи одной записи
+// по номеру (ПЛАН-(РС) РС3).
+func channelPostItem(p store.ChannelPost, comments int) map[string]any {
+	item := map[string]any{
+		"post_id": p.PostID, "author_id": p.AuthorID, "text": p.Text,
+		"nodes": p.Nodes, "created_at_unix_ms": p.CreatedAtUnixMs,
+		"level": p.Level, "comments": comments,
+		// Выключатель обсуждения этой записи (ADR-0024 §6): экран говорит
+		// «обсуждение закрыто» словом, а не пустым списком.
+		"comments_closed": p.CommentsClosed,
+		// Язык и страна записи (ПЛАН-(Я)-ЯЗЫКА Я5): по ним клиент отсеивает, а
+		// сервер готовит региональные ленты. Метаданные открытые.
+		"lang": p.Lang, "country": p.Country,
+	}
+	if len(p.Markup) > 0 {
+		item["markup"] = json.RawMessage(p.Markup)
+	}
+	return item
+}
+
 func listChannelPosts(st ChannelStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		channelID := r.PathValue("channelID")
@@ -364,21 +385,7 @@ func listChannelPosts(st ChannelStore) http.HandlerFunc {
 		}
 		out := make([]map[string]any, 0, len(posts))
 		for _, p := range posts {
-			item := map[string]any{
-				"post_id": p.PostID, "author_id": p.AuthorID, "text": p.Text,
-				"nodes": p.Nodes, "created_at_unix_ms": p.CreatedAtUnixMs,
-				"level": p.Level, "comments": counts[p.PostID],
-				// Выключатель обсуждения этой записи (ADR-0024 §6): экран говорит
-				// «обсуждение закрыто» словом, а не пустым списком.
-				"comments_closed": p.CommentsClosed,
-				// Язык и страна записи (ПЛАН-(Я)-ЯЗЫКА Я5): по ним клиент отсеивает, а
-				// сервер готовит региональные ленты. Метаданные открытые.
-				"lang": p.Lang, "country": p.Country,
-			}
-			if len(p.Markup) > 0 {
-				item["markup"] = json.RawMessage(p.Markup)
-			}
-			out = append(out, item)
+			out = append(out, channelPostItem(p, counts[p.PostID]))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"channel": channelJSON(store.ChannelView{Channel: ch}), "posts": out})

@@ -53,6 +53,7 @@ func RegisterMessages(
 
 	mux.HandleFunc("POST /api/v1/messages", requireDevice(postMessage(deps)))
 	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", requireDevice(listMessages(deps)))
+	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages/{messageID}", requireDevice(getPersonalMessage(deps)))
 	mux.HandleFunc("POST /api/v1/chats/{chatID}/read", requireDevice(chatRead(deps)))
 	mux.HandleFunc("POST /api/v1/chats/{chatID}/typing", requireDevice(chatTyping(deps)))
 }

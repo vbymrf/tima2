@@ -141,6 +141,7 @@ func RegisterGroups(
 
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/messages", requireDevice(postGroupMessage(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/messages", requireDevice(listGroupMessages(deps)))
+	mux.HandleFunc("GET /api/v1/groups/{groupID}/messages/{messageID}", requireDevice(getGroupMessage(deps)))
 	mux.HandleFunc("PATCH /api/v1/groups/{groupID}/messages/{messageID}", requireDevice(patchGroupMessageLevel(deps)))
 
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/keys", requireDevice(groupRotate(deps)))
