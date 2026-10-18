@@ -3,6 +3,9 @@ package io.tima.core.encryption
 import io.tima.crypto.MessageContent
 import io.tima.crypto.MessageContentCodec
 import io.tima.crypto.MessageEdits
+import io.tima.crypto.MessageReplies
+import io.tima.crypto.MarkupRef
+import io.tima.domain.chat.ReplyTarget
 import io.tima.crypto.MarkupRules
 import io.tima.crypto.MessageSerializer
 import io.tima.crypto.QuickMarkdown
@@ -45,14 +48,27 @@ object TextBodyCodec : MessageBodyCodec {
         edited(body, edits)?.let { DecodedLine(it.displayText(), RichMapper.from(it)) }
 
     override fun editSource(body: ByteArray, edits: List<ByteArray>): String? =
-        edited(body, edits)?.let(QuickMarkdown::source)
+        edited(body, edits)?.let { QuickMarkdown.source(MessageReplies.detach(it)) }
+
+    /**
+     * Набранное с блоком ответа первым (ADR-0044 `reply`). Не прошло строгую проверку — ответ к
+     * тексту как есть: лучше без оформления, чем без ответа.
+     */
+    override fun encodeReply(text: String, marks: Boolean, reply: ReplyTarget): ByteArray {
+        val ref = MessageReplies.Reply(MarkupRef(kind = reply.kind, container = reply.chatId, message = reply.messageId), reply.userId)
+        val typed = if (marks) QuickMarkdown.parse(text) else QuickMarkdown.plain(text)
+        val withReply = MessageReplies.attach(typed, ref).takeIf { MarkupRules.check(it, strict = true).isEmpty() }
+            ?: MessageReplies.attach(MessageContent.text(text), ref)
+        return MessageSerializer.encodeBody(MessageContentCodec.toBody(withReply))
+    }
 
     /**
      * Правка считается от того, что человек видит: исходное с прежними правками. У сообщения без
      * оформления знаки остаются текстом — строение (абзац без разметки) правка не меняет.
      */
     override fun encodeEdit(body: ByteArray, edits: List<ByteArray>, typed: String, marks: Boolean): EditBody {
-        val current = edited(body, edits) ?: return EditBody.Unsupported
+        // Ответ правкой не меняется: блок ответа узлов не занимает, разница — по тексту без него.
+        val current = edited(body, edits)?.let(MessageReplies::detach) ?: return EditBody.Unsupported
         val next = if (marks && current.hasMarkup) QuickMarkdown.parse(typed) else QuickMarkdown.plain(typed)
         if (MarkupRules.check(next, strict = true).isNotEmpty()) return EditBody.Structure
         val changes = MessageEdits.diff(current, next) ?: return EditBody.Structure

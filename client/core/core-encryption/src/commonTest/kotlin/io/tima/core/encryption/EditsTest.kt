@@ -46,6 +46,26 @@ class EditsTest {
     }
 
     @Test
+    fun ответ_уходит_блоком_и_правится_по_тексту() {
+        val reply = io.tima.domain.chat.ReplyTarget("group", "g-1", 42, "u-7")
+        val body = TextBodyCodec.encodeReply("да, **в девять**", marks = true, reply = reply)
+        val line = TextBodyCodec.decodeLine(body)!!
+        assertEquals("да, в девять", line.text, "блок ответа текста не добавляет")
+        val first = line.rich!!.blocks.first()
+        assertEquals(io.tima.domain.chat.RichBlock.Reply("u-7", "g-1", 42), first)
+        // Правка ответа: в строку ввода — текст без блока ответа; ответ после правки на месте.
+        assertEquals("да, **в девять**", TextBodyCodec.editSource(body, emptyList()))
+        val edit = assertIs<EditBody.Changes>(TextBodyCodec.encodeEdit(body, emptyList(), "да, **в десять**", marks = true))
+        val after = TextBodyCodec.decodeEdited(body, listOf(edit.body))!!
+        assertEquals("да, в десять", after.text)
+        assertEquals(first, after.rich!!.blocks.first())
+        // Простой текст с ответом правится простым текстом.
+        val plain = TextBodyCodec.encodeReply("ок", marks = true, reply = reply)
+        assertEquals("ок", TextBodyCodec.editSource(plain, emptyList()))
+        assertIs<EditBody.Changes>(TextBodyCodec.encodeEdit(plain, emptyList(), "ладно", marks = true))
+    }
+
+    @Test
     fun таблицу_строкой_ввода_не_правят() {
         assertNull(TextBodyCodec.editSource(TextBodyCodec.encodeTyped("| a | b |\n|---|---|\n| 1 | 2 |"), emptyList()))
     }

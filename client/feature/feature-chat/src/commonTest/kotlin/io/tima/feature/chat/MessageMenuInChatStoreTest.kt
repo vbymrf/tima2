@@ -47,11 +47,17 @@ class MessageMenuInChatStoreTest {
             if (typed == body.decodeToString()) EditBody.Same else EditBody.Changes(typed.encodeToByteArray())
     }
 
+    /** Ответ помечается в теле — так видно, что отправка ушла ответом. */
+    private val replyCodec = object : MessageBodyCodec by codec {
+        override fun encodeReply(text: String, marks: Boolean, reply: io.tima.domain.chat.ReplyTarget) =
+            "↩${reply.messageId}:$text".encodeToByteArray()
+    }
+
     private fun store(scope: kotlinx.coroutines.CoroutineScope) = ChatStore(
         io = kotlinx.coroutines.Dispatchers.Unconfined,
         chatId = "chat-1",
         observe = ObserveChat(ChatFeed { _, _ -> stream }),
-        send = SendMessage(OutgoingQueue { key, _, body, _, _, _ -> sent += body.decodeToString(); true }, codec, DedupKeys { "d-${sent.size}" }),
+        send = SendMessage(OutgoingQueue { key, _, body, _, _, _ -> sent += body.decodeToString(); true }, replyCodec, DedupKeys { "d-${sent.size}" }),
         scope = scope,
         edit = EditMessage(
             queue = EditQueue { _, _, body, _, editOf -> edits += editOf to body.decodeToString(); true },
@@ -127,6 +133,18 @@ class MessageMenuInChatStoreTest {
         runCurrent()
         assertEquals(listOf("d-42"), removed)
         assertEquals(emptyList(), remote)
+    }
+
+    @Test
+    fun ответить_уходит_ответом_и_полоса_уходит() = runTest {
+        val store = store(backgroundScope)
+        val theirs = mine.copy(outgoing = false, senderId = "u-он", serverId = 7)
+        store.replyStarted(theirs)
+        assertEquals(7L, store.state.value.replyTo?.serverId)
+        store.draftChanged("да")
+        store.sendPressed()
+        assertEquals(listOf("↩7:да"), sent)
+        assertEquals(null, store.state.value.replyTo)
     }
 
     @Test

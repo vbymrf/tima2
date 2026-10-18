@@ -4516,6 +4516,7 @@ private fun Chat(
         onNarrowConfirm = store::narrowConfirmed,
         onDeleteConfirm = store::deleteForAllConfirmed,
         onEditCancel = store::editCancelled,
+        onReplyCancel = store::replyCancelled,
         onMenu = { line -> menuFor = line },
         // Показ доступности — только в группе: в личной переписке круга нет.
         onCircles = if (group) store::circlesShown else null,
@@ -4586,8 +4587,8 @@ private fun Chat(
             text = text?.take(160),
             own = line.outgoing,
             onClose = close,
-            // Ответ — следующим срезом РС7 (ответ уходит в подписанном reply_to).
-            onReply = null,
+            // Ответ — блок первым в разметке тела: ссылка зашифрована вместе с текстом.
+            onReply = { store.replyStarted(line); close() },
             onEdit = if (line.edits < io.tima.domain.chat.EditMessage.MAX_EDITS) {
                 { store.editStarted(line); close() }
             } else {

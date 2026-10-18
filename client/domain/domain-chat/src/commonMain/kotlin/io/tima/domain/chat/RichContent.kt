@@ -44,6 +44,12 @@ sealed interface RichBlock {
     data class Table(val rows: List<List<TableCell>>) : RichBlock
 
     /**
+     * Ответ (Решения §7 «`@Ник`», §11.1): чьё и какое сообщение. Имя и строку из него рисует экран
+     * по своей переписке — в теле лежит только ссылка.
+     */
+    data class Reply(val userId: String, val chatId: String, val messageId: Long) : RichBlock
+
+    /**
      * Блок, который эта версия показать не умеет: ряд, виджет, подкладка — пока их нет на экране,
      * или незнакомое от более новой версии. Показывается текстом его узлов — сообщение не
      * теряется.

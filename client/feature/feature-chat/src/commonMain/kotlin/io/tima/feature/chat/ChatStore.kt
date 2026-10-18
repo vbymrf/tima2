@@ -12,6 +12,7 @@ import io.tima.domain.chat.EditMessage
 import io.tima.domain.chat.EditResult
 import io.tima.domain.chat.MessagePicks
 import io.tima.domain.chat.PickResult
+import io.tima.domain.chat.ReplyTarget
 import io.tima.domain.chat.HealGroupKey
 import io.tima.domain.chat.HealStep
 import io.tima.domain.chat.MessageCircle
@@ -430,6 +431,19 @@ class ChatStore(
 
     // ── Меню сообщения (Решения §11.1) ─────────────────────────────────────────
 
+    /** «Ответить» на чужое: полоса ответа над строкой ввода; отправка уйдёт с блоком ответа. */
+    fun replyStarted(line: ChatLine) {
+        if (line.serverId <= 0) return
+        _state.value = _state.value.copy(
+            replyTo = ReplyDraft(line.serverId, line.senderId.orEmpty(), line.text?.take(REPLY_PREVIEW)),
+            editing = 0,
+        )
+    }
+
+    fun replyCancelled() {
+        _state.value = _state.value.copy(replyTo = null)
+    }
+
     /**
      * «Изменить»: в строку ввода — набранный текст со знаками (с прежними правками), над ней —
      * полоса «Изменение». Отправка уйдёт правкой. Нечем выразить знаками (таблица, ряд) —
@@ -446,7 +460,7 @@ class ChatStore(
             _state.value = if (source == null) {
                 _state.value.copy(notice = ChatNotice.Said(words().chat.editInEditor))
             } else {
-                _state.value.copy(draft = source, editing = line.serverId, notice = null)
+                _state.value.copy(draft = source, editing = line.serverId, replyTo = null, notice = null)
             }
         }
     }
@@ -535,13 +549,16 @@ class ChatStore(
         val text = _state.value.draft
         // Круг едет в очередь вместе с сообщением: решение «нужен ли ключ» принимается
         // при отправке, а она может случиться после перезапуска.
-        val outcome = send.send(chatId, text, _state.value.level)
+        val reply = _state.value.replyTo?.let {
+            ReplyTarget(kind = if (_state.value.group) "group" else "personal", chatId = chatId, messageId = it.serverId, userId = it.userId)
+        }
+        val outcome = send.send(chatId, text, _state.value.level, reply = reply)
 
         _state.value = when (outcome) {
             // Принято: поле чистим — сообщение уже в списке.
             is SendMessageResult.Queued,
             is SendMessageResult.AlreadyQueued,
-            -> _state.value.copy(draft = "", notice = null)
+            -> _state.value.copy(draft = "", notice = null, replyTo = null)
 
             // Нажатие мимо. Ни сообщения, ни жалобы: человек и сам видит, что поле пусто.
             SendMessageResult.Empty -> _state.value.copy(notice = null)
@@ -637,6 +654,8 @@ data class ChatState(
     val draft: String = "",
     /** Серверный номер исправляемого (ADR-0045); 0 — правки нет, отправка — новое сообщение. */
     val editing: Long = 0,
+    /** На что отвечаем (Решения §11.1); `null` — не ответ. */
+    val replyTo: ReplyDraft? = null,
     val notice: ChatNotice? = null,
     /** Запрос ключа в пути: второе нажатие не шлёт вторую просьбу чужим устройствам. */
     val expectKey: Boolean = false,
@@ -702,6 +721,12 @@ data class ChatState(
      */
     val pendingNarrow: PendingNarrow? = null,
 )
+
+/** Задуманный ответ: номер сообщения, его автор и строка из него для полосы. */
+data class ReplyDraft(val serverId: Long, val userId: String, val preview: String?)
+
+/** Сколько знаков сообщения показывать в полосе ответа. */
+private const val REPLY_PREVIEW = 120
 
 /** Задуманное сужение: до какого круга и от какого. */
 data class PendingNarrow(val messageId: Long, val was: Int, val to: Int)

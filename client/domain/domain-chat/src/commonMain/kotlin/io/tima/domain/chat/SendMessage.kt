@@ -51,6 +51,8 @@ class SendMessage(
          * ([KIND_TEXT]): служебное и звонки знаков не разбирают.
          */
         marks: Boolean = true,
+        /** Ответ на сообщение (Решения §11.1): блок ответа первым в разметке тела. */
+        reply: ReplyTarget? = null,
     ): SendMessageResult {
         require(chatId.isNotBlank()) { "chatId пустой" }
 
@@ -58,7 +60,11 @@ class SendMessage(
         // незачем, а «отправилось ничего» — это ещё и строка в переписке.
         if (text.isBlank()) return SendMessageResult.Empty
 
-        val body = if (kind == KIND_TEXT && marks) codec.encodeTyped(text) else codec.encodeText(text)
+        val body = when {
+            reply != null && kind == KIND_TEXT -> codec.encodeReply(text, marks, reply)
+            kind == KIND_TEXT && marks -> codec.encodeTyped(text)
+            else -> codec.encodeText(text)
+        }
         if (body.size > maxBodyBytes) {
             return SendMessageResult.TooLarge(body.size, maxBodyBytes)
         }
@@ -190,7 +196,16 @@ interface MessageBodyCodec {
      * выразить (таблица, ряд, виджет) — такое правит редактор (РС6).
      */
     fun editSource(body: ByteArray, edits: List<ByteArray>): String? = null
+
+    /** Набранное с ответом на сообщение. По умолчанию ответ не знает — уходит как набранное. */
+    fun encodeReply(text: String, marks: Boolean, reply: ReplyTarget): ByteArray =
+        if (marks) encodeTyped(text) else encodeText(text)
 }
+
+/**
+ * На что отвечают: вид переписки (`personal`, `group`, `channel`), где, номер и чьё.
+ */
+data class ReplyTarget(val kind: String, val chatId: String, val messageId: Long, val userId: String)
 
 /** Что вышло из правки на уровне тела. */
 sealed interface EditBody {

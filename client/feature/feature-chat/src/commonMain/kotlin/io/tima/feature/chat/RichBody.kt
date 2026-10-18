@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -25,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaType
+import io.tima.core.ui.words
 import io.tima.domain.chat.Bullet
 import io.tima.domain.chat.RichBlock
 import io.tima.domain.chat.RichContent
@@ -70,6 +72,33 @@ private fun RichBlockView(block: RichBlock) {
         RichBlock.Divider -> Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(colors.line))
         is RichBlock.Table -> RichTable(block)
         is RichBlock.Fallback -> Caption(block.text, fontSize = TimaType.sz4)
+        is RichBlock.Reply -> ReplyBlock(LocalReplyLook.current(block))
+    }
+}
+
+/**
+ * Как показать блок ответа: имя автора и строка из его сообщения — по своей переписке (в теле
+ * только ссылка). Нет сообщения на устройстве — только имя; удалено — «Сообщение удалено»
+ * (Решения §7).
+ */
+data class ReplyLook(val name: String?, val preview: String?, val deleted: Boolean = false)
+
+/** Переписка называет, на что ответ; по умолчанию — ничего не знаем, видно только знак ответа. */
+val LocalReplyLook = staticCompositionLocalOf<(RichBlock.Reply) -> ReplyLook> { { ReplyLook(null, null) } }
+
+/** Блок ответа: полоса, имя, строка из сообщения. */
+@Composable
+fun ReplyBlock(look: ReplyLook) {
+    val colors = Tima.colors
+    Row(
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).background(colors.functional, RoundedCornerShape(6.dp)),
+    ) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(colors.activity))
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Caption(look.name ?: "↩", fontSize = TimaType.sz5, weight = FontWeight.Bold, maxLines = 1)
+            val second = if (look.deleted) Tima.words.chat.deleted else look.preview
+            if (!second.isNullOrBlank()) Caption(second, fontSize = TimaType.sz5, color = colors.text2, maxLines = 1)
+        }
     }
 }
 

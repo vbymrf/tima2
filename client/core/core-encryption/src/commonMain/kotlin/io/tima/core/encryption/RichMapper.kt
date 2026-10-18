@@ -51,6 +51,8 @@ internal object RichMapper {
                         }
                     },
                 )
+                BlockType.REPLY -> block.widget?.ref?.let { RichBlock.Reply(block.widget!!.userId, it.container, it.message) }
+                    ?: RichBlock.Fallback("")
                 // Ряд, виджеты, подкладка, незнакомое — пока текстом своих узлов (виджеты — РС4/РС6).
                 else -> RichBlock.Fallback(allNodes(block).joinToString("\n") { nodeText(it) }.trim())
             }

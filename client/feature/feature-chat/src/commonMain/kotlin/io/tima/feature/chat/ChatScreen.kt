@@ -158,6 +158,8 @@ fun ChatScreen(
     onDeleteConfirm: () -> Unit = {},
     /** Отменил правку — полоса «Изменение» уходит (ADR-0045). `null` — полосы нет. */
     onEditCancel: (() -> Unit)? = null,
+    /** Не отвечать — полоса ответа уходит. `null` — полосы нет. */
+    onReplyCancel: (() -> Unit)? = null,
     /**
      * Унести чужую запись к себе на страницу: `(messageId, круг записи)`.
      *
@@ -275,6 +277,16 @@ fun ChatScreen(
         }
         banner?.invoke()
 
+        // Блок ответа называет автора и строку из сообщения по этой же переписке (в теле — ссылка).
+        val replyLook: (io.tima.domain.chat.RichBlock.Reply) -> ReplyLook = { reply ->
+            val found = state.lines.firstOrNull { it.serverId == reply.messageId }
+            val name = when {
+                !state.group -> peer
+                else -> state.names[reply.userId]?.line(authorLook) ?: words.someone
+            }
+            ReplyLook(name = name, preview = found?.text, deleted = found?.deleted == true)
+        }
+        androidx.compose.runtime.CompositionLocalProvider(LocalReplyLook provides replyLook) {
         Feed(
             lines = state.lines,
             // **В личной переписке подписи нет вовсе.** Так в макете: у чужой реплики
@@ -310,6 +322,7 @@ fun ChatScreen(
             invite = invite,
             onInvite = onInvite,
         )
+        }
 
         // Полоса недоступной истории — над вводом и ОДНА на экран, а не у каждой строки.
         // Запрос уходит сразу за все недостающие версии; кнопка у каждого сообщения
@@ -347,6 +360,12 @@ fun ChatScreen(
         }
 
         // Полоса правки над строкой ввода (ADR-0045): видно, что отправка исправит, а не напишет.
+        state.replyTo?.let { reply ->
+            if (onReplyCancel != null) {
+                val name = if (!state.group) peer else state.names[reply.userId]?.line(authorLook) ?: words.someone
+                ReplyBar(look = ReplyLook(name, reply.preview), onCancel = onReplyCancel)
+            }
+        }
         if (state.editing > 0 && onEditCancel != null) {
             EditBar(onCancel = onEditCancel)
         }
@@ -839,6 +858,28 @@ const val NARROW_CONFIRM_TAG = "chat:narrow.confirm"
 /** Метка полосы правки и её «✕». */
 const val EDIT_BAR_TAG = "chat:editing"
 const val EDIT_CANCEL_TAG = "chat:editing.cancel"
+
+/** Метка полосы ответа и её «✕». */
+const val REPLY_BAR_TAG = "chat:reply"
+const val REPLY_CANCEL_TAG = "chat:reply.cancel"
+
+/** Полоса ответа над строкой ввода: на что отвечаем, ✕ — не отвечать (Решения §11.1). */
+@Composable
+private fun ReplyBar(look: ReplyLook, onCancel: () -> Unit) {
+    val colors = Tima.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.softAccent)
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+            .testTag(REPLY_BAR_TAG),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f)) { ReplyBlock(look) }
+        IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(REPLY_CANCEL_TAG))
+    }
+}
 
 /** Полоса «Изменение» над строкой ввода: идёт правка, ✕ — отменить (ADR-0045). */
 @Composable
