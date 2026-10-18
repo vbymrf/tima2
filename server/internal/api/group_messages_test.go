@@ -28,6 +28,9 @@ type groupMsg struct {
 	ThreadRoot      int64
 	ReplyTo         int64
 	CreatedAtUnixMs int64
+	// Key — ключ группы, которым закрыт Payload: от него обязательство (подпись v2). nil у
+	// зашифрованного — обязательство от нулевого ключа: сервер значения не проверит, только длину.
+	Key *[32]byte
 }
 
 // sealGK шифрует plaintext групповым ключом (SecretBox, nonce‖box — как Kodium).
@@ -47,7 +50,7 @@ func sendGroupMessage(t *testing.T, ts *httptest.Server, sender *device, groupID
 	if m.CreatedAtUnixMs == 0 {
 		m.CreatedAtUnixMs = 1_750_000_000_000
 	}
-	cb := timacrypto.GroupMessageCanonicalBytes(timacrypto.GroupMessageMeta{
+	meta := timacrypto.GroupMessageMeta{
 		GroupID:         groupID,
 		SenderID:        sender.userID,
 		SenderDevice:    sender.id,
@@ -56,7 +59,17 @@ func sendGroupMessage(t *testing.T, ts *httptest.Server, sender *device, groupID
 		ThreadRoot:      uint64(m.ThreadRoot),
 		ReplyTo:         uint64(m.ReplyTo),
 		GKVersion:       uint32(m.GKVersion),
-	}, m.Payload)
+	}
+	cb := timacrypto.GroupMessageCanonicalBytes(meta, m.Payload)
+	var commitment []byte
+	if m.GKVersion > 0 {
+		key := [32]byte{}
+		if m.Key != nil {
+			key = *m.Key
+		}
+		commitment = timacrypto.KeyCommitment(key[:])
+		cb = timacrypto.GroupMessageCanonicalBytesV2(meta, m.Payload, commitment)
+	}
 	sig := ed25519.Sign(sender.signKey, cb)
 	if tamper {
 		sig[0] ^= 1
@@ -71,6 +84,9 @@ func sendGroupMessage(t *testing.T, ts *httptest.Server, sender *device, groupID
 		"reply_to":           m.ReplyTo,
 		"created_at_unix_ms": m.CreatedAtUnixMs,
 		"signature":          b64.EncodeToString(sig),
+	}
+	if commitment != nil {
+		body["key_commitment"] = b64.EncodeToString(commitment)
 	}
 	var resp map[string]json.RawMessage
 	code := authedJSON(t, ts, "POST", "/api/v1/groups/"+groupID+"/messages", sender.token, body, &resp)
@@ -102,7 +118,7 @@ func verifyAndOpen(t *testing.T, groupID string, item map[string]json.RawMessage
 	if err1 != nil || err2 != nil {
 		t.Fatal("битые base64url в сообщении группы")
 	}
-	cb := timacrypto.GroupMessageCanonicalBytes(timacrypto.GroupMessageMeta{
+	cb := timacrypto.GroupMessageCanonicalBytesV2(timacrypto.GroupMessageMeta{
 		GroupID:         groupID,
 		SenderID:        m.SenderID,
 		SenderDevice:    m.SenderDevice,
@@ -111,7 +127,7 @@ func verifyAndOpen(t *testing.T, groupID string, item map[string]json.RawMessage
 		ThreadRoot:      uint64(m.ThreadRoot),
 		ReplyTo:         uint64(m.ReplyTo),
 		GKVersion:       uint32(m.GKVersion),
-	}, payload)
+	}, payload, timacrypto.KeyCommitment(gk[:]))
 	if !timacrypto.VerifyEnvelopeSignature(signingPub, cb, sig) {
 		t.Fatal("подпись сообщения группы не сошлась на стороне получателя")
 	}
@@ -151,7 +167,7 @@ func TestGroupMessagesEndToEnd(t *testing.T) {
 
 	// member шлёт зашифрованное GK сообщение
 	plaintext := []byte("групповое сообщение, зашифрованное GK v1 🎯")
-	msg := groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000001", Kind: 1, GKVersion: 1, Payload: sealGK(t, gk1, plaintext)}
+	msg := groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000001", Kind: 1, GKVersion: 1, Key: &gk1, Payload: sealGK(t, gk1, plaintext)}
 	code, resp := sendGroupMessage(t, ts, member, groupID, msg, false)
 	if code != http.StatusCreated {
 		t.Fatalf("POST group message: %d", code)
@@ -171,31 +187,31 @@ func TestGroupMessagesEndToEnd(t *testing.T) {
 
 	// Отказы: не-участник → 404; битая подпись → 403; чужая версия GK → 400; без GK → 400
 	if code, _ := sendGroupMessage(t, ts, outsider, groupID,
-		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000002", GKVersion: 1, Payload: sealGK(t, gk1, plaintext)}, false); code != http.StatusNotFound {
+		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000002", GKVersion: 1, Key: &gk1, Payload: sealGK(t, gk1, plaintext)}, false); code != http.StatusNotFound {
 		t.Fatalf("сообщение не-участника: ожидался 404, получен %d", code)
 	}
 	if code, _ := sendGroupMessage(t, ts, member, groupID,
-		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000003", GKVersion: 1, Payload: sealGK(t, gk1, plaintext)}, true); code != http.StatusForbidden {
+		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000003", GKVersion: 1, Key: &gk1, Payload: sealGK(t, gk1, plaintext)}, true); code != http.StatusForbidden {
 		t.Fatalf("битая подпись: ожидался 403, получен %d", code)
 	}
 	if code, _ := sendGroupMessage(t, ts, member, groupID,
-		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000004", GKVersion: 9, Payload: sealGK(t, gk1, plaintext)}, false); code != http.StatusBadRequest {
+		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000004", GKVersion: 9, Key: &gk1, Payload: sealGK(t, gk1, plaintext)}, false); code != http.StatusBadRequest {
 		t.Fatalf("неизвестный gk_version: ожидался 400, получен %d", code)
 	}
 	if code, _ := sendGroupMessage(t, ts, member, groupID,
-		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000005", Payload: sealGK(t, gk1, plaintext)}, false); code != http.StatusBadRequest {
+		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000005", Key: &gk1, Payload: sealGK(t, gk1, plaintext)}, false); code != http.StatusBadRequest {
 		t.Fatalf("private без gk_version: ожидался 400, получен %d", code)
 	}
 
 	// Ветка: ответ с thread_root на первое сообщение; битая ссылка → 400
 	reply := groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000006", Kind: 1, GKVersion: 1,
-		Payload: sealGK(t, gk1, []byte("ответ в ветке")), ThreadRoot: firstID, ReplyTo: firstID}
+		Key: &gk1, Payload: sealGK(t, gk1, []byte("ответ в ветке")), ThreadRoot: firstID, ReplyTo: firstID}
 	if code, _ := sendGroupMessage(t, ts, owner, groupID, reply, false); code != http.StatusCreated {
 		t.Fatalf("ответ в ветке: %d", code)
 	}
 	if code, _ := sendGroupMessage(t, ts, owner, groupID,
 		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000007", GKVersion: 1,
-			Payload: sealGK(t, gk1, plaintext), ThreadRoot: 999999}, false); code != http.StatusBadRequest {
+			Key: &gk1, Payload: sealGK(t, gk1, plaintext), ThreadRoot: 999999}, false); code != http.StatusBadRequest {
 		t.Fatalf("битый thread_root: ожидался 400, получен %d", code)
 	}
 
@@ -224,12 +240,12 @@ func TestGroupMessagesEndToEnd(t *testing.T) {
 		t.Fatalf("PATCH slow_mode: %d", code)
 	}
 	code, _ = sendGroupMessage(t, ts, member, groupID,
-		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000008", GKVersion: 1, Payload: sealGK(t, gk1, plaintext)}, false)
+		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000008", GKVersion: 1, Key: &gk1, Payload: sealGK(t, gk1, plaintext)}, false)
 	if code != http.StatusTooManyRequests {
 		t.Fatalf("slow mode: ожидался 429, получен %d", code)
 	}
 	if code, _ := sendGroupMessage(t, ts, owner, groupID,
-		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000009", GKVersion: 1, Payload: sealGK(t, gk1, plaintext)}, false); code != http.StatusCreated {
+		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000009", GKVersion: 1, Key: &gk1, Payload: sealGK(t, gk1, plaintext)}, false); code != http.StatusCreated {
 		t.Fatalf("slow mode не должен действовать на owner: %d", code)
 	}
 
@@ -239,7 +255,7 @@ func TestGroupMessagesEndToEnd(t *testing.T) {
 		t.Fatalf("бан: %d", code)
 	}
 	code, _ = sendGroupMessage(t, ts, member, groupID,
-		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-00000000000a", GKVersion: 1, Payload: sealGK(t, gk1, plaintext)}, false)
+		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-00000000000a", GKVersion: 1, Key: &gk1, Payload: sealGK(t, gk1, plaintext)}, false)
 	if code != http.StatusForbidden {
 		t.Fatalf("сообщение под баном: ожидался 403, получен %d", code)
 	}
@@ -262,7 +278,7 @@ func TestWSDeliversGroupMessage(t *testing.T) {
 	plaintext := []byte("live-сообщение группы по WS")
 	if code, _ := sendGroupMessage(t, ts, owner, groupID,
 		groupMsg{ClientMsgID: "cccccccc-0000-0000-0000-000000000011", Kind: 1, GKVersion: 1,
-			Payload: sealGK(t, gk1, plaintext)}, false); code != http.StatusCreated {
+			Key: &gk1, Payload: sealGK(t, gk1, plaintext)}, false); code != http.StatusCreated {
 		t.Fatalf("POST group message: %d", code)
 	}
 

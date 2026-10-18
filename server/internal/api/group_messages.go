@@ -152,6 +152,13 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 				writeErr(w, http.StatusBadRequest, "bad_payload", "payload короче минимума SecretBox")
 				return
 			}
+			// Зашифрованное — только с обязательством по ключу группы (подпись v2 или v3): без
+			// него проверку ключа обходили бы, не прислав его. Приём v1 отозван (поправка к
+			// ADR-0013, заказчик 2026-10-18); открытое по-прежнему v1 — ключа у него нет.
+			if commitment == nil {
+				writeErr(w, http.StatusBadRequest, "no_commitment", "зашифрованное сообщение группы — только с key_commitment")
+				return
+			}
 			known, err := deps.store.GroupKeyVersionExists(r.Context(), groupID, req.GKVersion)
 			if err != nil {
 				log.Printf("postGroupMessage: gk version: %v", err)

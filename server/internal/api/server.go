@@ -485,12 +485,10 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 // validateEnvelope — жёсткие инварианты wire-формата (envelope.proto). Пустая строка = ок.
 func validateEnvelope(env *pb.Envelope) string {
 	switch {
-	// Принимаем и старую версию: пока в пути есть сообщения от необновлённых
-	// клиентов, отказ означал бы их потерю. Отзовём приём v1 отдельным релизом,
-	// когда все перейдут (двухфазная выкатка, ADR-0013).
-	case env.GetFormatVersion() != timacrypto.FormatVersion && env.GetFormatVersion() != timacrypto.FormatVersionLegacy &&
-		env.GetFormatVersion() != timacrypto.FormatVersionEdit:
-		return "неподдерживаемый format_version"
+	// Версия 1 не принимается (поправка к ADR-0013, заказчик 2026-10-18): конверт без
+	// обязательства по ключу обходил бы его проверку. Клиенты собирают v2 с ADR-0013.
+	case env.GetFormatVersion() != timacrypto.FormatVersion && env.GetFormatVersion() != timacrypto.FormatVersionEdit:
+		return "неподдерживаемый format_version (принимаются 2 и 3)"
 	// Версия 3 — только правка, и правка — только версия 3 (ADR-0045): номер исходного обязан
 	// стоять под подписью, иначе его переносят на другое сообщение того же автора.
 	case env.GetFormatVersion() == timacrypto.FormatVersionEdit && env.GetMeta().GetEditOf() == 0:
@@ -502,8 +500,6 @@ func validateEnvelope(env *pb.Envelope) string {
 	// подписью: оно входит в canonical_bytes.
 	case env.GetFormatVersion() >= timacrypto.FormatVersion && len(env.GetKeyCommitment()) != timacrypto.CommitmentSize:
 		return "key_commitment должен быть 32 байта при format_version >= 2"
-	case env.GetFormatVersion() < timacrypto.FormatVersion && len(env.GetKeyCommitment()) != 0:
-		return "key_commitment не место в конверте версии 1"
 	case env.GetMeta() == nil:
 		return "нет meta"
 	case env.GetMeta().GetChatId() == "" || env.GetMeta().GetSenderId() == "" || env.GetMeta().GetSenderDevice() == "":
