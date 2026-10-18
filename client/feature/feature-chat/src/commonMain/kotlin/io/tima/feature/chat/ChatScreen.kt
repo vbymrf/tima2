@@ -171,6 +171,10 @@ fun ChatScreen(
     onAttach: ((AttachItem) -> Unit)? = null,
     /** Эмоджи при пустой строке — отдельным сообщением. */
     onEmojiSend: ((String) -> Unit)? = null,
+    /** Открыть фото и сохранить файл из сообщения (Решения §3, §6). */
+    attachments: AttachmentActions = AttachmentActions(),
+    /** Плитки скрепки на этой платформе. */
+    attachItems: List<AttachItem> = AttachItem.entries,
     /**
      * Унести чужую запись к себе на страницу: `(messageId, круг записи)`.
      *
@@ -308,7 +312,11 @@ fun ChatScreen(
                 deleted = found.deleted,
             )
         }
-        androidx.compose.runtime.CompositionLocalProvider(LocalReplyLook provides replyLook, LocalQuoteLook provides quoteLook) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalReplyLook provides replyLook,
+            LocalQuoteLook provides quoteLook,
+            LocalAttachmentActions provides attachments,
+        ) {
         Feed(
             lines = state.lines,
             // **В личной переписке подписи нет вовсе.** Так в макете: у чужой реплики
@@ -404,6 +412,7 @@ fun ChatScreen(
             onComposedDrop = onComposedDrop,
             onAttach = onAttach,
             onEmojiSend = onEmojiSend,
+            attachItems = attachItems,
         )
     }
     }
@@ -628,7 +637,11 @@ private fun Reply(
     ) {
         // Только эмоджи — крупно и без пузыря (Решения §2): это не текст, а знак.
         val emoji = line.text?.takeIf { line.rich == null && !line.deleted && isEmojiOnly(it) }
-        if (emoji != null) {
+        val rich = line.rich
+        if (rich != null && !line.deleted && rich.isOutside()) {
+            // Фото без текста и файлы — вне пузыря (Решения §2).
+            OutsideBubble(line) { AttachmentsView(rich) }
+        } else if (emoji != null) {
             OutsideBubble(line) { Caption(emoji.trim(), fontSize = 44.sp) }
         } else {
             Bubbled(

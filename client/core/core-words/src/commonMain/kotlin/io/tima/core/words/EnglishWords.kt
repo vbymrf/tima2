@@ -1253,6 +1253,34 @@ object EnglishWords : Words {
         }
         override fun composedInEditor(rows: Int) = "Composed in the editor · $rows " + if (rows == 1) "row" else "rows"
         override val undo = "Undo"
+        override fun mediaSummary(kind: String, count: Int, name: String) = when (kind) {
+            "PHOTO" -> if (count > 1) "Photo · $count" else "Photo"
+            "CONTACT" -> "Contact" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            "PLACE" -> "Location" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            "LINK" -> "Link" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            else -> "File: " + name.ifBlank { "unnamed" }
+        }
+        override val fileDownload = "Download"
+        override val sizeUnits = listOf("B", "KB", "MB")
+        override val fileSaveAs = "Save as"
+        override val fileGone = "The file is no longer on the server — ask to send it again"
+        override val sending = "Sending…"
+        override val sendFailed = "Not sent: no connection to the server"
+        override val photoTooMany = "No more than 10 photos in one message"
+        override fun fileRefused(reason: String) = when (reason) {
+            "large" -> "The file is over 10 MB (50 MB to yourself)"
+            "type" -> "Such files are not sent: executables, .html, .svg"
+            "archive" -> "An archive or installer: the recipient will see a warning"
+            else -> "The file was not sent"
+        }
+        override val linkAsk = "Link"
+        override val linkPlace = "Link to a file in the cloud"
+        override val placeYandex = "Yandex Maps"
+        override val placeGoogle = "Google Maps"
+        override val placeAsk = "Coordinates or a map link"
+        override val placeNoAccess = "No access to location — enter the point by hand"
+        override val ok = "Done"
+        override val cancel = "Cancel"
         override fun failReason(code: String): String? = when (code) {
             "level_in_private" -> "a private group has no such circle — only “Encrypted” and “Everyone, always”"
             "secret_in_public" -> "a public group is not encrypted — pick an open circle"

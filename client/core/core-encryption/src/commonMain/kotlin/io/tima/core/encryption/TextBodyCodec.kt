@@ -95,7 +95,39 @@ object TextBodyCodec : MessageBodyCodec {
      * оформления — это хуже, чем с оформлением, и несравнимо лучше, чем пустое место.
      * Разметка приедет вместе с редактором.
      */
-    override fun decodeText(body: ByteArray): String? = decode(body).getOrNull()?.displayText()
+    override fun decodeText(body: ByteArray): String? = decode(body).getOrNull()?.let { c ->
+        // Без текста, с файлами — метка для списка: «Фото», «Файл: имя» скажет экран (Решения §12).
+        if (c.plainText().isBlank() && c.media.isNotEmpty()) {
+            val photos = c.media.count { it.mime.startsWith("image/") && it.name.isEmpty() }
+            if (photos == c.media.size) {
+                io.tima.domain.chat.MediaSummary.of(io.tima.domain.chat.MediaSummary.Kind.PHOTO, photos)
+            } else {
+                val file = c.media.first { it.name.isNotEmpty() || !it.mime.startsWith("image/") }
+                io.tima.domain.chat.MediaSummary.of(io.tima.domain.chat.MediaSummary.Kind.FILE, c.media.size, file.name)
+            }
+        } else {
+            c.displayText().ifBlank { c.markup?.blocks?.let(::cardSummary) ?: "" }
+        }
+    }
+
+    /** Карточка без текста — контакт, место, ссылка: первая встреченная в разметке (Решения §12). */
+    private fun cardSummary(blocks: List<io.tima.crypto.MarkupBlock>): String? {
+        for (b in blocks) {
+            val w = b.widget
+            val found = when (b.type) {
+                io.tima.crypto.BlockType.CONTACT -> io.tima.domain.chat.MediaSummary.of(io.tima.domain.chat.MediaSummary.Kind.CONTACT, 1, w?.name.orEmpty())
+                io.tima.crypto.BlockType.MAP -> io.tima.domain.chat.MediaSummary.of(io.tima.domain.chat.MediaSummary.Kind.PLACE, 1, w?.label.orEmpty())
+                io.tima.crypto.BlockType.LINK, io.tima.crypto.BlockType.CLOUD -> io.tima.domain.chat.MediaSummary.of(
+                    io.tima.domain.chat.MediaSummary.Kind.LINK,
+                    1,
+                    w?.title?.ifBlank { null } ?: w?.url.orEmpty().substringAfter("://").substringBefore('/').removePrefix("www."),
+                )
+                else -> cardSummary(b.children)
+            }
+            if (found != null) return found
+        }
+        return null
+    }
 
     fun decode(payload: ByteArray): Result<MessageContent> =
         MessageSerializer.decodeBody(payload).map { MessageContentCodec.fromBody(it) }

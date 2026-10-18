@@ -39,6 +39,54 @@ class MediaOverHttp(
     private val token: () -> String,
 ) : Media {
 
+    override suspend fun uploadSealed(sealed: ByteArray, mime: String, postmanChat: String?, postmanPeer: String?): String? = try {
+        val init = client.post(route.api("/api/v1/media/init")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("size_bytes", JsonPrimitive(sealed.size))
+                    put("mime", JsonPrimitive(mime))
+                    put("is_encrypted", JsonPrimitive(true))
+                    if (postmanChat != null && postmanPeer != null) {
+                        put("postman", buildJsonObject {
+                            put("chat_id", JsonPrimitive(postmanChat))
+                            put("peer_id", JsonPrimitive(postmanPeer))
+                        })
+                    }
+                }.toString(),
+            )
+        }
+        if (init.status != HttpStatusCode.Created) {
+            null
+        } else {
+            val body = Json.parseToJsonElement(init.bodyAsText()).jsonObject
+            val mediaId = body["media_id"]?.jsonPrimitive?.content
+            val url = body["upload_urls"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.content
+            if (mediaId == null || url == null) {
+                null
+            } else {
+                // Байты закрыты ключом файла — тип для хранилища один: бинарный.
+                val put = client.put(url) {
+                    contentType(ContentType.Application.OctetStream)
+                    setBody(sealed)
+                }
+                if (!put.status.isSuccess()) {
+                    null
+                } else {
+                    val done = client.post(route.api("/api/v1/media/complete")) {
+                        header("Authorization", "Bearer ${token()}")
+                        contentType(ContentType.Application.Json)
+                        setBody(buildJsonObject { put("media_id", JsonPrimitive(mediaId)) }.toString())
+                    }
+                    if (done.status == HttpStatusCode.OK) mediaId else null
+                }
+            }
+        }
+    } catch (_: Throwable) {
+        null
+    }
+
     override suspend fun upload(bytes: ByteArray, mime: String): String? = try {
         val init = client.post(route.api("/api/v1/media/init")) {
             header("Authorization", "Bearer ${token()}")

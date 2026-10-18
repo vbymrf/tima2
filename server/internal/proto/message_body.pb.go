@@ -385,7 +385,10 @@ type MediaRef struct {
 	ChunkCount uint32                 `protobuf:"varint,9,opt,name=chunk_count,json=chunkCount,proto3" json:"chunk_count,omitempty"` // >1 → chunked (§10.3)
 	// Превью фото от отправителя (doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §3): JPEG по большей стороне 320,
 	// качество 0,7, до 20 КБ — едет внутри зашифрованного тела, полное — по нажатию. Пусто — нет.
-	Preview       []byte `protobuf:"bytes,10,opt,name=preview,proto3" json:"preview,omitempty"`
+	Preview []byte `protobuf:"bytes,10,opt,name=preview,proto3" json:"preview,omitempty"`
+	// Имя файла вне пузыря (Решения §6): на диске файл лежит по номеру сообщения, имя — здесь, в
+	// зашифрованном теле. Пусто у фото.
+	Name          string `protobuf:"bytes,11,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -490,6 +493,13 @@ func (x *MediaRef) GetPreview() []byte {
 	return nil
 }
 
+func (x *MediaRef) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 var File_message_body_proto protoreflect.FileDescriptor
 
 const file_message_body_proto_rawDesc = "" +
@@ -513,7 +523,7 @@ const file_message_body_proto_rawDesc = "" +
 	"\x03url\x18\x04 \x01(\tR\x03url\x12\x17\n" +
 	"\auser_id\x18\x05 \x01(\tR\x06userId\x12\x1c\n" +
 	"\tattribute\x18\x06 \x01(\tR\tattribute\x12\x19\n" +
-	"\bmedia_id\x18\a \x01(\tR\amediaId\"\x9b\x02\n" +
+	"\bmedia_id\x18\a \x01(\tR\amediaId\"\xaf\x02\n" +
 	"\bMediaRef\x12\x19\n" +
 	"\bmedia_id\x18\x01 \x01(\tR\amediaId\x12\x1b\n" +
 	"\tmedia_key\x18\x02 \x01(\fR\bmediaKey\x12\x12\n" +
@@ -528,7 +538,8 @@ const file_message_body_proto_rawDesc = "" +
 	"\vchunk_count\x18\t \x01(\rR\n" +
 	"chunkCount\x12\x18\n" +
 	"\apreview\x18\n" +
-	" \x01(\fR\apreview*\xdc\x01\n" +
+	" \x01(\fR\apreview\x12\x12\n" +
+	"\x04name\x18\v \x01(\tR\x04name*\xdc\x01\n" +
 	"\n" +
 	"EntityType\x12\x12\n" +
 	"\x0eET_UNSPECIFIED\x10\x00\x12\v\n" +

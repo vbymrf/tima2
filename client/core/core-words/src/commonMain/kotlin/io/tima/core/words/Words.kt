@@ -1426,6 +1426,25 @@ interface ChatWords {
     fun attachItem(tag: String): String
     fun composedInEditor(rows: Int): String
     val undo: String
+    /** Строка списка у сообщения без текста: `PHOTO` — фото, `FILE` — файл с именем. */
+    fun mediaSummary(kind: String, count: Int, name: String): String
+    val fileDownload: String
+    /** Единицы размера файла: байты, килобайты, мегабайты. */
+    val sizeUnits: List<String>
+    val fileSaveAs: String
+    val fileGone: String
+    val sending: String
+    val sendFailed: String
+    val photoTooMany: String
+    fun fileRefused(reason: String): String
+    val linkAsk: String
+    val linkPlace: String
+    val placeYandex: String
+    val placeGoogle: String
+    val placeAsk: String
+    val placeNoAccess: String
+    val ok: String
+    val cancel: String
     /** Причина отказа словами по коду сервера; незнакомый код — `null`, покажется сам код. */
     fun failReason(code: String): String?
     val moveToSection: String
@@ -3499,6 +3518,34 @@ object RussianWords : Words {
             else -> "$rows рядов"
         }
         override val undo = "Вернуть"
+        override fun mediaSummary(kind: String, count: Int, name: String) = when (kind) {
+            "PHOTO" -> if (count > 1) "Фото · $count" else "Фото"
+            "CONTACT" -> "Контакт" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            "PLACE" -> "Место" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            "LINK" -> "Ссылка" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            else -> "Файл: " + name.ifBlank { "без имени" }
+        }
+        override val fileDownload = "Скачать"
+        override val sizeUnits = listOf("Б", "КБ", "МБ")
+        override val fileSaveAs = "Сохранить как"
+        override val fileGone = "Файла на сервере уже нет — попросить прислать снова"
+        override val sending = "Отправляется…"
+        override val sendFailed = "Не отправлено: нет связи с сервером"
+        override val photoTooMany = "Не больше 10 фото в одном сообщении"
+        override fun fileRefused(reason: String) = when (reason) {
+            "large" -> "Файл больше 10 МБ (себе — 50 МБ)"
+            "type" -> "Такие файлы не отправляются: исполняемые, .html, .svg"
+            "archive" -> "Архив или установщик: получатель увидит предупреждение"
+            else -> "Файл не отправлен"
+        }
+        override val linkAsk = "Ссылка"
+        override val linkPlace = "Ссылка на файл в облаке"
+        override val placeYandex = "Яндекс Карты"
+        override val placeGoogle = "Google Карты"
+        override val placeAsk = "Координаты или ссылка на карту"
+        override val placeNoAccess = "Нет доступа к местоположению — укажите точку вручную"
+        override val ok = "Готово"
+        override val cancel = "Отмена"
         override fun failReason(code: String): String? = when (code) {
             "level_in_private" -> "в личной группе такого круга нет — только «Зашифровано» и «Всем и всегда»"
             "secret_in_public" -> "публичная группа не шифруется — выберите открытый круг"

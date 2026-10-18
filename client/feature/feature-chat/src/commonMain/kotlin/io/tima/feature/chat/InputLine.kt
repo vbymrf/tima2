@@ -97,6 +97,8 @@ internal fun InputLine(
     onAttach: ((AttachItem) -> Unit)? = null,
     /** Эмоджи при пустой строке — отдельным сообщением; `null` — только вставка в набранное. */
     onEmojiSend: ((String) -> Unit)? = null,
+    /** Плитки скрепки, которые есть на этой платформе (на ПК нет камеры). */
+    attachItems: List<AttachItem> = AttachItem.entries,
 ) {
     val colors = Tima.colors
     val keyboard = LocalSoftwareKeyboardController.current
@@ -154,7 +156,7 @@ internal fun InputLine(
             InputArea.EMOJI -> EmojiArea(onClose = { area = null }) { e ->
                 if (typed.isEmpty() && composed == null && onEmojiSend != null) onEmojiSend(e) else onSet(typed + e)
             }
-            InputArea.ATTACH -> if (onAttach != null) AttachArea(onClose = { area = null }) { item -> area = null; onAttach(item) }
+            InputArea.ATTACH -> if (onAttach != null) AttachArea(attachItems, onClose = { area = null }) { item -> area = null; onAttach(item) }
             null -> Unit
         }
     }
@@ -229,11 +231,11 @@ private fun EmojiArea(onClose: () -> Unit, onPick: (String) -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AttachArea(onClose: () -> Unit, onPick: (AttachItem) -> Unit) {
+private fun AttachArea(items: List<AttachItem>, onClose: () -> Unit, onPick: (AttachItem) -> Unit) {
     val words = Tima.words.chat
     AreaFrame(words.attachArea, onClose, InputTags.ATTACH_AREA) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (item in AttachItem.entries) {
+            for (item in items) {
                 // Ярлычок и подпись — одна нажимаемая плитка (Решения §9).
                 Column(
                     Modifier.width(96.dp).background(Tima.colors.surface, RoundedCornerShape(10.dp))

@@ -1253,6 +1253,34 @@ object SpanishWords : Words {
         }
         override fun composedInEditor(rows: Int) = "Hecho en el editor · $rows " + if (rows == 1) "fila" else "filas"
         override val undo = "Deshacer"
+        override fun mediaSummary(kind: String, count: Int, name: String) = when (kind) {
+            "PHOTO" -> if (count > 1) "Foto · $count" else "Foto"
+            "CONTACT" -> "Contacto" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            "PLACE" -> "Ubicación" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            "LINK" -> "Enlace" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            else -> "Archivo: " + name.ifBlank { "sin nombre" }
+        }
+        override val fileDownload = "Descargar"
+        override val sizeUnits = listOf("B", "KB", "MB")
+        override val fileSaveAs = "Guardar como"
+        override val fileGone = "El archivo ya no está en el servidor: pida que lo envíen de nuevo"
+        override val sending = "Enviando…"
+        override val sendFailed = "No enviado: sin conexión con el servidor"
+        override val photoTooMany = "No más de 10 fotos en un mensaje"
+        override fun fileRefused(reason: String) = when (reason) {
+            "large" -> "El archivo supera 10 MB (50 MB para usted mismo)"
+            "type" -> "Estos archivos no se envían: ejecutables, .html, .svg"
+            "archive" -> "Un archivo comprimido o instalador: el destinatario verá un aviso"
+            else -> "El archivo no se envió"
+        }
+        override val linkAsk = "Enlace"
+        override val linkPlace = "Enlace a un archivo en la nube"
+        override val placeYandex = "Yandex Mapas"
+        override val placeGoogle = "Google Maps"
+        override val placeAsk = "Coordenadas o enlace del mapa"
+        override val placeNoAccess = "Sin acceso a la ubicación: indique el punto a mano"
+        override val ok = "Listo"
+        override val cancel = "Cancelar"
         override fun failReason(code: String): String? = when (code) {
             "level_in_private" -> "un grupo privado no tiene ese círculo: solo «Cifrado» y «Todos, siempre»"
             "secret_in_public" -> "un grupo público no se cifra: elija un círculo abierto"

@@ -406,6 +406,8 @@ private val MARK_SIDE = 14.dp
 private fun preview(chat: ChatSummary, words: ChatWords, invite: String): String = chat.preview
     // Приглашение в групповой звонок — словами, а не ссылкой: в самом сообщении только она.
     ?.let { text -> if (CallInviteLink.groupOf(text) != null) "🔊 $invite" else text }
+    // Без текста — словами читающего (Решения §12).
+    ?.let { text -> io.tima.domain.chat.MediaSummary.parse(text)?.let { (kind, count, name) -> words.mediaSummary(kind.name, count, name) } ?: text }
     ?: when (chat.lastDisplay) {
         MessageDisplay.UNREADABLE -> words.messageUnreadable
         else -> words.newMessage

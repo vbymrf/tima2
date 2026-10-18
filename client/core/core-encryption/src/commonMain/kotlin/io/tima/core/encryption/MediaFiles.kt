@@ -13,4 +13,7 @@ object MediaFiles {
 
     /** Закрыть перед загрузкой. */
     fun seal(key: ByteArray, plain: ByteArray): ByteArray = MediaCipher.seal(key, plain).getOrThrow()
+
+    /** Новый ключ файла — свой у каждого: утечка одного не открывает остальные. */
+    fun newKey(): ByteArray = io.kodium.Kodium.generateHighEntropyKey()
 }

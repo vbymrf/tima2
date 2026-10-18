@@ -236,15 +236,25 @@ private fun CloudWidget(cloud: RichBlock.Cloud) {
 @Composable
 private fun PlaceWidget(place: RichBlock.Place) {
     val open = LocalUriHandler.current
-    val url = "https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lon}#map=16/${place.lat}/${place.lon}"
+    val w = Tima.words.chat
     Column(
-        Modifier.fillMaxWidth().background(Tima.colors.functional, RoundedCornerShape(8.dp))
-            .clickable { runCatching { open.openUri(url) } }.padding(8.dp),
+        Modifier.fillMaxWidth().background(Tima.colors.functional, RoundedCornerShape(8.dp)).padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Caption(place.label.ifBlank { Tima.words.chat.place }, fontSize = TimaType.sz4, weight = FontWeight.Bold)
+        Caption(place.label.ifBlank { w.place }, fontSize = TimaType.sz4, weight = FontWeight.Bold)
         Tertiary("${round5(place.lat)}, ${round5(place.lon)}", lineOne = true)
+        // Выбор карты (РЕДАКТОР-СООБЩЕНИЙ §10.4): картинку не рисуем, человек открывает свою.
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(w.placeYandex, kind = ChipKind.Quiet, onClick = { runCatching { open.openUri(yandexMapUrl(place.lat, place.lon)) } })
+            Chip(w.placeGoogle, kind = ChipKind.Quiet, onClick = { runCatching { open.openUri(googleMapUrl(place.lat, place.lon)) } })
+        }
     }
 }
+
+/** Точка на Яндекс Картах: приложение перехватит ссылку, если стоит; нет — откроется сайт. */
+internal fun yandexMapUrl(lat: Double, lon: Double): String = "https://yandex.ru/maps/?pt=$lon,$lat&z=16&l=map"
+
+internal fun googleMapUrl(lat: Double, lon: Double): String = "https://www.google.com/maps/search/?api=1&query=$lat,$lon"
 
 private fun round5(v: Double): String {
     val scaled = kotlin.math.round(v * 100_000) / 100_000

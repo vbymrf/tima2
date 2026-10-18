@@ -5,7 +5,11 @@ import io.tima.domain.account.PhraseWords
 import io.tima.core.words.Words
 import io.tima.core.words.RussianWords
 import io.tima.core.words.ChatWords
+import io.tima.core.media.FileRules
+import io.tima.core.media.PhotoPrep
+import io.tima.domain.chat.AttachResult
 import io.tima.domain.chat.ChatLine
+import io.tima.domain.chat.SendAttachments
 import io.tima.domain.chat.DeleteMessage
 import io.tima.domain.chat.DeleteResult
 import io.tima.domain.chat.EditMessage
@@ -162,6 +166,12 @@ class ChatStore(
     private val pickLevel: String = MessagePicks.SELF,
     /** Черновики (Решения §9): у переписки свой, зашифрованный, переживает перезапуск. `null` — не храним. */
     private val drafts: io.tima.domain.chat.Drafts? = null,
+    /** Вложения (Решения §2, §3, §6). `null` — нечем: скрепки и галереи нет. */
+    private val attach: SendAttachments? = null,
+    /** Собеседник личной переписки — получатель почтальона; `null` — группа. */
+    private val peerId: String? = null,
+    /** Переписка с собой: файл себе — до 50 МБ. */
+    private val selfChat: Boolean = false,
 ) {
 
     /** Отложенная запись черновика: не на каждое нажатие клавиши. */
@@ -571,6 +581,78 @@ class ChatStore(
         }
         send.send(chatId, emoji, _state.value.level, marks = false, reply = reply)
         if (reply != null) _state.value = _state.value.copy(replyTo = null)
+    }
+
+    // ── Вложения (Решения §2, §3, §6) ───────────────────────────────────────────
+
+    /** Есть ли чем отправлять вложения — экран показывает Галерею и Скрепку. */
+    val canAttach: Boolean get() = attach != null
+
+    /** В группе файлы — только ссылкой на облако (Решения §2). */
+    val filesByLink: Boolean get() = peerId == null
+
+    private fun attachResult(result: AttachResult, warn: String? = null) {
+        val w = words().chat
+        val said = when (result) {
+            is AttachResult.Queued -> warn
+            AttachResult.Offline -> w.sendFailed
+            AttachResult.TooMany -> w.photoTooMany
+            is AttachResult.Refused -> w.fileRefused(result.reason)
+        }
+        _state.value = _state.value.copy(notice = said?.let { ChatNotice.Said(it) })
+    }
+
+    /** Фото: полное 1280 и превью до 20 КБ готовятся здесь же, на фоне (ПЛАН-(ПФ) ПФ3). */
+    fun sendPhotos(images: List<Pair<ByteArray, String>>) {
+        val port = attach ?: return
+        if (images.size > SendAttachments.MAX_PHOTOS) {
+            _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.photoTooMany))
+            return
+        }
+        _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.sending))
+        scope.launch {
+            val result = withContext(io) {
+                val photos = images.mapNotNull { (bytes, _) ->
+                    PhotoPrep.prepare(bytes)?.let { SendAttachments.Photo(it.full, it.preview, it.width, it.height) }
+                }
+                port.photos(chatId, _state.value.level, peerId, photos)
+            }
+            attachResult(result)
+        }
+    }
+
+    /** Файл почтальоном (личная переписка): запреты и предупреждения — по имени (Решения §6). */
+    fun sendFile(bytes: ByteArray, mime: String, name: String) {
+        val port = attach ?: return
+        val peer = peerId ?: return
+        if (FileRules.forbidden(name)) {
+            attachResult(AttachResult.Refused("type"))
+            return
+        }
+        _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.sending))
+        val warn = if (FileRules.warned(name)) words().chat.fileRefused("archive") else null
+        scope.launch {
+            val result = withContext(io) { port.file(chatId, _state.value.level, peer, selfChat, bytes, mime, name) }
+            attachResult(result, warn)
+        }
+    }
+
+    fun sendContact(name: String, phone: String) {
+        val port = attach ?: return
+        if (name.isBlank() && phone.isBlank()) return
+        attachResult(port.contact(chatId, _state.value.level, name, phone))
+    }
+
+    fun sendPlace(lat: Double, lon: Double, label: String = "") {
+        val port = attach ?: return
+        attachResult(port.place(chatId, _state.value.level, lat, lon, label))
+    }
+
+    fun sendLink(url: String, title: String = "", cloudKind: String = "") {
+        val port = attach ?: return
+        val clean = url.trim().let { if ("://" in it) it else "https://$it" }
+        if (clean.length < 10) return
+        attachResult(port.link(chatId, _state.value.level, clean, title, cloudKind))
     }
 
     /** Сказать человеку одно предложение — «Текст скопирован» и подобное. */

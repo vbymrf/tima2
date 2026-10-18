@@ -29,6 +29,9 @@ import io.tima.domain.chat.TableCell
 internal object RichMapper {
 
     fun from(content: MessageContent): RichContent? {
+        // Без разметки, но с файлами — сообщение вне пузыря (Решения §2, §3, §6): фото — альбомом,
+        // остальное — файлами.
+        if (content.markup == null && content.media.isNotEmpty() && content.plainText().isBlank()) return attachments(content)
         val markup = content.markup ?: return null
         if (MarkupRules.check(content, strict = false).isNotEmpty()) return null
         val byId = markup.n.mapIndexed { index, id -> id to index }.toMap()
@@ -70,10 +73,24 @@ internal object RichMapper {
                 else -> widget(block) ?: RichBlock.Fallback(allNodes(block).joinToString("\n") { nodeText(it) }.trim())
             }
         }.filterNot { it is RichBlock.Fallback && it.text.isEmpty() }
-        val media = content.media.map {
-            RichMedia(it.media_id, it.media_key.toByteArray(), it.mime, it.width, it.height)
+        return RichContent(blocks, media(content))
+    }
+
+    private fun media(content: MessageContent): List<RichMedia> = content.media.map {
+        RichMedia(
+            it.media_id, it.media_key.toByteArray(), it.mime, it.width, it.height,
+            preview = it.preview.toByteArray(), name = it.name, size = it.size_bytes,
+        )
+    }
+
+    private fun attachments(content: MessageContent): RichContent {
+        val all = media(content)
+        val photos = all.indices.filter { all[it].mime.startsWith("image/") && all[it].name.isEmpty() }
+        val blocks = buildList {
+            if (photos.isNotEmpty()) add(RichBlock.Album(photos))
+            for (i in all.indices) if (i !in photos) add(RichBlock.File(i))
         }
-        return RichContent(blocks, media)
+        return RichContent(blocks, all)
     }
 
     /** Виджет — в ячейке ряда или сам по себе (ADR-0044 §3). Не виджет или без данных — `null`. */

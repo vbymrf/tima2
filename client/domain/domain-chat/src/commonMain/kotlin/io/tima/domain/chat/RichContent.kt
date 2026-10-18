@@ -20,7 +20,18 @@ data class RichContent(
  * Файл внутри сообщения: номер в хранилище и ключ, которым он закрыт (ключ едет в зашифрованном
  * теле, на сервере его нет). Размеры — от отправителя: место под картинку до её загрузки.
  */
-class RichMedia(val mediaId: String, val key: ByteArray, val mime: String, val width: Int, val height: Int) {
+class RichMedia(
+    val mediaId: String,
+    val key: ByteArray,
+    val mime: String,
+    val width: Int,
+    val height: Int,
+    /** Превью фото от отправителя — JPEG до 20 КБ внутри тела (Решения §3); пусто — нет. */
+    val preview: ByteArray = ByteArray(0),
+    /** Имя файла вне пузыря (Решения §6); пусто у фото. */
+    val name: String = "",
+    val size: Long = 0,
+) {
     override fun equals(other: Any?) = other is RichMedia && other.mediaId == mediaId
     override fun hashCode() = mediaId.hashCode()
     override fun toString() = "RichMedia($mediaId, $mime, ${width}x$height)"
@@ -107,6 +118,15 @@ sealed interface RichBlock {
 
     /** Крупный эмоджи. */
     data class Emoji(val text: String) : RichBlock
+
+    /**
+     * Фото без текста — вне пузыря, одно или несколько (Решения §3): превью из тела, полное — по
+     * нажатию, от почтальона. Номера — в [RichContent.media].
+     */
+    data class Album(val media: List<Int>) : RichBlock
+
+    /** Файл вне пузыря (Решения §6): имя, размер, скачать и «Сохранить как». */
+    data class File(val media: Int) : RichBlock
 
     /** Подкладка в конце: [lines] строк исходного и «Продолжить чтение». */
     data class Underlay(val kind: String, val chatId: String, val messageId: Long, val author: Boolean, val lines: Int) : RichBlock
