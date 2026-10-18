@@ -179,8 +179,10 @@ fun SubwindowHeader(
      * не стоит человек. Аватар там был бы чужой картинкой на месте, где никого нет.
      */
     avatar: String? = null,
-    /** Картинка аватара; `null` — буквы. Та же картинка, что в списке и на странице. */
+    /** Картинка аватара байтами; `null` — буквы. */
     avatarImage: ImageBitmap? = null,
+    /** Картинка аватара по номеру файла (`tima-media://…`, ПЛАН-(ЗК) ЗК4) — та же, что в списке и на странице. */
+    avatarPicture: String? = null,
     /** Надпись поверх картинки аватара — «ГЗ» у группы звонка. */
     avatarOverlay: String? = null,
     /** Строка между названием и подписью — создатель группы звонка (2026-10-02). */
@@ -238,6 +240,7 @@ fun SubwindowHeader(
             Avatar(
                 letters = it,
                 image = avatarImage,
+                picture = avatarPicture,
                 overlay = avatarOverlay,
                 size = AvatarSize.Small,
                 modifier = if (onPerson != null) Modifier.clickable(onClick = onPerson) else Modifier,

@@ -374,7 +374,7 @@ class GroupCallDesk(
     }
 
     /** Строки раздела «Участники» в журнале идущего звонка. */
-    fun liveMembers(peers: List<CallPeer>, nameOf: (String) -> String, faceOf: (String) -> ImageBitmap?): List<CallMember> {
+    fun liveMembers(peers: List<CallPeer>, nameOf: (String) -> String, faceOf: (String) -> String?): List<CallMember> {
         val g = host.group ?: return emptyList()
         val info = live[g.groupId]?.call
         val creator = info?.creatorId ?: g.creatorId
@@ -440,7 +440,7 @@ fun GroupCallOverlays(
     host: CallHost,
     me: String,
     nameOf: (String) -> String,
-    faceOf: (String) -> ImageBitmap?,
+    faceOf: (String) -> String?,
     /** Книга: кого можно позвать без группы. */
     book: List<CallCandidate>,
     sections: List<Section>,

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -16,6 +17,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import com.github.panpf.sketch.AsyncImage
+import com.github.panpf.sketch.Sketch
+import com.github.panpf.sketch.rememberAsyncImageState
+import com.github.panpf.sketch.request.ImageResult
+
+/**
+ * Загрузчик картинок приложения (ПЛАН-(ЗК)). Один на приложение — его ставит корень; `null` —
+ * загрузчика нет (снимки, харнесс), и картинка по номеру не рисуется: остаются буквы.
+ */
+val LocalSketch = staticCompositionLocalOf<Sketch?> { null }
 
 /**
  * Аватар — **квадрат со скруглёнными краями**.
@@ -43,6 +54,13 @@ fun Avatar(
      */
     image: ImageBitmap? = null,
     /**
+     * Картинка по номеру файла — `tima-media://<номер>` (ПЛАН-(ЗК) ЗК4). Её грузит и раскодирует
+     * под размер места загрузчик [LocalSketch]; ушёл аватар с экрана — загрузка отменяется. Пока
+     * не доехала или не доехала вовсе — буквы. [image] при этом не нужен: он для картинок,
+     * которые уже есть байтами (переписка, обрезка своего аватара).
+     */
+    picture: String? = null,
+    /**
      * Надпись поверх картинки — «ГЗ» у группы звонка на аватаре создателя (заказчик
      * 2026-10-02). Без картинки не рисуется: тогда сами буквы и есть надпись.
      */
@@ -57,27 +75,57 @@ fun Avatar(
             .background(color = background ?: colors.softAccent, shape = shape),
         contentAlignment = Alignment.Center,
     ) {
-        if (image != null) {
-            Image(
-                bitmap = image,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-            // Подложка полупрозрачная из цветов темы: надпись читается и на светлом, и на
-            // тёмном лице, а лицо под ней остаётся узнаваемым.
-            overlay?.let {
-                Box(Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) {
-                    Caption(text = it, fontSize = size.fontSize, weight = FontWeight.ExtraBold, color = colors.surface)
-                }
+        val sketch = LocalSketch.current
+        when {
+            image != null -> {
+                Image(
+                    bitmap = image,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+                AvatarOverlay(overlay, size)
             }
-        } else {
-            Caption(
-                text = letters,
-                fontSize = size.fontSize,
-                weight = FontWeight.ExtraBold,
-                color = colors.text,
-            )
+            picture != null && sketch != null -> {
+                val state = rememberAsyncImageState()
+                val shown = state.result is ImageResult.Success
+                // Буквы под картинкой, пока она не доехала: место не пустует и не прыгает.
+                if (!shown) AvatarLetters(letters, size)
+                AsyncImage(
+                    uri = picture,
+                    sketch = sketch,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    state = state,
+                    contentScale = ContentScale.Crop,
+                )
+                if (shown) AvatarOverlay(overlay, size)
+            }
+            else -> AvatarLetters(letters, size)
+        }
+    }
+}
+
+@Composable
+private fun AvatarLetters(letters: String, size: AvatarSize) {
+    Caption(
+        text = letters,
+        fontSize = size.fontSize,
+        weight = FontWeight.ExtraBold,
+        color = Tima.colors.text,
+    )
+}
+
+/**
+ * Подложка полупрозрачная из цветов темы: надпись читается и на светлом, и на тёмном лице, а
+ * лицо под ней остаётся узнаваемым. Без картинки не рисуется — тогда сами буквы и есть надпись.
+ */
+@Composable
+private fun AvatarOverlay(overlay: String?, size: AvatarSize) {
+    val colors = Tima.colors
+    overlay?.let {
+        Box(Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) {
+            Caption(text = it, fontSize = size.fontSize, weight = FontWeight.ExtraBold, color = colors.surface)
         }
     }
 }

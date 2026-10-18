@@ -422,8 +422,16 @@ fun Root(
         font = appearance.text.font,
         text = appearance.text,
     ) {
+      // Загрузчик картинок — один на приложение (ПЛАН-(ЗК) ЗК2): живёт выше сессии, байты берёт
+      // через прослойку, которую сессия наполняет своим медиа-хранилищем.
+      val pictureSource = remember { PictureSource() }
+      val sketch = rememberTimaSketch(pictureSource)
       // Полосы авторов — из тех же «Цветов»: тип темы и выключатель (заказчик 2026-09-19).
-      CompositionLocalProvider(LocalStripLook provides appearance.strips) {
+      CompositionLocalProvider(
+          LocalStripLook provides appearance.strips,
+          io.tima.core.ui.LocalSketch provides sketch,
+          LocalPictureSource provides pictureSource,
+      ) {
         Inside(
             entry = entry,
             callEngine = callEngine,
@@ -1070,9 +1078,10 @@ private fun App(
     LaunchedEffect(socialTab) { Journal.note(LogCode.SCREEN_OPEN, "tab", "окно" to Window.Social.name, "вкладка" to socialTab.name) }
     // Люди за идентификаторами — одно место на книгу, реплики и состав (2026-09-18).
     val people = remember(assembled) { People(network.directory, environment.bookStorage, scope, network.media) }
+    // Загрузчику картинок — хранилище этой сессии: аватары по номеру файла (ПЛАН-(ЗК) ЗК3).
+    val pictureSource = LocalPictureSource.current
+    SideEffect { pictureSource?.media = network.media }
     val peopleCards by people.cards.collectAsState()
-    // Аватары раскодируются под размер места (ПЛАН-(БС) Э5.5) — People нужна плотность экрана.
-    people.density = LocalDensity.current.density
     val peopleHues by people.hues.collectAsState()
     val wordsNow = Tima.words
     // Штамп отправителя из каждого события о сообщении (сервер 0052/0053): счётчик профиля
@@ -1886,21 +1895,21 @@ private fun App(
             ?: io.tima.domain.chat.selfName(card?.userName)
             ?: card?.nick?.takeIf { it.isNotBlank() }?.let { "@$it" }
     }
-    val creatorFaceOf: (String, AvatarSize) -> ImageBitmap? = { id, size -> people.face(id, size) }
+    val creatorFaceOf: (String) -> String? = { id -> people.picture(id) }
     val callCreatorName: (String) -> String? = { groupId -> callOwnerOf(groupId)?.let(creatorNameOf) }
-    val callCreatorFace: (String, AvatarSize) -> ImageBitmap? = { groupId, size -> callOwnerOf(groupId)?.let { creatorFaceOf(it, size) } }
+    val callCreatorFace: (String) -> String? = { groupId -> callOwnerOf(groupId)?.let(creatorFaceOf) }
     val callGroupOf: (ChatSummary) -> io.tima.feature.chat.CallGroupLook? = { chat ->
         if (chat.kind == ChatKind.Group && chat.chatId in callGroupsTtl) {
-            io.tima.feature.chat.CallGroupLook(callCreatorName(chat.chatId), callCreatorFace(chat.chatId, AvatarSize.Normal))
+            io.tima.feature.chat.CallGroupLook(callCreatorName(chat.chatId), callCreatorFace(chat.chatId))
         } else {
             null
         }
     }
-    val faceOfChatSized: (ChatSummary, AvatarSize) -> ImageBitmap? = { chat, size ->
-        chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let { id -> people.face(id, size) }
+    // Аватар — номером файла: грузит и подгоняет под место загрузчик (ПЛАН-(ЗК) ЗК4).
+    val faceOfChat: (ChatSummary) -> String? = { chat ->
+        chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let { id -> people.picture(id) }
     }
     // Строка «Чатов».
-    val faceOfChat: (ChatSummary) -> ImageBitmap? = { chat -> faceOfChatSized(chat, AvatarSize.Normal) }
     // Янтарная цифра раздела — сколько людей раздела написали новое. Считается по личным
     // перепискам с новым **в журнале уведомлений** — том же, что у строк, вкладки и значка
     // приложения (ЖУ2). До 2026-10-05 считалось по `unread` базы, а в нём навсегда оставались
@@ -2081,7 +2090,6 @@ private fun App(
 
     if (newContact) {
         // Лицо найденного качается по требованию, как у страницы человека.
-        LaunchedEffect(contactsState.foundUserId) { contactsState.foundUserId?.let { people.wantFace(it, AvatarSize.Big) } }
         NewContactScreen(
             state = contactsState,
             onPhone = contacts::changedPhone,
@@ -2099,7 +2107,7 @@ private fun App(
                 where = Where.Person(userId)
             },
             onBy = contacts::chooseBy,
-            face = contactsState.foundUserId?.let { people.face(it, AvatarSize.Big) },
+            face = contactsState.foundUserId?.let { people.picture(it) },
             // Завести раздел прямо из подокна контакта: человек уже набрал его имя, и
             // отсылать его за тем же именем в другое место значит набрать дважды.
             onCreateSection = contacts::createTypedSection,
@@ -2236,7 +2244,7 @@ private fun App(
                 }
             },
             onSound = { chosen -> ledgerSound = chosen },
-            faceOf = { entry -> entry.userId?.let { people.face(it, AvatarSize.Normal) } },
+            faceOf = { entry -> entry.userId?.let { people.picture(it) } },
         )
         ledgerSound?.let { targets ->
             ContactSoundSheet(
@@ -2276,7 +2284,7 @@ private fun App(
                 ?: wordsNow.chat.nameless
         }
     }
-    val groupFaceOf: (String) -> ImageBitmap? = { uid -> people.face(uid, AvatarSize.Normal) }
+    val groupFaceOf: (String) -> String? = { uid -> people.picture(uid) }
     if (GroupCallOverlays(
             desk = groupDesk,
             host = callHost,
@@ -2832,7 +2840,7 @@ private fun App(
                 userId = me,
                 micForbidden = callHost.micForbidden,
                 videoForbidden = callHost.videoForbidden,
-                face = people.face(me, AvatarSize.Big),
+                face = people.picture(me),
             ),
         ) + peers.map { p ->
             val name = peopleCards[p.userId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)
@@ -2847,7 +2855,7 @@ private fun App(
                 micForbidden = forbiddenMics.contains(p.userId),
                 videoForbidden = forbiddenVideos.contains(p.userId),
                 // Аватар — тот же, что в списках (заказчик 2026-10-02: были только буквы).
-                face = people.face(p.userId, AvatarSize.Big),
+                face = people.picture(p.userId),
                 // Пропажа видео — на клетке того, у кого пропало (заказчик 2026-10-01).
                 bench = p.bench,
                 incoming = p.incoming,
@@ -2860,13 +2868,12 @@ private fun App(
         }
         LaunchedEffect(peers.map { it.userId }) {
             people.want(peers.map { it.userId }.filter { it != me })
-            (peers.map { it.userId } + me).distinct().forEach { people.wantFace(it, AvatarSize.Big) }
         }
         io.tima.feature.call.GroupStage(
             title = g.title,
             // В окне — кто начал звонок; у группы звонка это и её создатель.
             creator = g.creatorId.ifBlank { null }?.let(creatorNameOf) ?: callCreatorName(g.groupId),
-            creatorFace = g.creatorId.ifBlank { null }?.let { creatorFaceOf(it, AvatarSize.Huge) } ?: callCreatorFace(g.groupId, AvatarSize.Huge),
+            creatorFace = g.creatorId.ifBlank { null }?.let(creatorFaceOf) ?: callCreatorFace(g.groupId),
             tiles = tiles,
             count = peers.distinctBy { it.userId }.size + 1,
             max = g.rules.max,
@@ -2980,7 +2987,7 @@ private fun App(
             // лицо — настоящим аватаром в голосовом звонке.
             val callPeerId = callHost.peerUserId.takeIf { window == Window.Call && it.isNotEmpty() && groupStage == null }
             val callPeerPhone = callPeerId?.let { personOfId(it).phone }
-            val callPeerFace = callPeerId?.let { id -> people.face(id, AvatarSize.Huge) }
+            val callPeerFace = callPeerId?.let { id -> people.picture(id) }
             when (window) {
                 // Окно 0 — звонок. Временное: пока идёт разговор. Экран чистый, всю
                 // работу держит CallHost.
@@ -3106,13 +3113,13 @@ private fun App(
                     personOfCall = { record -> personOfId(if (record.group) record.initiatorId else record.other(session.userId)) },
                     kindOfCall = { record -> kindOfId(if (record.group) record.initiatorId else record.other(session.userId)) },
                     kindOfChat = { chat -> chat.peerId?.takeIf { chat.kind == ChatKind.Personal }?.let(kindOfId) ?: io.tima.feature.chat.PersonKind.Known },
-                    faceOfCall = { record -> people.face(record.other(session.userId), AvatarSize.Normal) },
+                    faceOfCall = { record -> people.picture(record.other(session.userId)) },
                     // Повтор звонит ТЕМ ЖЕ видом, каким звонили тогда (Ж6). Кнопка,
                     // молча звонящая голосом вместо видео, выглядит поломкой ровно один
                     // раз — а потом ей перестают верить.
                     // Строка группового звонка (заказчик 2026-10-08): аватар создателя с «ГЗ».
                     groupCallOf = { record ->
-                        if (record.group) io.tima.feature.chat.GroupCallLine(face = creatorFaceOf(record.initiatorId, AvatarSize.Normal)) else null
+                        if (record.group) io.tima.feature.chat.GroupCallLine(face = creatorFaceOf(record.initiatorId)) else null
                     },
                     // Нажали на строку группового: чат звонка, а его нет — «Чат удалён».
                     onOpenGroupCall = { record ->
@@ -3154,7 +3161,7 @@ private fun App(
                     // Имя пользователя и ник у контактов — со справочника, пачкой по разу.
                     personOf = personOfBook,
                     // Картинка аватара — по карточке справочника, приезжает потоком.
-                    faceOf = { entry -> entry.userId?.let { people.face(it, AvatarSize.Normal) } },
+                    faceOf = { entry -> entry.userId?.let { people.picture(it) } },
                     // ТОЛЬКО личные. Группы ушли на свою вкладку окна 5 — решение
                     // заказчика 2026-09-17; до него они стояли здесь вперемешку с
                     // личными, и это было временным размещением, записанным в
@@ -3879,7 +3886,7 @@ private fun App(
                             }
                             ?: current.name,
                         peerFace = listState.chats.firstOrNull { it.chatId == current.chatId }
-                            ?.let { faceOfChatSized(it, AvatarSize.Small) },
+                            ?.let(faceOfChat),
                         // Позвонить можно только человеку и только там, где есть чем:
                         // у группы собеседника нет, на ПК нет движка. Кнопки тогда нет.
                         // Видеозвонок — «три точки», а не шапка (решение заказчика
@@ -3912,7 +3919,7 @@ private fun App(
                         },
                         ttlUntilMs = callGroupsTtl[current.chatId],
                         callCreator = callCreatorName(current.chatId),
-                        callCreatorFace = callCreatorFace(current.chatId, AvatarSize.Small),
+                        callCreatorFace = callCreatorFace(current.chatId),
                         inviteOf = { line ->
                             io.tima.feature.chat.CallInviteLink.groupOf(line.text)?.let { g -> groupDesk.inviteOf(g, groupTitleOf(g)) }
                         },
@@ -3970,7 +3977,6 @@ private fun App(
                     // переписки, где мы знали только идентификатор.
                     LaunchedEffect(current.userId) {
                         people.want(listOf(current.userId))
-                        people.wantFace(current.userId, AvatarSize.Big)
                     }
                     // Дружит ли ОН со мной. Спрашивается чтением его ленты: сервер кладёт
                     // ответ полем `friend` туда же (Д1б). Отдельной ручки «дружим ли» нет,
@@ -3988,7 +3994,7 @@ private fun App(
                         .withBookName(entry?.name, entry?.phone)
                     GuestPageScreen(
                         person = who,
-                        face = people.face(current.userId, AvatarSize.Big),
+                        face = people.picture(current.userId),
                         inContacts = entry != null,
                         // Номера не знаем — заводить контакт не из чего: книга держит
                         // человека по номеру, и пустая строка завела бы пустого.
@@ -4190,7 +4196,7 @@ private fun Chat(
     /** Нажали на аватар с именем в шапке — личная страница собеседника; `null` — группа. */
     onPerson: (() -> Unit)? = null,
     /** Картинка аватара собеседника в шапке. */
-    peerFace: ImageBitmap? = null,
+    peerFace: String? = null,
     /** Позвонить собеседнику; `null` — у группы или там, где звонить нечем. */
     onCall: (() -> Unit)? = null,
     /** Видеозвонок — пункт «•••» личной переписки (ЗВ6). */
@@ -4216,7 +4222,7 @@ private fun Chat(
     ttlUntilMs: Long? = null,
     /** Группа звонка: имя создателя и его аватар (заказчик 2026-10-02). */
     callCreator: String? = null,
-    callCreatorFace: ImageBitmap? = null,
+    callCreatorFace: String? = null,
     inviteOf: (ChatLine) -> io.tima.feature.chat.CallInvite? = { null },
     onInvite: (ChatLine) -> Unit = {},
 ) {
@@ -5823,10 +5829,10 @@ private fun PhoneWindow(
     /** Собеседник личной переписки — для строки списка чатов; `null` у групп. */
     personOfChat: (ChatSummary) -> ChatPerson? = { null },
     /** Аватар собеседника личной переписки. */
-    faceOfChat: (ChatSummary) -> ImageBitmap? = { null },
+    faceOfChat: (ChatSummary) -> String? = { null },
     /** Группа звонка: создатель и его аватар. */
     callGroupOf: (ChatSummary) -> io.tima.feature.chat.CallGroupLook? = { null },
-    faceOf: (BookEntry) -> ImageBitmap? = { null },
+    faceOf: (BookEntry) -> String? = { null },
     onSearchInBook: (String) -> Unit,
     onOpen: (ChatSummary) -> Unit,
     onOpenPerson: (BookEntry) -> Unit,
@@ -5880,7 +5886,7 @@ private fun PhoneWindow(
     onOpenGroupCall: (CallRecord) -> Unit = {},
     /** Короткое слово поверх журнала; `null` — нет. */
     callsNote: String? = null,
-    faceOfCall: (CallRecord) -> ImageBitmap? = { null },
+    faceOfCall: (CallRecord) -> String? = { null },
     /** Перезвонить из журнала — **тем же видом**, каким звонили тогда (Ж6). */
     onCallAgain: ((CallRecord) -> Unit)? = null,
     /** Открыли вкладку «Звонки»: сходить за свежим журналом и погасить счётчик. */

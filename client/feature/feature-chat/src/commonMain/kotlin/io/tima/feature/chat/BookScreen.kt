@@ -144,7 +144,7 @@ fun BookScreen(
      */
     personOf: (BookEntry) -> ChatPerson = { ChatPerson(name = it.name, phone = it.phone) },
     /** Аватар человека за строкой, если он есть и уже доехал. */
-    faceOf: (BookEntry) -> ImageBitmap? = { null },
+    faceOf: (BookEntry) -> String? = { null },
 ) {
     val words = Tima.words.book
     val colors = Tima.colors
@@ -174,7 +174,7 @@ fun BookScreen(
                             left = {
                                 Avatar(
                                     letters = who.letter(),
-                                    image = faceOf(person),
+                                    picture = faceOf(person),
                                     modifier = if (onFace != null) {
                                         Modifier.clickable { onFace(person) }
                                     } else {

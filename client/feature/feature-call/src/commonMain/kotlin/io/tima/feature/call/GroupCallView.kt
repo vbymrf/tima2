@@ -358,7 +358,7 @@ private fun VoiceList(tiles: List<GroupTile>, modifier: Modifier) {
         for (tile in tiles) {
             ListLine(
                 modifier = if (tile.speaking) Modifier.border(2.dp, Tima.colors.navigation) else Modifier,
-                left = { Avatar(letters = tile.letters, image = tile.face) },
+                left = { Avatar(letters = tile.letters, picture = tile.face) },
                 middle = { Name(tile.name) },
                 right = { IconButton(glyph = if (tile.microphoneOn) "🎤" else "🔇", onClick = {}, live = tile.microphoneOn) },
             )
@@ -379,7 +379,7 @@ internal fun GroupCell(tile: GroupTile, modifier: Modifier, compact: Boolean = f
             CallVideo(tile.video, Modifier.fillMaxSize())
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Avatar(letters = tile.letters, image = tile.face, size = if (compact) AvatarSize.Normal else AvatarSize.Big)
+                Avatar(letters = tile.letters, picture = tile.face, size = if (compact) AvatarSize.Normal else AvatarSize.Big)
             }
         }
         if (!compact) {
@@ -534,7 +534,7 @@ private fun Bubble(tile: GroupTile, group: GroupStage, words: io.tima.core.words
                     color = if (tile.speaking) Tima.colors.navigation else Tima.colors.surface,
                 ).padding(2.dp),
             ) {
-                Avatar(letters = tile.letters, image = tile.face)
+                Avatar(letters = tile.letters, picture = tile.face)
                 if (marks.isNotEmpty()) {
                     Caption(marks, modifier = Modifier.align(Alignment.TopEnd), fontSize = TimaType.sz6, lineOne = true)
                 }

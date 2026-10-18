@@ -91,7 +91,7 @@ fun ChatsScreen(
      */
     personOf: (ChatSummary) -> ChatPerson? = { null },
     /** Картинка аватара собеседника; `null` — её нет или она ещё не доехала. */
-    faceOf: (ChatSummary) -> ImageBitmap? = { null },
+    faceOf: (ChatSummary) -> String? = { null },
     /**
      * Нажали на аватар личной переписки — страница собеседника; строка — сама переписка.
      * Так же, как у «Контактов» (заказчик 2026-10-06: «единый стиль для клика»). `null` —
@@ -228,7 +228,7 @@ private fun List(
     chats: List<ChatSummary>,
     onOpen: (ChatSummary) -> Unit,
     personOf: (ChatSummary) -> ChatPerson? = { null },
-    faceOf: (ChatSummary) -> ImageBitmap? = { null },
+    faceOf: (ChatSummary) -> String? = { null },
     look: PersonLook = PersonLook.DEFAULT,
     countOf: ((ChatSummary) -> Int)? = null,
     tagOf: (ChatSummary) -> String? = { null },
@@ -261,7 +261,7 @@ private fun List(
 private fun ChatLine(
     chat: ChatSummary,
     who: ChatPerson?,
-    face: ImageBitmap?,
+    face: String?,
     look: PersonLook,
     /** Число строки: уведомления сущности (ЖУ2) либо непрочитанные. */
     count: Int,
@@ -281,11 +281,11 @@ private fun ChatLine(
     left = {
         if (call != null) {
             val badge = Tima.words.groupCall.badge
-            Avatar(letters = badge, image = call.face, overlay = badge)
+            Avatar(letters = badge, picture = call.face, overlay = badge)
         } else {
             Avatar(
                 letters = who?.letter() ?: letters(chat),
-                image = face,
+                picture = face,
                 modifier = if (onFace != null) Modifier.clickable(onClick = onFace) else Modifier,
             )
         }
@@ -447,7 +447,7 @@ fun ChatSummary.matches(request: String): Boolean {
  * Как показать группу звонка в списке и шапке: имя создателя (не ник — заказчик 2026-10-02)
  * и его аватар, на который ложится «ГЗ».
  */
-data class CallGroupLook(val creator: String?, val face: ImageBitmap?)
+data class CallGroupLook(val creator: String?, val face: String?)
 
 /** «Написать» (новая переписка) — для сценариев на телефонах (ПЛАН-(МС)). */
 const val CHATS_NEW_TAG: String = "chats:new"

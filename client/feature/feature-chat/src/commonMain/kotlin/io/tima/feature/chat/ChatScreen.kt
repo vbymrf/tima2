@@ -201,7 +201,7 @@ fun ChatScreen(
      */
     onPerson: (() -> Unit)? = null,
     /** Картинка аватара собеседника в шапке; `null` — буквы, как было. */
-    peerFace: ImageBitmap? = null,
+    peerFace: String? = null,
     /**
      * Группа звонка (заказчик 2026-10-02): имя создателя отдельной строкой под названием и
      * «ГЗ» на аватаре — поверх его картинки, а без неё буквами. `null` — группа обычная.
@@ -239,7 +239,7 @@ fun ChatScreen(
             // Аватар собеседника — по макету подокна чата. Буквы, а не картинка: картинки
             // приезжают вместе с медиа, а место под них тут то же самое.
             avatar = if (callGroup) Tima.words.groupCall.badge else peerLetters(peer),
-            avatarImage = peerFace,
+            avatarPicture = peerFace,
             avatarOverlay = if (callGroup) Tima.words.groupCall.badge else null,
             subcaption = callCreator,
             // Чипы «Доступность» и «Участники» из шапки убраны (решение заказчика

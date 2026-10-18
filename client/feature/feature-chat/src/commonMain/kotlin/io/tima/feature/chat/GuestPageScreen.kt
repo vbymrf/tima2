@@ -95,7 +95,7 @@ fun GuestPageScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /** Картинка аватара; `null` — буквы. */
-    face: ImageBitmap? = null,
+    face: String? = null,
     /** Он уже в книге: вместо кнопки — строка о том, что добавлять нечего. */
     inContacts: Boolean = false,
     /** Завести контакт. `null` — добавлять нечем: номера мы не знаем. */
@@ -141,7 +141,7 @@ fun GuestPageScreen(
             title = person.line(look, PERSON_FIRST_LINE) ?: words.guestPage,
             onBack = onBack,
             avatar = person.letter(),
-            avatarImage = face,
+            avatarPicture = face,
         )
         Column(
             modifier = Modifier
@@ -154,7 +154,7 @@ fun GuestPageScreen(
                 modifier = Modifier.fillMaxWidth().padding(vertical = TimaSpacing.about5),
                 contentAlignment = Alignment.Center,
             ) {
-                Avatar(letters = person.letter(), image = face, size = AvatarSize.Big)
+                Avatar(letters = person.letter(), picture = face, size = AvatarSize.Big)
             }
 
             // Ряд действий — сразу под аватаром: страница отвечает на вопрос «кто это»,

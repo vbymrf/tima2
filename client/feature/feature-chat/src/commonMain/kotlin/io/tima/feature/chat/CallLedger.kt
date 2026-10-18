@@ -50,7 +50,7 @@ data class CallCandidate(
     val userId: String,
     val name: String,
     val letters: String,
-    val face: ImageBitmap? = null,
+    val face: String? = null,
     /** Раздел книги; `""` — «Общий». У участников группы — пусто. */
     val sectionId: String = "",
 )
@@ -64,7 +64,7 @@ data class CallMember(
     val name: String,
     val letters: String,
     val state: CallMemberState,
-    val face: ImageBitmap? = null,
+    val face: String? = null,
     val microphoneOn: Boolean = false,
     val cameraOn: Boolean = false,
     val creator: Boolean = false,
@@ -223,7 +223,7 @@ fun CallLedgerPage(
                     val on = c.userId in selected
                     ListLine(
                         onClick = if (mine) ({ selected = if (on) selected - c.userId else selected + c.userId }) else null,
-                        left = { Avatar(letters = c.letters, image = c.face) },
+                        left = { Avatar(letters = c.letters, picture = c.face) },
                         middle = {
                             Column {
                                 Name(c.name)
@@ -352,7 +352,7 @@ private fun MemberRow(
     val controls = inRoom && (self || mine)
     ListLine(
         onClick = if (mine && !self) onToggle else null,
-        left = { Avatar(letters = m.letters, image = m.face) },
+        left = { Avatar(letters = m.letters, picture = m.face) },
         middle = {
             Column {
                 Name(m.name)

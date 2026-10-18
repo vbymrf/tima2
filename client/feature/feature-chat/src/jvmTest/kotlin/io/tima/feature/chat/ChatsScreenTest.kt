@@ -66,11 +66,10 @@ class ChatsScreenTest {
     @Test
     fun группа_звонка_с_создателем_и_ГЗ_на_его_аватаре() {
         // Заказчик 2026-10-02: имя создателя отдельной строкой; его аватар — с «ГЗ» поверх.
-        val face = androidx.compose.ui.graphics.ImageBitmap(64, 64)
-        androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(
-            androidx.compose.ui.unit.Density(1f), androidx.compose.ui.unit.LayoutDirection.Ltr,
-            androidx.compose.ui.graphics.Canvas(face), androidx.compose.ui.geometry.Size(64f, 64f),
-        ) { drawRect(FOREIGN_BACKGROUND) }
+        // С 2026-10-18 аватар — адрес файла для загрузчика (ПЛАН-(ЗК) ЗК4); в снимке загрузчика
+        // нет, и на месте картинки — буквы «ГЗ». Сам показ картинки по адресу проверяет
+        // `TimaSketchTest` в core-media, здесь — что строка создателя видна.
+        val face = "tima-media://avatar-anna"
         val state = ChatsState(
             chats = listOf(line("g-1", title = "Групповой звонок @anna", preview = "Звонок начат: Анна", unread = 0).copy(kind = ChatKind.Group)),
             read = true,

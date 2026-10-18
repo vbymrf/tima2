@@ -16,6 +16,9 @@ plugins {
 // Общего здесь ровно две вещи: порт загрузки в медиа-хранилище (чистый интерфейс, сеть
 // его реализует в core-network) и обрезка квадратом — она считается на ImageBitmap и от
 // платформы не зависит.
+//
+// С 2026-10-18 здесь же сборка загрузчика картинок Sketch под наш формат (ПЛАН-(ЗК) ЗК2, ЗК3):
+// источник — номер файла, сети у загрузчика нет, кеша расшифрованного на диске нет.
 kotlin {
     jvmToolchain(17)
 
@@ -29,6 +32,10 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.ui)
+            // Загрузчик картинок (ПЛАН-(ЗК)): ядро без сети и анимированный WebP. `api` — потому
+            // что `TimaSketch` отдаёт тип `Sketch` наружу: его держат корень приложения и core-ui.
+            api(libs.sketch.compose.core)
+            implementation(libs.sketch.animated.webp)
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)

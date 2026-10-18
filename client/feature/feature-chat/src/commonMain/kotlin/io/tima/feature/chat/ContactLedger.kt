@@ -113,7 +113,7 @@ fun ContactLedgerPage(
      */
     view: BookView = BookView(),
     /** Аватар человека — тот же, что во вкладке «Контакты»; `null` — буква. */
-    faceOf: (BookEntry) -> androidx.compose.ui.graphics.ImageBitmap? = { null },
+    faceOf: (BookEntry) -> String? = { null },
 ) {
     val words = Tima.words.book
     var list by remember { mutableStateOf(LedgerList.All) }
@@ -211,7 +211,7 @@ fun ContactLedgerPage(
                 ListLine(
                     onClick = onOpenPerson?.let { open -> { open(entry) } },
                     // Аватар и имя — как во вкладке «Контакты»: человек узнаёт «своего» Сашу.
-                    left = { Avatar(letters = person.letter(), image = faceOf(entry)) },
+                    left = { Avatar(letters = person.letter(), picture = faceOf(entry)) },
                     middle = {
                         Column {
                             // Заблокированный — имя единым красным (заказчик 2026-10-08).

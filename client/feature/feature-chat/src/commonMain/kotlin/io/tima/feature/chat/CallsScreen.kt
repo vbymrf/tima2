@@ -81,7 +81,7 @@ fun CallsScreen(
     personOf: (CallRecord) -> ChatPerson,
     modifier: Modifier = Modifier,
     look: PersonLook = PersonLook(),
-    faceOf: (CallRecord) -> ImageBitmap? = { null },
+    faceOf: (CallRecord) -> String? = { null },
     /** Перезвонить — **тем же видом**, каким звонили тогда. `null` — звонить нечем. */
     onCallAgain: ((CallRecord) -> Unit)? = null,
     /** Открыть переписку с этим человеком — нажатие на строку. */
@@ -140,7 +140,7 @@ private fun Records(
     me: String,
     personOf: (CallRecord) -> ChatPerson,
     look: PersonLook,
-    faceOf: (CallRecord) -> ImageBitmap?,
+    faceOf: (CallRecord) -> String?,
     onCallAgain: ((CallRecord) -> Unit)?,
     onOpen: ((CallRecord) -> Unit)?,
     onFace: ((CallRecord) -> Unit)?,
@@ -172,9 +172,9 @@ private fun Records(
                     if (group != null) {
                         // Аватар создателя и «ГЗ» поверх; картинки нет — одно «ГЗ», как в «Чатах».
                         val badge = Tima.words.groupCall.badge
-                        Avatar(letters = badge, image = group.face, overlay = badge, modifier = tap)
+                        Avatar(letters = badge, picture = group.face, overlay = badge, modifier = tap)
                     } else {
-                        Avatar(letters = who.letter(), image = faceOf(record), modifier = tap)
+                        Avatar(letters = who.letter(), picture = faceOf(record), modifier = tap)
                     }
                 },
                 middle = {
@@ -364,4 +364,4 @@ private const val GROUP_GLYPH = "👥"
  * Групповой звонок строкой журнала: аватар создателя, на который ложится «ГЗ». Имя и
  * телефон создателя — тем же [CallsScreen] `personOf`, что у личного.
  */
-data class GroupCallLine(val face: ImageBitmap?)
+data class GroupCallLine(val face: String?)

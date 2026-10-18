@@ -43,6 +43,10 @@ kotlin {
             // Шрифты в сборке (ПЛАН-(Ш)-ШРИФТОВ Ш1). Ресурсы Compose, а не classpath:
             // на iOS classpath нет вовсе, и файл оттуда не прочитать.
             implementation(compose.components.resources)
+            // Аватар по номеру файла рисует загрузчик Sketch (ПЛАН-(ЗК) ЗК4): отмена ушедшего с
+            // экрана, кеш в памяти с вытеснением, раскодирование под размер места. Сам загрузчик
+            // собирается в core-media; здесь только показ и `LocalSketch`.
+            implementation(libs.sketch.compose.core)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

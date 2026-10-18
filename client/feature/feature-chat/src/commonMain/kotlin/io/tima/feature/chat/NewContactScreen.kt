@@ -95,7 +95,7 @@ fun NewContactScreen(
     /** Переключатель «Телефон / Ник». */
     onBy: (AddBy) -> Unit = {},
     /** Аватар найденного; `null` — буквы. */
-    face: ImageBitmap? = null,
+    face: String? = null,
 ) {
     var picking by remember { mutableStateOf(false) }
     val colors = Tima.colors
@@ -164,7 +164,7 @@ fun NewContactScreen(
                         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Avatar(letters = person.letter(), image = face, size = AvatarSize.Big)
+                        Avatar(letters = person.letter(), picture = face, size = AvatarSize.Big)
                         Column {
                             for ((f, value) in known) {
                                 Name(value)

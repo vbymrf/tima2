@@ -150,7 +150,7 @@ fun CallScreen(
     /** Телефон собеседника — второй строкой под именем; `null` — не знаем (2026-10-08). */
     peerPhone: String? = null,
     /** Лицо собеседника — настоящий аватар в голосовом звонке; `null` — буквы. */
-    peerFace: ImageBitmap? = null,
+    peerFace: String? = null,
     /**
      * Свайп между окнами — на области картинки и аватара, как у других окон на их
      * содержимом, а не на всём окне (заказчик 2026-10-08): кнопки и переключатели внизу
@@ -269,14 +269,14 @@ fun CallScreen(
                 ) {
                     if (group != null) {
                         val badge = Tima.words.groupCall.badge
-                        Avatar(letters = badge, size = AvatarSize.Huge, image = group.creatorFace, overlay = badge)
+                        Avatar(letters = badge, size = AvatarSize.Huge, picture = group.creatorFace, overlay = badge)
                     } else if (!incoming && state.stage == CallStage.Connecting) {
                         // Дозваниваемся — волны от аватара (заказчик 2026-10-08), вместе с гудком.
                         Dialing(side = AvatarSize.Huge.side * 2) {
-                            Avatar(letters = letters(peer), size = AvatarSize.Huge, image = peerFace)
+                            Avatar(letters = letters(peer), size = AvatarSize.Huge, picture = peerFace)
                         }
                     } else {
-                        Avatar(letters = letters(peer), size = AvatarSize.Huge, image = peerFace)
+                        Avatar(letters = letters(peer), size = AvatarSize.Huge, picture = peerFace)
                     }
                     PeerName(peer, stranger, tint = peerTint)
                     peerPhone?.takeIf { group == null && it.isNotBlank() }?.let { Secondary(it) }
@@ -357,7 +357,7 @@ fun CallScreen(
                     below = if (group == null && big != null) pipBelow else 0.dp,
                     dragging = pipDragging,
                     onTap = { if (mine != null) swapped = !swapped },
-                    instead = { Avatar(letters = letters(peer), size = AvatarSize.Big, image = peerFace) },
+                    instead = { Avatar(letters = letters(peer), size = AvatarSize.Big, picture = peerFace) },
                     onDrag = { moving -> pipDragging = moving },
                     onMove = { delta -> pipOffset = clampPip(pipOffset + delta, area.belowBy(pipBelowPx), pipSizePx) },
                     modifier = Modifier.align(Alignment.TopEnd),
@@ -485,7 +485,7 @@ data class GroupStage(
     /** Создатель группы звонка — имя отдельной строкой (заказчик 2026-10-02). */
     val creator: String? = null,
     /** Аватар создателя; на него ложится «ГЗ». */
-    val creatorFace: androidx.compose.ui.graphics.ImageBitmap? = null,
+    val creatorFace: String? = null,
     /** Конец звонка, я автор — «Создать звонок». */
     val onCreateAgain: (() -> Unit)? = null,
     /** Конец звонка, не автор — «Присоединиться»; активна, пока звонок в группе идёт. */
@@ -512,7 +512,7 @@ data class GroupTile(
     /** Видео запрещено создателем (заказчик 2026-10-02, 6д). */
     val videoForbidden: Boolean = false,
     /** Аватар-картинка человека; `null` — буквы (2026-10-02: раньше буквы были всегда). */
-    val face: androidx.compose.ui.graphics.ImageBitmap? = null,
+    val face: String? = null,
     /** Видео участника не приходит или не раскодируется — словами на его клетке; `null` — всё в порядке. */
     val videoTrouble: String? = null,
     /** Его набор с его слов — для журнала стенда (5а); `null` — не сказал. */

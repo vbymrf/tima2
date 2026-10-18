@@ -1,0 +1,1 @@
+animated.webp — из тестовых ресурсов Coil (coil-kt/coil, internal/test-utils/src/androidMain/assets/animated.webp), лицензия Apache-2.0. Нужен проверке анимированного WebP в TimaSketchTest (ПЛАН-(ЗК) ЗК5).
