@@ -231,7 +231,7 @@ private val EMOJI = listOf(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EmojiArea(onClose: () -> Unit, onPick: (String) -> Unit) {
+internal fun EmojiArea(onClose: () -> Unit, onPick: (String) -> Unit) {
     AreaFrame(Tima.words.chat.emojiArea, onClose, InputTags.EMOJI_AREA) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             for (e in EMOJI) {

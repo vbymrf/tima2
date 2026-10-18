@@ -1,5 +1,6 @@
 package io.tima.core.database
 
+import io.tima.domain.chat.Pick
 import io.tima.domain.chat.PickStore
 
 /** Подборка сообщений на устройстве (Решения §11.2). */
@@ -12,4 +13,7 @@ class SqlPicks(private val db: TimaDatabase) : PickStore {
     override fun add(level: String, chatId: String, serverId: Long, atMs: Long) {
         db.picksQueries.addPick(level, chatId, serverId, atMs)
     }
+
+    override fun list(level: String): List<Pick> =
+        db.picksQueries.picksOf(level).executeAsList().map { Pick(it.chat_id, it.server_id) }
 }

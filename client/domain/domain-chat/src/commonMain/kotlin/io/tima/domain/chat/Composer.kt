@@ -78,8 +78,14 @@ sealed interface ComposedWidget {
     /** Картинка — уже загружена и закрыта своим ключом. */
     data class Image(val media: OutMedia) : ComposedWidget
 
-    /** Ссылка: `plain`, `button`, `card`. */
-    data class Link(val url: String, val title: String = "", val mode: String = "plain") : ComposedWidget
+    /** Ссылка: `plain`, `button`, `card`; у карточки — описание и картинка со страницы (Решения §4). */
+    data class Link(
+        val url: String,
+        val title: String = "",
+        val mode: String = "plain",
+        val description: String = "",
+        val image: OutMedia? = null,
+    ) : ComposedWidget
 
     /** Файл вне телефона: `file`, `document`, `audio`, `video`. */
     data class Cloud(val url: String, val kind: String, val title: String = "") : ComposedWidget
@@ -92,6 +98,12 @@ sealed interface ComposedWidget {
 
     /** Ответ на сообщение — `@Ник` (Решения §7). */
     data class Reply(val target: ReplyTarget) : ComposedWidget
+
+    /**
+     * Из подборки — ссылка на сообщение, а не копия (Решения §10.4, §11.2). [author] — галочка
+     * «имя владельца»; [cut] — `full` или `cut` (по высоте соседа в ряду, нет соседа — три строки).
+     */
+    data class Quoted(val kind: String, val container: String, val message: Long, val author: Boolean = true, val cut: String = "") : ComposedWidget
 }
 
 /** Вид абзаца — «Абзац ▾» (Решения §10.2). */

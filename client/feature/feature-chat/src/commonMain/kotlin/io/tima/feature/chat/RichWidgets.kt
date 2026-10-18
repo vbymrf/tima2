@@ -191,7 +191,16 @@ private fun LinkWidget(link: RichBlock.Link) {
     val open = LocalUriHandler.current
     val go = { runCatching { open.openUri(link.url) } }
     when (link.mode) {
-        "button" -> Chip(link.title.ifBlank { hostOf(link.url) }, kind = ChipKind.Selected, onClick = { go() })
+        // Кнопка (Решения §4): крупно домен — он из самой ссылки и не обрезается, ниже путь без схемы.
+        "button" -> Column(
+            Modifier.background(Tima.colors.navigation, RoundedCornerShape(10.dp)).clickable { go() }.padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Caption(hostOf(link.url), fontSize = TimaType.sz4, weight = FontWeight.Bold, color = Tima.colors.onAccent, lineOne = true)
+            val path = pathOf(link.url)
+            if (link.title.isNotBlank()) Caption(link.title, fontSize = TimaType.sz5, color = Tima.colors.onAccent, lineOne = true)
+            else if (path.isNotEmpty()) Caption(path, fontSize = TimaType.sz5, color = Tima.colors.onAccent, lineOne = true)
+            if (link.url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz6, color = Tima.colors.onAccent)
+        }
         "card" -> Column(
             Modifier.fillMaxWidth().background(Tima.colors.functional, RoundedCornerShape(8.dp)).clickable { go() }.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -215,6 +224,9 @@ private fun LinkWidget(link: RichBlock.Link) {
 
 /** Домен ссылки — то, что человек видит до перехода (Решения §4). */
 internal fun hostOf(url: String): String = url.substringAfter("://").substringBefore('/').removePrefix("www.")
+
+/** Путь ссылки без схемы и домена — обрезается он, а не домен. */
+internal fun pathOf(url: String): String = url.substringAfter("://").substringAfter('/', "").let { if (it.isEmpty()) "" else "/$it" }
 
 @Composable
 private fun CloudWidget(cloud: RichBlock.Cloud) {

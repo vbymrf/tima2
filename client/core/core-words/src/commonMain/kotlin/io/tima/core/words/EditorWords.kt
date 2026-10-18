@@ -28,6 +28,22 @@ interface EditorWords {
     val marksOff: String
     /** Раздел ещё не сделан — следующим срезом. */
     val soon: String
+
+    // ── Вставка (§10.4) ──
+    /** Вид ссылки: `plain`, `button`, `card`. */
+    fun linkMode(key: String): String
+    val linkAddress: String
+    val linkTitle: String
+    val cardFailed: String
+    val pictureFailed: String
+    val replyTitle: String
+    val replyEmpty: String
+    val picksTitle: String
+    val picksEmpty: String
+    /** Сообщение из подборки, которого нет на этом устройстве. */
+    fun pickElsewhere(serverId: Long): String
+    /** Пометка на кнопке ссылки без шифрования (`http://`). */
+    val unsafeLink: String
 }
 
 object RussianEditorWords : EditorWords {
@@ -116,6 +132,21 @@ object RussianEditorWords : EditorWords {
     override val marksOn = "Знаки md включены: знаки становятся оформлением"
     override val marksOff = "Знаки md выключены: текст уходит как набран"
     override val soon = "Этот раздел — следующим срезом редактора"
+    override fun linkMode(key: String) = when (key) {
+        "button" -> "Кнопкой"
+        "card" -> "Карточкой"
+        else -> "Текстом"
+    }
+    override val linkAddress = "Адрес"
+    override val linkTitle = "Название (можно пусто)"
+    override val cardFailed = "Карточку со страницы не собрать — вставлена кнопка"
+    override val pictureFailed = "Картинка не загрузилась: нет связи или это не картинка"
+    override val replyTitle = "На какое сообщение ответить"
+    override val replyEmpty = "Отвечать пока не на что"
+    override val picksTitle = "Подборка"
+    override val picksEmpty = "В подборке пусто: добавьте сообщение из его меню"
+    override fun pickElsewhere(serverId: Long) = "Сообщение № $serverId"
+    override val unsafeLink = "без шифрования"
 }
 
 object EnglishEditorWords : EditorWords {
@@ -204,6 +235,21 @@ object EnglishEditorWords : EditorWords {
     override val marksOn = "md signs on: signs become formatting"
     override val marksOff = "md signs off: text is sent as typed"
     override val soon = "This section comes with the next editor slice"
+    override fun linkMode(key: String) = when (key) {
+        "button" -> "Button"
+        "card" -> "Card"
+        else -> "Text"
+    }
+    override val linkAddress = "Address"
+    override val linkTitle = "Title (optional)"
+    override val cardFailed = "Could not build a card from the page — a button was inserted"
+    override val pictureFailed = "The picture did not upload: no connection or not a picture"
+    override val replyTitle = "Which message to reply to"
+    override val replyEmpty = "Nothing to reply to yet"
+    override val picksTitle = "Picks"
+    override val picksEmpty = "Picks are empty: add a message from its menu"
+    override fun pickElsewhere(serverId: Long) = "Message #$serverId"
+    override val unsafeLink = "not encrypted"
 }
 
 object SpanishEditorWords : EditorWords {
@@ -292,4 +338,19 @@ object SpanishEditorWords : EditorWords {
     override val marksOn = "Signos md activados: los signos se convierten en formato"
     override val marksOff = "Signos md desactivados: el texto se envía tal cual"
     override val soon = "Esta sección llega con la siguiente parte del editor"
+    override fun linkMode(key: String) = when (key) {
+        "button" -> "Botón"
+        "card" -> "Tarjeta"
+        else -> "Texto"
+    }
+    override val linkAddress = "Dirección"
+    override val linkTitle = "Título (opcional)"
+    override val cardFailed = "No se pudo crear la tarjeta de la página: se insertó un botón"
+    override val pictureFailed = "La imagen no se subió: sin conexión o no es una imagen"
+    override val replyTitle = "A qué mensaje responder"
+    override val replyEmpty = "Aún no hay nada a qué responder"
+    override val picksTitle = "Selección"
+    override val picksEmpty = "La selección está vacía: añade un mensaje desde su menú"
+    override fun pickElsewhere(serverId: Long) = "Mensaje n.º $serverId"
+    override val unsafeLink = "sin cifrado"
 }

@@ -4660,6 +4660,36 @@ private fun Chat(
     // ушёл черновиком в store, следующее открытие начнёт историю заново.
     if (state.editorOpen) {
         val editorModel = remember { io.tima.feature.chat.EditorModel(state.composed ?: io.tima.domain.chat.ComposedDoc()) }
+        val ew = Tima.words.editor
+        var editorNotice by remember { mutableStateOf<String?>(null) }
+        var editorAsk by remember { mutableStateOf<String?>(null) }
+        var editorChoice by remember { mutableStateOf<String?>(null) }
+        fun put(widget: io.tima.domain.chat.ComposedWidget) = editorModel.insert(io.tima.domain.chat.ComposedItem.Widget(widget))
+        // Картинка внутри сообщения (Решения §3): под ширину ряда 720, без превью, хранится, пока живёт сообщение.
+        val editorUploads = remember { SealedUploads { network.media } }
+        val editorPicture = io.tima.core.media.rememberPhotosPicker(1) { list ->
+            val picked = list.firstOrNull() ?: return@rememberPhotosPicker
+            scope.launch {
+                val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(picked.bytes) }
+                val up = prepared?.let { editorUploads.upload(it.full, "image/jpeg", null, null) }
+                if (prepared == null || up == null) {
+                    editorNotice = ew.pictureFailed
+                } else {
+                    editorNotice = null
+                    put(io.tima.domain.chat.ComposedWidget.Image(io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", prepared.width, prepared.height, prepared.full.size.toLong())))
+                }
+            }
+        }
+        val editorContact = io.tima.core.media.rememberContactPicker { c -> c?.let { put(io.tima.domain.chat.ComposedWidget.Contact(it.name, it.phone)) } }
+        val noPlaceAccess = Tima.words.chat.placeNoAccess
+        val editorPlace = io.tima.core.media.rememberMyPlace { p ->
+            if (p != null) put(io.tima.domain.chat.ComposedWidget.Place(p.first, p.second)) else { editorNotice = noPlaceAccess; editorAsk = "place" }
+        }
+        val linkCards = remember { io.tima.core.network.LinkCardsOverHttp() }
+        val replyLines = remember(state.lines) { state.lines.filter { !it.outgoing && it.serverId > 0 }.take(30) }
+        val pickList = remember(editorChoice) {
+            if (editorChoice == "picks") environment.picks.list(io.tima.domain.chat.MessagePicks.levelOf(chatId, group)) else emptyList()
+        }
         io.tima.feature.chat.EditorScreen(
             model = editorModel,
             levels = kind?.circles ?: listOf(io.tima.domain.chat.MessageCircle.Secret),
@@ -4669,7 +4699,117 @@ private fun Chat(
             problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
             onBack = store::editorBack,
             onSend = { doc -> store.sendComposed(doc) },
+            notice = editorNotice,
+            // Раздел «Вставка» (Решения §10.4): виджет встаёт после куска, где курсор.
+            onButton = { key ->
+                editorNotice = null
+                when (key) {
+                    "picture" -> { editorPicture(); true }
+                    "link", "cloud" -> { editorAsk = key; true }
+                    "place" -> { editorPlace?.invoke() ?: run { editorAsk = "place" }; true }
+                    "contact" -> { editorContact?.invoke() ?: run { editorAsk = "contact" }; true }
+                    "reply", "picks" -> { editorChoice = key; true }
+                    else -> false
+                }
+            },
         )
+        editorAsk?.let { ask ->
+            val cw = Tima.words.chat
+            val (title, fields, options) = when (ask) {
+                "link" -> Triple(cw.linkAsk, listOf(ew.linkAddress, ew.linkTitle), listOf("plain", "button", "card").map { it to ew.linkMode(it) })
+                "cloud" -> Triple(cw.linkPlace, listOf(ew.linkAddress, ew.linkTitle), listOf("file", "document", "audio", "video").map { it to cw.cloudKind(it) })
+                "place" -> Triple(cw.attachItem("place"), listOf(cw.placeAsk), emptyList())
+                else -> Triple(cw.attachItem("contact"), listOf(cw.contact, "+7"), emptyList())
+            }
+            io.tima.feature.chat.AskSheet(
+                title = title,
+                fields = fields,
+                ok = cw.ok,
+                cancel = cw.cancel,
+                options = options,
+                onCancel = { editorAsk = null },
+                onDone = { v ->
+                    val url = v[0].trim().let { if (it.isEmpty() || "://" in it) it else "https://$it" }
+                    when (ask) {
+                        "link" -> if (url.isNotEmpty()) {
+                            editorAsk = null
+                            val mode = v.getOrNull(2) ?: "plain"
+                            if (mode != "card") {
+                                put(io.tima.domain.chat.ComposedWidget.Link(url, v[1], mode))
+                            } else {
+                                // Карточку собирает отправитель (Решения §4): страница — сюда, картинка перекодируется и уходит в тело.
+                                scope.launch {
+                                    val card = linkCards.card(url)
+                                    if (card == null) {
+                                        editorNotice = ew.cardFailed
+                                        put(io.tima.domain.chat.ComposedWidget.Link(url, v[1], "button"))
+                                        return@launch
+                                    }
+                                    val prepared = card.image?.let { bytes ->
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(bytes) }
+                                    }
+                                    val up = prepared?.let { editorUploads.upload(it.full, "image/jpeg", null, null) }
+                                    val image = if (prepared != null && up != null) {
+                                        io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", prepared.width, prepared.height, prepared.full.size.toLong())
+                                    } else null
+                                    put(io.tima.domain.chat.ComposedWidget.Link(url, v[1].ifBlank { card.title }, "card", card.description, image))
+                                }
+                            }
+                        }
+                        "cloud" -> if (url.isNotEmpty()) {
+                            editorAsk = null
+                            put(io.tima.domain.chat.ComposedWidget.Cloud(url, v.getOrNull(2) ?: "file", v[1]))
+                        }
+                        "place" -> io.tima.core.media.PlaceText.parse(v[0])?.let { (lat, lon) ->
+                            editorAsk = null
+                            put(io.tima.domain.chat.ComposedWidget.Place(lat, lon))
+                        } ?: run { editorNotice = cw.placeAsk }
+                        else -> if (v[0].isNotBlank() || v[1].isNotBlank()) {
+                            editorAsk = null
+                            put(io.tima.domain.chat.ComposedWidget.Contact(v[0], v[1]))
+                        }
+                    }
+                },
+            )
+        }
+        when (editorChoice) {
+            "reply" -> io.tima.feature.chat.ChoiceSheet(
+                title = ew.replyTitle,
+                items = replyLines.map { line ->
+                    io.tima.feature.chat.Choice(
+                        title = line.senderId?.let { state.names[it]?.name } ?: name.orEmpty(),
+                        about = line.text.orEmpty(),
+                    )
+                },
+                empty = ew.replyEmpty,
+                onCancel = { editorChoice = null },
+                onPick = { i ->
+                    val line = replyLines[i]
+                    editorChoice = null
+                    put(
+                        io.tima.domain.chat.ComposedWidget.Reply(
+                            io.tima.domain.chat.ReplyTarget(if (group) "group" else "personal", chatId, line.serverId, line.senderId ?: peerUser.orEmpty()),
+                        ),
+                    )
+                },
+            )
+            "picks" -> io.tima.feature.chat.ChoiceSheet(
+                title = ew.picksTitle,
+                items = pickList.map { pick ->
+                    val here = if (pick.chatId == chatId) state.lines.firstOrNull { it.serverId == pick.serverId } else null
+                    io.tima.feature.chat.Choice(title = here?.text ?: ew.pickElsewhere(pick.serverId))
+                },
+                empty = ew.picksEmpty,
+                onCancel = { editorChoice = null },
+                onPick = { i ->
+                    val pick = pickList[i]
+                    editorChoice = null
+                    // Вид ссылки — по переписке, где сообщение лежит: своя группа — `group`, иначе личная.
+                    val kind = if (pick.chatId == chatId && group) "group" else if (pick.chatId == chatId) "personal" else "group"
+                    put(io.tima.domain.chat.ComposedWidget.Quoted(kind, pick.chatId, pick.serverId))
+                },
+            )
+        }
     }
     asking?.let { ask ->
         val w = Tima.words.chat

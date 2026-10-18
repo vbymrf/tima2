@@ -33,6 +33,16 @@ object PhotoPrep {
         return Prepared(jpeg, preview(source), full.width, full.height)
     }
 
+    /**
+     * Картинка внутри сообщения (Решения §3): под ширину места — ряд целиком 720, ячейка — её доля;
+     * высота по пропорции, превью нет. Не картинка — `null`.
+     */
+    fun inline(bytes: ByteArray, width: Int = INLINE_SIDE): Prepared? {
+        val source = decodeImage(bytes, atLeast = width) ?: return null
+        val fitted = if (source.width <= width) source else scaled(source, (maxOf(source.width, source.height) * width.toFloat() / source.width).roundToInt())
+        return Prepared(encodeJpeg(fitted, 85), ByteArray(0), fitted.width, fitted.height)
+    }
+
     /** Превью до 20 КБ: ступени стороны и качества по замеру Решений §3. */
     fun preview(source: ImageBitmap): ByteArray {
         var last = ByteArray(0)

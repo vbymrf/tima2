@@ -147,7 +147,10 @@ object ComposedBodiesOverKodium : ComposedBodies {
                 media += ref(w.media)
                 MarkupBlock(type = BlockType.IMAGE, widget = MarkupWidget(media = media.size - 1))
             }
-            is ComposedWidget.Link -> MarkupBlock(type = BlockType.LINK, widget = MarkupWidget(url = w.url, mode = w.mode, title = w.title))
+            is ComposedWidget.Link -> {
+                val image = w.image?.let { media += ref(it); media.size - 1 } ?: -1
+                MarkupBlock(type = BlockType.LINK, widget = MarkupWidget(url = w.url, mode = w.mode, title = w.title, description = w.description, media = image))
+            }
             is ComposedWidget.Cloud -> MarkupBlock(type = BlockType.CLOUD, widget = MarkupWidget(url = w.url, kind = w.kind, title = w.title))
             is ComposedWidget.Place -> MarkupBlock(type = BlockType.MAP, widget = MarkupWidget(lat = w.lat, lon = w.lon, label = w.label))
             is ComposedWidget.Contact -> MarkupBlock(type = BlockType.CONTACT, widget = MarkupWidget(name = w.name, phone = w.phone, userId = w.userId))
@@ -155,6 +158,10 @@ object ComposedBodiesOverKodium : ComposedBodies {
             is ComposedWidget.Reply -> MarkupBlock(
                 type = BlockType.REPLY,
                 widget = MarkupWidget(userId = w.target.userId, ref = MarkupRef(kind = w.target.kind, container = w.target.chatId, message = w.target.messageId)),
+            )
+            is ComposedWidget.Quoted -> MarkupBlock(
+                type = BlockType.QUOTED,
+                widget = MarkupWidget(ref = MarkupRef(kind = w.kind, container = w.container, message = w.message), author = w.author, cut = w.cut),
             )
         }
 
@@ -245,17 +252,22 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val height: Int = 0,
         val size: Long = 0,
         val preview: String = "",
+        val author: Boolean = false,
+        val cut: String = "",
+        val description: String = "",
     ) {
+        private fun media(): OutMedia? = if (mediaId.isEmpty()) null else
+            OutMedia(mediaId, Base64.decode(key), mime, width, height, size, Base64.decode(preview), name)
+
         fun toWidget(): ComposedWidget? = when (type) {
-            "image" -> ComposedWidget.Image(
-                OutMedia(mediaId, Base64.decode(key), mime, width, height, size, Base64.decode(preview), name),
-            )
-            "link" -> ComposedWidget.Link(url, title, mode)
+            "image" -> media()?.let { ComposedWidget.Image(it) }
+            "link" -> ComposedWidget.Link(url, title, mode, description, media())
             "cloud" -> ComposedWidget.Cloud(url, kind, title)
             "place" -> ComposedWidget.Place(lat, lon, label)
             "contact" -> ComposedWidget.Contact(name, phone, userId)
             "emoji" -> ComposedWidget.Emoji(text)
             "reply" -> ComposedWidget.Reply(ReplyTarget(kind, chatId, messageId, userId))
+            "quoted" -> ComposedWidget.Quoted(kind, chatId, messageId, author, cut)
             else -> null
         }
 
@@ -266,13 +278,20 @@ object ComposedBodiesOverKodium : ComposedBodies {
                     width = w.media.width, height = w.media.height, size = w.media.size,
                     preview = Base64.encode(w.media.preview), name = w.media.name,
                 )
-                is ComposedWidget.Link -> SavedWidget("link", url = w.url, title = w.title, mode = w.mode)
+                is ComposedWidget.Link -> SavedWidget(
+                    "link", url = w.url, title = w.title, mode = w.mode, description = w.description,
+                    mediaId = w.image?.mediaId.orEmpty(), key = w.image?.let { Base64.encode(it.key) }.orEmpty(),
+                    mime = w.image?.mime.orEmpty(), width = w.image?.width ?: 0, height = w.image?.height ?: 0, size = w.image?.size ?: 0,
+                )
                 is ComposedWidget.Cloud -> SavedWidget("cloud", url = w.url, kind = w.kind, title = w.title)
                 is ComposedWidget.Place -> SavedWidget("place", lat = w.lat, lon = w.lon, label = w.label)
                 is ComposedWidget.Contact -> SavedWidget("contact", name = w.name, phone = w.phone, userId = w.userId)
                 is ComposedWidget.Emoji -> SavedWidget("emoji", text = w.text)
                 is ComposedWidget.Reply -> SavedWidget(
                     "reply", kind = w.target.kind, chatId = w.target.chatId, messageId = w.target.messageId, userId = w.target.userId,
+                )
+                is ComposedWidget.Quoted -> SavedWidget(
+                    "quoted", kind = w.kind, chatId = w.container, messageId = w.message, author = w.author, cut = w.cut,
                 )
             }
         }

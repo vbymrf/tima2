@@ -154,6 +154,8 @@ fun EditorScreen(
     onSend: (ComposedDoc) -> Unit,
     /** Кнопки ленты, которых нет в первом срезе, — их обработчик; `null` — подсказка «следующим срезом». */
     onButton: ((String) -> Boolean)? = null,
+    /** Сказать одно предложение в разделителе — «картинка не загрузилась» и подобное. */
+    notice: String? = null,
 ) {
     val colors = Tima.colors
     val w = Tima.words.editor
@@ -163,6 +165,9 @@ fun EditorScreen(
     var levelMenu by remember { mutableStateOf(false) }
     var paragraphMenu by remember { mutableStateOf(false) }
     var symbolArea by remember { mutableStateOf(false) }
+    var emojiArea by remember { mutableStateOf(false) }
+    val clipboardHtml = io.tima.core.media.rememberClipboardHtml()
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     var hint by remember { mutableStateOf<String?>(null) }
     val recent = remember { mutableStateListOf<String>() }
     val doc = model.doc
@@ -179,7 +184,15 @@ fun EditorScreen(
             "strike" -> model.inline(InlineKind.STRIKE)
             "highlight" -> model.inline(InlineKind.HIGHLIGHT)
             "code" -> model.inline(InlineKind.CODE)
-            "symbol" -> { keyboard?.hide(); symbolArea = !symbolArea }
+            "symbol" -> { keyboard?.hide(); emojiArea = false; symbolArea = !symbolArea }
+            "emoji" -> { keyboard?.hide(); symbolArea = false; emojiArea = !emojiArea }
+            // Из HTML — только текст и простое оформление (Решения §5); HTML нет — текст как есть.
+            "paste" -> {
+                val html = clipboardHtml()
+                val text = html?.let(io.tima.domain.chat.HtmlToMarks::convert)?.takeIf { it.isNotBlank() }
+                    ?: clipboard.getText()?.text.orEmpty()
+                model.paste(text)
+            }
             "marks" -> { model.toggleMarks(); hint = if (model.doc.marks) w.marksOn else w.marksOff }
             else -> if (onButton?.invoke(key) != true) hint = w.soon
         }
@@ -223,7 +236,7 @@ fun EditorScreen(
             Modifier.fillMaxWidth().background(colors.functional).padding(horizontal = TimaSpacing.about4, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Tertiary(hint ?: w.selected(selectedKind(model)), lineOne = true)
+            Tertiary(notice ?: hint ?: w.selected(selectedKind(model)), lineOne = true)
         }
         if (model.hasSelection) SelectionStrip { kind -> model.inline(kind) }
 
@@ -244,6 +257,10 @@ fun EditorScreen(
                 Caption(w.cannotSend, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.alarm)
                 for (p in trouble.take(3)) Caption(p, fontSize = TimaType.sz5, color = colors.alarm)
             }
+        }
+        if (emojiArea) EmojiArea(onClose = { emojiArea = false }) { e ->
+            model.insert(ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Emoji(e)))
+            emojiArea = false
         }
         if (symbolArea) SymbolArea(recent, onClose = { symbolArea = false }) { s ->
             model.symbol(s)

@@ -164,4 +164,16 @@ class EditorInChatStoreTest {
         m.undo()
         assertTrue(m.doc.marks, "знаки и уровень отменяются, как и всё")
     }
+
+    @Test
+    fun вставка_в_место_курсора_без_экранирования() {
+        val m = EditorModel(ComposedDoc.of("ab"))
+        m.changed(0, TextFieldValue("ab", TextRange(1)))
+        m.paste("**x**")
+        assertEquals("a**x**b", m.focusedText)
+        m.insert(ComposedItem.Widget(ComposedWidget.Emoji("🎉")))
+        m.select(1)
+        m.paste("новый")
+        assertEquals("новый", (m.doc.items[2] as ComposedItem.Text).source, "курсор на виджете — текст новым куском после него")
+    }
 }

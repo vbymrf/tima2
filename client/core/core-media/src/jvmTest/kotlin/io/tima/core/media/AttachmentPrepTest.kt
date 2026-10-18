@@ -59,4 +59,16 @@ class AttachmentPrepTest {
         assertFalse(FileRules.warned("отчёт.pdf"))
         assertEquals("application/pdf", FileRules.mimeOf("A.PDF"))
     }
+
+    @Test
+    fun картинка_внутри_сообщения_под_ширину_места() {
+        val wide = assertNotNull(PhotoPrep.inline(noisy(1600, 400)))
+        assertEquals(720, wide.width)
+        assertEquals(180, wide.height)
+        assertEquals(0, wide.preview.size, "превью у картинки внутри сообщения нет")
+        val tall = assertNotNull(PhotoPrep.inline(noisy(600, 2000), width = 238))
+        assertEquals(238, tall.width, "ячейка 33 % — 238")
+        val small = assertNotNull(PhotoPrep.inline(noisy(200, 100)))
+        assertEquals(200, small.width, "меньшее не растягивается")
+    }
 }

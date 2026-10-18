@@ -130,6 +130,22 @@ class EditorModel(initial: ComposedDoc) {
         applyText(ComposedText.symbol(text, snapshot.start, snapshot.end, symbol, doc.marks))
     }
 
+    /**
+     * «С оформл.» и обычная вставка: текст со знаками — туда, где курсор, без экранирования (знаки
+     * в нём и есть оформление). Курсор не в тексте — новым куском после выбранного.
+     */
+    fun paste(text: String) {
+        if (text.isEmpty()) return
+        val current = focusedText
+        if (current == null) {
+            insert(ComposedItem.Text(text))
+            return
+        }
+        val s = minOf(snapshot.start, snapshot.end).coerceIn(0, current.length)
+        val e = maxOf(snapshot.start, snapshot.end).coerceIn(0, current.length)
+        applyText(TextEdit(current.substring(0, s) + text + current.substring(e), s + text.length, s + text.length))
+    }
+
     /** «Знаки md» — шаг истории: отменяется, как и всё остальное. */
     fun toggleMarks() {
         typingIn = null

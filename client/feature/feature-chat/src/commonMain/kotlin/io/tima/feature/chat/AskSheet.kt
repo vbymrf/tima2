@@ -37,6 +37,8 @@ import io.tima.core.ui.TimaType
  * «Отмена».
  *
  * @param fields подписи полей; ответ — значения в том же порядке.
+ * @param options выбор вида (ключ, подпись) — ссылка текстом или кнопкой, вид файла в облаке;
+ *   есть выбор — ключ выбранного идёт в ответ последним.
  */
 @Composable
 fun AskSheet(
@@ -48,9 +50,11 @@ fun AskSheet(
     onCancel: () -> Unit,
     /** Ошибка ответа словами; `null` — ошибки нет. */
     trouble: String? = null,
+    options: List<Pair<String, String>> = emptyList(),
 ) {
     val colors = Tima.colors
     var values by remember(fields) { mutableStateOf(fields.map { "" }) }
+    var chosen by remember(options) { mutableStateOf(options.firstOrNull()?.first) }
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
         contentAlignment = Alignment.BottomCenter,
@@ -73,9 +77,26 @@ fun AskSheet(
                         .padding(10.dp).testTag("chat:ask.$i"),
                 )
             }
+            if (options.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for ((key, label) in options) {
+                        Chip(
+                            label,
+                            kind = if (key == chosen) ChipKind.Selected else ChipKind.Quiet,
+                            onClick = { chosen = key },
+                            modifier = Modifier.testTag("chat:ask.option.$key"),
+                        )
+                    }
+                }
+            }
             if (trouble != null) Caption(trouble, fontSize = TimaType.sz5, color = colors.alarm)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Chip(ok, kind = ChipKind.Selected, onClick = { onDone(values.map { it.trim() }) }, modifier = Modifier.testTag("chat:ask.ok"))
+                Chip(
+                    ok,
+                    kind = ChipKind.Selected,
+                    onClick = { onDone(values.map { it.trim() } + listOfNotNull(chosen)) },
+                    modifier = Modifier.testTag("chat:ask.ok"),
+                )
                 Chip(cancel, kind = ChipKind.Quiet, onClick = onCancel)
             }
         }

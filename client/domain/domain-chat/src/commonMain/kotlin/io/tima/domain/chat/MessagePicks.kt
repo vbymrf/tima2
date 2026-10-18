@@ -18,6 +18,9 @@ class MessagePicks(private val store: PickStore, private val nowMs: () -> Long) 
         return PickResult.Added
     }
 
+    /** Подборка уровня — новые первыми; вставляет редактор (Решения §11.2). */
+    fun list(level: String): List<Pick> = store.list(level)
+
     companion object {
         /** Предложение решений §11.2: до 20 ссылок на уровень. */
         const val MAX = 20
@@ -48,4 +51,10 @@ interface PickStore {
     fun has(level: String, chatId: String, serverId: Long): Boolean
     fun count(level: String): Int
     fun add(level: String, chatId: String, serverId: Long, atMs: Long)
+
+    /** Новые первыми. */
+    fun list(level: String): List<Pick> = emptyList()
 }
+
+/** Ссылка в подборке: переписка и номер сообщения на сервере. */
+data class Pick(val chatId: String, val serverId: Long)
