@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -515,28 +516,35 @@ private fun Feed(
     }
     }
 
+/** Стандартный открытый уровень в группе — цифра у него не рисуется (В29). */
+private const val STANDARD_OPEN_LEVEL = 2
+
+/** Метка цифры уровня — для сценариев. */
+const val LEVEL_DIGIT_TAG = "chat:level"
+
 /**
- * Метка круга у реплики: стрелка вправо и номер.
- *
- * Вправо — потому что запись не скачивается, а **уходит дальше**: на стену, оттуда к
- * друзьям. Цвет говорит быстрее номера: зелёная — можно унести, тихая — нельзя, янтарная
- * — по разрешению. Номер нужен тем, кто разбирается; остальным хватает цвета, и это
- * правильный порядок — цвет читается за полсекунды, номер за две.
- *
- * Слова «уровень» здесь нет: человек видит круг, а не понятие сервера.
+ * Уровень у реплики — цифра в кружке перед временем (Решения, В29). Цвет говорит быстрее цифры:
+ * зелёная — можно унести (0, 1), янтарная — по разрешению (3), тихая — своим (2). Можно сузить —
+ * цифра нажимается и открывает список кругов уже нынешнего.
  */
 @Composable
-private fun CircleMark(level: Int) {
-    if (level < 0) return // шифр метки не носит: в нём и так всё закрыто
-    Chip(
-        label = "→ $level",
-        kind = when (level) {
-            0, 1 -> ChipKind.Confirmed // можно унести к себе
-            3 -> ChipKind.Neutral      // по разрешению
-            else -> ChipKind.Quiet     // только своим
-        },
-        horizontalPadding = 6.dp,
-    )
+private fun LevelDigit(level: Int, onClick: (() -> Unit)?) {
+    val colors = Tima.colors
+    val fill = when (level) {
+        0, 1 -> colors.confirmed
+        3 -> colors.activity
+        else -> colors.border
+    }
+    androidx.compose.foundation.layout.Box(
+        Modifier
+            .size(18.dp)
+            .background(fill, androidx.compose.foundation.shape.CircleShape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .testTag(LEVEL_DIGIT_TAG),
+        contentAlignment = Alignment.Center,
+    ) {
+        Caption(level.toString(), fontSize = TimaType.sz6, weight = FontWeight.Bold, color = if (level == 3) colors.onAmber else colors.onAccent)
+    }
 }
 
 /**
@@ -653,6 +661,32 @@ private fun Bubbled(
     keyLost: Boolean = false,
     look: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
     onAvatar: (() -> Unit)? = null,
+) {
+    // Сужение — кнопкой-цифрой со списком (В29): нажали цифру — под сообщением круги уже нынешнего.
+    var narrowing by androidx.compose.runtime.remember(line.dedupKey) { androidx.compose.runtime.mutableStateOf(false) }
+    val canNarrow = onNarrow != null && line.serverId > 0 && MessageCircle.narrowerThan(line.level).isNotEmpty()
+    Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, keyLost, look, onAvatar,
+        narrowing = narrowing, onDigit = if (canNarrow) ({ narrowing = !narrowing }) else null, onNarrowed = { narrowing = false })
+}
+
+@Composable
+private fun Bubbled(
+    line: ChatLine,
+    author: String?,
+    letter: String,
+    face: ImageBitmap?,
+    strip: Color?,
+    continuation: Boolean,
+    showCircle: Boolean,
+    onNarrow: ((Long, Int, Int) -> Unit)?,
+    onCarry: ((Long, Int) -> Unit)?,
+    onAskChatKeys: (() -> Unit)?,
+    keyLost: Boolean,
+    look: io.tima.core.ui.AvatarLook,
+    onAvatar: (() -> Unit)?,
+    narrowing: Boolean,
+    onDigit: (() -> Unit)?,
+    onNarrowed: () -> Unit,
 ) = Bubble(
     my = line.outgoing,
     author = author,
@@ -664,13 +698,13 @@ private fun Bubbled(
     look = look,
     onAvatar = onAvatar,
     bottom = {
+        // Уровень — цифрой в кружке перед временем, только нестандартный (В29: −1 и 2 —
+        // стандарт); с включённым показом кругов — и стандартный открытый. Шифр метки не носит.
+        if (line.level >= 0 && (line.level != STANDARD_OPEN_LEVEL || showCircle)) LevelDigit(line.level, onDigit)
         // Исправленное (ADR-0045): пометка у времени — у всех, кто видит сообщение.
         if (line.edits > 0) Tertiary(Tima.words.chat.edited, lineOne = true)
         Tertiary(time(line.atMs), lineOne = true)
         markOf(line.display, line.atMs, LocalChatReceipt.current)?.let { Mark(it) }
-        // Метка круга — рядом со временем, а не поверх текста: цвет несёт метка, а не
-        // буквы. Красить текст значило бы, что читаемость зависит от доступа.
-        if (showCircle) CircleMark(line.level)
     },
 ) {
     val text = line.text
@@ -712,10 +746,9 @@ private fun Bubbled(
         CarryButton(roomy = roomAfter(line.text)) { onCarry(line.serverId, line.level) }
     }
 
-    // Сужение предлагается там же, где показана метка: оба про одно — кто это видит.
-    // У неотправленного серверного идентификатора нет, и сужать там нечего.
-    if (onNarrow != null && showCircle && line.level >= 0 && line.serverId > 0) {
-        NarrowChoice(line.level) { to -> onNarrow(line.serverId, line.level, to) }
+    // Список сужения — под сообщением, пока открыт цифрой. У неотправленного номера нет.
+    if (narrowing && onNarrow != null && line.serverId > 0) {
+        NarrowChoice(line.level) { to -> onNarrow(line.serverId, line.level, to); onNarrowed() }
     }
 }
 
@@ -770,10 +803,11 @@ private const val WORD_ROOM = 15
 private fun NarrowChoice(was: Int, onPick: (Int) -> Unit) {
     val narrower = MessageCircle.narrowerThan(was)
     if (narrower.isEmpty()) return
-    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+    Column(verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
         Tertiary(Tima.words.chat.narrowTo, lineOne = true)
+        // Список, а не ряд чипов: под цифрой — цифра и слово круга, по строке на круг.
         for (circle in narrower) {
-            Chip(circle.title, kind = ChipKind.Quiet, onClick = { onPick(circle.level) })
+            Chip("${circle.level} · ${circle.title}", kind = ChipKind.Quiet, onClick = { onPick(circle.level) })
         }
     }
 }
