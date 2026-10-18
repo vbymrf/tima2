@@ -227,13 +227,13 @@ func (s *Store) CreatePost(ctx context.Context, p ChannelPost) (uint64, error) {
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO channel_posts
 		    (channel_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms, level,
-		     lang, country)
+		     lang, country, search_key)
 		SELECT $1,$2,$3,$4,$5,$6,$7,$8,
-		       COALESCE(NULLIF($9, ''), u.lang), u.country
+		       COALESCE(NULLIF($9, ''), u.lang), u.country, $10
 		  FROM users u WHERE u.user_id = $2
 		RETURNING post_id`,
 		p.ChannelID, p.AuthorID, p.Text, p.Nodes, markupParam, p.MarkupVersion, p.CreatedAtUnixMs,
-		p.Level, p.Lang).Scan(&id)
+		p.Level, p.Lang, SearchKey(postSearchText(p))).Scan(&id)
 	return id, err
 }
 

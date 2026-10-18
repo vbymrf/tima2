@@ -39,6 +39,8 @@ type GroupMessage struct {
 	KeyCommitment []byte
 	// EditOf — номер исправляемого сообщения (подпись версии 3, ADR-0045); 0 — не правка.
 	EditOf int64
+	// SearchText — первый узел текста открытого сообщения для поиска (Решения §12); пусто у шифра.
+	SearchText string
 	// Level — кому сервер отдаёт сообщение (ADR-0019): -1 шифр, 0 всем и всегда,
 	// 1 всем, 2 вступившим, 3 по разрешению. В подпись НЕ входит: подпись неизменна,
 	// а уровень по замыслу сужается после отправки.
@@ -59,13 +61,13 @@ func (s *Store) SaveGroupMessage(ctx context.Context, m GroupMessage) (int64, bo
 	var id int64
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO group_messages (group_id, client_msg_id, sender_id, sender_device, kind,
-			gk_version, payload, thread_root, reply_to, created_at_unix_ms, signature, level, key_commitment, edit_of)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			gk_version, payload, thread_root, reply_to, created_at_unix_ms, signature, level, key_commitment, edit_of, search_text, search_key)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 		ON CONFLICT (group_id, client_msg_id) DO NOTHING
 		RETURNING message_id`,
 		m.GroupID, m.ClientMsgID, m.SenderID, m.SenderDevice, m.Kind,
 		nullIfZero(m.GKVersion), m.Payload, nullIfZero(m.ThreadRoot), nullIfZero(m.ReplyTo),
-		m.CreatedAtUnixMs, m.Signature, m.Level, m.KeyCommitment, m.EditOf).Scan(&id)
+		m.CreatedAtUnixMs, m.Signature, m.Level, m.KeyCommitment, m.EditOf, m.SearchText, SearchKey(m.SearchText)).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) { // конфликт — сообщение уже принято
 		err = s.pool.QueryRow(ctx,
 			`SELECT message_id FROM group_messages WHERE group_id = $1 AND client_msg_id = $2`,

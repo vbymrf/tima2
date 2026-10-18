@@ -33,6 +33,7 @@ import (
 // или расширение — правка этого файла, а не общего типа, который читают все.
 // *store.Store реализует его без единого изменения, что и проверяет строка ниже.
 type ChannelStore interface {
+	SearchOpen(ctx context.Context, channel bool, container, q string, maxLevel int16, limit int) ([]store.SearchHit, error)
 	CreateChannel(ctx context.Context, c store.Channel) (string, error)
 	GetChannel(ctx context.Context, channelID string) (store.Channel, error)
 	MyChannels(ctx context.Context, userID string) ([]store.ChannelView, error)
@@ -72,6 +73,7 @@ func RegisterChannels(mux *http.ServeMux, st ChannelStore, n *Notifier, requireD
 	mux.HandleFunc("DELETE /api/v1/channels/{channelID}/subscribe", requireDevice(unsubscribeChannel(st)))
 	mux.HandleFunc("POST /api/v1/channels/{channelID}/posts", requireDevice(postToChannel(st, n)))
 	mux.HandleFunc("GET /api/v1/channels/{channelID}/posts", requireDevice(listChannelPosts(st)))
+	mux.HandleFunc("GET /api/v1/channels/{channelID}/search", requireDevice(searchChannel(st)))
 	mux.HandleFunc("GET /api/v1/channels/{channelID}/posts/{postID}", requireDevice(getChannelPost(st)))
 
 	// Разговор под записью. Тот же набор обслуживает и ленту человека: она сделана

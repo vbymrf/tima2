@@ -25,6 +25,7 @@ type MediaStore interface {
 	CompleteMedia(ctx context.Context, mediaID, ownerID string, actualSize int64) error
 	FindMediaByHash(ctx context.Context, contentHash []byte) (string, error)
 	GetMedia(ctx context.Context, mediaID string) (store.Media, error)
+	MediaMany(ctx context.Context, ids []string) ([]store.Media, error)
 }
 
 var _ MediaStore = (*store.Store)(nil)
@@ -39,12 +40,13 @@ type mediaDeps struct {
 	blobs func() *blob.Client
 }
 
-// RegisterMedia — три маршрута медиа: инициация загрузки, подтверждение, ссылка.
+// RegisterMedia — четыре маршрута медиа: инициация загрузки, подтверждение, ссылка, ссылки пачкой.
 func RegisterMedia(mux *http.ServeMux, st MediaStore, blobs func() *blob.Client, requireDevice Middleware) {
 	deps := mediaDeps{store: st, blobs: blobs}
 	mux.HandleFunc("POST /api/v1/media/init", requireDevice(mediaInit(deps)))
 	mux.HandleFunc("POST /api/v1/media/complete", requireDevice(mediaComplete(deps)))
 	mux.HandleFunc("GET /api/v1/media/{mediaID}/url", requireDevice(mediaURL(deps)))
+	mux.HandleFunc("POST /api/v1/media/urls", requireDevice(mediaURLs(deps)))
 }
 
 const (
@@ -53,7 +55,12 @@ const (
 	// Предел 10 МБ для чужого получателя проверяется там, где получатель известен, — у почтальона
 	// (ПЛАН-(ПФ) ПФ4, ПЛАН-(РС) РС3). У Caddy перед s3 остаётся max_size 2GB — предел
 	// держит эта ручка: больше 50 МБ ссылка на загрузку не выдаётся.
-	maxMediaBytes  = 50 << 20
+	maxMediaBytes = 50 << 20
+	// Квота загрузок на человека (Решения §14): заявлено за последние сутки, вместе с новым файлом.
+	// Числа решения не назвали — 1 ГБ: двадцать файлов по 50 МБ себе и запас на картинки.
+	uploadQuotaBytes = 1 << 30
+	// Ссылок пачкой — до 100 (Решения §14).
+	maxURLBatch    = 100
 	maxChunks      = 1024
 	uploadURLTTL   = 15 * time.Minute
 	downloadURLTTL = 10 * time.Minute // media-storage.md §2
@@ -85,7 +92,7 @@ func mediaInit(deps mediaDeps) http.HandlerFunc {
 			return
 		}
 		if req.SizeBytes <= 0 || req.SizeBytes > maxMediaBytes {
-			writeErr(w, http.StatusBadRequest, "bad_size", "size_bytes должен быть в (0, 2 GB]")
+			writeErr(w, http.StatusBadRequest, "bad_size", "size_bytes должен быть в (0, 50 МБ]")
 			return
 		}
 		if req.ChunkCount < 0 || req.ChunkCount > maxChunks {
@@ -124,8 +131,13 @@ func mediaInit(deps mediaDeps) http.HandlerFunc {
 		id, _ := auth.FromContext(r.Context())
 		m, err := deps.store.CreateMedia(r.Context(), store.Media{
 			OwnerID: id.UserID, Mime: req.Mime, SizeBytes: req.SizeBytes,
-			IsEncrypted: req.IsEncrypted, ChunkCount: req.ChunkCount,
+			IsEncrypted: req.IsEncrypted, ChunkCount: req.ChunkCount, QuotaBytes: uploadQuotaBytes,
 		}, contentHash)
+		if errors.Is(err, store.ErrUploadQuota) {
+			w.Header().Set("Retry-After", "3600")
+			writeErr(w, http.StatusTooManyRequests, "upload_quota", "за сутки загружено больше 1 ГБ — попробуйте позже")
+			return
+		}
 		if err != nil {
 			log.Printf("mediaInit: create: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -239,5 +251,62 @@ func mediaURL(deps mediaDeps) http.HandlerFunc {
 			"media_id": m.MediaID, "mime": m.Mime, "size_bytes": m.SizeBytes,
 			"is_encrypted": m.IsEncrypted, "chunk_count": m.ChunkCount, "urls": urls,
 		})
+	}
+}
+
+// mediaURLs — POST /media/urls: ссылки пачкой, до 100 номеров (Решения §14) — лента с картинками
+// не ходит за каждой отдельно. Незавершённое и пропавшее — в `missing`, а не отказом всей пачки.
+func mediaURLs(deps mediaDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.blobs() == nil {
+			writeErr(w, http.StatusServiceUnavailable, "no_storage", "object storage не сконфигурирован (S3_ENDPOINT)")
+			return
+		}
+		var req struct {
+			MediaIDs []string `json:"media_ids"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
+			return
+		}
+		if len(req.MediaIDs) == 0 || len(req.MediaIDs) > maxURLBatch {
+			writeErr(w, http.StatusBadRequest, "bad_batch", fmt.Sprintf("номеров от 1 до %d", maxURLBatch))
+			return
+		}
+		found, err := deps.store.MediaMany(r.Context(), req.MediaIDs)
+		if err != nil {
+			log.Printf("mediaURLs: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		byID := make(map[string]store.Media, len(found))
+		for _, m := range found {
+			byID[m.MediaID] = m
+		}
+		items := make([]map[string]any, 0, len(found))
+		missing := []string{}
+		for _, id := range req.MediaIDs {
+			m, ok := byID[id]
+			if !ok || m.Status != "complete" {
+				missing = append(missing, id)
+				continue
+			}
+			urls := make([]string, 0, m.ChunkCount)
+			for i := int32(0); i < m.ChunkCount; i++ {
+				u, err := deps.blobs().PresignGet(r.Context(), chunkKey(m.StorageKey, i, m.ChunkCount), downloadURLTTL)
+				if err != nil {
+					log.Printf("mediaURLs: presign: %v", err)
+					writeErr(w, http.StatusInternalServerError, "internal", "не выдался download URL")
+					return
+				}
+				urls = append(urls, u)
+			}
+			items = append(items, map[string]any{
+				"media_id": m.MediaID, "mime": m.Mime, "size_bytes": m.SizeBytes,
+				"is_encrypted": m.IsEncrypted, "chunk_count": m.ChunkCount, "urls": urls,
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "missing": missing})
 	}
 }

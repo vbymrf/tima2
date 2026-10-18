@@ -256,6 +256,11 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			EditOf:          req.EditOf,
 			Level:           level,
 		}
+		// Открытое — первым узлом в поиск (Решения §12). Правка открытого строку поиска не меняет:
+		// её тело — изменённые узлы, а не сообщение целиком.
+		if level >= levelPublicShowcase && req.EditOf == 0 {
+			msg.SearchText = searchTextOf(payload)
+		}
 		messageID, duplicate, err := deps.store.SaveGroupMessage(r.Context(), msg)
 		if err != nil {
 			log.Printf("postGroupMessage: save: %v", err)

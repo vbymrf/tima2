@@ -18,15 +18,29 @@ type Media struct {
 	IsEncrypted bool
 	ChunkCount  int32
 	Status      string
+	// QuotaBytes — сколько человек может заявить к загрузке за последние сутки вместе с этим
+	// файлом (Решения §14 «квота загрузок на человека»); 0 — без квоты (проверки, внутреннее).
+	QuotaBytes int64
 }
+
+// ErrUploadQuota — за сутки заявлено больше квоты.
+var ErrUploadQuota = errors.New("квота загрузок за сутки исчерпана")
 
 // CreateMedia регистрирует pending-объект; storage_key достраивается по media_id.
 func (s *Store) CreateMedia(ctx context.Context, m Media, contentHash []byte) (Media, error) {
+	// Квота проверяется той же командой, что вставляет: между подсчётом и записью не влезет
+	// вторая загрузка того же человека. Считается заявленное — и незавершённое тоже: иначе квоту
+	// обходили бы, не подтверждая загрузку.
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO media_objects (owner_id, storage_key, mime, size_bytes, is_encrypted, content_hash, chunk_count)
-		VALUES ($1, '', $2, $3, $4, $5, $6)
+		SELECT $1::uuid, '', $2::text, $3::bigint, $4::boolean, $5::bytea, $6::int
+		 WHERE $7::bigint = 0 OR $3::bigint + (SELECT COALESCE(sum(size_bytes), 0) FROM media_objects
+		                                       WHERE owner_id = $1::uuid AND created_at > now() - interval '1 day') <= $7::bigint
 		RETURNING media_id`,
-		m.OwnerID, m.Mime, m.SizeBytes, m.IsEncrypted, contentHash, m.ChunkCount).Scan(&m.MediaID)
+		m.OwnerID, m.Mime, m.SizeBytes, m.IsEncrypted, contentHash, m.ChunkCount, m.QuotaBytes).Scan(&m.MediaID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return m, ErrUploadQuota
+	}
 	if err != nil {
 		return m, err
 	}
@@ -49,6 +63,27 @@ func (s *Store) GetMedia(ctx context.Context, mediaID string) (Media, error) {
 		return m, ErrMediaNotFound
 	}
 	return m, err
+}
+
+// MediaMany — метаданные пачки объектов (ссылки пачкой, Решения §14). Чего нет — того нет в
+// ответе: вызывающий называет пропавшее сам.
+func (s *Store) MediaMany(ctx context.Context, ids []string) ([]Media, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT media_id, owner_id, storage_key, mime, size_bytes, is_encrypted, chunk_count, status
+		FROM media_objects WHERE media_id::text = ANY($1)`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Media
+	for rows.Next() {
+		var m Media
+		if err := rows.Scan(&m.MediaID, &m.OwnerID, &m.StorageKey, &m.Mime, &m.SizeBytes, &m.IsEncrypted, &m.ChunkCount, &m.Status); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 // CompleteMedia фиксирует фактический размер и переводит в complete (только владелец).
