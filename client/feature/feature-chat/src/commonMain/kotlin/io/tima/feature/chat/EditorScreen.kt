@@ -94,6 +94,8 @@ object EditorTags {
     const val SYMBOL_AREA = "editor:symbol.area"
     /** Место сообщения; нажатие на пустое под ним — писать после всего. */
     const val BODY = "editor:body"
+    /** Пустое место под сообщением — прокручивается вместе с ним. */
+    const val TAIL = "editor:tail"
     fun tab(key: String) = "editor:tab.$key"
     fun button(key: String) = "editor:$key"
     fun level(level: Int) = "editor:level.$level"
@@ -352,9 +354,10 @@ fun EditorScreen(
         // ── Сообщение ──
         val drag = rememberEditorDrag()
         drag.forget(doc.items.size)
+        var bodyHeight by remember { mutableStateOf(0) }
         Box(
             Modifier.weight(1f).fillMaxWidth()
-                .onGloballyPositioned { drag.origin = it.boundsInRoot().topLeft }
+                .onGloballyPositioned { drag.origin = it.boundsInRoot().topLeft; bodyHeight = it.size.height }
                 .then(if (onFiles != null) Modifier.fileDrop(onHover = { dropping = it }, onFiles = onFiles) else Modifier)
                 .then(if (dropping) Modifier.border(3.dp, colors.navigation) else Modifier)
                 // Пустое место под сообщением — писать после всего, как Enter в конце (заказчик
@@ -375,6 +378,10 @@ fun EditorScreen(
                             EditorItemView(model, i, item, typing, preview, drag, tooWide = i in wide, levels = levels)
                         }
                     }
+                    // Пустое место под сообщением всегда есть (заказчик 2026-10-18): сообщение заняло окно
+                    // целиком — прокрутка уводит его выше, и под ним можно нажать, чтобы писать дальше.
+                    val tail = with(androidx.compose.ui.platform.LocalDensity.current) { (bodyHeight / 3).toDp() }
+                    Box(Modifier.fillMaxWidth().height(maxOf(tail, EDITOR_TAIL_MIN)).testTag(EditorTags.TAIL))
                 }
             }
             DragGhost(drag)
@@ -411,6 +418,9 @@ private fun selectedKind(model: EditorModel): String {
         else -> "text"
     }
 }
+
+/** Пустое место под сообщением не меньше этого; обычно — треть окна сообщения. */
+private val EDITOR_TAIL_MIN = 160.dp
 
 /** Пауза набора, после которой документ пишется черновиком. */
 private const val DRAFT_PAUSE_MS = 500L
