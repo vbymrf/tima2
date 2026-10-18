@@ -62,6 +62,7 @@ object MessageSerializer {
             kind = requireNotNull(ContentKind.fromValue(meta.kind)) { "Неизвестный ContentKind: ${meta.kind}" },
             created_at_unix_ms = meta.createdAtUnixMs,
             reply_to = meta.replyTo.toLong(),
+            edit_of = meta.editOf.toLong(),
         ),
         encrypted_payload = encryptedPayload.toByteString(),
         escrow = ProtoEscrowBlob(
@@ -94,6 +95,7 @@ object MessageSerializer {
                 kind = meta.kind.value,
                 createdAtUnixMs = meta.created_at_unix_ms,
                 replyTo = meta.reply_to.toULong(),
+                editOf = meta.edit_of.toULong(),
             ),
             encryptedPayload = encrypted_payload.toByteArray(),
             escrow = EscrowBlob(

@@ -70,7 +70,8 @@ class PersonalMessageSealer(private val escrowModule: EscrowModule) {
         }
 
         val message = SealedPersonalMessage(
-            formatVersion = CanonicalBytes.FORMAT_VERSION,
+            // Правка — версия 3: номер исходного входит в подпись хвостом (ADR-0045). Остальное — v2.
+            formatVersion = if (meta.editOf != 0uL) CanonicalBytes.FORMAT_VERSION_EDIT else CanonicalBytes.FORMAT_VERSION,
             meta = meta,
             encryptedPayload = encryptedPayload,
             escrow = escrowBlob,

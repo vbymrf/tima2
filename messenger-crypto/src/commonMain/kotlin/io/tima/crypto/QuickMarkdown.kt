@@ -147,6 +147,69 @@ object QuickMarkdown {
         return out
     }
 
+    /**
+     * Обратный ход: набранный текст по содержимому — для правки в строке ввода (ADR-0045).
+     *
+     * `null` — знаками не выразить (таблица, ряд, виджет: их правит редактор) или разбор набранного
+     * не вернул бы того же содержимого. Сначала без экранирования — человеку не нужны косые там,
+     * где знак и так не сработает; не сошлось — с экранированием каждого знака пары.
+     */
+    fun source(content: MessageContent): String? {
+        val markup = content.markup?.takeIf { content.hasMarkup } ?: return content.plainText()
+        for (escape in listOf(false, true)) {
+            val text = Source(content, markup, escape).render() ?: return null
+            val back = parse(text)
+            if (back.nodes == content.nodes && back.markup == markup) return text
+        }
+        return null
+    }
+
+    private class Source(val content: MessageContent, val markup: Markup, val escape: Boolean) {
+        private val lines = mutableListOf<String>()
+
+        fun render(): String? {
+            for (block in markup.blocks) if (!block(block)) return null
+            return lines.joinToString("\n")
+        }
+
+        private fun node(id: Int): String? {
+            val i = markup.indexOf(id)
+            if (i < 0) return null
+            return Inline.source(content.nodes[i], markup.entities.filter { it.nodeId == id }, escape)
+        }
+
+        private fun block(b: MarkupBlock): Boolean {
+            when (b.type) {
+                BlockType.PARAGRAPH -> lines += node(b.nodeIds.singleOrNull() ?: return false) ?: return false
+                BlockType.HEADING -> {
+                    if (b.level !in 1..3) return false
+                    lines += "#".repeat(b.level) + " " + (node(b.nodeIds.singleOrNull() ?: return false) ?: return false)
+                }
+                BlockType.QUOTE -> for (id in b.nodeIds) lines += "--> " + (node(id) ?: return false)
+                BlockType.CODE_BLOCK -> {
+                    val i = markup.indexOf(b.nodeIds.singleOrNull() ?: return false)
+                    if (i < 0) return false
+                    lines += "```"
+                    lines += content.nodes[i]
+                    lines += "```"
+                }
+                BlockType.DIVIDER -> lines += "---"
+                BlockType.LIST -> return list(b, 0)
+                else -> return false
+            }
+            return true
+        }
+
+        private fun list(b: MarkupBlock, depth: Int): Boolean {
+            for (item in b.children) {
+                if (item.type != BlockType.LIST_ITEM) return false
+                lines += "  ".repeat(depth) + "- " + (node(item.nodeIds.singleOrNull() ?: return false) ?: return false)
+                for (child in item.children) if (child.type != BlockType.LIST || !list(child, depth + 1)) return false
+            }
+            return true
+        }
+    }
+
     /** Отрезок строки ввода в координатах набранного текста. */
     data class TypingMark(val kind: TypingKind, val start: Int, val end: Int)
 
@@ -336,6 +399,49 @@ object QuickMarkdown {
                 }
             }
             return out.toString() to spans.sortedWith(compareBy({ it.start }, { -it.end }))
+        }
+
+        /**
+         * Узел со знаками по тексту и сущностям — обратный ход [parse]. `null` — сущность, которой
+         * знаком не набрать (ссылка и прочее). Хештег и упоминание знаков не требуют: они узнаются
+         * по тексту. [escape] — `\` перед каждым знаком пары в тексте вне кода.
+         */
+        fun source(text: String, entities: List<MarkupEntity>, escape: Boolean): String? {
+            val marks = mutableListOf<MarkupEntity>()
+            for (e in entities) when (e.type) {
+                EntityType.HASHTAG, EntityType.MENTION -> Unit
+                EntityType.BOLD, EntityType.ITALIC, EntityType.UNDERLINE, EntityType.HIGHLIGHT,
+                EntityType.STRIKETHROUGH, EntityType.CODE -> marks += e
+                else -> return null
+            }
+            fun sign(t: EntityType) = when (t) {
+                EntityType.BOLD -> "**"
+                EntityType.ITALIC -> "*"
+                EntityType.UNDERLINE -> "++"
+                EntityType.HIGHLIGHT -> "=="
+                EntityType.STRIKETHROUGH -> "~~"
+                else -> "`"
+            }
+            val opening = marks.sortedWith(compareBy({ it.start }, { -(it.start + it.length) }))
+            val open = mutableListOf<MarkupEntity>()
+            val out = StringBuilder()
+            var inCode = 0
+            for (pos in 0..text.length) {
+                // Сначала закрыть кончившиеся — в обратном порядке открытия.
+                for (e in open.reversed()) if (e.start + e.length == pos) {
+                    out.append(sign(e.type)); open.remove(e)
+                    if (e.type == EntityType.CODE) inCode--
+                }
+                for (e in opening) if (e.start == pos && e.length > 0) {
+                    out.append(sign(e.type)); open += e
+                    if (e.type == EntityType.CODE) inCode++
+                }
+                if (pos == text.length) break
+                val c = text[pos]
+                if (escape && inCode == 0 && c in "\\*+=~`") out.append('\\')
+                out.append(c)
+            }
+            return out.toString()
         }
 
         /**
