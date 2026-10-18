@@ -28,7 +28,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -105,6 +107,11 @@ internal fun InputLine(
     val colors = Tima.colors
     val keyboard = LocalSoftwareKeyboardController.current
     var area by remember { mutableStateOf<InputArea?>(null) }
+    // Поле с местом курсора: эмоджи из области встаёт туда, где курсор, и курсор уходит за него
+    // (заказчик 2026-10-18: «курсор не заходит за него»). Текст снаружи сменился (черновик,
+    // отправка) — курсор в конец.
+    var field by remember { mutableStateOf(TextFieldValue(typed, TextRange(typed.length))) }
+    val shown = if (field.text == typed) field else TextFieldValue(typed, TextRange(typed.length))
     fun open(next: InputArea) {
         keyboard?.hide()
         area = if (area == next) null else next
@@ -133,8 +140,11 @@ internal fun InputLine(
                         Caption(composed?.firstLine ?: Tima.words.chat.messageHint, fontSize = TimaType.sz4, color = colors.text3, lineOne = true)
                     }
                     BasicTextField(
-                        value = typed,
-                        onValueChange = onSet,
+                        value = shown,
+                        onValueChange = { v ->
+                            field = v
+                            if (v.text != typed) onSet(v.text)
+                        },
                         // Собрано в редакторе — печатать в разметку нельзя (Решения §9).
                         readOnly = composed != null,
                         textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
@@ -161,12 +171,23 @@ internal fun InputLine(
         }
         when (area) {
             InputArea.EMOJI -> EmojiArea(onClose = { area = null }) { e ->
-                if (typed.isEmpty() && composed == null && onEmojiSend != null) onEmojiSend(e) else onSet(typed + e)
+                if (typed.isEmpty() && composed == null && onEmojiSend != null) {
+                    onEmojiSend(e)
+                } else {
+                    field = shown.inserted(e)
+                    onSet(field.text)
+                }
             }
             InputArea.ATTACH -> if (onAttach != null) AttachArea(attachItems, onClose = { area = null }) { item -> area = null; onAttach(item) }
             null -> Unit
         }
     }
+}
+
+/** Вставить [s] на место курсора (или выделенного); курсор — сразу за вставленным. */
+internal fun TextFieldValue.inserted(s: String): TextFieldValue {
+    val next = text.replaceRange(selection.min, selection.max, s)
+    return TextFieldValue(next, TextRange(selection.min + s.length))
 }
 
 /** Кнопка редактора: три полосы; серая, зелёная — сообщение собрано в редакторе. */

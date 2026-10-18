@@ -22,6 +22,18 @@ class InputLineTest {
         assertTrue(empty.difference(typed) > 0.0)
     }
 
+    /** Заказчик 2026-10-18: эмоджи из области встаёт туда, где курсор, и курсор уходит за него. */
+    @Test
+    fun эмоджи_встаёт_у_курсора_и_курсор_за_ним() {
+        val middle = androidx.compose.ui.text.input.TextFieldValue("ая", androidx.compose.ui.text.TextRange(1)).inserted("🙂")
+        kotlin.test.assertEquals("а🙂я", middle.text)
+        kotlin.test.assertEquals(androidx.compose.ui.text.TextRange(1 + "🙂".length), middle.selection)
+        val end = androidx.compose.ui.text.input.TextFieldValue("ок", androidx.compose.ui.text.TextRange(2)).inserted("👍")
+        kotlin.test.assertEquals(androidx.compose.ui.text.TextRange(end.text.length), end.selection, "в конце — курсор за эмоджи")
+        val chosen = androidx.compose.ui.text.input.TextFieldValue("да нет", androidx.compose.ui.text.TextRange(3, 6)).inserted("❤️")
+        kotlin.test.assertEquals("да ❤️", chosen.text, "выделенное заменяется")
+    }
+
     @Test
     fun только_эмоджи() {
         assertTrue(isEmojiOnly("😀"))
