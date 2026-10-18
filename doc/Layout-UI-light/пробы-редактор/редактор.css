@@ -397,3 +397,18 @@
 .ред-подкл .ручка { position: absolute; top: -9px; left: 4px; font-size: 8.5px; font-weight: 800; padding: 1px 6px; border-radius: 999px; background: var(--текст); color: #fff; }
 .ред-подкл.выбран { border: 2px solid var(--навигация); }
 .ред-подкл.выбран .ручка { background: var(--навигация); color: #000; }
+
+/* ── Переходы по сообщениям: назад, вперёд над «вниз» (2026-10-18) ────────── */
+.поток-пер { position: relative; }
+.гроздь-пер { position: absolute; right: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 8px; align-items: center; z-index: 2; }
+.кн-пер {
+  width: 38px; height: 38px; border-radius: 50%; background: var(--поверхность); border: 1px solid var(--чёрный-12);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.18); display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 900; color: var(--текст); position: relative;
+}
+.кн-пер.путь { background: var(--навигация); border-color: var(--навигация); color: #fff; }
+.кн-пер .счёт { position: absolute; top: -5px; right: -4px; }
+.подсвет { box-shadow: 0 0 0 3px var(--активность); }
+.тост-сброс { margin: 8px 10px; background: var(--текст); color: #fff; border-radius: 12px; padding: 9px 12px; font-size: 12px; font-weight: 700; display: flex; gap: 10px; align-items: center; }
+.тост-сброс .вернуть { margin-left: auto; color: var(--навигация); }
+.тост-сброс .полоса-врем { height: 3px; border-radius: 2px; background: var(--навигация); width: 60%; }
