@@ -768,7 +768,10 @@ class Receiver(
 
         // Сообщение группы — вкладка «Группы» журнала уведомлений (ЖУ1, ЖУ4). До 2026-09-30
         // группы не уведомляли вовсе. Своё и от заблокированного молчит — решает `Notices`.
-        notices?.arrived(groupId, parsed?.senderId, ref = "$groupId/$messageId", sentAtMs = parsed?.createdAtUnixMs ?: 0, group = true)
+        // Правка — без уведомления (ADR-0045 §5): она ложится на уже показанное сообщение.
+        if ((parsed?.editOf ?: 0L) == 0L) {
+            notices?.arrived(groupId, parsed?.senderId, ref = "$groupId/$messageId", sentAtMs = parsed?.createdAtUnixMs ?: 0, group = true)
+        }
 
         // Ключ подписи спрашивается до разбора: сам разбор синхронный, и ходить за ним
         // изнутри нельзя. Промах кэша означает лишь, что сообщение откроется следующей
@@ -876,8 +879,10 @@ class Receiver(
             senderSigningPublic = captionKey,
             groupKey = groupKey,
             keyCommitment = frame.keyCommitment,
+            editOf = frame.editOf,
         ).fold(
-            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId, frame.level, frame.threadRoot) },
+            // Номер исправляемого — из кадра: подпись версии 3 сошлась, значит он тот, что подписал автор.
+            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId, frame.level, frame.threadRoot, editOf = frame.editOf) },
             onFailure = { OpenOutcome.Rejected("сообщение группы не открылось: ${it.message}") },
         )
     }
@@ -956,7 +961,10 @@ class Receiver(
         //
         // Кого не уведомлять (заблокированный, своё с другого устройства), решает
         // `Notices`: правило живёт в одном месте, а не расходится по вызовам.
-        notices?.arrived(chatId, sender?.userId, ref = "$chatId/$messageId", sentAtMs = sender?.createdAtMs ?: 0)
+        // Правка — без уведомления (ADR-0045 §5): она ложится на уже показанное сообщение.
+        if ((sender?.editOf ?: 0L) == 0L) {
+            notices?.arrived(chatId, sender?.userId, ref = "$chatId/$messageId", sentAtMs = sender?.createdAtMs ?: 0)
+        }
 
         // ── ОТ ЗАБЛОКИРОВАННОГО: ЗАПИСАТЬ, НО НЕ ОТКРЫВАТЬ (Л9) ─────────────
         //
@@ -1235,7 +1243,7 @@ class Receiver(
                 // Пришедшее из истории или из самой копии в копии уже есть — второй раз не подаём,
                 // иначе восстановление давало бы по запросу на каждое сообщение.
                 if (!io.tima.core.encryption.HistoryFrame.isHistory(entry.envelope)) keyCopy?.feedMessage(entry.chatId, entry.envelope)
-                OpenOutcome.Opened(it.body, it.meta.senderId, kind = it.meta.kind)
+                OpenOutcome.Opened(it.body, it.meta.senderId, kind = it.meta.kind, editOf = it.meta.editOf.toLong())
             },
             // Подпись не сошлась или обёртки для нас нет — разные беды, и причина
             // доносится дословно: человеку видно «не читается», нам — почему.
@@ -1255,7 +1263,7 @@ class Receiver(
     /** Кто прислал — по открытой части конверта. Доверенным станет после проверки подписи. */
     private fun envelopeSender(envelope: ByteArray): SentBy? =
         PersonalMessages.peekSender(envelope)?.let {
-            SentBy(userId = it.userId, deviceId = it.deviceId, createdAtMs = it.createdAtMs)
+            SentBy(userId = it.userId, deviceId = it.deviceId, createdAtMs = it.createdAtMs, editOf = it.editOf)
         }
 
     /** О каком сообщении и причине уже сказано за этот запуск — повтор разбора не дублирует строку. */
@@ -1325,7 +1333,7 @@ class Receiver(
         return senderKeys[deviceId]
     }
 
-    private class SentBy(val userId: String, val deviceId: String, val createdAtMs: Long)
+    private class SentBy(val userId: String, val deviceId: String, val createdAtMs: Long, val editOf: Long = 0)
 
     internal companion object {
         /**

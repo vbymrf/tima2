@@ -127,6 +127,11 @@ sealed interface OpenOutcome {
          * Отсюда — и только отсюда: подпись сошлась, значит виду можно верить.
          */
         val kind: Int = KIND_TEXT,
+        /**
+         * Правка (ADR-0045): номер исправляемого из подписанных метаданных; 0 — не правка.
+         * Правка в ленте отдельной строкой не идёт — она накладывается на исходное.
+         */
+        val editOf: Long = 0,
     ) : OpenOutcome
 
     /**
@@ -188,6 +193,7 @@ interface InboxStore {
         level: Int,
         threadRoot: Long,
         kind: Int = KIND_TEXT,
+        editOf: Long = 0,
     )
 
     /**
@@ -265,6 +271,7 @@ class Inbox(
                     outcome.level,
                     outcome.threadRoot,
                     outcome.kind,
+                    outcome.editOf,
                 )
                 entry.copy(state = IncomingState.STORED, kind = outcome.kind, undecryptableReason = null)
             }

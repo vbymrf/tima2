@@ -16,6 +16,7 @@ import io.tima.domain.chat.CallLog
 import io.tima.domain.chat.ChatFacts
 import io.tima.domain.chat.Book
 import io.tima.domain.chat.ContactDiscovery
+import io.tima.domain.chat.EditMessage
 import io.tima.domain.chat.Friends
 import io.tima.domain.account.Profile
 import io.tima.domain.chat.ObserveBook
@@ -768,7 +769,9 @@ class Environment private constructor(
     val readState: io.tima.core.database.SqlReadState = io.tima.core.database.SqlReadState(db)
 
 
-    val chat: ObserveChat = ObserveChat(SqlChatFeed(db, TextBodyCodec, cipher, myUserId, priorIdentities::ids))
+    private val chatFeed = SqlChatFeed(db, TextBodyCodec, cipher, myUserId, priorIdentities::ids)
+
+    val chat: ObserveChat = ObserveChat(chatFeed)
 
     /**
      * Местные записи в переписке: смена круга у сообщения и служебная строка о ней.
@@ -783,6 +786,17 @@ class Environment private constructor(
 
     val send: SendMessage = SendMessage(
         queue = queue,
+        codec = TextBodyCodec,
+        keys = UuidDedupKeys,
+    )
+
+    /**
+     * Правка своего сообщения (ADR-0045): та же очередь, те же ключи, исходное — из ленты.
+     * Кнопка «Изменить» — в меню сообщения (ПЛАН-(РС) РС7).
+     */
+    val edit: EditMessage = EditMessage(
+        queue = queue,
+        bodies = chatFeed,
         codec = TextBodyCodec,
         keys = UuidDedupKeys,
     )

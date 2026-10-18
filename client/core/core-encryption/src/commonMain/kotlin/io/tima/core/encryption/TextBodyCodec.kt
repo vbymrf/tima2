@@ -2,10 +2,12 @@ package io.tima.core.encryption
 
 import io.tima.crypto.MessageContent
 import io.tima.crypto.MessageContentCodec
+import io.tima.crypto.MessageEdits
 import io.tima.crypto.MarkupRules
 import io.tima.crypto.MessageSerializer
 import io.tima.crypto.QuickMarkdown
 import io.tima.domain.chat.DecodedLine
+import io.tima.domain.chat.EditBody
 import io.tima.domain.chat.MessageBodyCodec
 
 /**
@@ -37,6 +39,31 @@ object TextBodyCodec : MessageBodyCodec {
 
     override fun decodeLine(body: ByteArray): DecodedLine? =
         decode(body).getOrNull()?.let { DecodedLine(it.displayText(), RichMapper.from(it)) }
+
+    /** Исходное с правками (ADR-0045). Нечитаемая правка пропускается — исходное важнее. */
+    override fun decodeEdited(body: ByteArray, edits: List<ByteArray>): DecodedLine? =
+        edited(body, edits)?.let { DecodedLine(it.displayText(), RichMapper.from(it)) }
+
+    override fun editSource(body: ByteArray, edits: List<ByteArray>): String? =
+        edited(body, edits)?.let(QuickMarkdown::source)
+
+    /**
+     * Правка считается от того, что человек видит: исходное с прежними правками. У сообщения без
+     * оформления знаки остаются текстом — строение (абзац без разметки) правка не меняет.
+     */
+    override fun encodeEdit(body: ByteArray, edits: List<ByteArray>, typed: String, marks: Boolean): EditBody {
+        val current = edited(body, edits) ?: return EditBody.Unsupported
+        val next = if (marks && current.hasMarkup) QuickMarkdown.parse(typed) else QuickMarkdown.plain(typed)
+        if (MarkupRules.check(next, strict = true).isNotEmpty()) return EditBody.Structure
+        val changes = MessageEdits.diff(current, next) ?: return EditBody.Structure
+        if (changes.isEmpty()) return EditBody.Same
+        return EditBody.Changes(MessageEdits.encode(changes))
+    }
+
+    private fun edited(body: ByteArray, edits: List<ByteArray>): MessageContent? {
+        val original = decode(body).getOrNull() ?: return null
+        return MessageEdits.apply(original, edits.mapNotNull { MessageEdits.decode(it).getOrNull() })
+    }
 
     /**
      * Обратный ход — для входящих.

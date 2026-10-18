@@ -49,19 +49,26 @@ class OutgoingSealer(
                 senderDevice = senderDeviceId,
                 kind = entry.kind,
                 createdAtUnixMs = entry.createdAtMs,
+                editOf = entry.editOf.toULong(),
             )
-            // Тело в записи очереди уже упаковано (zstd(protobuf)) — один кодек на
-            // провод и на диск. Разворачиваем его обратно в содержимое только потому,
-            // что фасад принимает содержимое: упаковывать дважды нельзя, иначе байты
-            // разойдутся с теми, что легли в базу.
-            val content = MessageSerializer.decodeBody(entry.body)
-                .map { io.tima.crypto.MessageContentCodec.fromBody(it) }
-                .getOrElse { error("тело записи ${entry.dedupKey} не разбирается: $it") }
+            // Правка (ADR-0045) уходит телом как есть: её узлы лежат в `MessageBody.edits`, а
+            // содержимое их не несёт — пересборка ниже их бы потеряла.
+            if (entry.editOf != 0L) {
+                messages.sealPrepared(entry.body, meta, identity, recipients).getOrThrow()
+            } else {
+                // Тело в записи очереди уже упаковано (zstd(protobuf)) — один кодек на
+                // провод и на диск. Разворачиваем его обратно в содержимое только потому,
+                // что фасад принимает содержимое: упаковывать дважды нельзя, иначе байты
+                // разойдутся с теми, что легли в базу.
+                val content = MessageSerializer.decodeBody(entry.body)
+                    .map { io.tima.crypto.MessageContentCodec.fromBody(it) }
+                    .getOrElse { error("тело записи ${entry.dedupKey} не разбирается: $it") }
 
-            messages.seal(content, meta, identity, recipients).getOrElse {
-                // Наверх исключением: это не «сеть отказала», а невозможность собрать
-                // конверт. Превратить такое в повтор значило бы повторять вечно.
-                throw it
+                messages.seal(content, meta, identity, recipients).getOrElse {
+                    // Наверх исключением: это не «сеть отказала», а невозможность собрать
+                    // конверт. Превратить такое в повтор значило бы повторять вечно.
+                    throw it
+                }
             }
         }
     }

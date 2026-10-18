@@ -59,6 +59,26 @@ class PersonalMessages(escrowKey: EscrowEpochKey) {
         MessageSerializer.encodeEnvelope(sealed)
     }
 
+    /**
+     * То же из готового тела — для правки (ADR-0045): её тело — `MessageBody.edits`, а содержимое
+     * ([MessageContent]) правок не несёт, и пересборка через него потеряла бы их.
+     */
+    fun sealPrepared(
+        payload: ByteArray,
+        meta: EnvelopeMeta,
+        sender: DeviceIdentity,
+        recipients: List<RecipientDevice>,
+    ): Result<ByteArray> = runCatching {
+        require(recipients.isNotEmpty()) { "нужен хотя бы один адресат обёртки ключа" }
+        val sealed = sealer.seal(
+            meta = meta,
+            payloadPlaintext = payload,
+            senderDeviceKey = sender.key,
+            recipientDevices = recipients.map { DeviceAddress(it.deviceId, it.encryptionPublic) },
+        ).getOrThrow()
+        MessageSerializer.encodeEnvelope(sealed)
+    }
+
     companion object {
         /**
          * **Непроверенная подсказка из открытой части конверта: кто его прислал.**
@@ -79,7 +99,7 @@ class PersonalMessages(escrowKey: EscrowEpochKey) {
          */
         fun peekSender(envelopeBytes: ByteArray): EnvelopeSender? =
             MessageSerializer.decodeEnvelope(HistoryFrame.split(envelopeBytes).second).getOrNull()?.meta?.let {
-                EnvelopeSender(userId = it.senderId, deviceId = it.senderDevice, createdAtMs = it.createdAtUnixMs)
+                EnvelopeSender(userId = it.senderId, deviceId = it.senderDevice, createdAtMs = it.createdAtUnixMs, editOf = it.editOf.toLong())
             }
 
         /**
@@ -172,4 +192,10 @@ data class ReceivedMessage(
  * это **конверт назвался**, а не «проверено, что прислал он». Пара `String` такого
  * не говорит, и через полгода её примут за доверенную.
  */
-data class EnvelopeSender(val userId: String, val deviceId: String, val createdAtMs: Long = 0)
+data class EnvelopeSender(
+    val userId: String,
+    val deviceId: String,
+    val createdAtMs: Long = 0,
+    /** Правка (ADR-0045): номер исправляемого — не повод для уведомления. Тоже неподтверждённое до разбора. */
+    val editOf: Long = 0,
+)

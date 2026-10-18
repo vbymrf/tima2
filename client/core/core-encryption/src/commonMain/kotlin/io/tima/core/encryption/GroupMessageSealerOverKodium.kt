@@ -58,6 +58,8 @@ class GroupMessageSealerOverKodium(
         key: ByteArray,
         body: ByteArray,
         createdAtUnixMs: Long,
+        /** Правка (ADR-0045): номер исправляемого; 0 — обычное сообщение. */
+        editOf: Long = 0,
     ): SealedGroupBytes? {
         val meta = GroupMessageMeta(
             groupId = groupId,
@@ -68,9 +70,9 @@ class GroupMessageSealerOverKodium(
             gkVersion = gkVersion,
         )
         val assembled = if (gkVersion == 0) {
-            GroupMessages.sealPreparedPlain(body, meta, identity).getOrNull()
+            GroupMessages.sealPreparedPlain(body, meta, identity, editOf).getOrNull()
         } else {
-            GroupMessages.sealPrepared(body, meta, identity, key).getOrNull()
+            GroupMessages.sealPrepared(body, meta, identity, key, editOf).getOrNull()
         } ?: return null
         return SealedGroupBytes(payload = assembled.payload, signature = assembled.signature, keyCommitment = assembled.keyCommitment)
     }

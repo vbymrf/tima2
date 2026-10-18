@@ -88,6 +88,7 @@ class SqlInboxStore(
         level: Int,
         threadRoot: Long,
         kind: Int,
+        editOf: Long,
     ) {
         q.updateParsed(
             body_enc = cipher.seal(body),
@@ -101,6 +102,8 @@ class SqlInboxStore(
             // Вид — там же и по той же причине: он лежит в метаданных конверта, а
             // конверт после разбора заменён телом, и достать его будет неоткуда.
             kind = kind.toLong(),
+            // Номер исправляемого — из подписанных метаданных, как и вид (ADR-0045).
+            edit_of = editOf,
             dedup_key = keyOf(chatId, messageId),
         )
     }

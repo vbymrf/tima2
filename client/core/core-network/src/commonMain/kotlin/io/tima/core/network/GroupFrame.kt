@@ -48,6 +48,11 @@ class GroupFrame(
     val level: Int = -1,
     /** Обязательство по ключу группы (подпись версии 2); `null` — версия 1 или открытое. */
     val keyCommitment: ByteArray? = null,
+    /**
+     * Правка (ADR-0045): номер исправляемого; 0 — обычное сообщение. Входит в подпись версии 3
+     * — подменить его по пути нельзя, но до проверки подписи это лишь подсказка.
+     */
+    val editOf: Long = 0,
 ) {
 
     companion object {
@@ -101,6 +106,7 @@ class GroupFrame(
                 // принять открытым то, о чём не сказано, было бы опаснее.
                 level = json.int("level") ?: -1,
                 keyCommitment = json.str("key_commitment")?.let { decodeBase64Url(it) },
+                editOf = json.long("edit_of") ?: 0,
             )
         }
     }

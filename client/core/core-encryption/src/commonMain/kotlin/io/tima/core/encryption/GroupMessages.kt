@@ -96,12 +96,14 @@ object GroupMessages {
         meta: GroupMessageMeta,
         sender: DeviceIdentity,
         groupKey: ByteArray,
+        /** Правка (ADR-0045): номер исправляемого; не 0 — подпись `tima.group_message.v3`. */
+        editOf: Long = 0,
     ): Result<SealedGroupMessage> = runCatching {
         require(meta.gkVersion >= 1) {
             "версия группового ключа обязана быть не меньше 1: нулевая означает открытый payload"
         }
         val payload = EnvelopeCipher.seal(groupKey, body).getOrThrow()
-        signedV2(meta, payload, sender, groupKey)
+        signedV2(meta, payload, sender, groupKey, editOf)
     }
 
     /**
@@ -109,14 +111,25 @@ object GroupMessages {
      * «отменяем решение 5»). Обязательство считается ОДИН раз от того же ключа, которым закрыт
      * payload: получатель и депозитарий пересчитают его из своего ключа и сверят.
      */
-    private fun signedV2(meta: GroupMessageMeta, payload: ByteArray, sender: DeviceIdentity, groupKey: ByteArray): SealedGroupMessage {
+    private fun signedV2(meta: GroupMessageMeta, payload: ByteArray, sender: DeviceIdentity, groupKey: ByteArray, editOf: Long = 0): SealedGroupMessage {
         val commitment = CanonicalBytes.keyCommitment(groupKey)
         return SealedGroupMessage(
             meta = meta,
             payload = payload,
-            signature = MessageSigner.sign(sender.key, CanonicalBytes.buildGroupMessageV2(meta, payload, commitment)).getOrThrow(),
+            signature = MessageSigner.sign(sender.key, canonical(meta, payload, commitment, editOf)).getOrThrow(),
             keyCommitment = commitment,
+            editOf = editOf,
         )
+    }
+
+    /**
+     * Подписываемые байты по виду: правка — v3 (ADR-0045; у открытого обязательство пусто),
+     * зашифрованное — v2, открытое — v1.
+     */
+    private fun canonical(meta: GroupMessageMeta, payload: ByteArray, commitment: ByteArray?, editOf: Long): ByteArray = when {
+        editOf > 0 -> CanonicalBytes.buildGroupMessageV3(meta, editOf.toULong(), payload, commitment ?: CanonicalBytes.EMPTY)
+        commitment != null -> CanonicalBytes.buildGroupMessageV2(meta, payload, commitment)
+        else -> CanonicalBytes.buildGroupMessage(meta, payload)
     }
 
     /** То же для ОТКРЫТОГО сообщения: тело уходит как есть, шифра нет, подпись есть. */
@@ -124,6 +137,7 @@ object GroupMessages {
         body: ByteArray,
         meta: GroupMessageMeta,
         sender: DeviceIdentity,
+        editOf: Long = 0,
     ): Result<SealedGroupMessage> = runCatching {
         require(meta.gkVersion == 0) {
             "у открытого сообщения версии ключа нет: ненулевая означает шифр"
@@ -131,7 +145,8 @@ object GroupMessages {
         SealedGroupMessage(
             meta = meta,
             payload = body,
-            signature = MessageSigner.sign(sender.key, CanonicalBytes.buildGroupMessage(meta, body)).getOrThrow(),
+            signature = MessageSigner.sign(sender.key, canonical(meta, body, null, editOf)).getOrThrow(),
+            editOf = editOf,
         )
     }
 
@@ -152,8 +167,7 @@ object GroupMessages {
         groupKey: ByteArray,
     ): Result<ReceivedGroupMessage> = runCatching {
         val commitment = sealed.keyCommitment
-        val canonical = if (commitment == null) CanonicalBytes.buildGroupMessage(sealed.meta, sealed.payload)
-        else CanonicalBytes.buildGroupMessageV2(sealed.meta, sealed.payload, commitment)
+        val canonical = canonical(sealed.meta, sealed.payload, commitment, sealed.editOf)
         if (!MessageSigner.verify(senderSigningPublic, canonical, sealed.signature)) {
             throw VerificationFailure("Подпись сообщения группы не прошла проверку")
         }
@@ -191,7 +205,7 @@ object GroupMessages {
         require(sealed.meta.gkVersion == 0) {
             "у открытого сообщения версии ключа нет: ненулевая означает шифр"
         }
-        val canonical = CanonicalBytes.buildGroupMessage(sealed.meta, sealed.payload)
+        val canonical = canonical(sealed.meta, sealed.payload, null, sealed.editOf)
         if (!MessageSigner.verify(senderSigningPublic, canonical, sealed.signature)) {
             throw VerificationFailure("Подпись сообщения группы не прошла проверку")
         }
@@ -236,6 +250,8 @@ object GroupMessages {
         groupKey: ByteArray,
         /** Обязательство по ключу группы (подпись версии 2); `null` — версия 1. */
         keyCommitment: ByteArray? = null,
+        /** Правка (ADR-0045): номер исправляемого из кадра; не 0 — подпись версии 3. */
+        editOf: Long = 0,
     ): Result<ReceivedGroupMessage> = openAny(
         sealed = SealedGroupMessage(
             meta = GroupMessageMeta(
@@ -251,6 +267,7 @@ object GroupMessages {
             payload = payload,
             signature = signature,
             keyCommitment = keyCommitment,
+            editOf = editOf,
         ),
         senderSigningPublic = senderSigningPublic,
         groupKey = groupKey,
@@ -275,6 +292,8 @@ class SealedGroupMessage(
     val signature: ByteArray,
     /** Обязательство по ключу группы — у зашифрованного (подпись версии 2); `null` — версия 1 или открытое. */
     val keyCommitment: ByteArray? = null,
+    /** Правка (ADR-0045): номер исправляемого; не 0 — подпись `tima.group_message.v3`. */
+    val editOf: Long = 0,
 )
 
 /** Разобранное сообщение группы. [body] — байты тела как пришли, их и пишет хранилище. */

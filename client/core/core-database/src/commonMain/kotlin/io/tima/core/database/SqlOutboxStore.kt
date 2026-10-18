@@ -50,6 +50,8 @@ class SqlOutboxStore(
             // Вид едет в подписанные метаданные конверта, а запечатывание бывает после
             // перезапуска: решать тогда будет нечем.
             kind = entry.kind.toLong(),
+            // Правка (ADR-0045): номер исправляемого уходит в подписанные метаданные.
+            edit_of = entry.editOf,
         )
         // INSERT OR IGNORE молчит при конфликте, поэтому «поставили» отличается от
         // «уже было» только числом затронутых строк. Без этой проверки повторная
@@ -140,6 +142,7 @@ class SqlOutboxStore(
         sealedForEpoch = sealed_epoch,
         level = level.toInt(),
         threadRoot = thread_root,
+        editOf = edit_of,
         failReason = fail_reason,
         kind = kind.toInt(),
     )

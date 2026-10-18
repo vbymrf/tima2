@@ -22,6 +22,7 @@ class GroupTransportOverHttp(private val api: GroupMessagesApi) : GroupTransport
         level: Int,
         threadRoot: Long,
         keyCommitment: ByteArray?,
+        editOf: Long,
     ): GroupSendStep {
         val answer = api.send(
             groupId = groupId,
@@ -34,6 +35,7 @@ class GroupTransportOverHttp(private val api: GroupMessagesApi) : GroupTransport
             threadRoot = threadRoot,
             level = level,
             keyCommitment = keyCommitment,
+            editOf = editOf,
         )
         return when (answer) {
             is SendGroupResult.Sent -> GroupSendStep.Sent(answer.messageId)

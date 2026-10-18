@@ -127,6 +127,7 @@ class GroupSender(
             key = key,
             body = entry.body,
             createdAtUnixMs = entry.createdAtMs,
+            editOf = entry.editOf,
         ) ?: return wait(entry, "не удалось собрать сообщение группы")
 
         val outcome = transport.send(
@@ -142,6 +143,8 @@ class GroupSender(
             threadRoot = entry.threadRoot,
             level = entry.level,
             keyCommitment = assembled.keyCommitment,
+            // Правка (ADR-0045): номер исправляемого под подписью версии 3.
+            editOf = entry.editOf,
         )
 
         return when (outcome) {

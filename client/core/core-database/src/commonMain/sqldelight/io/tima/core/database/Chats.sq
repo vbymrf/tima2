@@ -115,7 +115,7 @@ SELECT
     c.section_id        AS section_id,
     (
         SELECT COUNT(*) FROM messages n
-        WHERE n.chat_id = m.chat_id AND n.direction = 1 AND n.state != :readState
+        WHERE n.chat_id = m.chat_id AND n.direction = 1 AND n.state != :readState AND n.edit_of = 0
     ) AS unread
 FROM messages m
 -- LEFT JOIN, а не подзапрос на каждый столбец: подзапрос генератор считает
@@ -125,7 +125,8 @@ FROM messages m
 LEFT JOIN chats c ON c.chat_id = m.chat_id
 WHERE m.local_id = (
     SELECT x.local_id FROM messages x
-    WHERE x.chat_id = m.chat_id
+    -- Правка — не последняя строка в списке (ADR-0045).
+    WHERE x.chat_id = m.chat_id AND x.edit_of = 0
     ORDER BY COALESCE(x.server_ts, x.client_ts) DESC, x.local_id DESC
     LIMIT 1
 )

@@ -155,6 +155,8 @@ interface GroupTransport {
         threadRoot: Long = 0,
         /** Обязательство по ключу группы (подпись версии 2); `null` — версия 1 или открытое. */
         keyCommitment: ByteArray? = null,
+        /** Правка (ADR-0045): номер исправляемого; 0 — обычное сообщение. */
+        editOf: Long = 0,
     ): GroupSendStep
 }
 

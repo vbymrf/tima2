@@ -161,6 +161,7 @@ class SendGroupMessageTest {
             level: Int,
             threadRoot: Long,
             keyCommitment: ByteArray?,
+            editOf: Long,
         ): GroupSendStep {
             version = gkVersion
             this.level = level

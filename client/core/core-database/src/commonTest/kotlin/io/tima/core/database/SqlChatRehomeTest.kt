@@ -15,7 +15,7 @@ class SqlChatRehomeTest {
     private fun place(id: String, chat: String) = q.insertQueued(
         dedup_key = id, chat_id = chat, sender_id = "me",
         client_ts = 100, state = 0, attempts = 0,
-        next_attempt_at = null, reply_to = null, level = -1, body_enc = byteArrayOf(1), thread_root = 0, kind = 1,
+        next_attempt_at = null, reply_to = null, level = -1, body_enc = byteArrayOf(1), thread_root = 0, kind = 1, edit_of = 0,
     )
 
     @Test

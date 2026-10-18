@@ -1,5 +1,6 @@
 package io.tima.core.outbox
 
+import io.tima.domain.chat.EditQueue
 import io.tima.domain.chat.KIND_TEXT
 import io.tima.domain.chat.LEVEL_SECRET
 import io.tima.domain.chat.OutgoingQueue
@@ -96,6 +97,11 @@ data class OutboxEntry(
      * ветка: отправка бывает после перезапуска, и решать тогда уже нечем.
      */
     val kind: Int = KIND_TEXT,
+    /**
+     * Правка (ADR-0045): серверный номер исправляемого сообщения; 0 — обычное сообщение.
+     * Уходит в подписанные метаданные — версия 3 конверта, `tima.group_message.v3` в группе.
+     */
+    val editOf: Long = 0,
     val state: OutboxState = OutboxState.QUEUED,
     val attempts: Int = 0,
     val nextAttemptAtMs: Long = 0,
@@ -267,7 +273,7 @@ class Outbox(
      * (`LinkState.retryDelayMs`): секунда, пять, две минуты. Последняя повторяется.
      */
     private val backoffMs: List<Long> = listOf(1_000, 5_000, 120_000),
-) : OutgoingQueue {
+) : OutgoingQueue, EditQueue {
 
     /**
      * Кэш конвертов, привязанный к эпохе. **В памяти, а не в базе** — конверт,
@@ -298,6 +304,26 @@ class Outbox(
         threadRoot: Long,
         kind: Int,
     ): Boolean = enqueue(dedupKey, chatId, body, level, threadRoot, kind, now = nowMs())
+
+    /** Правка — та же очередь: отправка, повтор и отказ у неё те же, что у сообщения. */
+    override fun enqueueEdit(dedupKey: String, chatId: String, body: ByteArray, level: Int, editOf: Long): Boolean {
+        require(editOf > 0) { "правка без номера исходного" }
+        require(dedupKey.isNotBlank()) { "dedupKey пустой: по нему опознаётся повтор" }
+        require(body.isNotEmpty()) { "тело пустое" }
+        val now = nowMs()
+        return store.putIfAbsent(
+            OutboxEntry(
+                dedupKey = dedupKey,
+                chatId = chatId,
+                body = body,
+                level = level,
+                editOf = editOf,
+                state = OutboxState.QUEUED,
+                nextAttemptAtMs = now,
+                createdAtMs = now,
+            ),
+        )
+    }
 
     /** Тот же вызов с умолчанием: круг по умолчанию — шифр. */
     fun enqueue(dedupKey: String, chatId: String, body: ByteArray): Boolean =

@@ -51,6 +51,7 @@ class InMemoryInboxStore : InboxStore {
         level: Int,
         threadRoot: Long,
         kind: Int,
+        editOf: Long,
     ) {
         if (failOnEntryBody) error("диск отказал")
         bodies[key(chatId, messageId)] = body

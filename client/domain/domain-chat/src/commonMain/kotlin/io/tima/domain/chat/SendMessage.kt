@@ -171,6 +171,36 @@ interface MessageBodyCodec {
      *   неизвестный формат. И то и другое человеку показывают, а не прячут.
      */
     fun decodeText(body: ByteArray): String?
+
+    /**
+     * Строка исходного с наложенными правками (ADR-0045), по порядку. По умолчанию правок не
+     * знает — заглушки тестов показывают исходное.
+     */
+    fun decodeEdited(body: ByteArray, edits: List<ByteArray>): DecodedLine? = decodeLine(body)
+
+    /**
+     * Тело правки: что изменилось между исходным с прежними правками и набранным заново.
+     * [marks] — «Знаки md» (Решения §7); у сообщения без оформления знаки остаются текстом.
+     */
+    fun encodeEdit(body: ByteArray, edits: List<ByteArray>, typed: String, marks: Boolean): EditBody =
+        EditBody.Unsupported
+
+    /**
+     * Что положить в строку ввода для правки: набранный текст со знаками. `null` — знаками не
+     * выразить (таблица, ряд, виджет) — такое правит редактор (РС6).
+     */
+    fun editSource(body: ByteArray, edits: List<ByteArray>): String? = null
+}
+
+/** Что вышло из правки на уровне тела. */
+sealed interface EditBody {
+    data class Changes(val body: ByteArray) : EditBody
+    /** Ничего не изменилось — отправлять нечего. */
+    data object Same : EditBody
+    /** Другое строение (новый блок, уровень заголовка): правка передаёт только текст узлов. */
+    data object Structure : EditBody
+    /** Кодек правок не знает. */
+    data object Unsupported : EditBody
 }
 
 /** Разобранное тело для строки переписки: текст для списка и поиска и оформление для показа. */

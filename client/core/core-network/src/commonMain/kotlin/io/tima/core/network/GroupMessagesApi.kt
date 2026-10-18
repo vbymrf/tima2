@@ -47,6 +47,8 @@ class GroupMessagesApi(
         level: Int = -1,
         /** Обязательство по ключу группы (подпись версии 2); `null` — версия 1 или открытое. */
         keyCommitment: ByteArray? = null,
+        /** Правка (ADR-0045): номер исправляемого; 0 — поле не уходит. */
+        editOf: Long = 0,
     ): SendGroupResult {
         val requestBody = "{\"client_msg_id\":\"" + clientMsgId + "\"" +
             ",\"kind\":" + kind +
@@ -57,7 +59,8 @@ class GroupMessagesApi(
             ",\"reply_to\":" + replyTo +
             ",\"created_at_unix_ms\":" + createdAtUnixMs +
             ",\"signature\":\"" + encodeBase64Url(signature) + "\"" +
-            (keyCommitment?.let { ",\"key_commitment\":\"" + encodeBase64Url(it) + "\"" } ?: "") + "}"
+            (keyCommitment?.let { ",\"key_commitment\":\"" + encodeBase64Url(it) + "\"" } ?: "") +
+            (if (editOf > 0) ",\"edit_of\":$editOf" else "") + "}"
 
         val response = try {
             client.post(route.api("/api/v1/groups/$groupId/messages")) {
