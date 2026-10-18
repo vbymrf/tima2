@@ -138,6 +138,11 @@ data class TimaColors(
      */
     val inkCode: Color,
     val paperCode: Color,
+    /**
+     * Палитра сообщений: имя цвета → значение в этой теме (doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §13,
+     * ADR-0044 §4). Разметка несёт только имена; `*-soft` — подложки ряда и ячейки.
+     */
+    val messagePalette: Map<String, Color> = LightMessagePalette,
 ) {
     companion object {
 
@@ -189,6 +194,7 @@ data class TimaColors(
          * салатовый, янтарь, зелёный — те же: перекрашивать их не пришлось.
          */
         val dark = TimaColors(
+            messagePalette = DarkMessagePalette,
             // Тёмно-зелёный, а не салатовый: решение заказчика 2026-09-03 — «для тёмной
             // темы навигация и действие устанавливаем цвет ff024408 по умолчанию».
             //
@@ -352,3 +358,39 @@ object TimaZones {
      */
     val wideThreshold: Dp = 840.dp
 }
+
+/** Палитра сообщений светлой темы: яркие — для текста и линий, `*-soft` — подложки. */
+internal val LightMessagePalette: Map<String, Color> = mapOf(
+    "text" to Color(0xFF000000),
+    "surface" to Color(0xFFFFFFFF),
+    "accent" to Color(0xFF5E9A1F),
+    "accent-soft" to Color(0x338AC44A),
+    "amber" to Color(0xFFB37F00),
+    "amber-soft" to Color(0x33FEBB02),
+    "green" to Color(0xFF2E8A00),
+    "green-soft" to Color(0x333BB300),
+    "blue" to Color(0xFF1F63C2),
+    "blue-soft" to Color(0x332F80ED),
+    "red" to Color(0xFFC63A24),
+    "red-soft" to Color(0x33E5533D),
+    "grey" to Color(0xFF6B6B6B),
+    "grey-soft" to Color(0x1F000000),
+)
+
+/** Палитра сообщений тёмной темы: яркие светлее — держат контраст на тёмном. */
+internal val DarkMessagePalette: Map<String, Color> = mapOf(
+    "text" to Color(0xFFFFFFFF),
+    "surface" to Color(0xFF1E1E1E),
+    "accent" to Color(0xFFA6D873),
+    "accent-soft" to Color(0x4D8AC44A),
+    "amber" to Color(0xFFFFCE4A),
+    "amber-soft" to Color(0x4DFEBB02),
+    "green" to Color(0xFF7AD94A),
+    "green-soft" to Color(0x4D3BB300),
+    "blue" to Color(0xFF7FB2F5),
+    "blue-soft" to Color(0x4D2F80ED),
+    "red" to Color(0xFFFF8A78),
+    "red-soft" to Color(0x4DE5533D),
+    "grey" to Color(0xFFB0B0B0),
+    "grey-soft" to Color(0x29FFFFFF),
+)
