@@ -135,5 +135,56 @@ class MediaOverHttp(
         null
     }
 
+    override suspend fun fetch(mediaId: String): Media.MediaFetch = try {
+        val meta = client.get(route.api("/api/v1/media/$mediaId/url")) {
+            header("Authorization", "Bearer ${token()}")
+        }
+        when {
+            // Срок почтальона прошёл (Решения §6): попросить снова — `requestAgain`.
+            meta.status == HttpStatusCode.Gone -> Media.MediaFetch.Gone
+            meta.status != HttpStatusCode.OK -> Media.MediaFetch.Failed
+            else -> {
+                val url = Json.parseToJsonElement(meta.bodyAsText()).jsonObject["urls"]
+                    ?.jsonArray?.firstOrNull()?.jsonPrimitive?.content
+                val file = url?.let { client.get(it) }
+                if (file != null && file.status.isSuccess()) Media.MediaFetch.Got(file.readRawBytes()) else Media.MediaFetch.Failed
+            }
+        }
+    } catch (_: Throwable) {
+        Media.MediaFetch.Failed
+    }
+
+    override suspend fun requestAgain(mediaId: String): Boolean = try {
+        client.post(route.api("/api/v1/media/$mediaId/request")) {
+            header("Authorization", "Bearer ${token()}")
+        }.status == HttpStatusCode.Accepted
+    } catch (_: Throwable) {
+        false
+    }
+
+    override suspend fun reupload(mediaId: String, sealed: ByteArray): Boolean = try {
+        val reopen = client.post(route.api("/api/v1/media/$mediaId/reupload")) {
+            header("Authorization", "Bearer ${token()}")
+        }
+        val url = if (reopen.status == HttpStatusCode.OK) {
+            Json.parseToJsonElement(reopen.bodyAsText()).jsonObject["upload_urls"]?.jsonArray?.firstOrNull()?.jsonPrimitive?.content
+        } else null
+        if (url == null) {
+            false
+        } else {
+            val put = client.put(url) {
+                contentType(ContentType.Application.OctetStream)
+                setBody(sealed)
+            }
+            put.status.isSuccess() && client.post(route.api("/api/v1/media/complete")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("media_id", JsonPrimitive(mediaId)) }.toString())
+            }.status == HttpStatusCode.OK
+        }
+    } catch (_: Throwable) {
+        false
+    }
+
     private fun HttpStatusCode.isSuccess() = value in 200..299
 }

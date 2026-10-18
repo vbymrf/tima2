@@ -67,6 +67,12 @@ data class CallLogLimits(
     val rows: Int = 1000,
 )
 
+/**
+ * Раздел своей папки медиа на экране (Решения §6): сколько занимает, срок (`null` — «Всегда») и
+ * предел в мегабайтах.
+ */
+data class MediaKindState(val kind: String, val occupied: Long, val keep: KeepFor?, val megabytes: Int)
+
 /** Пределы журнала: срок и объём. Срабатывает тот, что наступит раньше. */
 data class DiaryLimits(
     val keep: KeepFor = KeepFor(),
@@ -98,6 +104,10 @@ fun StorageScreen(
     /** Сколько строк журнала лежит сейчас. */
     callLogRows: Int = 0,
     onCallLog: (CallLogLimits) -> Unit = {},
+    /** Разделы папки медиа: фото и файлы (Решения §6); пусто — папки нет. */
+    media: List<MediaKindState> = emptyList(),
+    onMediaLimits: (kind: String, keep: KeepFor?, megabytes: Int) -> Unit = { _, _, _ -> },
+    onMediaClear: (kind: String) -> Unit = {},
 ) = Column(
     modifier.fillMaxSize().padding(TimaSpacing.about4).verticalScroll(rememberScrollState()),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
@@ -107,6 +117,10 @@ fun StorageScreen(
     Tertiary(
         words.mediaAndFilesAbout,
     )
+    for (m in media) MediaKindSection(m, words, onMediaLimits, onMediaClear)
+    if (media.isNotEmpty()) {
+        ListLine(middle = { Name(words.mediaInline) }, right = { Secondary(words.mediaInlineAbout) })
+    }
 
     Caption(words.messages, fontSize = TimaType.sz4, weight = FontWeight.Bold)
     Tertiary(
@@ -220,6 +234,53 @@ fun StorageScreen(
         words.clearDiaryAbout,
     )
 }
+
+/** Раздел папки медиа: занимает, держать (недели, месяцы, «Всегда»), не больше, очистить. */
+@Composable
+private fun MediaKindSection(
+    m: MediaKindState,
+    words: StorageWords,
+    onLimits: (String, KeepFor?, Int) -> Unit,
+    onClear: (String) -> Unit,
+) {
+    Caption(if (m.kind == "photo") words.mediaPhotos else words.mediaFiles, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    ListLine(middle = { Name(words.occupies) }, right = { Secondary(megabytes(m.occupied, words)) })
+    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+        KeepUnit.entries.forEach { unit ->
+            Button(
+                label = if (unit == KeepUnit.Weeks) words.weeks else words.months,
+                onClick = { onLimits(m.kind, (m.keep ?: KeepFor(unit, 1)).copy(unit = unit), m.megabytes) },
+                kind = if (m.keep?.unit == unit) ButtonKind.Action else ButtonKind.Quiet,
+            )
+        }
+        Button(
+            label = words.always,
+            onClick = { onLimits(m.kind, null, m.megabytes) },
+            kind = if (m.keep == null) ButtonKind.Action else ButtonKind.Quiet,
+        )
+    }
+    m.keep?.let { keep ->
+        Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+            Button(label = "\u2212", onClick = { onLimits(m.kind, keep.copy(count = keep.count - 1), m.megabytes) }, kind = ButtonKind.Quiet, enabled = keep.count > 1)
+            Button(label = keep.words(words), onClick = {}, enabled = false)
+            Button(label = "+", onClick = { onLimits(m.kind, keep.copy(count = keep.count + 1), m.megabytes) }, kind = ButtonKind.Quiet, enabled = keep.count < MAX_COUNT)
+        }
+    }
+    Caption(words.butNoMore, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+        MEDIA_SIZES.forEach { size ->
+            Button(
+                label = words.megabytes(size),
+                onClick = { onLimits(m.kind, m.keep, size) },
+                kind = if (m.megabytes == size) ButtonKind.Action else ButtonKind.Quiet,
+            )
+        }
+    }
+    Button(label = words.clearNow, onClick = { onClear(m.kind) }, kind = ButtonKind.Dangerous)
+}
+
+/** Предел папки медиа: 300 МБ … 5 ГБ (Решения §6). */
+private val MEDIA_SIZES = listOf(300, 1024, 2048, 5120)
 
 /** Предел числа: больше года не держим — см. пояснение у кнопки. */
 private const val MAX_COUNT = 12

@@ -156,6 +156,16 @@ class Receiver(
 ) {
 
     /**
+     * Файлы почтальона (Решения §6): забрать сразу при получении, загрузить снова по просьбе,
+     * отметить «получатель забрал». Своя область: забор идёт в фоне и не держит разбор очереди.
+     */
+    val postman = PostmanFiles(
+        media = { network.media },
+        folder = environment.media,
+        scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
+    )
+
+    /**
      * Кого человек заблокировал — по `user_id` (Л8, Л9, Л17).
      *
      * Спрашивается у книги на каждом событии, а не держится в поле: блокировка меняется
@@ -536,6 +546,8 @@ class Receiver(
                 onLevelNarrowed = { decision -> aboutLevel(decision) },
                 // Удалили у всех (Решения §8): «Сообщение удалено», содержимое и правки стёрты.
                 onMessageDeleted = { decision -> environment.removal.markDeleted(decision.chatId, decision.messageId) },
+                // Файл почтальона: просьба загрузить снова, «получатель забрал» (Решения §6).
+                onMedia = { decision -> postman.event(decision.wanted, decision.mediaId) },
                 onComment = { decision -> aboutComment(decision) },
                 onStoreChanged = { decision -> onStoreChanged(decision.kind, decision.revision) },
                 onCall = { decision -> aboutCall(decision) },
@@ -1247,6 +1259,8 @@ class Receiver(
                 // Пришедшее из истории или из самой копии в копии уже есть — второй раз не подаём,
                 // иначе восстановление давало бы по запросу на каждое сообщение.
                 if (!io.tima.core.encryption.HistoryFrame.isHistory(entry.envelope)) keyCopy?.feedMessage(entry.chatId, entry.envelope)
+                // Фото и файлы вне пузыря — забрать сразу, «приди и получи» (Решения §6).
+                postman.received(io.tima.core.encryption.TextBodyCodec.decodeLine(it.body)?.rich)
                 OpenOutcome.Opened(it.body, it.meta.senderId, kind = it.meta.kind, editOf = it.meta.editOf.toLong())
             },
             // Подпись не сошлась или обёртки для нас нет — разные беды, и причина

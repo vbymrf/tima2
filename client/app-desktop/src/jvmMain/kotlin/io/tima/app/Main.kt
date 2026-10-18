@@ -241,6 +241,14 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
             }
             // Тема здесь больше не решается: её выбирает человек в настройках, и держит
             // выбор `Root`. Платформе осталось только место для хранения строки.
+            // Папка медиа аккаунта — рядом с его базой (Решения §6): «tima.db» → «tima-media».
+            io.tima.shared.DeviceFolders.provider = { name ->
+                io.tima.core.media.DiskMediaFolder(
+                    okio.FileSystem.SYSTEM,
+                    okio.Path.Companion.run { File(dataCatalog(), name.removeSuffix(".db") + "-media").absolutePath.toPath() },
+                    nowMs = { System.currentTimeMillis() },
+                )
+            }
             Root(
                 entry = entry,
                 // Имя файла приходит готовым: правило именования — общее (Д11), каталог —

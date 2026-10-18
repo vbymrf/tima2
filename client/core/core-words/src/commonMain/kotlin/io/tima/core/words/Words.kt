@@ -471,6 +471,13 @@ interface StorageWords {
     fun keepFor(count: Int, weeks: Boolean): String
     val mediaAndFiles: String
     val mediaAndFilesAbout: String
+    /** Разделы папки медиа (Решения §6): фото вне пузыря, файлы, картинки в сообщениях. */
+    val mediaPhotos: String
+    val mediaFiles: String
+    val mediaInline: String
+    val mediaInlineAbout: String
+    val always: String
+    val clearNow: String
     val messages: String
     val messagesAbout: String
     val diary: String
@@ -1439,6 +1446,8 @@ interface ChatWords {
     val sizeUnits: List<String>
     val fileSaveAs: String
     val fileGone: String
+    /** Срок почтальона прошёл — попросили прислать снова (Решения §6). */
+    val fileAsked: String
     val sending: String
     val sendFailed: String
     val photoTooMany: String
@@ -3008,8 +3017,14 @@ object RussianWords : Words {
         }
         override val mediaAndFiles = "Медиа и другие файлы"
         override val mediaAndFilesAbout =
-            "Пока нечего убирать: приложение не сохраняет вложения на устройство — они " +
-                "открываются с сервера. Появятся файлы — появится и срок."
+            "Фото и файлы личных переписок лежат на устройстве закрытыми. Удалённое после срока " +
+                "почтальона вернуть можно, только если его ещё держит другое устройство."
+        override val mediaPhotos = "Фото"
+        override val mediaFiles = "Файлы"
+        override val mediaInline = "Картинки в сообщениях"
+        override val mediaInlineAbout = "Кеш загрузчика: докачиваются сами, пока живо сообщение"
+        override val always = "Всегда"
+        override val clearNow = "Очистить сейчас"
         override val messages = "Сообщения"
         override val messagesAbout =
             "Срок для переписки не заводим, пока не решено, что значит «удалить». Стереть " +
@@ -3537,6 +3552,7 @@ object RussianWords : Words {
         override val sizeUnits = listOf("Б", "КБ", "МБ")
         override val fileSaveAs = "Сохранить как"
         override val fileGone = "Файла на сервере уже нет — попросить прислать снова"
+        override val fileAsked = "Файла у сервера уже нет — попросили прислать снова; откроется, когда его загрузят"
         override val sending = "Отправляется…"
         override val sendFailed = "Не отправлено: нет связи с сервером"
         override val photoTooMany = "Не больше 10 фото в одном сообщении"

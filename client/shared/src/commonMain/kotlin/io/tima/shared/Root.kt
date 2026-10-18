@@ -1081,7 +1081,25 @@ private fun App(
     val people = remember(assembled) { People(network.directory, environment.bookStorage, scope, network.media) }
     // Загрузчику картинок — хранилище этой сессии: аватары по номеру файла (ПЛАН-(ЗК) ЗК3).
     val pictureSource = LocalPictureSource.current
-    SideEffect { pictureSource?.media = network.media }
+    // Уборка папки медиа при запуске — по пределам из настроек (Решения §6).
+    LaunchedEffect(assembled) {
+        val saved = environment.settings.all().first()
+        for (kind in listOf(io.tima.core.media.MediaFolder.PHOTO, io.tima.core.media.MediaFolder.FILE)) {
+            val d = io.tima.core.media.MediaLimits.defaultsOf(kind)
+            val limits = io.tima.core.media.MediaLimits(
+                keepDays = saved["media.$kind.days"]?.toIntOrNull() ?: d.keepDays,
+                maxMegabytes = saved["media.$kind.mb"]?.toIntOrNull() ?: d.maxMegabytes,
+            )
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                io.tima.core.media.MediaSweep.sweep(environment.media, kind, limits, msNow())
+            }
+        }
+    }
+    SideEffect {
+        pictureSource?.media = network.media
+        // Своя папка — первой (Решения §6): фото вне пузыря у почтальона живёт недолго.
+        pictureSource?.local = { id -> assembled.receiver.postman.local(id) }
+    }
     val peopleCards by people.cards.collectAsState()
     val peopleHues by people.hues.collectAsState()
     val wordsNow = Tima.words
@@ -3716,6 +3734,7 @@ private fun App(
                         callsLog = callsLog,
                         callsState = callsState,
                         deviceSettings = environment.settings,
+                        mediaFolder = environment.media,
                         callDevices = callEngine as? io.tima.core.call.CallDevices,
                         loginStart = loginStart,
                         // Снимок считается ЗДЕСЬ и в момент открытия экрана: человек
@@ -3808,6 +3827,7 @@ private fun App(
                 {
                     Chat(
                         desktop = platform == Platform.DESKTOP,
+                        postman = assembled.receiver.postman,
                         liveStates = assembled.liveStates,
                         onPullGroupNew = { id -> assembled.receiver.pullGroupNew(id) },
                         myDeviceId = assembled.session.deviceId,
@@ -4154,6 +4174,8 @@ private fun Chat(
     network: ChatPorts,
     /** ПК: стрелки ленты редактора и перетаскивание файлов (Решения §10.2). */
     desktop: Boolean = false,
+    /** Файлы почтальона: своя папка, повторная просьба (Решения §6). `null` — без папки. */
+    postman: PostmanFiles? = null,
     /** «Доставлено», «прочитано», «печатает», «в сети» — личной переписке (ПЛАН-(ОП)). */
     liveStates: LiveStates? = null,
     /** Забрать новое открытой группы (ПЛАН-(ОУ) ОУ6) → номер позднейшего на сервере. */
@@ -4399,7 +4421,9 @@ private fun Chat(
             // Вложения (Решения §2, §3, §6): файл закрыт своим ключом до выхода с устройства.
             attach = io.tima.domain.chat.SendAttachments(
                 queue = environment.queue,
-                uploads = SealedUploads { network.media },
+                uploads = SealedUploads({ network.media }) { id, sealed, mime ->
+                    postman?.keepSent(id, sealed, photo = mime.startsWith("image/"))
+                },
                 bodies = io.tima.core.encryption.AttachmentBodiesOverKodium,
                 keys = io.tima.core.outbox.UuidDedupKeys,
             ),
@@ -4443,6 +4467,8 @@ private fun Chat(
     var failed by remember { mutableStateOf<ChatLine?>(null) }
     // Меню отправленного сообщения (Решения §11.1): на какое сообщение нажали.
     var menuFor by remember { mutableStateOf<ChatLine?>(null) }
+    // Забранные получателем файлы почтальона — галочки у своих (Решения §6).
+    val fetchedFiles by (postman?.fetched ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
     // Долгое нажатие — выделить часть и скопировать (Решения §11.1).
     var selectFor by remember { mutableStateOf<ChatLine?>(null) }
     // ── Вложения (Решения §2, §3, §6; ВЫБОР-РЕАЛИЗАЦИИ §11.2а) ─────────────────────
@@ -4484,9 +4510,18 @@ private fun Chat(
     val saver = io.tima.core.media.rememberFileSaver { ok -> if (!ok) store.said(saved.fileRefused("")) }
     val saveFromChat: (io.tima.domain.chat.RichMedia) -> Unit = { file ->
         scope.launch {
-            val raw = network.media.download(file.mediaId)
-            val plain = raw?.let { io.tima.core.encryption.MediaFiles.open(file.key, it) }
-            if (plain == null) store.said(saved.fileGone) else saver(file.name.ifBlank { "file" }, file.mime, plain)
+            // Из своей папки, иначе у почтальона; срок прошёл — попросили прислать снова (Решения §6).
+            val got = postman?.obtain(file)
+                ?: network.media.download(file.mediaId)?.let { PostmanFiles.Obtained.Got(it) }
+                ?: PostmanFiles.Obtained.Failed
+            when (got) {
+                is PostmanFiles.Obtained.Got -> {
+                    val plain = io.tima.core.encryption.MediaFiles.open(file.key, got.sealed)
+                    if (plain == null) store.said(saved.fileGone) else saver(file.name.ifBlank { "file" }, file.mime, plain)
+                }
+                PostmanFiles.Obtained.Asked -> store.said(saved.fileAsked)
+                PostmanFiles.Obtained.Failed -> store.said(saved.sendFailed)
+            }
         }
     }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -4610,6 +4645,7 @@ private fun Chat(
         attachments = io.tima.feature.chat.AttachmentActions(
             openPhoto = { photo -> photoOpen = photo },
             saveFile = { file -> saveFromChat(file) },
+            fetched = { id -> id in fetchedFiles },
         ),
         onMenu = { line -> menuFor = line },
         onSelect = { line -> selectFor = line },
@@ -4698,7 +4734,7 @@ private fun Chat(
         var editorChoice by remember { mutableStateOf<String?>(null) }
         fun put(widget: io.tima.domain.chat.ComposedWidget) = editorModel.insert(io.tima.domain.chat.ComposedItem.Widget(widget))
         // Картинка внутри сообщения (Решения §3): под ширину ряда 720, без превью, хранится, пока живёт сообщение.
-        val editorUploads = remember { SealedUploads { network.media } }
+        val editorUploads = remember { SealedUploads({ network.media }) }
         // Исходные файлы картинок черновика (Решения §3): сменилась ширина места — картинка заново из исходного.
         val editorSources = remember { mutableMapOf<String, ByteArray>() }
         // Картинка — в документ: под ширину ряда, закрыта своим ключом, исходный файл — для смены ширины.
@@ -5102,6 +5138,8 @@ private fun Settings(
     onUnmute: (String) -> Unit = {},
     /** Настройки устройства — выбор звуков (ВЗ4) живёт здесь и не синхронизируется. */
     deviceSettings: io.tima.domain.chat.Settings,
+    /** Своя папка медиа аккаунта — раздел «Медиа и другие файлы» (Решения §6). */
+    mediaFolder: io.tima.core.media.MediaFolder = io.tima.core.media.MediaFolder.NONE,
     /** Микрофон, колонки, камера — есть только у ПК; `null` — пункта нет. */
     callDevices: io.tima.core.call.CallDevices? = null,
     /** Запуск вместе с системой — есть только у ПК; `null` — раздела в «Разрешениях» нет. */
@@ -5345,7 +5383,7 @@ private fun Settings(
             // Предложение — та же отправка с очередью, но без журнала (заказчик 2026-10-07).
             SettingsItem.SUGGEST -> Suggest(problemFacts, reporting, scope, platform)
 
-            SettingsItem.STORAGE -> Storage(diaryPolicy, callsLog, callsState)
+            SettingsItem.STORAGE -> Storage(diaryPolicy, callsLog, callsState, deviceSettings, mediaFolder)
 
             // Испытательный режим звонков. Пункт временный и уйдёт вместе со стендом —
             // держать его «на всякий случай» после испытаний незачем (С-В1).
@@ -5576,7 +5614,35 @@ private fun Storage(
     policyStore: AppearanceStore,
     callsLog: CallsStore,
     callsState: CallsState,
+    settings: io.tima.domain.chat.Settings? = null,
+    media: io.tima.core.media.MediaFolder = io.tima.core.media.MediaFolder.NONE,
 ) {
+    // ── Медиа и другие файлы (Решения §6): срок и предел по разделу, в настройках базы аккаунта ──
+    val saved by (settings?.all() ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, String>()) })
+        .collectAsState(initial = emptyMap())
+    var mediaTick by remember { mutableStateOf(0) }
+    val mediaScope = rememberCoroutineScope()
+    fun limitsOf(kind: String): io.tima.core.media.MediaLimits {
+        val d = io.tima.core.media.MediaLimits.defaultsOf(kind)
+        return io.tima.core.media.MediaLimits(
+            keepDays = saved["media.$kind.days"]?.toIntOrNull() ?: d.keepDays,
+            maxMegabytes = saved["media.$kind.mb"]?.toIntOrNull() ?: d.maxMegabytes,
+        )
+    }
+    // Пересчёт — по смене пределов и после уборки: занятое человек обязан увидеть сразу.
+    val mediaRows = remember(saved, mediaTick) {
+        if (media === io.tima.core.media.MediaFolder.NONE) emptyList() else
+        listOf(io.tima.core.media.MediaFolder.PHOTO, io.tima.core.media.MediaFolder.FILE).map { kind ->
+            val l = limitsOf(kind)
+            io.tima.feature.shell.MediaKindState(
+                kind = kind,
+                occupied = media.entries(kind).sumOf { it.size },
+                keep = if (l.keepDays <= 0) null else keepForDays(l.keepDays),
+                megabytes = l.maxMegabytes,
+            )
+        }
+    }
+
     var limits by remember { mutableStateOf(limitsOf(Journal.diary.policy)) }
     // Занятое пересчитывается после каждого действия, а не раз при открытии: человек
     // нажал «очистить» и обязан увидеть, что стало пусто, — иначе он нажмёт ещё раз.
@@ -5615,6 +5681,21 @@ private fun Storage(
         ),
         callLogRows = callsState.rows,
         onCallLog = { chosen -> callsLog.keep(days = chosen.keep.days, rows = chosen.rows) },
+        media = mediaRows,
+        onMediaLimits = { kind, keep, mb ->
+            val chosen = io.tima.core.media.MediaLimits(keepDays = keep?.days ?: 0, maxMegabytes = mb)
+            mediaScope.launch {
+                settings?.put("media.$kind.days", chosen.keepDays.toString())
+                settings?.put("media.$kind.mb", chosen.maxMegabytes.toString())
+                // Новый срок действует сразу, а не при следующем запуске — как у журнала.
+                io.tima.core.media.MediaSweep.sweep(media, kind, chosen, msNow())
+                mediaTick++
+            }
+        },
+        onMediaClear = { kind ->
+            media.clear(kind)
+            mediaTick++
+        },
     )
 }
 

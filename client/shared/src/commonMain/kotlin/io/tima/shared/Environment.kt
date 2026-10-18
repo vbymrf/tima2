@@ -691,6 +691,8 @@ class Network(
 class Environment private constructor(
     val db: TimaDatabase,
     val cipher: FieldCipher,
+    /** Своя папка медиа аккаунта (Решения §6): фото и файлы вне пузыря, закрытые своим ключом. */
+    val media: io.tima.core.media.MediaFolder,
     /** Кто я: по этому отличается своё сообщение со второго устройства от чужого. */
     private val myUserId: String,
     /** Какое я устройство: штамп на правках книги для слияния копий (Р2а). */
@@ -837,8 +839,13 @@ class Environment private constructor(
          * @param myUserId кто я. Нужен переписке: входящее от себя же — своё сообщение,
          *   написанное с другого своего устройства.
          */
-        fun open(db: TimaDatabase, deviceSecret: ByteArray, myUserId: String, myDeviceId: String = ""): Environment =
-            Environment(db, LocalStoreFieldCipher(deviceSecret), myUserId, myDeviceId)
+        fun open(
+            db: TimaDatabase,
+            deviceSecret: ByteArray,
+            myUserId: String,
+            myDeviceId: String = "",
+            media: io.tima.core.media.MediaFolder = io.tima.core.media.MediaFolder.NONE,
+        ): Environment = Environment(db, LocalStoreFieldCipher(deviceSecret), media, myUserId, myDeviceId)
     }
 }
 

@@ -744,9 +744,13 @@ object SpanishWords : Words {
         }
 
         override val mediaAndFiles = "Multimedia y otros archivos"
-        override val mediaAndFilesAbout =
-            "Todavía no hay nada que limpiar: la aplicación no guarda los adjuntos en el " +
-                "dispositivo — se abren desde el servidor. Cuando haya archivos, habrá plazo."
+        override val mediaAndFilesAbout = "Las fotos y archivos de chats personales se guardan cifrados en el dispositivo. Pasado el plazo del cartero, lo borrado solo vuelve si otro dispositivo aún lo tiene."
+        override val mediaPhotos = "Fotos"
+        override val mediaFiles = "Archivos"
+        override val mediaInline = "Imágenes en mensajes"
+        override val mediaInlineAbout = "Caché del cargador: se vuelven a descargar mientras vive el mensaje"
+        override val always = "Siempre"
+        override val clearNow = "Vaciar ahora"
         override val messages = "Mensajes"
         override val messagesAbout =
             "No ponemos plazo a los chats mientras no esté decidido qué significa «borrar». " +
@@ -1266,6 +1270,7 @@ object SpanishWords : Words {
         override val sizeUnits = listOf("B", "KB", "MB")
         override val fileSaveAs = "Guardar como"
         override val fileGone = "El archivo ya no está en el servidor: pida que lo envíen de nuevo"
+        override val fileAsked = "El servidor ya no tiene el archivo: se pidió reenviarlo; se abrirá cuando lo suban"
         override val sending = "Enviando…"
         override val sendFailed = "No enviado: sin conexión con el servidor"
         override val photoTooMany = "No más de 10 fotos en un mensaje"

@@ -103,6 +103,12 @@ class ReceiveHarness(private val inbox: Inbox) {
                 decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
+            // Файл почтальона (Решения §6): просьба загрузить снова, «получатель забрал».
+            is EventStreamProtocol.Decision.MediaEvent -> {
+                aboutKeys += (if (decision.wanted) "media-wanted:" else "media-fetched:") + decision.mediaId
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
+            }
+
             // Повтор: кадр уже проходил. Наружу не отдаём — только подтверждаем заново,
             // как это делает живой канал: не подтвердить значит получать его вечно.
             is EventStreamProtocol.Decision.Seen -> {

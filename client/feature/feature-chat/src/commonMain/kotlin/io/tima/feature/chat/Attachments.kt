@@ -46,7 +46,12 @@ import io.tima.domain.chat.RichMedia
 class AttachmentActions(
     val openPhoto: (RichMedia) -> Unit = {},
     val saveFile: (RichMedia) -> Unit = {},
+    /** Получатель забрал файл у почтальона (Решения §6) — галочки у своего. */
+    val fetched: (mediaId: String) -> Boolean = { false },
 )
+
+/** Галочки «получатель забрал» у своего фото или файла вне пузыря (Решения §6). */
+const val FETCHED_TAG = "msg:fetched"
 
 val LocalAttachmentActions = staticCompositionLocalOf { AttachmentActions() }
 

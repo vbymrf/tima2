@@ -21,6 +21,25 @@ interface Media {
      */
     suspend fun uploadSealed(sealed: ByteArray, mime: String, postmanChat: String? = null, postmanPeer: String? = null): String? = null
 
+    /**
+     * Забрать файл почтальона (Решения §6): байты, «на сервере его уже нет» (срок прошёл — можно
+     * попросить снова) или неудача связи. Отличие важно: «нет» просится заново, связь — повторяется.
+     */
+    suspend fun fetch(mediaId: String): MediaFetch = download(mediaId)?.let { MediaFetch.Got(it) } ?: MediaFetch.Failed
+
+    /** Опоздавшее устройство просит файл снова — `media.wanted` устройствам, у которых он есть. */
+    suspend fun requestAgain(mediaId: String): Boolean = false
+
+    /** Загрузить файл почтальона снова — тот же номер и ключ: у этого устройства он есть. */
+    suspend fun reupload(mediaId: String, sealed: ByteArray): Boolean = false
+
+    /** Исход забора файла почтальона. */
+    sealed interface MediaFetch {
+        class Got(val bytes: ByteArray) : MediaFetch
+        data object Gone : MediaFetch
+        data object Failed : MediaFetch
+    }
+
     /** Заглушка там, где медиа нет: харнесс, снимки. */
     object None : Media {
         override suspend fun upload(bytes: ByteArray, mime: String): String? = null

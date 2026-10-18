@@ -176,11 +176,13 @@ fun buildAssembled(
     firstAccount: String? = null,
 ): Assembled =
     run {
+        val databaseName = databaseFor(device.session.userId, firstAccount, entry.relinkedDevice(device.session.userId))
         val environment = Environment.open(
-            deviceDatabase(databaseFor(device.session.userId, firstAccount, entry.relinkedDevice(device.session.userId))),
+            deviceDatabase(databaseName),
             device.secret,
             device.session.userId,
             device.session.deviceId,
+            media = DeviceFolders.of(databaseName),
         )
         // ── ВЕРНУТЬ В ОЧЕРЕДЬ ТО, ЧТО ЗАСТРЯЛО В ПРОШЛЫЙ РАЗ ────────────────
         //

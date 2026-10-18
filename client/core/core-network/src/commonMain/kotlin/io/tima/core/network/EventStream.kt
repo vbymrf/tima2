@@ -67,6 +67,8 @@ class EventStream(
         onLevelNarrowed: suspend (EventStreamProtocol.Decision.LevelNarrowed) -> Unit = {},
         /** Сообщение удалили у всех (Решения §8). По умолчанию ничего — как сужение круга. */
         onMessageDeleted: suspend (EventStreamProtocol.Decision.MessageDeleted) -> Unit = {},
+        /** Файл почтальона: просьба загрузить снова, «получатель забрал» (Решения §6). */
+        onMedia: suspend (EventStreamProtocol.Decision.MediaEvent) -> Unit = {},
         /**
          * Кто-то прокомментировал нашу запись (ADR-0024). По умолчанию ничего: канал
          * обязан работать и там, где страницы нет вовсе.
@@ -199,6 +201,14 @@ class EventStream(
 
                         is EventStreamProtocol.Decision.MessageDeleted -> {
                             onMessageDeleted(decision)
+                            decision.eventId?.let {
+                                last = it
+                                send(Frame.Text(protocol.ackFrame(it)))
+                            }
+                        }
+
+                        is EventStreamProtocol.Decision.MediaEvent -> {
+                            onMedia(decision)
                             decision.eventId?.let {
                                 last = it
                                 send(Frame.Text(protocol.ackFrame(it)))

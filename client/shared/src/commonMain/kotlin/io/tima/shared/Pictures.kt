@@ -22,14 +22,18 @@ import kotlinx.coroutines.flow.getAndUpdate
  *
  * Порядок источника по плану: своя папка → наше хранилище → расшифровка ключом из сообщения.
  * Аватары лежат открытыми — расшифровывать нечего; картинка внутри сообщения закрыта ключом из
- * его тела (ПЛАН-(РС) РС4), ключ приходит в адресе. Своей папки ещё нет (ПЛАН-(РС) РС8).
+ * его тела (ПЛАН-(РС) РС4), ключ приходит в адресе. Своя папка — фото и файлы вне пузыря,
+ * которые забрал почтальон (ПЛАН-(РС) РС8): у них срок на сервере, и показ без сети берёт отсюда.
  */
 class PictureSource {
     /** Медиа-хранилище текущей сессии; `null` — сессии нет, картинки не грузятся. */
     var media: Media? = null
 
+    /** Своя папка аккаунта: закрытые байты фото вне пузыря; `null` — смотреть не во что. */
+    var local: ((String) -> ByteArray?)? = null
+
     suspend fun bytes(mediaId: String, key: ByteArray? = null): ByteArray? {
-        val raw = media?.download(mediaId) ?: return null
+        val raw = local?.invoke(mediaId) ?: media?.download(mediaId) ?: return null
         if (key == null) return raw
         // Ключ не подошёл — так и сказать журналу: «нет файла» и «не тот ключ» чинятся по-разному.
         return io.tima.core.encryption.MediaFiles.open(key, raw)

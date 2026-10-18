@@ -734,6 +734,12 @@ internal fun OutsideBubble(line: ChatLine, content: @Composable () -> Unit) = Ro
             if (line.edits > 0) Tertiary(Tima.words.chat.edited, lineOne = true)
             Tertiary(time(line.atMs), lineOne = true)
             markOf(line.display, line.atMs, LocalChatReceipt.current)?.let { Mark(it) }
+            // Своё фото или файл забрал получатель — галочки «приложение забрало» (Решения §6).
+            val actions = LocalAttachmentActions.current
+            val media = line.rich?.media.orEmpty()
+            if (line.outgoing && media.isNotEmpty() && media.all { actions.fetched(it.mediaId) }) {
+                Caption("✓✓", fontSize = TimaType.sz6, weight = FontWeight.Bold, color = Tima.colors.confirmed, modifier = Modifier.testTag(FETCHED_TAG))
+            }
         }
     }
 }

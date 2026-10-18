@@ -240,6 +240,17 @@ class EventStreamProtocol {
         ) : Decision
 
         /**
+         * Файл почтальона (Решения §6): `media.wanted` — опоздавшее устройство просит его снова,
+         * загрузит то, у которого он есть; `media.fetched` — получатель забрал (галочка).
+         */
+        data class MediaEvent(
+            val wanted: Boolean,
+            val mediaId: String,
+            val chatId: String,
+            val eventId: Long?,
+        ) : Decision
+
+        /**
          * Нам звонят (`call.incoming`).
          *
          * **Звонок — не сообщение, и курсор он не двигает.** Событие живое: через минуту
@@ -643,6 +654,14 @@ class EventStreamProtocol {
                 }
             }
 
+            "media.wanted", "media.fetched" -> {
+                val mediaId = json.string("media_id")
+                if (mediaId == null) {
+                    Decision.Skip("$event без media_id", eventId)
+                } else {
+                    Decision.MediaEvent(event == "media.wanted", mediaId, json.string("chat_id").orEmpty(), eventId)
+                }
+            }
             "message.deleted" -> {
                 val chatId = json.string("chat_id") ?: json.string("group_id")
                 val messageId = json["message_id"]?.jsonPrimitive?.longOrNull

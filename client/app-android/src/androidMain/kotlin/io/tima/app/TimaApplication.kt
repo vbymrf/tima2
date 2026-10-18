@@ -56,6 +56,15 @@ class TimaApplication : Application() {
         // берут наблюдателя отсюда. Без него канал узнаёт о смене сети только пингом,
         // до 36 секунд, а о возвращении — через паузу отступления, до минуты.
         NetworkWatches.current = AndroidNetworkWatch(this)
+        // Папка медиа аккаунта — в каталоге данных приложения рядом с базой (Решения §6): окну и
+        // службе одна и та же, поэтому задаётся здесь, у процесса.
+        io.tima.shared.DeviceFolders.provider = { name ->
+            io.tima.core.media.DiskMediaFolder(
+                okio.FileSystem.SYSTEM,
+                okio.Path.Companion.run { java.io.File(filesDir, name.removeSuffix(".db") + "-media").absolutePath.toPath() },
+                nowMs = { System.currentTimeMillis() },
+            )
+        }
         // Стенду звонков контекст нужен ровно для одного — заряда батареи; процессор,
         // нагрев и трафик он читает из файлов. Представляемся здесь же: замеры снимаются
         // из общего кода, которому Context недоступен.

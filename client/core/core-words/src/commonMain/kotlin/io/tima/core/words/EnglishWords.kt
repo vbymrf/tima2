@@ -745,9 +745,13 @@ object EnglishWords : Words {
         }
 
         override val mediaAndFiles = "Media and other files"
-        override val mediaAndFilesAbout =
-            "Nothing to clear yet: the app does not keep attachments on the device — they " +
-                "open from the server. Once there are files, there will be a term as well."
+        override val mediaAndFilesAbout = "Photos and files from personal chats are kept on the device encrypted. Once the postman period is over, deleted items can only come back from another device that still has them."
+        override val mediaPhotos = "Photos"
+        override val mediaFiles = "Files"
+        override val mediaInline = "Pictures in messages"
+        override val mediaInlineAbout = "Loader cache: re-downloaded while the message lives"
+        override val always = "Always"
+        override val clearNow = "Clear now"
         override val messages = "Messages"
         override val messagesAbout =
             "We are not setting a term for chats until it is decided what «delete» means. " +
@@ -1266,6 +1270,7 @@ object EnglishWords : Words {
         override val sizeUnits = listOf("B", "KB", "MB")
         override val fileSaveAs = "Save as"
         override val fileGone = "The file is no longer on the server — ask to send it again"
+        override val fileAsked = "The server no longer has the file — asked to send it again; it opens once re-uploaded"
         override val sending = "Sending…"
         override val sendFailed = "Not sent: no connection to the server"
         override val photoTooMany = "No more than 10 photos in one message"
