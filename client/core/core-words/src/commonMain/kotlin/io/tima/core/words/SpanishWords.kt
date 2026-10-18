@@ -1238,6 +1238,21 @@ object SpanishWords : Words {
         override val contact = "Contacto"
         override val quotedElsewhere = "Un mensaje de otro chat"
         override val continueReading = "Seguir leyendo"
+        override val emojiArea = "Emoji"
+        override val attachArea = "Adjuntar"
+        override fun attachItem(tag: String) = when (tag) {
+            "file" -> "Archivo"
+            "document" -> "Documento"
+            "picture" -> "Imagen"
+            "camera" -> "Cámara"
+            "audio" -> "Audio"
+            "video" -> "Vídeo"
+            "contact" -> "Contactos"
+            "place" -> "Mapa"
+            else -> "Enlace"
+        }
+        override fun composedInEditor(rows: Int) = "Hecho en el editor · $rows " + if (rows == 1) "fila" else "filas"
+        override val undo = "Deshacer"
         override fun failReason(code: String): String? = when (code) {
             "level_in_private" -> "un grupo privado no tiene ese círculo: solo «Cifrado» y «Todos, siempre»"
             "secret_in_public" -> "un grupo público no se cifra: elija un círculo abierto"

@@ -1,0 +1,7 @@
+-- Схема 20 → 21: черновики переписок (doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §9) — у каждой свой,
+-- закрыт ключом покоя, переживает перезапуск; в очередь исходящих не попадает.
+CREATE TABLE drafts (
+    chat_id    TEXT    NOT NULL PRIMARY KEY,
+    body_enc   BLOB    NOT NULL,
+    updated_at INTEGER NOT NULL
+);

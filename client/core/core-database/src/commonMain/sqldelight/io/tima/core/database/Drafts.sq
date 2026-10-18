@@ -1,0 +1,16 @@
+-- Черновики переписок (doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §9): у каждой свой, закрыт ключом покоя,
+-- переживает перезапуск. Слово в слово как в 20.sqm.
+CREATE TABLE drafts (
+    chat_id    TEXT    NOT NULL PRIMARY KEY,
+    body_enc   BLOB    NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+draftOf:
+SELECT body_enc FROM drafts WHERE chat_id = ?;
+
+putDraft:
+INSERT OR REPLACE INTO drafts(chat_id, body_enc, updated_at) VALUES (?, ?, ?);
+
+dropDraft:
+DELETE FROM drafts WHERE chat_id = ?;

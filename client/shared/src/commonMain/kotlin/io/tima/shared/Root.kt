@@ -4380,6 +4380,7 @@ private fun Chat(
             deleter = io.tima.domain.chat.DeleteMessage(environment.removal, network.removal),
             picks = environment.picks,
             pickLevel = io.tima.domain.chat.MessagePicks.levelOf(chatId, group),
+            drafts = environment.drafts,
         )
     }
     val state by store.state.collectAsState()
@@ -4419,6 +4420,9 @@ private fun Chat(
         val allowed = kind?.circles ?: return@LaunchedEffect
         if (allowed.none { it.level == state.level }) store.circleChosen(allowed.first().level)
     }
+    // Быстрая отправка из строки ввода (Решения §9): личная группа — −1, публичная — 2. Выбора
+    // над строкой нет; другой уровень ставит редактор.
+    LaunchedEffect(kind) { kind?.let { store.circleChosen(it.quickLevel) } }
     var myColor by remember { mutableStateOf(false) }
     // Листы переписки — подокна в паре меток для сценариев (ПЛАН-(МО)).
     InnerPopup(PopupCode.CHAT_MENU, chatMenu)
@@ -4517,6 +4521,7 @@ private fun Chat(
         onDeleteConfirm = store::deleteForAllConfirmed,
         onEditCancel = store::editCancelled,
         onReplyCancel = store::replyCancelled,
+        onEmojiSend = store::sendEmoji,
         onMenu = { line -> menuFor = line },
         // Показ доступности — только в группе: в личной переписке круга нет.
         onCircles = if (group) store::circlesShown else null,

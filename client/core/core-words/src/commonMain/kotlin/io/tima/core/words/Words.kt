@@ -1420,6 +1420,12 @@ interface ChatWords {
     /** Вставленное из другой переписки, которого нет на устройстве. */
     val quotedElsewhere: String
     val continueReading: String
+    // ── Строка ввода (Решения §9) ──
+    val emojiArea: String
+    val attachArea: String
+    fun attachItem(tag: String): String
+    fun composedInEditor(rows: Int): String
+    val undo: String
     /** Причина отказа словами по коду сервера; незнакомый код — `null`, покажется сам код. */
     fun failReason(code: String): String?
     val moveToSection: String
@@ -3474,6 +3480,25 @@ object RussianWords : Words {
         override val contact = "Контакт"
         override val quotedElsewhere = "Сообщение из другой переписки"
         override val continueReading = "Продолжить чтение"
+        override val emojiArea = "Эмоджи"
+        override val attachArea = "Прикрепить"
+        override fun attachItem(tag: String) = when (tag) {
+            "file" -> "Файл"
+            "document" -> "Документ"
+            "picture" -> "Картинка"
+            "camera" -> "Камера"
+            "audio" -> "Аудио"
+            "video" -> "Видео"
+            "contact" -> "Контакты"
+            "place" -> "Карта"
+            else -> "Ссылка"
+        }
+        override fun composedInEditor(rows: Int) = "Оформлено в редакторе · " + when {
+            rows % 10 == 1 && rows % 100 != 11 -> "$rows ряд"
+            rows % 10 in 2..4 && rows % 100 !in 12..14 -> "$rows ряда"
+            else -> "$rows рядов"
+        }
+        override val undo = "Вернуть"
         override fun failReason(code: String): String? = when (code) {
             "level_in_private" -> "в личной группе такого круга нет — только «Зашифровано» и «Всем и всегда»"
             "secret_in_public" -> "публичная группа не шифруется — выберите открытый круг"

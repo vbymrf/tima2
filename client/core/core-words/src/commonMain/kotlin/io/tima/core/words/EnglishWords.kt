@@ -1238,6 +1238,21 @@ object EnglishWords : Words {
         override val contact = "Contact"
         override val quotedElsewhere = "A message from another chat"
         override val continueReading = "Continue reading"
+        override val emojiArea = "Emoji"
+        override val attachArea = "Attach"
+        override fun attachItem(tag: String) = when (tag) {
+            "file" -> "File"
+            "document" -> "Document"
+            "picture" -> "Picture"
+            "camera" -> "Camera"
+            "audio" -> "Audio"
+            "video" -> "Video"
+            "contact" -> "Contacts"
+            "place" -> "Map"
+            else -> "Link"
+        }
+        override fun composedInEditor(rows: Int) = "Composed in the editor · $rows " + if (rows == 1) "row" else "rows"
+        override val undo = "Undo"
         override fun failReason(code: String): String? = when (code) {
             "level_in_private" -> "a private group has no such circle — only “Encrypted” and “Everyone, always”"
             "secret_in_public" -> "a public group is not encrypted — pick an open circle"

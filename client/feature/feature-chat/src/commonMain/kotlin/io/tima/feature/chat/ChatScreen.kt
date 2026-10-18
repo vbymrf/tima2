@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.tima.core.ui.MarkKind
 import io.tima.core.ui.ChipKind
 import io.tima.core.ui.Button
@@ -161,6 +162,15 @@ fun ChatScreen(
     onEditCancel: (() -> Unit)? = null,
     /** Не отвечать — полоса ответа уходит. `null` — полосы нет. */
     onReplyCancel: (() -> Unit)? = null,
+    /** Кнопка редактора слева от строки ввода (Решения §9); `null` — кнопки нет. */
+    onEditor: (() -> Unit)? = null,
+    /** Собрано в редакторе — чип над строкой; `null` — не собрано. */
+    composed: ComposedLook? = null,
+    onComposedDrop: (() -> Unit)? = null,
+    /** Галерея и Скрепка; `null` — кнопок нет. */
+    onAttach: ((AttachItem) -> Unit)? = null,
+    /** Эмоджи при пустой строке — отдельным сообщением. */
+    onEmojiSend: ((String) -> Unit)? = null,
     /**
      * Унести чужую запись к себе на страницу: `(messageId, круг записи)`.
      *
@@ -382,14 +392,18 @@ fun ChatScreen(
             EditBar(onCancel = onEditCancel)
         }
 
-        InputZone(
+        // Выбора уровня над строкой нет (Решения §9): быстрая отправка — −1 или 2, другой — в
+        // редакторе. Круг по-прежнему приходит параметром — его покажет и сменит редактор.
+        InputLine(
             typed = state.draft,
             onSet = onSet,
             onSend = onSend,
             typingMarks = typingMarks,
-            circle = circle,
-            onCircle = onCircle,
-            circles = circles,
+            onEditor = onEditor,
+            composed = composed,
+            onComposedDrop = onComposedDrop,
+            onAttach = onAttach,
+            onEmojiSend = onEmojiSend,
         )
     }
     }
@@ -612,11 +626,17 @@ private fun Reply(
         (if (failed) Modifier.clickable { onFailed!!(line) } else if (menu) Modifier.clickable { onMenu!!(line) } else Modifier)
             .then(if (withAvatar) Modifier.padding(top = TimaSpacing.about3 / 2) else Modifier),
     ) {
-        Bubbled(
-            line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, line.serverId in lostKeys,
-            look = avatarLook,
-            onAvatar = line.senderId?.let { who -> onAuthor?.let { open -> { open(who) } } },
-        )
+        // Только эмоджи — крупно и без пузыря (Решения §2): это не текст, а знак.
+        val emoji = line.text?.takeIf { line.rich == null && !line.deleted && isEmojiOnly(it) }
+        if (emoji != null) {
+            OutsideBubble(line) { Caption(emoji.trim(), fontSize = 44.sp) }
+        } else {
+            Bubbled(
+                line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, line.serverId in lostKeys,
+                look = avatarLook,
+                onAvatar = line.senderId?.let { who -> onAuthor?.let { open -> { open(who) } } },
+            )
+        }
         // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:
         // это не часть сказанного, а вход в разговор о нём (ADR-0024 §7).
         //
@@ -636,6 +656,51 @@ private fun Reply(
         }
     }
 }
+
+/**
+ * Сообщение вне пузыря (Решения §2): эмоджи, фото без текста, файл. Сторона — как у пузыря, под
+ * содержимым — время и отметка.
+ */
+@Composable
+internal fun OutsideBubble(line: ChatLine, content: @Composable () -> Unit) = Row(
+    Modifier.fillMaxWidth(),
+    horizontalArrangement = if (line.outgoing) Arrangement.End else Arrangement.Start,
+) {
+    Column(horizontalAlignment = if (line.outgoing) Alignment.End else Alignment.Start) {
+        content()
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (line.edits > 0) Tertiary(Tima.words.chat.edited, lineOne = true)
+            Tertiary(time(line.atMs), lineOne = true)
+            markOf(line.display, line.atMs, LocalChatReceipt.current)?.let { Mark(it) }
+        }
+    }
+}
+
+/**
+ * Только эмоджи — от одного до трёх знаков, без букв, цифр и знаков препинания. Грубая граница,
+ * но честная: «😀😀» — знак, «ок 👍» — текст.
+ */
+internal fun isEmojiOnly(text: String): Boolean {
+    val t = text.trim()
+    if (t.isEmpty() || t.length > 24) return false
+    var pictographs = 0
+    var i = 0
+    while (i < t.length) {
+        val c = t[i]
+        when {
+            c.isHighSurrogate() -> { pictographs++; i += 2; continue }
+            // Склейка, вариант «картинкой» и рамка клавиши — части знака, а не знаки.
+            c.code == 0x200D || c.code == 0xFE0F || c.code == 0x20E3 -> Unit
+            c.code in 0x2190..0x2BFF || c.code == 0xA9 || c.code == 0xAE -> pictographs++
+            else -> return false
+        }
+        i++
+    }
+    return pictographs in 1..MAX_EMOJI_ALONE * 2
+}
+
+/** Сколько эмоджи «одни» рисуются крупно. */
+private const val MAX_EMOJI_ALONE = 3
 
 /** Служебная строка: сказанное приложением, а не человеком. */
 @Composable
@@ -813,88 +878,6 @@ private fun NarrowChoice(was: Int, onPick: (Int) -> Unit) {
 }
 
 
-/**
- * Зона 4 — строка ввода.
- *
- * Поле и кнопка на функциональной подложке, как в макете. **Кнопка отправки нарисована**,
- * а не набрана знаком: «→» есть не во всяком шрифте, а кнопка без надписи — это кнопка,
- * про которую надо догадываться.
- */
-@Composable
-private fun InputZone(
-    typed: String,
-    onSet: (String) -> Unit,
-    onSend: () -> Unit,
-    typingMarks: io.tima.domain.chat.TypingMarks? = null,
-    circle: MessageCircle? = null,
-    onCircle: ((MessageCircle) -> Unit)? = null,
-    circles: List<MessageCircle> = MessageCircle.entries,
-) {
-    val colors = Tima.colors
-    // Круг стоит рядом с «Отправить», а не в настройках: он выбирается для каждого
-    // сообщения, и последствие у него необратимое — сузить можно, расширить нельзя.
-    if (circle != null && onCircle != null) {
-        // FlowRow и пояснение отдельной строкой. В `Row` пять чипов и пояснение в одну
-        // строку не влезали: последний чип ужимался до одной буквы в ширину, и пояснение
-        // вытягивалось столбиком на весь экран — поле ввода уезжало за нижний край, и
-        // написать в группу было НЕЛЬЗЯ. Поймано на Redmi 2026-09-18, при разборе ключа
-        // группы: ключ вылечили, а отправить всё равно было нечем.
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(colors.functional)
-                .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about1),
-            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
-        ) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-                verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
-            ) {
-                // Только круги, которые у группы этого вида есть: у личной — два, у
-                // публичной — четыре. Лишний чип — это 400 от сервера и крестик у сообщения.
-                for (option in circles) {
-                    Chip(
-                        label = option.title,
-                        kind = if (option == circle) ChipKind.Selected else ChipKind.Quiet,
-                        onClick = { onCircle(option) },
-                    )
-                }
-            }
-            Caption(circle.about, fontSize = TimaType.sz6, color = colors.text3)
-        }
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(colors.functional)
-            .heightIn(min = TimaZones.zone4)
-            .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .background(colors.surface, CircleShape)
-                .padding(horizontal = TimaSpacing.about4, vertical = 10.dp),
-        ) {
-            if (typed.isEmpty()) {
-                Caption(Tima.words.chat.messageHint, fontSize = TimaType.sz4, color = colors.text3)
-            }
-            BasicTextField(
-                value = typed,
-                onValueChange = onSet,
-                textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
-                cursorBrush = SolidColor(colors.navigation),
-                visualTransformation = rememberTypingView(typingMarks),
-                modifier = Modifier.fillMaxWidth().testTag(CHAT_INPUT_TAG),
-            )
-        }
-        ButtonCircle(onClick = onSend, live = true, modifier = Modifier.testTag(CHAT_SEND_TAG)) {
-            Arrow(Side.Up, color = colors.onAccent)
-        }
-    }
-}
 
 /** Подтверждение «Удалить у всех» и сужения в полосе сообщения — метки для сценариев. */
 const val DELETE_CONFIRM_TAG = "msg:delete.confirm"

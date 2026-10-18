@@ -160,7 +160,21 @@ class ChatStore(
     private val picks: MessagePicks? = null,
     /** Чья подборка у этой переписки — `MessagePicks.levelOf`. */
     private val pickLevel: String = MessagePicks.SELF,
+    /** Черновики (Решения §9): у переписки свой, зашифрованный, переживает перезапуск. `null` — не храним. */
+    private val drafts: io.tima.domain.chat.Drafts? = null,
 ) {
+
+    /** Отложенная запись черновика: не на каждое нажатие клавиши. */
+    private var draftSave: kotlinx.coroutines.Job? = null
+
+    private fun keepDraft(text: String) {
+        val port = drafts ?: return
+        draftSave?.cancel()
+        draftSave = scope.launch {
+            kotlinx.coroutines.delay(DRAFT_DELAY_MS)
+            withContext(io) { port.save(chatId, text) }
+        }
+    }
 
     /** Сами уже просили в этой переписке — один запрос, не на каждое обновление списка. */
     private var autoAsked = false
@@ -181,6 +195,13 @@ class ChatStore(
     private var known: List<ChatLine> = emptyList()
 
     init {
+        // Черновик этой переписки — в строку ввода, если человек ещё ничего не набрал.
+        drafts?.let { port ->
+            scope.launch {
+                val saved = withContext(io) { port.load(chatId) }
+                if (!saved.isNullOrEmpty() && _state.value.draft.isEmpty()) _state.value = _state.value.copy(draft = saved)
+            }
+        }
         // Потерянное помечается сразу, а не после первой просьбы: «запросить» у него быть не должно.
         lostKeys?.let { load -> scope.launch { _state.value = _state.value.copy(lostKeys = load()) } }
         peopleChanges?.onEach { who ->
@@ -304,6 +325,8 @@ class ChatStore(
     /** Человек набирает текст. */
     fun draftChanged(text: String) {
         _state.value = _state.value.copy(draft = text, notice = null)
+        // Правка — не черновик: её текст взят из сообщения и уходит правкой.
+        if (_state.value.editing == 0L) keepDraft(text)
     }
 
     /**
@@ -538,6 +561,18 @@ class ChatStore(
         }
     }
 
+    /**
+     * Эмоджи при пустой строке — отдельным сообщением (Решения §9): знак, а не текст, поэтому без
+     * быстрого оформления.
+     */
+    fun sendEmoji(emoji: String) {
+        val reply = _state.value.replyTo?.let {
+            ReplyTarget(kind = if (_state.value.group) "group" else "personal", chatId = chatId, messageId = it.serverId, userId = it.userId)
+        }
+        send.send(chatId, emoji, _state.value.level, marks = false, reply = reply)
+        if (reply != null) _state.value = _state.value.copy(replyTo = null)
+    }
+
     /** Сказать человеку одно предложение — «Текст скопирован» и подобное. */
     fun said(text: String) {
         _state.value = _state.value.copy(notice = ChatNotice.Said(text))
@@ -558,7 +593,7 @@ class ChatStore(
             // Принято: поле чистим — сообщение уже в списке.
             is SendMessageResult.Queued,
             is SendMessageResult.AlreadyQueued,
-            -> _state.value.copy(draft = "", notice = null, replyTo = null)
+            -> _state.value.copy(draft = "", notice = null, replyTo = null).also { keepDraft("") }
 
             // Нажатие мимо. Ни сообщения, ни жалобы: человек и сам видит, что поле пусто.
             SendMessageResult.Empty -> _state.value.copy(notice = null)
@@ -721,6 +756,9 @@ data class ChatState(
      */
     val pendingNarrow: PendingNarrow? = null,
 )
+
+/** Через сколько после последнего нажатия черновик ложится на диск. */
+private const val DRAFT_DELAY_MS = 400L
 
 /** Задуманный ответ: номер сообщения, его автор и строка из него для полосы. */
 data class ReplyDraft(val serverId: Long, val userId: String, val preview: String?)

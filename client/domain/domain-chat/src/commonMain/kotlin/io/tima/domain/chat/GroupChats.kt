@@ -243,6 +243,16 @@ enum class GroupKind(val wire: String) {
             Public -> MessageCircle.entries.filter { it != MessageCircle.Secret }
         }
 
+    /**
+     * Уровень быстрой отправки из строки ввода (Решения §9): личная группа — шифр (−1), публичная —
+     * «своим» (2). Другой уровень — только в редакторе.
+     */
+    val quickLevel: Int
+        get() = when (this) {
+            Personal -> MessageCircle.Secret.level
+            Public -> MessageCircle.Members.level
+        }
+
     companion object {
         fun fromWire(wire: String): GroupKind? = entries.firstOrNull { it.wire == wire }
     }

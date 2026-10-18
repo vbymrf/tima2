@@ -797,6 +797,9 @@ class Environment private constructor(
     /** Удаление в базе устройства: у себя и пометка «удалено у всех» (Решения §8). */
     val removal: io.tima.core.database.SqlMessageRemoval = io.tima.core.database.SqlMessageRemoval(db)
 
+    /** Черновики переписок — зашифрованные, переживают перезапуск (Решения §9). */
+    val drafts: io.tima.domain.chat.Drafts = io.tima.core.database.SqlDrafts(db, cipher, nowMs = { msNow() })
+
     /** Подборка сообщений на устройстве (Решения §11.2). */
     val picks: io.tima.domain.chat.MessagePicks =
         io.tima.domain.chat.MessagePicks(io.tima.core.database.SqlPicks(db), nowMs = { msNow() })
