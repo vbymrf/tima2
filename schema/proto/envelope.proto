@@ -44,6 +44,9 @@ message Metadata {
   ContentKind kind = 5;
   int64 created_at_unix_ms = 6;
   uint64 reply_to = 7;               // 0 = нет ответа
+  // ADR-0045: номер исправляемого сообщения. Не 0 только у правки, и только при
+  // format_version = 3 — там он входит в canonical_bytes хвостом.
+  uint64 edit_of = 8;
 }
 
 enum ContentKind {

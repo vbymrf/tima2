@@ -130,7 +130,12 @@ type MessageBody struct {
 	Nodes []string `protobuf:"bytes,4,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	// Разметка в компактном JSON (ADR-0011 §6): один формат с читаемыми ключами,
 	// сжимается zstd вместе со всем телом. Пусто = разметки нет.
-	Markup        string `protobuf:"bytes,5,opt,name=markup,proto3" json:"markup,omitempty"`
+	Markup string `protobuf:"bytes,5,opt,name=markup,proto3" json:"markup,omitempty"`
+	// ── Правка (ADR-0045, Решения §8 doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md) ──
+	//
+	// Тело записи правки — только изменённые узлы исходного; text, nodes и markup такой записи
+	// пусты. Строение сообщения правка не трогает: блоки разметки исходного остаются на месте.
+	Edits         []*NodeEdit `protobuf:"bytes,6,rep,name=edits,proto3" json:"edits,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -200,6 +205,79 @@ func (x *MessageBody) GetMarkup() string {
 	return ""
 }
 
+func (x *MessageBody) GetEdits() []*NodeEdit {
+	if x != nil {
+		return x.Edits
+	}
+	return nil
+}
+
+// Новый текст одного узла исходного сообщения.
+type NodeEdit struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Позиция узла в nodes исходного, а не идентификатор: у сообщения без разметки
+	// идентификаторов нет, а узел есть — один.
+	Index uint32 `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	Text  string `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	// Инлайн-оформление этого узла: JSON-массив сущностей разметки (ADR-0011 §6), поле node —
+	// идентификатор узла исходного. Прежние сущности узла заменяются целиком; пусто — без
+	// оформления. Смещения прежних сущностей к новому тексту не подходят, поэтому едут заново.
+	Entities      string `protobuf:"bytes,3,opt,name=entities,proto3" json:"entities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NodeEdit) Reset() {
+	*x = NodeEdit{}
+	mi := &file_message_body_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NodeEdit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NodeEdit) ProtoMessage() {}
+
+func (x *NodeEdit) ProtoReflect() protoreflect.Message {
+	mi := &file_message_body_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NodeEdit.ProtoReflect.Descriptor instead.
+func (*NodeEdit) Descriptor() ([]byte, []int) {
+	return file_message_body_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *NodeEdit) GetIndex() uint32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *NodeEdit) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *NodeEdit) GetEntities() string {
+	if x != nil {
+		return x.Entities
+	}
+	return ""
+}
+
 type Entity struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          EntityType             `protobuf:"varint,1,opt,name=type,proto3,enum=tima.crypto.v1.EntityType" json:"type,omitempty"`
@@ -215,7 +293,7 @@ type Entity struct {
 
 func (x *Entity) Reset() {
 	*x = Entity{}
-	mi := &file_message_body_proto_msgTypes[1]
+	mi := &file_message_body_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -227,7 +305,7 @@ func (x *Entity) String() string {
 func (*Entity) ProtoMessage() {}
 
 func (x *Entity) ProtoReflect() protoreflect.Message {
-	mi := &file_message_body_proto_msgTypes[1]
+	mi := &file_message_body_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -240,7 +318,7 @@ func (x *Entity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Entity.ProtoReflect.Descriptor instead.
 func (*Entity) Descriptor() ([]byte, []int) {
-	return file_message_body_proto_rawDescGZIP(), []int{1}
+	return file_message_body_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Entity) GetType() EntityType {
@@ -309,7 +387,7 @@ type MediaRef struct {
 
 func (x *MediaRef) Reset() {
 	*x = MediaRef{}
-	mi := &file_message_body_proto_msgTypes[2]
+	mi := &file_message_body_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -321,7 +399,7 @@ func (x *MediaRef) String() string {
 func (*MediaRef) ProtoMessage() {}
 
 func (x *MediaRef) ProtoReflect() protoreflect.Message {
-	mi := &file_message_body_proto_msgTypes[2]
+	mi := &file_message_body_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -334,7 +412,7 @@ func (x *MediaRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaRef.ProtoReflect.Descriptor instead.
 func (*MediaRef) Descriptor() ([]byte, []int) {
-	return file_message_body_proto_rawDescGZIP(), []int{2}
+	return file_message_body_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *MediaRef) GetMediaId() string {
@@ -404,13 +482,18 @@ var File_message_body_proto protoreflect.FileDescriptor
 
 const file_message_body_proto_rawDesc = "" +
 	"\n" +
-	"\x12message_body.proto\x12\x0etima.crypto.v1\"\xb3\x01\n" +
+	"\x12message_body.proto\x12\x0etima.crypto.v1\"\xe3\x01\n" +
 	"\vMessageBody\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x122\n" +
 	"\bentities\x18\x02 \x03(\v2\x16.tima.crypto.v1.EntityR\bentities\x12.\n" +
 	"\x05media\x18\x03 \x03(\v2\x18.tima.crypto.v1.MediaRefR\x05media\x12\x14\n" +
 	"\x05nodes\x18\x04 \x03(\tR\x05nodes\x12\x16\n" +
-	"\x06markup\x18\x05 \x01(\tR\x06markup\"\xcc\x01\n" +
+	"\x06markup\x18\x05 \x01(\tR\x06markup\x12.\n" +
+	"\x05edits\x18\x06 \x03(\v2\x18.tima.crypto.v1.NodeEditR\x05edits\"P\n" +
+	"\bNodeEdit\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\rR\x05index\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12\x1a\n" +
+	"\bentities\x18\x03 \x01(\tR\bentities\"\xcc\x01\n" +
 	"\x06Entity\x12.\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x1a.tima.crypto.v1.EntityTypeR\x04type\x12\x16\n" +
 	"\x06offset\x18\x02 \x01(\rR\x06offset\x12\x16\n" +
@@ -466,22 +549,24 @@ func file_message_body_proto_rawDescGZIP() []byte {
 }
 
 var file_message_body_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_message_body_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_message_body_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_message_body_proto_goTypes = []any{
 	(EntityType)(0),     // 0: tima.crypto.v1.EntityType
 	(*MessageBody)(nil), // 1: tima.crypto.v1.MessageBody
-	(*Entity)(nil),      // 2: tima.crypto.v1.Entity
-	(*MediaRef)(nil),    // 3: tima.crypto.v1.MediaRef
+	(*NodeEdit)(nil),    // 2: tima.crypto.v1.NodeEdit
+	(*Entity)(nil),      // 3: tima.crypto.v1.Entity
+	(*MediaRef)(nil),    // 4: tima.crypto.v1.MediaRef
 }
 var file_message_body_proto_depIdxs = []int32{
-	2, // 0: tima.crypto.v1.MessageBody.entities:type_name -> tima.crypto.v1.Entity
-	3, // 1: tima.crypto.v1.MessageBody.media:type_name -> tima.crypto.v1.MediaRef
-	0, // 2: tima.crypto.v1.Entity.type:type_name -> tima.crypto.v1.EntityType
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3, // 0: tima.crypto.v1.MessageBody.entities:type_name -> tima.crypto.v1.Entity
+	4, // 1: tima.crypto.v1.MessageBody.media:type_name -> tima.crypto.v1.MediaRef
+	2, // 2: tima.crypto.v1.MessageBody.edits:type_name -> tima.crypto.v1.NodeEdit
+	0, // 3: tima.crypto.v1.Entity.type:type_name -> tima.crypto.v1.EntityType
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_message_body_proto_init() }
@@ -495,7 +580,7 @@ func file_message_body_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_message_body_proto_rawDesc), len(file_message_body_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

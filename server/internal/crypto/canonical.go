@@ -27,6 +27,12 @@ const FormatVersion = 2
 // принимать, пока в пути есть сообщения от старых клиентов.
 const FormatVersionLegacy = 1
 
+// FormatVersionEdit — версия 3, правка сообщения (ADR-0045, решение заказчика 2026-10-18
+// «Правку делаем новой версией конверта»). Раскладка v2 с хвостом u64(edit_of): номер
+// исходного сообщения под подписью, подменить его нельзя. Обычные сообщения остаются v2 —
+// версию 3 несут только правки.
+const FormatVersionEdit = 3
+
 // CommitmentSize — длина key_commitment в байтах (HKDF-SHA256).
 const CommitmentSize = 32
 
@@ -59,6 +65,8 @@ type EnvelopeMeta struct {
 	Kind            uint32
 	CreatedAtUnixMs int64
 	ReplyTo         uint64
+	// EditOf — номер исправляемого сообщения; входит в подпись только при версии 3.
+	EditOf uint64
 }
 
 // CanonicalBytes собирает подписываемый preimage: строго schema/proto/README.md.
@@ -92,6 +100,9 @@ func CanonicalBytesV2(formatVersion uint32, meta EnvelopeMeta, encryptedPayload,
 	if formatVersion >= 2 {
 		out = append(out, keyCommitment...)
 	}
+	if formatVersion >= FormatVersionEdit {
+		out = appendU64(out, meta.EditOf)
+	}
 	return out
 }
 
@@ -111,6 +122,10 @@ const GroupMessageDomain = "tima.group_message.v1"
 // GroupMessageDomainV2 — версия 2: привязка ключа группы (ADR-0013 для групп; решение заказчика
 // 2026-10-06 «отменяем решение 5»). Раскладка v1 под этим доменом плюс key_commitment хвостом.
 const GroupMessageDomainV2 = "tima.group_message.v2"
+
+// GroupMessageDomainV3 — версия 3, правка (ADR-0045): раскладка v1 под этим доменом, затем
+// u64(edit_of), затем key_commitment (у публичной группы — пусто).
+const GroupMessageDomainV3 = "tima.group_message.v3"
 
 // GroupMessageMeta — подписываемые поля сообщения группы. message_id не входит —
 // его назначает сервер при приёме. GKVersion 0 = публичная группа (plaintext).
@@ -136,6 +151,14 @@ func GroupMessageCanonicalBytes(meta GroupMessageMeta, payload []byte) []byte {
 // своего ключа и сверяют (KAT-вектор group_message_canonical_v2).
 func GroupMessageCanonicalBytesV2(meta GroupMessageMeta, payload, keyCommitment []byte) []byte {
 	return append(groupMessageCanonical(GroupMessageDomainV2, meta, payload), keyCommitment...)
+}
+
+// GroupMessageCanonicalBytesV3 — preimage правки (KAT-вектор group_message_canonical_v3):
+// номер исправляемого сообщения под подписью; keyCommitment — как у v2, у публичной группы пуст.
+func GroupMessageCanonicalBytesV3(meta GroupMessageMeta, editOf uint64, payload, keyCommitment []byte) []byte {
+	out := groupMessageCanonical(GroupMessageDomainV3, meta, payload)
+	out = appendU64(out, editOf)
+	return append(out, keyCommitment...)
 }
 
 func groupMessageCanonical(domain string, meta GroupMessageMeta, payload []byte) []byte {

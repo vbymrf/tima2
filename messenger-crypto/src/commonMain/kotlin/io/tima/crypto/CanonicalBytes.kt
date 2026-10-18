@@ -12,6 +12,8 @@ data class EnvelopeMeta(
     val kind: Int,
     val createdAtUnixMs: Long,
     val replyTo: ULong = 0u,
+    /** Номер исправляемого сообщения; входит в подпись только при версии 3 (ADR-0045). */
+    val editOf: ULong = 0u,
 )
 
 /**
@@ -52,6 +54,12 @@ object CanonicalBytes {
 
     /** Версия, которую приёмная сторона обязана принимать на время перехода. */
     const val FORMAT_VERSION_LEGACY = 1
+
+    /**
+     * v3 — правка сообщения (ADR-0045, решение заказчика 2026-10-18): раскладка v2 с хвостом
+     * `u64(edit_of)`. Версию 3 несут только правки; обычные сообщения остаются v2.
+     */
+    const val FORMAT_VERSION_EDIT = 3
 
     /** Длина обязательства по ключу. */
     const val COMMITMENT_SIZE = 32
@@ -101,6 +109,12 @@ object CanonicalBytes {
      */
     const val GROUP_MESSAGE_DOMAIN_V2 = "tima.group_message.v2"
 
+    /**
+     * Версия 3 — правка (ADR-0045): раскладка v1 под этим доменом, затем `u64(edit_of)`, затем
+     * `key_commitment` (у публичной группы пусто).
+     */
+    const val GROUP_MESSAGE_DOMAIN_V3 = "tima.group_message.v3"
+
     val EMPTY: ByteArray = ByteArray(0)
 
     /**
@@ -130,7 +144,9 @@ object CanonicalBytes {
             sha256(ratchetEnvelope) +
             // Хвост версии 2. В версии 1 добавлять нечего — раскладка обязана
             // остаться прежней, иначе старые подписи перестанут проверяться.
-            (if (formatVersion >= FORMAT_VERSION) keyCommitment else EMPTY)
+            (if (formatVersion >= FORMAT_VERSION) keyCommitment else EMPTY) +
+            // Хвост версии 3 — номер исправляемого сообщения под подписью.
+            (if (formatVersion >= FORMAT_VERSION_EDIT) u64le(meta.editOf.toLong()) else EMPTY)
 
     /**
      * Preimage подписи сообщения группы — schema/proto/README.md
@@ -147,6 +163,13 @@ object CanonicalBytes {
      */
     fun buildGroupMessageV2(meta: GroupMessageMeta, payload: ByteArray, keyCommitment: ByteArray): ByteArray =
         groupMessage(GROUP_MESSAGE_DOMAIN_V2, meta, payload) + keyCommitment
+
+    /**
+     * Preimage правки в группе — KAT-вектор `group_message_canonical_v3`. [keyCommitment] у
+     * публичной группы — [EMPTY].
+     */
+    fun buildGroupMessageV3(meta: GroupMessageMeta, editOf: ULong, payload: ByteArray, keyCommitment: ByteArray): ByteArray =
+        groupMessage(GROUP_MESSAGE_DOMAIN_V3, meta, payload) + u64le(editOf.toLong()) + keyCommitment
 
     private fun groupMessage(domain: String, meta: GroupMessageMeta, payload: ByteArray): ByteArray =
         lp(domain) +

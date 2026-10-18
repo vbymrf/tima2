@@ -37,7 +37,15 @@ canonical_bytes =
   ⊕ sha256(sender_ephemeral_pub)
   ⊕ sha256(ratchet_envelope)     // sha256(пустых байт), если поля нет
   ⊕ key_commitment               // ТОЛЬКО при format_version >= 2; 32 байта, без хэширования
+  ⊕ u64(meta.edit_of)            // ТОЛЬКО при format_version >= 3 (правка, ADR-0045)
 ```
+
+### `edit_of` — версия 3 (ADR-0045)
+
+Версию 3 несёт **только запись правки**; обычные сообщения остаются версии 2. `Metadata.edit_of`
+— номер исправляемого сообщения, открыт для сервера и стоит под подписью: подменить его по пути,
+перенеся правку на другое сообщение того же автора, нельзя. Хвостом — раскладка версий 1 и 2 не
+меняется. Вектор `canonical_bytes_v3`. Тело правки — `MessageBody.edits` (только изменённые узлы).
 
 ### `key_commitment` — версия 2 (ADR-0013)
 
@@ -88,6 +96,12 @@ group_message_canonical_bytes =
 ```
 
 `message_id` в preimage не входит — его назначает сервер при приёме. Версию раскладки несёт доменная метка (`…v1`); изменение = новая метка + новый тест-вектор (`group_message_canonical`).
+
+| Домен | Хвост после `sha256(payload)` | Вектор |
+|---|---|---|
+| `tima.group_message.v1` | — | `group_message_canonical` |
+| `tima.group_message.v2` | `key_commitment` (32 байта; ADR-0013) | `group_message_canonical_v2` |
+| `tima.group_message.v3` | `u64(edit_of)` ⊕ `key_commitment` (у публичной группы пусто) — только правка, ADR-0045 | `group_message_canonical_v3` |
 
 ## `escrow_key_signing_bytes` — подпись конфига анклава (Р2, ADR-0012)
 

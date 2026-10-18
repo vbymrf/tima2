@@ -177,6 +177,43 @@
         "sample": "MarkupSample.content(): заголовок; ряд 33 · 67 (картинка media 0 | узел 2), фон amber-soft, разделитель 2; таблица 2×2, ячейка «Анна» merge=up; абзац; подкладка group/g-1/42, автор, 3 строки; маркер в узле 2"
       },
       "json": "{\"n\":[1,2,3,4,5,6,7],\"entities\":[{\"type\":\"highlight\",\"node\":2,\"length\":4}],\"blocks\":[{\"type\":\"heading\",\"nodes\":[1],\"level\":1},{\"type\":\"flex\",\"children\":[{\"type\":\"cell\",\"children\":[{\"type\":\"image\",\"widget\":{\"media\":0}}],\"style\":{\"width\":\"33\"}},{\"type\":\"cell\",\"nodes\":[2],\"style\":{\"width\":\"67\"}}],\"style\":{\"background\":\"amber-soft\",\"divider\":\"2\"}},{\"type\":\"table\",\"children\":[{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"nodes\":[3]},{\"type\":\"cell\",\"nodes\":[4]}]},{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"nodes\":[5]},{\"type\":\"cell\",\"nodes\":[6],\"style\":{\"merge\":\"up\"}}]}]},{\"type\":\"paragraph\",\"nodes\":[7]},{\"type\":\"underlay\",\"widget\":{\"ref\":{\"kind\":\"group\",\"container\":\"g-1\",\"message\":42},\"author\":true,\"lines\":3}}]}"
+    },
+    "canonical_bytes_v3": {
+      "desc": "Раскладка версии 3 (ADR-0045, правка): та же, что v2, с format_version = 3, ХВОСТОМ — key_commitment и u64(edit_of). Блобы пустые. Посчитан node:crypto (gen/edit-v3.mjs)",
+      "inputs": {
+        "format_version": 3,
+        "message_id": 43,
+        "chat_id": "11111111-1111-1111-1111-111111111111",
+        "sender_id": "22222222-2222-2222-2222-222222222222",
+        "sender_device": "33333333-3333-3333-3333-333333333333",
+        "kind": 1,
+        "created_at_unix_ms": 1750000000000,
+        "reply_to": 0,
+        "message_key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "edit_of": 42
+      },
+      "key_commitment_hex": "2cf82a0464d9889d4ba37dad796d3de9eac2d865b5d9f3456aeaaf4a5ad34d65",
+      "canonical_bytes_hex": "030000002b000000000000002400000031313131313131312d313131312d313131312d313131312d3131313131313131313131312400000032323232323232322d323232322d323232322d323232322d3232323232323232323232322400000033333333333333332d333333332d333333332d333333332d3333333333333333333333330100000000dc2074970100000000000000000000e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b8552cf82a0464d9889d4ba37dad796d3de9eac2d865b5d9f3456aeaaf4a5ad34d652a00000000000000",
+      "sha256_hex": "93f1bc82e98b451d7bf796d3da0a656bb73d0a7edc2f2a3aa6f0188e182d1bdb"
+    },
+    "group_message_canonical_v3": {
+      "desc": "Раскладка версии 3 группы (ADR-0045, правка): домен tima.group_message.v3, поля как у v1, затем u64(edit_of), затем key_commitment (личная группа — 32 байта; у публичной пусто). Ключ группы и payload — из secretbox. Посчитан node:crypto (gen/edit-v3.mjs)",
+      "inputs": {
+        "domain": "tima.group_message.v3",
+        "group_id": "44444444-4444-4444-4444-444444444444",
+        "sender_id": "22222222-2222-2222-2222-222222222222",
+        "sender_device": "33333333-3333-3333-3333-333333333333",
+        "kind": 1,
+        "created_at_unix_ms": 1750000000000,
+        "thread_root": 0,
+        "reply_to": 5,
+        "gk_version": 7,
+        "edit_of": 7,
+        "group_key_from": "secretbox.key"
+      },
+      "key_commitment_hex": "e77982433472070828794c32947c43caafa3d3a44009f28d752952557055156d",
+      "canonical_bytes_hex": "1500000074696d612e67726f75705f6d6573736167652e76332400000034343434343434342d343434342d343434342d343434342d3434343434343434343434342400000032323232323232322d323232322d323232322d323232322d3232323232323232323232322400000033333333333333332d333333332d333333332d333333332d3333333333333333333333330100000000dc2074970100000000000000000000050000000000000007000000f303e907fca039eb114ee0f50c3b41a6cdcff46c899e55451fe809d5593d9db10700000000000000e77982433472070828794c32947c43caafa3d3a44009f28d752952557055156d",
+      "sha256_hex": "2f47539bccc371b363d08c3849fe79fc9126bd4b95f872f12eaa5936142456e2"
     }
   }
 }

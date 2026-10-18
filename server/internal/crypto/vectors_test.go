@@ -377,3 +377,92 @@ func TestCanonicalBytesV2Vector(t *testing.T) {
 	digest := sha256.Sum256(cb)
 	assertHex(t, v.Sha256Hex, digest[:], "sha256(canonical_bytes_v2)")
 }
+
+// TestCanonicalBytesV3Vector — правка (ADR-0045): v2 с хвостом u64(edit_of). Вектор посчитан
+// независимо (node:crypto, gen/edit-v3.mjs).
+func TestCanonicalBytesV3Vector(t *testing.T) {
+	vectors := loadVectors(t)
+	v := vec[struct {
+		Inputs struct {
+			FormatVersion   uint32 `json:"format_version"`
+			MessageID       uint64 `json:"message_id"`
+			ChatID          string `json:"chat_id"`
+			SenderID        string `json:"sender_id"`
+			SenderDevice    string `json:"sender_device"`
+			Kind            uint32 `json:"kind"`
+			CreatedAtUnixMs int64  `json:"created_at_unix_ms"`
+			ReplyTo         uint64 `json:"reply_to"`
+			EditOf          uint64 `json:"edit_of"`
+			MessageKeyHex   string `json:"message_key_hex"`
+		} `json:"inputs"`
+		KeyCommitmentHex  string `json:"key_commitment_hex"`
+		CanonicalBytesHex string `json:"canonical_bytes_hex"`
+		Sha256Hex         string `json:"sha256_hex"`
+	}](t, vectors, "canonical_bytes_v3")
+	if v.Inputs.FormatVersion != FormatVersionEdit {
+		t.Fatalf("версия вектора %d, реализация %d", v.Inputs.FormatVersion, FormatVersionEdit)
+	}
+	messageKey, err := hex.DecodeString(v.Inputs.MessageKeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit := KeyCommitment(messageKey)
+	assertHex(t, v.KeyCommitmentHex, commit, "key_commitment")
+	cb := CanonicalBytesV2(v.Inputs.FormatVersion, EnvelopeMeta{
+		MessageID:       v.Inputs.MessageID,
+		ChatID:          v.Inputs.ChatID,
+		SenderID:        v.Inputs.SenderID,
+		SenderDevice:    v.Inputs.SenderDevice,
+		Kind:            v.Inputs.Kind,
+		CreatedAtUnixMs: v.Inputs.CreatedAtUnixMs,
+		ReplyTo:         v.Inputs.ReplyTo,
+		EditOf:          v.Inputs.EditOf,
+	}, nil, nil, nil, nil, commit)
+	assertHex(t, v.CanonicalBytesHex, cb, "canonical_bytes_v3")
+	digest := sha256.Sum256(cb)
+	assertHex(t, v.Sha256Hex, digest[:], "sha256(canonical_bytes_v3)")
+}
+
+// TestGroupMessageCanonicalV3Vector — правка в группе (ADR-0045).
+func TestGroupMessageCanonicalV3Vector(t *testing.T) {
+	vectors := loadVectors(t)
+	v := vec[struct {
+		Inputs struct {
+			Domain          string `json:"domain"`
+			GroupID         string `json:"group_id"`
+			SenderID        string `json:"sender_id"`
+			SenderDevice    string `json:"sender_device"`
+			Kind            uint32 `json:"kind"`
+			CreatedAtUnixMs int64  `json:"created_at_unix_ms"`
+			ThreadRoot      uint64 `json:"thread_root"`
+			ReplyTo         uint64 `json:"reply_to"`
+			GKVersion       uint32 `json:"gk_version"`
+			EditOf          uint64 `json:"edit_of"`
+		} `json:"inputs"`
+		KeyCommitmentHex  string `json:"key_commitment_hex"`
+		CanonicalBytesHex string `json:"canonical_bytes_hex"`
+		Sha256Hex         string `json:"sha256_hex"`
+	}](t, vectors, "group_message_canonical_v3")
+	if v.Inputs.Domain != GroupMessageDomainV3 {
+		t.Fatalf("доменная метка разошлась: вектор %q, реализация %q", v.Inputs.Domain, GroupMessageDomainV3)
+	}
+	sb := vec[struct {
+		Key             string `json:"key"`
+		KodiumOutputHex string `json:"kodium_output_hex"`
+	}](t, vectors, "secretbox")
+	commitment := KeyCommitment(unhex(t, sb.Key))
+	assertHex(t, v.KeyCommitmentHex, commitment, "key_commitment ключа группы")
+	cb := GroupMessageCanonicalBytesV3(GroupMessageMeta{
+		GroupID:         v.Inputs.GroupID,
+		SenderID:        v.Inputs.SenderID,
+		SenderDevice:    v.Inputs.SenderDevice,
+		Kind:            v.Inputs.Kind,
+		CreatedAtUnixMs: v.Inputs.CreatedAtUnixMs,
+		ThreadRoot:      v.Inputs.ThreadRoot,
+		ReplyTo:         v.Inputs.ReplyTo,
+		GKVersion:       v.Inputs.GKVersion,
+	}, v.Inputs.EditOf, unhex(t, sb.KodiumOutputHex), commitment)
+	assertHex(t, v.CanonicalBytesHex, cb, "group_message_canonical_bytes v3")
+	digest := sha256.Sum256(cb)
+	assertHex(t, v.Sha256Hex, digest[:], "sha256(group_message_canonical_bytes v3)")
+}

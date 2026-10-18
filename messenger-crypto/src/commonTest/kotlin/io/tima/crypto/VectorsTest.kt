@@ -195,6 +195,61 @@ class VectorsTest {
     }
 
     @Test
+    fun `canonical_bytes_v3 - номер исправляемого сообщения хвостом совпадает байт-в-байт`() {
+        val v = vector("canonical_bytes_v3")
+        val inputs = v["inputs"]!!.jsonObject
+        assertEquals(CanonicalBytes.FORMAT_VERSION_EDIT, inputs["format_version"]!!.jsonPrimitive.int)
+        val commitment = CanonicalBytes.keyCommitment(inputs["message_key_hex"]!!.jsonPrimitive.content.hexToBytes())
+        assertEquals(v["key_commitment_hex"]!!.jsonPrimitive.content, commitment.toHex())
+        val meta = EnvelopeMeta(
+            messageId = inputs["message_id"]!!.jsonPrimitive.long.toULong(),
+            chatId = inputs["chat_id"]!!.jsonPrimitive.content,
+            senderId = inputs["sender_id"]!!.jsonPrimitive.content,
+            senderDevice = inputs["sender_device"]!!.jsonPrimitive.content,
+            kind = inputs["kind"]!!.jsonPrimitive.int,
+            createdAtUnixMs = inputs["created_at_unix_ms"]!!.jsonPrimitive.long,
+            replyTo = inputs["reply_to"]!!.jsonPrimitive.long.toULong(),
+            editOf = inputs["edit_of"]!!.jsonPrimitive.long.toULong(),
+        )
+        val cb = CanonicalBytes.build(
+            meta = meta,
+            encryptedPayload = CanonicalBytes.EMPTY,
+            escrowBytes = CanonicalBytes.EMPTY,
+            senderEphemeralPub = CanonicalBytes.EMPTY,
+            ratchetEnvelope = CanonicalBytes.EMPTY,
+            formatVersion = CanonicalBytes.FORMAT_VERSION_EDIT,
+            keyCommitment = commitment,
+        )
+        assertEquals(v["canonical_bytes_hex"]!!.jsonPrimitive.content, cb.toHex())
+        assertEquals(v["sha256_hex"]!!.jsonPrimitive.content, sha256(cb).toHex())
+    }
+
+    @Test
+    fun `group_message_canonical_v3 - правка в группе совпадает байт-в-байт`() {
+        val v = vector("group_message_canonical_v3")
+        val inputs = v["inputs"]!!.jsonObject
+        assertEquals(inputs["domain"]!!.jsonPrimitive.content, CanonicalBytes.GROUP_MESSAGE_DOMAIN_V3)
+        val meta = GroupMessageMeta(
+            groupId = inputs["group_id"]!!.jsonPrimitive.content,
+            senderId = inputs["sender_id"]!!.jsonPrimitive.content,
+            senderDevice = inputs["sender_device"]!!.jsonPrimitive.content,
+            kind = inputs["kind"]!!.jsonPrimitive.int,
+            createdAtUnixMs = inputs["created_at_unix_ms"]!!.jsonPrimitive.long,
+            threadRoot = inputs["thread_root"]!!.jsonPrimitive.long.toULong(),
+            replyTo = inputs["reply_to"]!!.jsonPrimitive.long.toULong(),
+            gkVersion = inputs["gk_version"]!!.jsonPrimitive.int,
+        )
+        val sb = vector("secretbox")
+        val commitment = CanonicalBytes.keyCommitment(sb.hex("key"))
+        assertEquals(v["key_commitment_hex"]!!.jsonPrimitive.content, commitment.toHex())
+        val cb = CanonicalBytes.buildGroupMessageV3(
+            meta, inputs["edit_of"]!!.jsonPrimitive.long.toULong(), sb.hex("kodium_output_hex"), commitment,
+        )
+        assertEquals(v["canonical_bytes_hex"]!!.jsonPrimitive.content, cb.toHex())
+        assertEquals(v["sha256_hex"]!!.jsonPrimitive.content, sha256(cb).toHex())
+    }
+
+    @Test
     fun `device_epoch_key - байты ключа эпохи устройства совпадают байт-в-байт`() {
         val v = vector("device_epoch_key")
         val inputs = v["inputs"]!!.jsonObject
@@ -237,7 +292,7 @@ class VectorsTest {
             "secretbox", "box_wrap", "ed25519", "hkdf_sha256", "media_chunk_keys",
             "canonical_bytes", "canonical_bytes_v2", "message_body", "mlkem768_escrow",
             "group_message_canonical", "group_message_canonical_v2", "device_epoch_key",
-            "markup_json",
+            "markup_json", "canonical_bytes_v3", "group_message_canonical_v3",
         )
         assertEquals(expected, vectors.keys, "Состав vectors.json изменился — обнови KAT")
     }

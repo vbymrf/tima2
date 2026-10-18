@@ -218,8 +218,11 @@ type Metadata struct {
 	Kind            ContentKind            `protobuf:"varint,5,opt,name=kind,proto3,enum=tima.crypto.v1.ContentKind" json:"kind,omitempty"`
 	CreatedAtUnixMs int64                  `protobuf:"varint,6,opt,name=created_at_unix_ms,json=createdAtUnixMs,proto3" json:"created_at_unix_ms,omitempty"`
 	ReplyTo         uint64                 `protobuf:"varint,7,opt,name=reply_to,json=replyTo,proto3" json:"reply_to,omitempty"` // 0 = нет ответа
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// ADR-0045: номер исправляемого сообщения. Не 0 только у правки, и только при
+	// format_version = 3 — там он входит в canonical_bytes хвостом.
+	EditOf        uint64 `protobuf:"varint,8,opt,name=edit_of,json=editOf,proto3" json:"edit_of,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Metadata) Reset() {
@@ -297,6 +300,13 @@ func (x *Metadata) GetCreatedAtUnixMs() int64 {
 func (x *Metadata) GetReplyTo() uint64 {
 	if x != nil {
 		return x.ReplyTo
+	}
+	return 0
+}
+
+func (x *Metadata) GetEditOf() uint64 {
+	if x != nil {
+		return x.EditOf
 	}
 	return 0
 }
@@ -429,7 +439,7 @@ const file_envelope_proto_rawDesc = "" +
 	"\x10ratchet_envelope\x18\x06 \x01(\fR\x0fratchetEnvelope\x12\x1c\n" +
 	"\tsignature\x18\a \x01(\fR\tsignature\x12=\n" +
 	"\fwrapped_keys\x18\b \x03(\v2\x1a.tima.crypto.v1.WrappedKeyR\vwrappedKeys\x12%\n" +
-	"\x0ekey_commitment\x18\t \x01(\fR\rkeyCommitment\"\xfd\x01\n" +
+	"\x0ekey_commitment\x18\t \x01(\fR\rkeyCommitment\"\x96\x02\n" +
 	"\bMetadata\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\x04R\tmessageId\x12\x17\n" +
@@ -438,7 +448,8 @@ const file_envelope_proto_rawDesc = "" +
 	"\rsender_device\x18\x04 \x01(\tR\fsenderDevice\x12/\n" +
 	"\x04kind\x18\x05 \x01(\x0e2\x1b.tima.crypto.v1.ContentKindR\x04kind\x12+\n" +
 	"\x12created_at_unix_ms\x18\x06 \x01(\x03R\x0fcreatedAtUnixMs\x12\x19\n" +
-	"\breply_to\x18\a \x01(\x04R\areplyTo\"\x85\x01\n" +
+	"\breply_to\x18\a \x01(\x04R\areplyTo\x12\x17\n" +
+	"\aedit_of\x18\b \x01(\x04R\x06editOf\"\x85\x01\n" +
 	"\n" +
 	"EscrowBlob\x12\x19\n" +
 	"\bmlkem_ct\x18\x01 \x01(\fR\amlkemCt\x12.\n" +

@@ -28,6 +28,7 @@
 | `mlkem768_escrow` | ML-KEM-768: keygen(seed) детерминирован (зафиксирован sha256 pk); ct=1088; инвариант `decap(ct,sk)=shared` | Инвариант, не ct |
 | `message_body` | Protobuf-байты `MessageBody` (Wire, заморожены 2026-07-12 на первом зелёном прогоне Kotlin) — референс для Go | Точные байты |
 | `media_chunk_keys` | `chunk_key[i] = HKDF-SHA256(media_key, salt пустой, "chunk:"+i, 32)` — чанкование медиа | Точные байты |
+| `canonical_bytes_v3`, `group_message_canonical_v3` | Правка (ADR-0045): номер исправляемого сообщения хвостом подписываемых байт — личное и группа. Посчитаны `node:crypto`, `gen/edit-v3.mjs` (дописывает только эти два) | Точные байты |
 | `markup_json` | JSON разметки образцового сообщения редактора (ADR-0044): ряд, ячейки, картинка, таблица с объединением, подкладка, маркер — байты `MessageBody.markup` (заморожены 2026-10-18 на первом зелёном прогоне Kotlin, `MarkupVectorTest`) | Точные байты |
 
 ## ~~Открыто~~: `markup_json` (ADR-0011, Р5б) — **заморожен 2026-10-18** (ADR-0044)
