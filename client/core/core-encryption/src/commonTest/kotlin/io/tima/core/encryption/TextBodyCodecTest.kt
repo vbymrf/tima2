@@ -22,6 +22,37 @@ class TextBodyCodecTest {
     }
 
     @Test
+    fun набранное_с_знаками_приходит_оформленным() {
+        // ПЛАН-(РС) РС2–РС4: набранные знаки — в узлы и разметку, на приёме — блоки для экрана.
+        val line = TextBodyCodec.decodeLine(TextBodyCodec.encodeTyped("# Поход\nСбор **в 9:00**\n- вода\n- зонт"))!!
+        assertEquals("Поход\nСбор в 9:00\nвода\nзонт", line.text, "текст для списка и поиска — без знаков, по строкам")
+        val blocks = line.rich!!.blocks
+        assertTrue(blocks[0] is io.tima.domain.chat.RichBlock.Heading)
+        val paragraph = blocks[1] as io.tima.domain.chat.RichBlock.Paragraph
+        assertEquals("Сбор в 9:00", paragraph.text.text)
+        assertEquals(io.tima.domain.chat.SpanKind.BOLD, paragraph.text.spans.single().kind)
+        assertEquals(2, (blocks[2] as io.tima.domain.chat.RichBlock.Bullets).items.size)
+    }
+
+    @Test
+    fun набранное_без_знаков_уходит_без_оформления() {
+        val line = TextBodyCodec.decodeLine(TextBodyCodec.encodeTyped("просто текст"))!!
+        assertEquals("просто текст", line.text)
+        assertEquals(null, line.rich)
+        // То же тело, что у прежнего пути: 99% сообщений не дорожают (ADR-0011 §3).
+        assertEquals(TextBodyCodec.encodeText("просто текст").toList(), TextBodyCodec.encodeTyped("просто текст").toList())
+    }
+
+    @Test
+    fun знаки_без_разбора_когда_оформление_не_проходит_проверку() {
+        // Узлов больше 4096 знаков — строгая проверка не пропустит; уходит текстом как есть.
+        val long = "**" + "а".repeat(5000) + "**"
+        val line = TextBodyCodec.decodeLine(TextBodyCodec.encodeTyped(long))!!
+        assertEquals(long, line.text)
+        assertEquals(null, line.rich)
+    }
+
+    @Test
     fun пустое_тело_не_роняет_разбор() {
         // Нечитаемое сообщение — обычное состояние входящей машины, а не поломка.
         assertTrue(TextBodyCodec.decode(ByteArray(0)).isFailure)

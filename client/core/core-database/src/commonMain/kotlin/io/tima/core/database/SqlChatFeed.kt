@@ -58,15 +58,21 @@ class SqlChatFeed(
             // Расшифровка ленты — не на главном потоке (см. SqlChatsFeed.list).
             .flowOn(Dispatchers.Default)
 
-    private fun Messages.toLine() = ChatLine(
-        dedupKey = dedup_key,
-        chatId = chat_id,
-        display = displayOf(direction, state, system),
+    private fun Messages.toLine(): ChatLine {
         // Два шага, и порядок обязателен: сначала открыть поле ключом покоя, потом
         // разобрать тело кодеком. Любой из шагов может не удаться, и тогда текста нет —
         // строка остаётся в переписке нечитаемой. Одна испорченная запись не должна
-        // лишать человека всей истории.
-        text = lineText(direction, state, body_enc, system),
+        // лишать человека всей истории. Разбор один — и текст, и оформление (ПЛАН-(РС) РС4).
+        val decoded = lineBody(direction, state, body_enc, system)
+        return toLine(decoded)
+    }
+
+    private fun Messages.toLine(decoded: io.tima.domain.chat.DecodedLine?) = ChatLine(
+        dedupKey = dedup_key,
+        chatId = chat_id,
+        display = displayOf(direction, state, system),
+        text = decoded?.text,
+        rich = decoded?.rich,
         outgoing = own(direction, sender_id),
         // Серверное время, если сообщение дошло; иначе часы устройства. Они врут, но
         // других на момент составления нет.
@@ -105,11 +111,11 @@ class SqlChatFeed(
      * только после успешной расшифровки. Поэтому у непринятого и нечитаемого текста нет
      * по определению, и пытаться разобрать конверт кодеком незачем — это не тело.
      */
-    private fun lineText(direction: Long, state: Long, field: ByteArray, system: Long): String? {
+    private fun lineBody(direction: Long, state: Long, field: ByteArray, system: Long): io.tima.domain.chat.DecodedLine? {
         // Служебная строка лежит уже разобранной: конверта у неё не было — её написало
         // само устройство, получив событие сервера.
         if (system == 0L && direction != OUTGOING && !incomingParsed(state)) return null
         val open = cipher.open(field) ?: return null
-        return codec.decodeText(open)
+        return codec.decodeLine(open)
     }
 }

@@ -45,6 +45,12 @@ class SendMessage(
         level: Int = LEVEL_SECRET,
         threadRoot: Long = 0,
         kind: Int = KIND_TEXT,
+        /**
+         * «Знаки md» (ПЛАН-(РС) РС2, Решения §7): включены — набранные знаки становятся
+         * оформлением; выключены — текст уходит как есть. Только у набранного текста
+         * ([KIND_TEXT]): служебное и звонки знаков не разбирают.
+         */
+        marks: Boolean = true,
     ): SendMessageResult {
         require(chatId.isNotBlank()) { "chatId пустой" }
 
@@ -52,7 +58,7 @@ class SendMessage(
         // незачем, а «отправилось ничего» — это ещё и строка в переписке.
         if (text.isBlank()) return SendMessageResult.Empty
 
-        val body = codec.encodeText(text)
+        val body = if (kind == KIND_TEXT && marks) codec.encodeTyped(text) else codec.encodeText(text)
         if (body.size > maxBodyBytes) {
             return SendMessageResult.TooLarge(body.size, maxBodyBytes)
         }
@@ -141,6 +147,19 @@ interface MessageBodyCodec {
     fun encodeText(text: String): ByteArray
 
     /**
+     * Набранный текст с быстрым оформлением (ПЛАН-(РС) РС2): знаки → узлы и разметка. Текст без
+     * знаков уходит так же, как через [encodeText]. По умолчанию — как [encodeText]: заглушки и
+     * фальшивые кодеки тестов оформления не знают.
+     */
+    fun encodeTyped(text: String): ByteArray = encodeText(text)
+
+    /**
+     * Строка переписки из тела: плоский текст и оформление, одним разбором. `null` — тело не
+     * читается (см. [decodeText]). По умолчанию оформления нет.
+     */
+    fun decodeLine(body: ByteArray): DecodedLine? = decodeText(body)?.let { DecodedLine(it, null) }
+
+    /**
      * Обратный ход: текст из тела, лежащего в базе.
      *
      * Не отдельный порт, а вторая половина этого: кодек один на провод и на диск, и
@@ -153,6 +172,9 @@ interface MessageBodyCodec {
      */
     fun decodeText(body: ByteArray): String?
 }
+
+/** Разобранное тело для строки переписки: текст для списка и поиска и оформление для показа. */
+data class DecodedLine(val text: String, val rich: RichContent?)
 
 /**
  * Порт к ключам идемпотентности. Отдельный порт, а не `Random` внутри: тест обязан

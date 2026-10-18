@@ -614,7 +614,10 @@ private fun Bubbled(
     },
 ) {
     val text = line.text
+    val rich = line.rich
     when {
+        // Оформленное (ПЛАН-(РС) РС4) — блоками; обычное — текстом, как было.
+        text != null && rich != null -> RichBody(rich)
         text != null -> Caption(text, fontSize = TimaType.sz4)
 
         // **«Не читается» и «ещё не разобрано» — разные вещи, и путать их нельзя.**

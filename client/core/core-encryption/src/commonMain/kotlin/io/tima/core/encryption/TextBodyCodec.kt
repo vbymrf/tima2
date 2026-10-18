@@ -2,7 +2,10 @@ package io.tima.core.encryption
 
 import io.tima.crypto.MessageContent
 import io.tima.crypto.MessageContentCodec
+import io.tima.crypto.MarkupRules
 import io.tima.crypto.MessageSerializer
+import io.tima.crypto.QuickMarkdown
+import io.tima.domain.chat.DecodedLine
 import io.tima.domain.chat.MessageBodyCodec
 
 /**
@@ -23,6 +26,19 @@ object TextBodyCodec : MessageBodyCodec {
         MessageSerializer.encodeBody(MessageContentCodec.toBody(MessageContent.text(text)))
 
     /**
+     * Набранный текст с быстрым оформлением (ПЛАН-(РС) РС2). Разбор не прошёл строгую проверку
+     * (предел разметки и прочее) — уходит текстом как есть: лучше без оформления, чем никак.
+     */
+    override fun encodeTyped(text: String): ByteArray {
+        val parsed = QuickMarkdown.parse(text)
+        val content = if (MarkupRules.check(parsed, strict = true).isEmpty()) parsed else MessageContent.text(text)
+        return MessageSerializer.encodeBody(MessageContentCodec.toBody(content))
+    }
+
+    override fun decodeLine(body: ByteArray): DecodedLine? =
+        decode(body).getOrNull()?.let { DecodedLine(it.displayText(), RichMapper.from(it)) }
+
+    /**
      * Обратный ход — для входящих.
      *
      * @return содержимое либо неудача. Именно `Result`, а не исключение: нечитаемое
@@ -36,7 +52,7 @@ object TextBodyCodec : MessageBodyCodec {
      * оформления — это хуже, чем с оформлением, и несравнимо лучше, чем пустое место.
      * Разметка приедет вместе с редактором.
      */
-    override fun decodeText(body: ByteArray): String? = decode(body).getOrNull()?.plainText()
+    override fun decodeText(body: ByteArray): String? = decode(body).getOrNull()?.displayText()
 
     fun decode(payload: ByteArray): Result<MessageContent> =
         MessageSerializer.decodeBody(payload).map { MessageContentCodec.fromBody(it) }

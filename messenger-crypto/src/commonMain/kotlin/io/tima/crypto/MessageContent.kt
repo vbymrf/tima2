@@ -16,8 +16,17 @@ data class MessageContent(
     val markup: Markup? = null,
     val media: List<MediaRef> = emptyList(),
 ) {
-    /** Весь текст одной строкой — для превью, поиска и старых клиентов. */
+    /** Весь текст одной строкой — склейка узлов как есть. */
     fun plainText(): String = nodes.joinToString("")
+
+    /**
+     * Текст для показа без оформления — список чатов, поиск, копирование, старые клиенты.
+     *
+     * У сообщения с разметкой узлы — это абзацы, заголовки, пункты, ячейки (ADR-0044 §2): склеенные
+     * встык, «Заголовок» и абзац слиплись бы в одно слово. Поэтому между узлами — перевод строки.
+     * Без разметки узел один, и это тот же текст.
+     */
+    fun displayText(): String = if (hasMarkup) nodes.filter { it.isNotEmpty() }.joinToString("\n") else plainText()
 
     val hasMarkup: Boolean get() = markup != null && markup != Markup.EMPTY
 
@@ -51,7 +60,7 @@ object MessageContentCodec {
 
     /** Содержимое → тело protobuf, с плоским текстом для старых клиентов. */
     fun toBody(content: MessageContent): MessageBody = MessageBody(
-        text = content.plainText(),
+        text = content.displayText(),
         // Сущности старого формата не восстанавливаем: смещения в UTF-16 — ровно то,
         // от чего уходим, и городить их обратно ради переходного периода значило бы
         // тащить их ошибки в новый код.

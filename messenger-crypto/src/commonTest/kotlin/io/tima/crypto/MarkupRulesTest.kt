@@ -133,6 +133,13 @@ class MarkupRulesTest {
     }
 
     @Test
+    fun плоский_текст_оформленного_по_строкам() {
+        val c = QuickMarkdown.parse("# Поход\nСбор в 9:00")
+        assertEquals("Поход\nСбор в 9:00", c.displayText())
+        assertEquals("Поход\nСбор в 9:00", MessageContentCodec.toBody(c).text)
+    }
+
+    @Test
     fun первый_текст_для_списка_и_поиска() {
         assertEquals("Поход в субботу", sample().firstText())
         assertEquals(null, MessageContent(nodes = listOf("", "  ")).firstText())

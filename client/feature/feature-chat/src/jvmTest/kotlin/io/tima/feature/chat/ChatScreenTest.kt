@@ -41,6 +41,27 @@ class ChatScreenTest {
     }
 
     @Test
+    fun оформленное_сообщение_рисуется_блоками() {
+        // ПЛАН-(РС) РС4: то же сообщение со знаками и без — разные картинки.
+        val rich = io.tima.domain.chat.RichContent(
+            listOf(
+                io.tima.domain.chat.RichBlock.Heading(1, io.tima.domain.chat.RichText("Поход")),
+                io.tima.domain.chat.RichBlock.Bullets(
+                    listOf(
+                        io.tima.domain.chat.Bullet(io.tima.domain.chat.RichText("вода")),
+                        io.tima.domain.chat.Bullet(io.tima.domain.chat.RichText("зонт")),
+                    ),
+                ),
+            ),
+        )
+        val plainLine = line("d-1", MessageDisplay.RECEIVED, outgoing = false, text = "Поход\nвода\nзонт")
+        val richLine = plainLine.copy(rich = rich)
+        val plain = capture("чат-без-оформления", WIDTH, HEIGHT, dark = false) { screen(ChatState(lines = listOf(plainLine))) }
+        val formatted = capture("чат-оформление", WIDTH, HEIGHT, dark = false) { screen(ChatState(lines = listOf(richLine))) }
+        assertTrue(plain.difference(formatted) > 0.0, "оформление не видно: заголовок и список нарисованы как текст")
+    }
+
+    @Test
     fun экран_рисуется_в_обеих_темах() {
         val snapshots = bothThemes("чат", WIDTH, HEIGHT) { screen(chat()) }
         val difference = snapshots.getValue("светлая").difference(snapshots.getValue("тёмная"))
