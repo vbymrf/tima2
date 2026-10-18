@@ -78,6 +78,23 @@ func (c *Client) PresignGet(ctx context.Context, key string, ttl time.Duration) 
 	return u.String(), nil
 }
 
+// ChunkKey — ключ куска файла: один кусок — сам ключ, больше — `<ключ>/chunk-N`.
+func ChunkKey(storageKey string, index, total int32) string {
+	if total <= 1 {
+		return storageKey
+	}
+	return fmt.Sprintf("%s/chunk-%d", storageKey, index)
+}
+
+// Delete удаляет объект; отсутствующий — не ошибка: удалять уже нечего.
+func (c *Client) Delete(ctx context.Context, key string) error {
+	err := c.mc.RemoveObject(ctx, c.bucket, key, minio.RemoveObjectOptions{})
+	if err != nil && minio.ToErrorResponse(err).Code == "NoSuchKey" {
+		return nil
+	}
+	return err
+}
+
 // Size возвращает размер объекта или ErrNotFound.
 func (c *Client) Size(ctx context.Context, key string) (int64, error) {
 	info, err := c.mc.StatObject(ctx, c.bucket, key, minio.StatObjectOptions{})

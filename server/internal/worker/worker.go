@@ -12,6 +12,7 @@ import (
 	"tima/server/internal/calls"
 	"time"
 
+	"tima/server/internal/blob"
 	"tima/server/internal/store"
 )
 
@@ -34,6 +35,49 @@ type Worker struct {
 	// вместе с ключом депозитария (умолчание), N > 0 — дней от отправки, store.ContentForever —
 	// бессрочно. Поля депозитария уходят по сроку закона при любом значении.
 	MessageContentDays int
+	// Blobs — объектное хранилище: файлы почтальона по сроку удаляются из него (Решения §6). `nil` —
+	// хранилище не настроено, уборка почтальона не идёт (правило жизненного цикла MinIO на 7 дней —
+	// страховка на этот случай).
+	Blobs *blob.Client
+}
+
+// RunPostman — уборка файлов почтальона раз в [every] (Решения §6: «сборщик раз в минуту»): срок
+// вышел — строка gone, объекты удаляются. Не удалилось — страхует правило MinIO на 7 дней.
+func (w *Worker) RunPostman(ctx context.Context, every time.Duration) {
+	if w.Blobs == nil {
+		log.Print("worker: почтальон не убирается — хранилище не настроено (S3_ENDPOINT)")
+		return
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		if n, err := w.SweepPostman(ctx); err != nil {
+			log.Printf("worker: почтальон: %v", err)
+		} else if n > 0 {
+			log.Printf("worker: почтальон — удалено файлов: %d", n)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// SweepPostman — один проход уборки почтальона.
+func (w *Worker) SweepPostman(ctx context.Context) (int, error) {
+	gone, err := w.Store.TakeExpiredPostman(ctx, 500)
+	if err != nil {
+		return 0, err
+	}
+	for _, m := range gone {
+		for i := int32(0); i < m.ChunkCount; i++ {
+			if err := w.Blobs.Delete(ctx, blob.ChunkKey(m.StorageKey, i, m.ChunkCount)); err != nil {
+				log.Printf("worker: почтальон %s кусок %d: %v", m.MediaID, i, err)
+			}
+		}
+	}
+	return len(gone), nil
 }
 
 // wholeDays — длительность в целых сутках. Сроки задаются днями и в переменных

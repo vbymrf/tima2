@@ -128,8 +128,30 @@ func runWorker() {
 		// такие строки не трогает вовсе: закрывать их по одному возрасту значило бы
 		// однажды оборвать живой разговор.
 		Rooms: livekitRooms(),
+		// Файлы почтальона по сроку — из хранилища (Решения §6).
+		Blobs: workerBlobs(ctx),
 	}
+	// Почтальон — раз в минуту, отдельно от часовой уборки: час на скачивание меряется минутами.
+	go w.RunPostman(ctx, time.Minute)
 	w.Run(ctx, interval)
+}
+
+// workerBlobs — клиент хранилища для уборщика; `nil`, если S3_ENDPOINT не задан.
+func workerBlobs(ctx context.Context) *blob.Client {
+	endpoint := os.Getenv("S3_ENDPOINT")
+	if endpoint == "" {
+		return nil
+	}
+	bucket := os.Getenv("S3_BUCKET")
+	if bucket == "" {
+		bucket = "media"
+	}
+	bl, err := blob.New(ctx, endpoint, os.Getenv("S3_PUBLIC_ENDPOINT"), os.Getenv("S3_ACCESS_KEY"), os.Getenv("S3_SECRET_KEY"), bucket)
+	if err != nil {
+		log.Printf("worker: хранилище не подключилось: %v", err)
+		return nil
+	}
+	return bl
 }
 
 // livekitRooms — клиент управления комнатами для уборщика. `nil`, если LiveKit не
