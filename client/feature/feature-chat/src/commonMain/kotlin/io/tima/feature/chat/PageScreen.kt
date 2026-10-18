@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import io.tima.core.ui.Caption
+import androidx.compose.ui.platform.testTag
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
 import io.tima.core.ui.Name
@@ -57,8 +58,18 @@ fun PageScreen(
     /** Закрыть или открыть обсуждение одной записи: `(postId, закрыть)`. */
     onPostComments: ((Long, Boolean) -> Unit)? = null,
     onCloseTrouble: () -> Unit = {},
+    /** «Написать» на своей странице — редактор (Решения §10.2). `null` — кнопки нет. */
+    onWrite: (() -> Unit)? = null,
 ) = Column(modifier.fillMaxSize()) {
     val words = Tima.words.page
+    if (onWrite != null) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            Chip(Tima.words.editor.pageWrite, kind = ChipKind.Selected, onClick = onWrite, modifier = Modifier.testTag(PAGE_COMPOSE_TAG))
+        }
+    }
     state.trouble?.let { text ->
         Row(
             modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about3),
@@ -179,3 +190,6 @@ private fun PageRow(
         }
     }
 }
+
+/** «Написать» на своей странице (СЦЕНАРИИ-ПО-ОКНАМ). */
+const val PAGE_COMPOSE_TAG = "page:compose"

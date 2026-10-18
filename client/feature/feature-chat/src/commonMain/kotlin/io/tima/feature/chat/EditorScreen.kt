@@ -35,6 +35,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.foundation.gestures.animateScrollBy
+import io.tima.core.media.fileDrop
+import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -162,6 +173,10 @@ fun EditorScreen(
     onButton: ((String) -> Boolean)? = null,
     /** Сказать одно предложение в разделителе — «картинка не загрузилась» и подобное. */
     notice: String? = null,
+    /** ПК: стрелки ленты в разделителе (§10.2). */
+    desktop: Boolean = false,
+    /** Файлы, перетащенные в редактор (ПК); `null` — не принимаем. */
+    onFiles: ((List<io.tima.core.media.PickedFile>) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val w = Tima.words.editor
@@ -178,6 +193,9 @@ fun EditorScreen(
     var hint by remember { mutableStateOf<String?>(null) }
     val recent = remember { mutableStateListOf<String>() }
     val doc = model.doc
+    val ribbonScroll = rememberScrollState()
+    val ribbonScope = androidx.compose.runtime.rememberCoroutineScope()
+    var dropping by remember { mutableStateOf(false) }
     // Таблица шире пузыря — красная и просьба изменить; отправить нельзя (§10.3).
     val wide = remember(doc) { io.tima.domain.chat.TableFit.tooWide(doc) }
     val trouble = remember(doc, wide) {
@@ -225,7 +243,10 @@ fun EditorScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(colors.surface).imePadding().testTag(EditorTags.WINDOW)) {
+    Column(
+        Modifier.fillMaxSize().background(colors.surface).imePadding().testTag(EditorTags.WINDOW)
+            .onPreviewKeyEvent { e -> editorKeys(e, model, trouble.isEmpty(), onSend = { onSend(model.doc) }, onBack = { onBack(model.doc) }) },
+    ) {
         // ── Шапка: ‹ · название · ↶ ↷ · цифра уровня · ➤ (§10.1) ──
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = TimaSpacing.about2),
@@ -255,7 +276,7 @@ fun EditorScreen(
                 )
             }
         }
-        Ribbon(tab, marksOn = doc.marks, onPress = ::press)
+        Ribbon(tab, marksOn = doc.marks, scroll = ribbonScroll, onPress = ::press)
         if (paragraphMenu) ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); paragraphMenu = false }
         stylePanel?.let { StylePanel(it, model, problems) }
 
@@ -264,7 +285,16 @@ fun EditorScreen(
             Modifier.fillMaxWidth().background(colors.functional).padding(horizontal = TimaSpacing.about4, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Tertiary(notice ?: hint ?: w.selected(selectedKind(model)), lineOne = true)
+            Box(Modifier.weight(1f)) { Tertiary(notice ?: hint ?: w.selected(selectedKind(model)), lineOne = true) }
+            // ПК: стрелки ленты в разделителе между кнопками и сообщением (§10.2).
+            if (desktop) {
+                HeaderGlyph("‹", ribbonScroll.canScrollBackward, "editor:ribbon.back") {
+                    ribbonScope.launch { ribbonScroll.animateScrollBy(-RIBBON_STEP) }
+                }
+                HeaderGlyph("›", ribbonScroll.canScrollForward, "editor:ribbon.forward") {
+                    ribbonScope.launch { ribbonScroll.animateScrollBy(RIBBON_STEP) }
+                }
+            }
         }
         if (model.hasSelection) SelectionStrip { kind -> model.inline(kind) }
 
@@ -273,7 +303,10 @@ fun EditorScreen(
         drag.forget(doc.items.size)
         Box(
             Modifier.weight(1f).fillMaxWidth()
-                .onGloballyPositioned { drag.origin = it.boundsInRoot().topLeft },
+                .onGloballyPositioned { drag.origin = it.boundsInRoot().topLeft }
+                .then(if (onFiles != null) Modifier.fileDrop(onHover = { dropping = it }, onFiles = onFiles) else Modifier)
+                .then(if (dropping) Modifier.border(3.dp, colors.navigation) else Modifier)
+                .testTag("editor:body"),
         ) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), enabled = drag.from == null).padding(TimaSpacing.about3)) {
                 if (showPreview) {
@@ -320,6 +353,42 @@ private fun selectedKind(model: EditorModel): String {
         }
         is ComposedItem.Widget -> "widget"
         else -> "text"
+    }
+}
+
+/** На сколько сдвигается лента стрелкой на ПК — три кнопки. */
+private const val RIBBON_STEP = 180f
+
+/**
+ * Сочетания клавиш редактора (Решения §10.2, ПК): Ctrl+B, I, U — жирный, курсив, подчёркнутый;
+ * Ctrl+Shift+X — зачёркнутый, Ctrl+Shift+H — маркер, Ctrl+E — код; Ctrl+1…3 — заголовки, Ctrl+0 —
+ * абзац; Ctrl+Z, Ctrl+Y и Ctrl+Shift+Z — отменить и повторить; Ctrl+Enter — отправить; Esc — назад.
+ */
+internal fun editorKeys(e: androidx.compose.ui.input.key.KeyEvent, model: EditorModel, canSend: Boolean, onSend: () -> Unit, onBack: () -> Unit): Boolean =
+    e.type == KeyEventType.KeyDown && editorCommand(e.key, e.isCtrlPressed || e.isMetaPressed, e.isShiftPressed, model, canSend, onSend, onBack)
+
+/** Сама команда по клавише — отдельно от события, чтобы проверять её без окна. */
+internal fun editorCommand(key: Key, ctrl: Boolean, shift: Boolean, model: EditorModel, canSend: Boolean, onSend: () -> Unit, onBack: () -> Unit): Boolean {
+    fun mark(kind: InlineKind): Boolean { model.inline(kind); return true }
+    fun heading(kind: ParagraphKind): Boolean { model.paragraph(kind); return true }
+    return when {
+        key == Key.Escape -> { onBack(); true }
+        !ctrl -> false
+        key == Key.B -> mark(InlineKind.BOLD)
+        key == Key.I -> mark(InlineKind.ITALIC)
+        key == Key.U -> mark(InlineKind.UNDERLINE)
+        shift && key == Key.X -> mark(InlineKind.STRIKE)
+        shift && key == Key.H -> mark(InlineKind.HIGHLIGHT)
+        key == Key.E -> mark(InlineKind.CODE)
+        key == Key.One -> heading(ParagraphKind.HEADING1)
+        key == Key.Two -> heading(ParagraphKind.HEADING2)
+        key == Key.Three -> heading(ParagraphKind.HEADING3)
+        key == Key.Zero -> heading(ParagraphKind.PARAGRAPH)
+        shift && key == Key.Z -> { model.redo(); true }
+        key == Key.Z -> { model.undo(); true }
+        key == Key.Y -> { model.redo(); true }
+        key == Key.Enter -> { if (canSend && !model.doc.isEmpty) onSend(); true }
+        else -> false
     }
 }
 
@@ -376,12 +445,12 @@ private fun LevelList(levels: List<MessageCircle>, current: Int, onPick: (Int) -
 
 /** Лента: шесть кнопок и половина седьмой — видно, что дальше есть ещё (§10.2). */
 @Composable
-private fun Ribbon(tab: EditorTab, marksOn: Boolean, onPress: (String) -> Unit) {
+private fun Ribbon(tab: EditorTab, marksOn: Boolean, scroll: androidx.compose.foundation.ScrollState, onPress: (String) -> Unit) {
     val colors = Tima.colors
     val w = Tima.words.editor
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val width = maxWidth / 6.5f
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(scroll).padding(vertical = 4.dp)) {
             for (key in tab.buttons) {
                 val on = key == "marks" && marksOn
                 Column(

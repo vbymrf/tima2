@@ -308,6 +308,9 @@ interface ComposedBodies {
     fun save(doc: ComposedDoc): String
 
     fun load(saved: String): ComposedDoc?
+
+    /** Открытое тело записи страницы; есть файлы (картинка) — `null`: у записи канала их нет. */
+    fun open(doc: ComposedDoc): OpenBody? = null
 }
 
 /** Чем кончилась отправка собранного. */

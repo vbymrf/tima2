@@ -15,6 +15,7 @@ import io.tima.domain.chat.PageEntry
 import io.tima.domain.chat.PageStep
 import io.tima.domain.chat.UserPages
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 
 /**
@@ -106,6 +107,11 @@ class UserPagesOverHttp(
         }
     }
 
+    /** Текст своей записи узлами: перевод строки между узлами, как у сообщения с разметкой. */
+    private fun nodesText(row: JsonObject): String? = runCatching {
+        row["nodes"]?.jsonArray?.mapNotNull { (it as? JsonPrimitive)?.content }
+    }.getOrNull()?.filter { it.isNotEmpty() }?.joinToString("\n")?.takeIf { it.isNotEmpty() }
+
     private fun entriesOf(body: JsonObject?): List<PageEntry> {
         val items = runCatching { body?.get("items")?.jsonArray }.getOrNull() ?: return emptyList()
         return items.mapNotNull { element ->
@@ -120,7 +126,9 @@ class UserPagesOverHttp(
                 text = row.str("payload")
                     ?.let { runCatching { decodeBase64Url(it) }.getOrNull() }
                     ?.takeIf { it.isNotEmpty() }
-                    ?.let { codec.decodeText(it) },
+                    ?.let { codec.decodeText(it) }
+                    // Своя запись — без конверта: текст узлами (запись из редактора страницы).
+                    ?: nodesText(row),
                 carriedBy = row.str("carried_by").orEmpty(),
                 sourceTitle = row.str("source_title").orEmpty(),
                 refKind = row.str("ref_kind").orEmpty(),

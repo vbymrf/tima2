@@ -48,4 +48,15 @@ class ComposedInsertTest {
         assertEquals(listOf("План", "в 9:00, 2*3", "раз"), content.nodes)
         assertEquals(listOf(BlockType.HEADING, BlockType.PARAGRAPH, BlockType.LIST), content.markup!!.blocks.map { it.type })
     }
+
+    @Test
+    fun запись_страницы_открытым_телом_без_файлов() {
+        val doc = ComposedDoc(listOf(ComposedItem.Text("# Сбор\nв **9**")))
+        val open = assertNotNull(bodies.open(doc))
+        assertEquals(listOf("Сбор", "в 9"), open.nodes)
+        assertEquals("Сбор\nв 9", open.text)
+        assertTrue("\"n\"" in open.markup, "разметка — компактным JSON")
+        val withImage = ComposedDoc(listOf(ComposedItem.Widget(ComposedWidget.Image(OutMedia("m", ByteArray(32), "image/jpeg", 10, 10)))))
+        assertEquals(null, bodies.open(withImage), "у записи канала нет файлов")
+    }
 }

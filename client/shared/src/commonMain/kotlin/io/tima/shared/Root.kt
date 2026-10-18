@@ -1271,7 +1271,13 @@ private fun App(
     val social = remember { SocialStore(GroupsOverHttp(network.groups), scope, network.communities) }
     // Окно 5 «Страница»: своя лента — своё и принесённое. Один Store на приложение: одна
     // страница у человека, и второй показывал бы то же самое со своим отставанием.
-    val page = remember { PageStore(network.pages, scope, switches = network.commentSwitches) }
+    val page = remember {
+        PageStore(
+            network.pages, scope, switches = network.commentSwitches,
+            // Своя запись — тем же редактором, что сообщение (Решения §10.2).
+            writer = io.tima.domain.chat.WriteToPage(network.pagePosts, io.tima.core.encryption.ComposedBodiesOverKodium),
+        )
+    }
 
     // Звонок: окно 0 живёт, пока идёт разговор (макет 21-call.md, решение заказчика
     // 2026-09-19). Движок приходит от платформы — общий код Context не видит; `null`
@@ -3469,7 +3475,9 @@ private fun App(
                             onPageComments = page::commentsOnPage,
                             onPostComments = { postId, closed -> page.commentsOnPost(postId, closed) },
                             onCloseTrouble = page::troubleDismissed,
+                            onWrite = if (page.canWrite && state.channelId.isNotBlank()) page::openEditor else null,
                         )
+                        if (state.editorOpen) PageEditor(page, state, scope)
                     },
                 )
             }
@@ -3799,6 +3807,7 @@ private fun App(
             is Where.Chat -> {
                 {
                     Chat(
+                        desktop = platform == Platform.DESKTOP,
                         liveStates = assembled.liveStates,
                         onPullGroupNew = { id -> assembled.receiver.pullGroupNew(id) },
                         myDeviceId = assembled.session.deviceId,
@@ -4141,6 +4150,8 @@ private fun App(
 private fun Chat(
     environment: Environment,
     network: ChatPorts,
+    /** ПК: стрелки ленты редактора и перетаскивание файлов (Решения §10.2). */
+    desktop: Boolean = false,
     /** «Доставлено», «прочитано», «печатает», «в сети» — личной переписке (ПЛАН-(ОП)). */
     liveStates: LiveStates? = null,
     /** Забрать новое открытой группы (ПЛАН-(ОУ) ОУ6) → номер позднейшего на сервере. */
@@ -4669,8 +4680,8 @@ private fun Chat(
         val editorUploads = remember { SealedUploads { network.media } }
         // Исходные файлы картинок черновика (Решения §3): сменилась ширина места — картинка заново из исходного.
         val editorSources = remember { mutableMapOf<String, ByteArray>() }
-        val editorPicture = io.tima.core.media.rememberPhotosPicker(1) { list ->
-            val picked = list.firstOrNull() ?: return@rememberPhotosPicker
+        // Картинка — в документ: под ширину ряда, закрыта своим ключом, исходный файл — для смены ширины.
+        fun insertPicture(picked: io.tima.core.media.PickedImage) {
             scope.launch {
                 val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(picked.bytes) }
                 val up = prepared?.let { editorUploads.upload(it.full, "image/jpeg", null, null) }
@@ -4683,6 +4694,7 @@ private fun Chat(
                 }
             }
         }
+        val editorPicture = io.tima.core.media.rememberPhotosPicker(1) { list -> list.firstOrNull()?.let(::insertPicture) }
         val editorContact = io.tima.core.media.rememberContactPicker { c -> c?.let { put(io.tima.domain.chat.ComposedWidget.Contact(it.name, it.phone)) } }
         val noPlaceAccess = Tima.words.chat.placeNoAccess
         val editorPlace = io.tima.core.media.rememberMyPlace { p ->
@@ -4728,6 +4740,17 @@ private fun Chat(
                 }
             },
             notice = editorNotice,
+            desktop = desktop,
+            // Перетащили файлы (ПК): картинка — в сообщение; прочее — отдельным сообщением вне пузыря (Решения §2).
+            onFiles = { files ->
+                for (f in files) {
+                    when {
+                        f.mime.startsWith("image/") -> insertPicture(io.tima.core.media.PickedImage(f.bytes, f.mime))
+                        group -> editorNotice = ew.filesByLink
+                        else -> { store.sendFile(f.bytes, f.mime, f.name); editorNotice = ew.fileSentApart(f.name) }
+                    }
+                }
+            },
             // Раздел «Вставка» (Решения §10.4): виджет встаёт после куска, где курсор.
             onButton = { key ->
                 editorNotice = null
@@ -4742,62 +4765,20 @@ private fun Chat(
             },
         )
         editorAsk?.let { ask ->
-            val cw = Tima.words.chat
-            val (title, fields, options) = when (ask) {
-                "link" -> Triple(cw.linkAsk, listOf(ew.linkAddress, ew.linkTitle), listOf("plain", "button", "card").map { it to ew.linkMode(it) })
-                "cloud" -> Triple(cw.linkPlace, listOf(ew.linkAddress, ew.linkTitle), listOf("file", "document", "audio", "video").map { it to cw.cloudKind(it) })
-                "place" -> Triple(cw.attachItem("place"), listOf(cw.placeAsk), emptyList())
-                else -> Triple(cw.attachItem("contact"), listOf(cw.contact, "+7"), emptyList())
-            }
-            io.tima.feature.chat.AskSheet(
-                title = title,
-                fields = fields,
-                ok = cw.ok,
-                cancel = cw.cancel,
-                options = options,
-                onCancel = { editorAsk = null },
-                onDone = { v ->
-                    val url = v[0].trim().let { if (it.isEmpty() || "://" in it) it else "https://$it" }
-                    when (ask) {
-                        "link" -> if (url.isNotEmpty()) {
-                            editorAsk = null
-                            val mode = v.getOrNull(2) ?: "plain"
-                            if (mode != "card") {
-                                put(io.tima.domain.chat.ComposedWidget.Link(url, v[1], mode))
-                            } else {
-                                // Карточку собирает отправитель (Решения §4): страница — сюда, картинка перекодируется и уходит в тело.
-                                scope.launch {
-                                    val card = linkCards.card(url)
-                                    if (card == null) {
-                                        editorNotice = ew.cardFailed
-                                        put(io.tima.domain.chat.ComposedWidget.Link(url, v[1], "button"))
-                                        return@launch
-                                    }
-                                    val prepared = card.image?.let { bytes ->
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(bytes) }
-                                    }
-                                    val up = prepared?.let { editorUploads.upload(it.full, "image/jpeg", null, null) }
-                                    val image = if (prepared != null && up != null) {
-                                        io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", prepared.width, prepared.height, prepared.full.size.toLong())
-                                    } else null
-                                    put(io.tima.domain.chat.ComposedWidget.Link(url, v[1].ifBlank { card.title }, "card", card.description, image))
-                                }
-                            }
-                        }
-                        "cloud" -> if (url.isNotEmpty()) {
-                            editorAsk = null
-                            put(io.tima.domain.chat.ComposedWidget.Cloud(url, v.getOrNull(2) ?: "file", v[1]))
-                        }
-                        "place" -> io.tima.core.media.PlaceText.parse(v[0])?.let { (lat, lon) ->
-                            editorAsk = null
-                            put(io.tima.domain.chat.ComposedWidget.Place(lat, lon))
-                        } ?: run { editorNotice = cw.placeAsk }
-                        else -> if (v[0].isNotBlank() || v[1].isNotBlank()) {
-                            editorAsk = null
-                            put(io.tima.domain.chat.ComposedWidget.Contact(v[0], v[1]))
-                        }
-                    }
+            EditorAskSheet(
+                ask = ask,
+                scope = scope,
+                cards = linkCards,
+                cardImage = { bytes ->
+                    val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(bytes) }
+                    val up = prepared?.let { editorUploads.upload(it.full, "image/jpeg", null, null) }
+                    if (prepared != null && up != null) {
+                        io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", prepared.width, prepared.height, prepared.full.size.toLong())
+                    } else null
                 },
+                put = ::put,
+                onNotice = { editorNotice = it },
+                onClose = { editorAsk = null },
             )
         }
         when (editorChoice) {

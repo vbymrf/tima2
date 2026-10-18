@@ -509,6 +509,9 @@ class Network(
     override val pages: UserPagesOverHttp =
         UserPagesOverHttp(link.route, link.client, token = { token() }, codec = TextBodyCodec)
 
+    override val pagePosts: io.tima.domain.chat.PagePosts =
+        io.tima.core.network.PagePostsOverHttp(link.route, link.client, token = { token() })
+
     /**
      * Комментарии: текст приходит открытым, кодек здесь не нужен вовсе.
      *

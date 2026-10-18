@@ -47,7 +47,54 @@ class PageStore(
      * жизнь store, и после смены языка беда пришла бы на прежнем.
      */
     private val words: () -> Words = { CurrentWords.value },
+    /** Своя запись редактором (Решения §10.2). `null` — страница чужая или писать нечем. */
+    private val writer: io.tima.domain.chat.WriteToPage? = null,
 ) {
+
+    /** Можно ли писать на этой странице — кнопка «Написать». */
+    val canWrite: Boolean get() = writer != null && userId == ReadPage.PAGE_MINE
+
+    /** Открыть редактор; недописанное в этот заход — на месте. */
+    fun openEditor() {
+        if (!canWrite) return
+        _state.value = _state.value.copy(editorOpen = true, trouble = null)
+    }
+
+    /** «Назад» из редактора: документ остаётся до следующего открытия. */
+    fun editorBack(doc: io.tima.domain.chat.ComposedDoc) {
+        _state.value = _state.value.copy(editorOpen = false, draft = doc.takeUnless { it.isEmpty })
+    }
+
+    /** Опубликовать собранное: удалось — окно закрывается и страница перечитывается. */
+    fun publish(doc: io.tima.domain.chat.ComposedDoc) {
+        val w = writer ?: return
+        val channel = _state.value.channelId
+        if (channel.isBlank() || _state.value.publishing) return
+        _state.value = _state.value.copy(publishing = true)
+        scope.launch {
+            val result = w.write(channel, doc, LEVEL_PAGE)
+            val ew = words().editor
+            _state.value = _state.value.copy(
+                publishing = false,
+                editorOpen = result !is io.tima.domain.chat.PageWriteResult.Published && _state.value.editorOpen,
+                draft = if (result is io.tima.domain.chat.PageWriteResult.Published) null else doc,
+                editorNotice = when (result) {
+                    is io.tima.domain.chat.PageWriteResult.Published -> null
+                    io.tima.domain.chat.PageWriteResult.Empty -> null
+                    is io.tima.domain.chat.PageWriteResult.Invalid -> ew.cannotSend + ": " + result.problems.firstOrNull().orEmpty()
+                    is io.tima.domain.chat.PageWriteResult.TableTooWide -> ew.tableTooWide(result.maxColumns)
+                    io.tima.domain.chat.PageWriteResult.HasFiles -> ew.pageHasFiles
+                    io.tima.domain.chat.PageWriteResult.Offline -> words().trouble.offline
+                    is io.tima.domain.chat.PageWriteResult.Refused -> words().trouble.refused(result.reason)
+                },
+            )
+            if (result is io.tima.domain.chat.PageWriteResult.Published) refresh()
+        }
+    }
+
+    fun editorNoticeShown(text: String?) {
+        _state.value = _state.value.copy(editorNotice = text)
+    }
 
     private val read = ReadPage(pages)
     private val carry = CarryToPage(pages)
@@ -170,6 +217,14 @@ class PageStore(
 /** Что видно на странице. */
 data class PageState(
     val entries: List<PageEntry> = emptyList(),
+    /** Редактор записи открыт (своя страница). */
+    val editorOpen: Boolean = false,
+    /** Недописанная запись — до следующего открытия редактора. */
+    val draft: io.tima.domain.chat.ComposedDoc? = null,
+    /** Запись уходит: второе нажатие не шлёт вторую. */
+    val publishing: Boolean = false,
+    /** Одно предложение в разделителе редактора — почему не ушло. */
+    val editorNotice: String? = null,
     /**
      * Канал, которым эта страница является. Пусто — страницы ещё не читали.
      *
@@ -192,3 +247,6 @@ data class PageState(
     val carried: Set<Long> = emptySet(),
     val trouble: String? = null,
 )
+
+/** Уровень записи страницы по умолчанию — «всем» (ADR-0019): страница для того и есть. */
+const val LEVEL_PAGE = 1

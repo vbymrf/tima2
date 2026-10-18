@@ -53,6 +53,12 @@ object ComposedBodiesOverKodium : ComposedBodies {
 
     override fun preview(doc: ComposedDoc): RichContent? = RichMapper.from(content(doc))
 
+    override fun open(doc: ComposedDoc): io.tima.domain.chat.OpenBody? {
+        val c = content(doc)
+        if (c.media.isNotEmpty()) return null
+        return io.tima.domain.chat.OpenBody(c.displayText(), c.nodes, c.markup?.let(Markup::encode).orEmpty())
+    }
+
     /** Содержимое сообщения из документа — для тела, проверки и показа. */
     fun content(doc: ComposedDoc): MessageContent {
         val a = Assembly(doc.marks)

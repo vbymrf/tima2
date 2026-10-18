@@ -103,6 +103,10 @@ interface ChatPorts {
      */
     val pages: UserPages
 
+    /** Своя запись на странице — редактором (Решения §10.2). Умолчание — писать некуда (проверки). */
+    val pagePosts: io.tima.domain.chat.PagePosts
+        get() = io.tima.domain.chat.PagePosts { _, _, _ -> io.tima.domain.chat.PublishStep.Refused("no_page_posts") }
+
     /**
      * Разговор под записью: комментарии канала и страницы (ADR-0024).
      *

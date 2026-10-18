@@ -58,6 +58,16 @@ interface EditorWords {
     fun cutName(key: String): String
     val authorShown: String
     val nothingChosen: String
+    /** Перетащили файл в редактор группы: файлы там — только ссылкой на облако (Решения §2). */
+    val filesByLink: String
+    /** Перетащенный файл ушёл отдельным сообщением вне пузыря (Решения §2). */
+    fun fileSentApart(name: String): String
+
+    // ── Личная страница (§10.2) ──
+    val pageWrite: String
+    val pageHasFiles: String
+    val pagePublished: String
+    val pageNoPictures: String
 }
 
 object RussianEditorWords : EditorWords {
@@ -194,6 +204,12 @@ object RussianEditorWords : EditorWords {
     override fun cutName(key: String) = if (key == "cut") "Обрезать" else "Полностью"
     override val authorShown = "Имя владельца"
     override val nothingChosen = "Выберите ряд, ячейку или виджет"
+    override val filesByLink = "В группе файлы — только ссылкой на облако: «Вставка» → «Облако»"
+    override fun fileSentApart(name: String) = "«$name» ушёл отдельным сообщением: файлы живут вне пузыря"
+    override val pageWrite = "Написать"
+    override val pageHasFiles = "На странице записи без картинок: уберите картинку или карточку с картинкой"
+    override val pagePublished = "Запись на странице"
+    override val pageNoPictures = "Картинок в записи страницы пока нет"
 }
 
 object EnglishEditorWords : EditorWords {
@@ -330,6 +346,12 @@ object EnglishEditorWords : EditorWords {
     override fun cutName(key: String) = if (key == "cut") "Trim" else "Full"
     override val authorShown = "Owner's name"
     override val nothingChosen = "Choose a row, cell or widget"
+    override val filesByLink = "In a group, files go only as a cloud link: Insert → Cloud"
+    override fun fileSentApart(name: String) = "\"$name\" was sent as a separate message: files live outside the bubble"
+    override val pageWrite = "Write"
+    override val pageHasFiles = "Page posts have no pictures: remove the picture or the card with a picture"
+    override val pagePublished = "Posted on the page"
+    override val pageNoPictures = "Page posts cannot have pictures yet"
 }
 
 object SpanishEditorWords : EditorWords {
@@ -466,4 +488,10 @@ object SpanishEditorWords : EditorWords {
     override fun cutName(key: String) = if (key == "cut") "Recortar" else "Completo"
     override val authorShown = "Nombre del dueño"
     override val nothingChosen = "Elige una fila, celda o widget"
+    override val filesByLink = "En un grupo, los archivos solo van como enlace a la nube: Insertar → Nube"
+    override fun fileSentApart(name: String) = "\"$name\" se envió como mensaje aparte: los archivos van fuera de la burbuja"
+    override val pageWrite = "Escribir"
+    override val pageHasFiles = "Las publicaciones de la página no llevan imágenes: quita la imagen o la tarjeta con imagen"
+    override val pagePublished = "Publicado en la página"
+    override val pageNoPictures = "Las publicaciones de la página aún no admiten imágenes"
 }
