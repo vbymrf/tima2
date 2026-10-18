@@ -315,6 +315,8 @@ sealed interface ComposedResult {
     data class Queued(val dedupKey: String) : ComposedResult
     data object Empty : ComposedResult
     data class Invalid(val problems: List<String>) : ComposedResult
+    /** Таблица шире пузыря: «99» не помещается в ячейку (Решения §10.3). */
+    data class TableTooWide(val maxColumns: Int) : ComposedResult
 }
 
 /** Отправка собранного в редакторе: тело — порт, очередь — та же, что у набранного. */
@@ -325,6 +327,7 @@ class SendComposed(
 ) {
     fun send(chatId: String, doc: ComposedDoc, level: Int, reply: ReplyTarget? = null): ComposedResult {
         if (doc.isEmpty) return ComposedResult.Empty
+        if (TableFit.tooWide(doc).isNotEmpty()) return ComposedResult.TableTooWide(TableFit.maxColumns())
         val body = bodies.encode(doc, reply) ?: return ComposedResult.Invalid(bodies.problems(doc))
         val key = keys.newKey()
         queue.enqueue(key, chatId, body, doc.level ?: level, 0, KIND_TEXT)

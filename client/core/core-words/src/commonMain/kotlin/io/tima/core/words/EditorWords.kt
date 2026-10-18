@@ -44,6 +44,20 @@ interface EditorWords {
     fun pickElsewhere(serverId: Long): String
     /** Пометка на кнопке ссылки без шифрования (`http://`). */
     val unsafeLink: String
+
+    // ── Стиль (§10.2) ──
+    /** Имя цвета палитры: `amber-soft` и прочие (`MarkupRules.PALETTE`). */
+    fun paletteName(key: String): String
+    /** Ступень свойства: `size` — `smaller`…, `align`, `valign`, `padding`, `divider`. */
+    fun stepName(key: String, value: String): String
+    val none: String
+    val apply: String
+    val jsonBad: String
+    fun tableTooWide(max: Int): String
+    /** Вставленное из подборки: `full`, `cut`. */
+    fun cutName(key: String): String
+    val authorShown: String
+    val nothingChosen: String
 }
 
 object RussianEditorWords : EditorWords {
@@ -147,6 +161,39 @@ object RussianEditorWords : EditorWords {
     override val picksEmpty = "В подборке пусто: добавьте сообщение из его меню"
     override fun pickElsewhere(serverId: Long) = "Сообщение № $serverId"
     override val unsafeLink = "без шифрования"
+    override fun paletteName(key: String) = when (key.removeSuffix("-soft")) {
+        "text" -> "текст"
+        "surface" -> "фон пузыря"
+        "accent" -> "акцент"
+        "amber" -> "янтарь"
+        "green" -> "зелёный"
+        "blue" -> "синий"
+        "red" -> "красный"
+        "grey" -> "серый"
+        else -> key
+    } + if (key.endsWith("-soft")) ", мягкий" else ""
+    override fun stepName(key: String, value: String) = when (key to value) {
+        "size" to "smaller" -> "Мельче"
+        "size" to "normal", "padding" to "normal" -> "Обычный"
+        "size" to "larger" -> "Крупнее"
+        "align" to "start" -> "Слева"
+        "align" to "center", "valign" to "center" -> "По центру"
+        "align" to "end" -> "Справа"
+        "valign" to "top" -> "Сверху"
+        "valign" to "bottom" -> "Снизу"
+        "padding" to "none" -> "Нет"
+        "padding" to "small" -> "Малый"
+        "padding" to "large" -> "Большой"
+        "divider" to "hidden" -> "Без линии"
+        else -> if (key == "divider") "Линия $value" else value
+    }
+    override val none = "Нет"
+    override val apply = "Применить"
+    override val jsonBad = "Это не JSON из строк: {\"свойство\": \"значение\"}"
+    override fun tableTooWide(max: Int) = "Таблица не помещается: больше $max столбцов — в ячейку не влезет «99». Измените таблицу"
+    override fun cutName(key: String) = if (key == "cut") "Обрезать" else "Полностью"
+    override val authorShown = "Имя владельца"
+    override val nothingChosen = "Выберите ряд, ячейку или виджет"
 }
 
 object EnglishEditorWords : EditorWords {
@@ -250,6 +297,39 @@ object EnglishEditorWords : EditorWords {
     override val picksEmpty = "Picks are empty: add a message from its menu"
     override fun pickElsewhere(serverId: Long) = "Message #$serverId"
     override val unsafeLink = "not encrypted"
+    override fun paletteName(key: String) = when (key.removeSuffix("-soft")) {
+        "text" -> "text"
+        "surface" -> "bubble"
+        "accent" -> "accent"
+        "amber" -> "amber"
+        "green" -> "green"
+        "blue" -> "blue"
+        "red" -> "red"
+        "grey" -> "grey"
+        else -> key
+    } + if (key.endsWith("-soft")) ", soft" else ""
+    override fun stepName(key: String, value: String) = when (key to value) {
+        "size" to "smaller" -> "Smaller"
+        "size" to "normal", "padding" to "normal" -> "Normal"
+        "size" to "larger" -> "Larger"
+        "align" to "start" -> "Left"
+        "align" to "center", "valign" to "center" -> "Center"
+        "align" to "end" -> "Right"
+        "valign" to "top" -> "Top"
+        "valign" to "bottom" -> "Bottom"
+        "padding" to "none" -> "None"
+        "padding" to "small" -> "Small"
+        "padding" to "large" -> "Large"
+        "divider" to "hidden" -> "No line"
+        else -> if (key == "divider") "Line $value" else value
+    }
+    override val none = "None"
+    override val apply = "Apply"
+    override val jsonBad = "Not a JSON of strings: {\"property\": \"value\"}"
+    override fun tableTooWide(max: Int) = "The table does not fit: more than $max columns — \"99\" will not fit in a cell. Change the table"
+    override fun cutName(key: String) = if (key == "cut") "Trim" else "Full"
+    override val authorShown = "Owner's name"
+    override val nothingChosen = "Choose a row, cell or widget"
 }
 
 object SpanishEditorWords : EditorWords {
@@ -353,4 +433,37 @@ object SpanishEditorWords : EditorWords {
     override val picksEmpty = "La selección está vacía: añade un mensaje desde su menú"
     override fun pickElsewhere(serverId: Long) = "Mensaje n.º $serverId"
     override val unsafeLink = "sin cifrado"
+    override fun paletteName(key: String) = when (key.removeSuffix("-soft")) {
+        "text" -> "texto"
+        "surface" -> "burbuja"
+        "accent" -> "acento"
+        "amber" -> "ámbar"
+        "green" -> "verde"
+        "blue" -> "azul"
+        "red" -> "rojo"
+        "grey" -> "gris"
+        else -> key
+    } + if (key.endsWith("-soft")) ", suave" else ""
+    override fun stepName(key: String, value: String) = when (key to value) {
+        "size" to "smaller" -> "Menor"
+        "size" to "normal", "padding" to "normal" -> "Normal"
+        "size" to "larger" -> "Mayor"
+        "align" to "start" -> "Izquierda"
+        "align" to "center", "valign" to "center" -> "Centro"
+        "align" to "end" -> "Derecha"
+        "valign" to "top" -> "Arriba"
+        "valign" to "bottom" -> "Abajo"
+        "padding" to "none" -> "Ninguno"
+        "padding" to "small" -> "Pequeño"
+        "padding" to "large" -> "Grande"
+        "divider" to "hidden" -> "Sin línea"
+        else -> if (key == "divider") "Línea $value" else value
+    }
+    override val none = "Ninguno"
+    override val apply = "Aplicar"
+    override val jsonBad = "No es un JSON de cadenas: {\"propiedad\": \"valor\"}"
+    override fun tableTooWide(max: Int) = "La tabla no cabe: más de $max columnas, \"99\" no cabe en una celda. Cambia la tabla"
+    override fun cutName(key: String) = if (key == "cut") "Recortar" else "Completo"
+    override val authorShown = "Nombre del dueño"
+    override val nothingChosen = "Elige una fila, celda o widget"
 }

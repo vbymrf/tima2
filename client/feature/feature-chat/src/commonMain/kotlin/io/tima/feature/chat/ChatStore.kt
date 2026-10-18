@@ -711,6 +711,7 @@ class ChatStore(
             is ComposedResult.Invalid -> _state.value.copy(
                 notice = ChatNotice.Said(words().editor.cannotSend + ": " + result.problems.firstOrNull().orEmpty()),
             )
+            is ComposedResult.TableTooWide -> _state.value.copy(notice = ChatNotice.Said(words().editor.tableTooWide(result.maxColumns)))
         }
         return result
     }

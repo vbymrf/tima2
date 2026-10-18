@@ -46,6 +46,8 @@ object ComposedBodiesOverKodium : ComposedBodies {
             )
         }
         if (MarkupRules.check(content, strict = true).isNotEmpty()) return null
+        // Таблица шире пузыря — отправить нельзя (Решения §10.3).
+        if (io.tima.domain.chat.TableFit.tooWide(doc).isNotEmpty()) return null
         return MessageSerializer.encodeBody(MessageContentCodec.toBody(content))
     }
 

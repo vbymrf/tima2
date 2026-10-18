@@ -106,5 +106,8 @@ class ComposerTest {
         assertIs<ComposedResult.Queued>(send.send("c", ComposedDoc.of("x").copy(level = 3), 2))
         assertIs<ComposedResult.Queued>(send.send("c", ComposedDoc.of("x"), 2))
         assertEquals(listOf(3, 2), queued, "уровень редактора важнее уровня переписки")
+        val wide = "| " + (1..9).joinToString(" | ") + " |\n|" + List(9) { "---" }.joinToString("|") + "|"
+        assertEquals(ComposedResult.TableTooWide(7), send.send("c", ComposedDoc.of(wide), 2), "«99» не помещается — не отправляется")
+        assertEquals(2, queued.size)
     }
 }

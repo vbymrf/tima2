@@ -172,12 +172,17 @@ fun EditorScreen(
     var paragraphMenu by remember { mutableStateOf(false) }
     var symbolArea by remember { mutableStateOf(false) }
     var emojiArea by remember { mutableStateOf(false) }
+    var stylePanel by remember { mutableStateOf<String?>(null) }
     val clipboardHtml = io.tima.core.media.rememberClipboardHtml()
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     var hint by remember { mutableStateOf<String?>(null) }
     val recent = remember { mutableStateListOf<String>() }
     val doc = model.doc
-    val trouble = remember(doc) { problems(doc) }
+    // Таблица шире пузыря — красная и просьба изменить; отправить нельзя (§10.3).
+    val wide = remember(doc) { io.tima.domain.chat.TableFit.tooWide(doc) }
+    val trouble = remember(doc, wide) {
+        problems(doc) + if (wide.isNotEmpty()) listOf(w.tableTooWide(io.tima.domain.chat.TableFit.maxColumns())) else emptyList()
+    }
     val level = doc.level ?: defaultLevel
 
     fun press(key: String) {
@@ -210,6 +215,12 @@ fun EditorScreen(
             "up" -> model.layout { d, s -> io.tima.domain.chat.ComposedLayout.shift(d, s, -1) }
             "down" -> model.layout { d, s -> io.tima.domain.chat.ComposedLayout.shift(d, s, 1) }
             "delete" -> model.layout(io.tima.domain.chat.ComposedLayout::removeAt)
+            // Раздел «Стиль» (§10.2): на выбранное.
+            "widget", "background", "color", "size", "align", "padding", "divider", "json" -> {
+                paragraphMenu = false
+                stylePanel = if (stylePanel == key) null else key
+            }
+            "reset" -> model.layout { d, s -> io.tima.domain.chat.ComposedStyle.setStyle(d, s, emptyMap()) to s }
             else -> if (onButton?.invoke(key) != true) hint = w.soon
         }
     }
@@ -239,13 +250,14 @@ fun EditorScreen(
                 io.tima.core.ui.Tab(
                     label = w.tab(t.key),
                     current = t == tab,
-                    onClick = { tab = t; paragraphMenu = false; hint = null },
+                    onClick = { tab = t; paragraphMenu = false; stylePanel = null; hint = null },
                     modifier = Modifier.testTag(EditorTags.tab(t.key)),
                 )
             }
         }
         Ribbon(tab, marksOn = doc.marks, onPress = ::press)
         if (paragraphMenu) ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); paragraphMenu = false }
+        stylePanel?.let { StylePanel(it, model, problems) }
 
         // Разделитель: что выбрано (§10.2) и подсказка последнего нажатия.
         Row(
@@ -271,7 +283,7 @@ fun EditorScreen(
                 } else {
                     doc.items.forEachIndexed { i, item ->
                         Box(Modifier.fillMaxWidth().onGloballyPositioned { drag.item(i, it.boundsInRoot()) }) {
-                            EditorItemView(model, i, item, typingMarks.takeIf { doc.marks }, preview, drag)
+                            EditorItemView(model, i, item, typingMarks.takeIf { doc.marks }, preview, drag, tooWide = i in wide)
                         }
                     }
                 }
@@ -443,7 +455,15 @@ private fun SelectionStrip(onMark: (InlineKind) -> Unit) {
 
 /** Кусок документа: текст набирается здесь же, остальное — как увидит получатель, нажатием выбирается. */
 @Composable
-private fun EditorItemView(model: EditorModel, index: Int, item: ComposedItem, marks: TypingMarks?, preview: (ComposedDoc) -> RichContent?, drag: EditorDrag) {
+private fun EditorItemView(
+    model: EditorModel,
+    index: Int,
+    item: ComposedItem,
+    marks: TypingMarks?,
+    preview: (ComposedDoc) -> RichContent?,
+    drag: EditorDrag,
+    tooWide: Boolean = false,
+) {
     val colors = Tima.colors
     val chosen = model.spot == io.tima.domain.chat.Spot(index)
     when (item) {
@@ -456,6 +476,7 @@ private fun EditorItemView(model: EditorModel, index: Int, item: ComposedItem, m
                 cursorBrush = SolidColor(colors.navigation),
                 visualTransformation = rememberTypingView(marks),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(vertical = 4.dp)
+                    .then(if (tooWide) Modifier.border(2.dp, colors.alarm, RoundedCornerShape(6.dp)).padding(4.dp) else Modifier)
                     .onFocusChanged { if (it.isFocused) model.focused(index) }
                     .testTag(EditorTags.text(index)),
             )

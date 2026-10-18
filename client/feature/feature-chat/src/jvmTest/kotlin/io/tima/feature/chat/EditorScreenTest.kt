@@ -52,4 +52,17 @@ class EditorScreenTest {
         val b = capture("редактор", 360, 640, dark = false) { screen(EditorModel(ComposedDoc.of("до ряда")))() }
         assertTrue(a.difference(b) > 0.0)
     }
+
+    @Test
+    fun панель_стиля_палитра_ступени_json() {
+        val model = EditorModel(ComposedDoc(listOf(ComposedItem.Text("x", mapOf("background" to "amber-soft")))))
+        model.select(io.tima.domain.chat.Spot(0))
+        val palette = capture("стиль-фон", 360, 160, dark = false) { StylePanel("background", model) { emptyList() } }
+        val json = capture("стиль-json", 360, 160, dark = false) { StylePanel("json", model) { emptyList() } }
+        assertTrue(palette.difference(json) > 0.0)
+        model.layout { d, s -> io.tima.domain.chat.ComposedStyle.with(d, s, "padding", "large") to s }
+        assertTrue(model.doc.items[0].style["padding"] == "large")
+        model.undo()
+        assertTrue(model.doc.items[0].style["padding"] == null, "стиль отменяется, как всё")
+    }
 }
