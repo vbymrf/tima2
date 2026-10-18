@@ -17,8 +17,8 @@ import io.tima.domain.chat.ReplyTarget
  * Обратный ход: сообщение → документ редактора — для правки того, что знаками строки ввода не
  * выразить (ряды, виджеты; заказчик 2026-10-18: «Редактор не открывает»).
  *
- * Обратное к [ComposedBodiesOverKodium.content]: подряд идущие текстовые блоки одного стиля — один
- * текстовый кусок со знаками, ряд из одной ячейки 100 % с одним виджетом — виджет во всю ширину,
+ * Обратное к [ComposedBodiesOverKodium.content]: текстовый блок — текстовый кусок со знаками, ряд из
+ * одной ячейки 100 % с одним виджетом — виджет во всю ширину,
  * остальные ряды — рядами. Не выразилось — `null`; вызывающий ещё сверяет, что документ собирается
  * обратно в то же строение.
  */
@@ -42,36 +42,17 @@ internal object ComposedFromContent {
         if (content.media.indices.any { it !in used }) return null
 
         val items = mutableListOf<ComposedItem>()
-        val run = mutableListOf<MarkupBlock>()
-        fun flush(): Boolean {
-            if (run.isEmpty()) return true
-            val source = textOf(content, markup, run.map { it.copy(style = emptyMap()) }) ?: return false
-            items += ComposedItem.Text(source, run.first().style)
-            run.clear()
-            return true
-        }
         for (b in markup.blocks) {
-            when {
-                b.type == BlockType.FLEX -> {
-                    if (!flush()) return null
-                    items += flex(content, markup, b) ?: return null
-                }
-                b.type in WIDGETS -> {
-                    if (!flush()) return null
-                    items += ComposedItem.Widget(widget(content, b) ?: return null, b.style)
-                }
+            items += when {
+                b.type == BlockType.FLEX -> flex(content, markup, b) ?: return null
+                b.type in WIDGETS -> ComposedItem.Widget(widget(content, b) ?: return null, b.style)
                 // Таблицу знаками строки ввода не выражают (её правит редактор) — свой обратный ход.
-                b.type == BlockType.TABLE -> {
-                    if (!flush()) return null
-                    items += ComposedItem.Text(tableOf(content, markup, b) ?: return null, b.style)
-                }
-                else -> {
-                    if (run.isNotEmpty() && run.first().style != b.style && !flush()) return null
-                    run += b
-                }
+                b.type == BlockType.TABLE -> ComposedItem.Text(tableOf(content, markup, b) ?: return null, b.style)
+                // Каждый текстовый блок — свой кусок: склеенные, два простых абзаца разобрались бы
+                // обратно одним абзацем, и строение разошлось бы.
+                else -> ComposedItem.Text(textOf(content, markup, listOf(b.copy(style = emptyMap()))) ?: return null, b.style)
             }
         }
-        if (!flush()) return null
         return ComposedDoc(items.ifEmpty { listOf(ComposedItem.Text("")) })
     }
 

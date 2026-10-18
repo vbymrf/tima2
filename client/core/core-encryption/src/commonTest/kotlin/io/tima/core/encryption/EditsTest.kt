@@ -59,13 +59,13 @@ class EditsTest {
         val body = ComposedBodiesOverKodium.encode(doc)!!
         assertNull(TextBodyCodec.editSource(body, emptyList()), "строкой ввода не выразить")
         val opened = assertNotNull(TextBodyCodec.editDoc(body, emptyList()), "редактор открывает сообщение")
-        assertEquals(4, opened.items.size)
+        assertEquals(5, opened.items.size, "заголовок и абзац — отдельными кусками")
         assertIs<EditBody.Same>(TextBodyCodec.encodeEditDoc(body, emptyList(), opened))
 
-        val row = opened.items[1] as io.tima.domain.chat.ComposedItem.Row
+        val row = opened.items[2] as io.tima.domain.chat.ComposedItem.Row
         val changed = opened.copy(
             items = opened.items.toMutableList().apply {
-                set(1, row.copy(cells = row.cells.mapIndexed { i, c -> if (i == 0) c.copy(text = "слева *иначе*") else c }))
+                set(2, row.copy(cells = row.cells.mapIndexed { i, c -> if (i == 0) c.copy(text = "слева *иначе*") else c }))
             },
         )
         val edit = assertIs<EditBody.Changes>(TextBodyCodec.encodeEditDoc(body, emptyList(), changed))
@@ -108,6 +108,26 @@ class EditsTest {
     @Test
     fun таблицу_строкой_ввода_не_правят() {
         assertNull(TextBodyCodec.editSource(TextBodyCodec.encodeTyped("| a | b |\n|---|---|\n| 1 | 2 |"), emptyList()))
+    }
+
+    /**
+     * Сообщение с Samsung 2026-10-18: абзацы, ряд, простые абзацы подряд разными кусками, таблица с
+     * пустыми ячейками. Склеенные простые абзацы разбирались обратно одним — «изменить нельзя».
+     */
+    @Test
+    fun простые_абзацы_подряд_ряд_и_таблица_правятся_в_редакторе() {
+        val doc = io.tima.domain.chat.ComposedDoc(
+            listOf(
+                io.tima.domain.chat.ComposedItem.Text("раз\nдва\n*три*"),
+                io.tima.domain.chat.ComposedItem.Row(listOf(io.tima.domain.chat.ComposedCell(50, "слева"), io.tima.domain.chat.ComposedCell(50, "справа"))),
+                io.tima.domain.chat.ComposedItem.Text("четыре\nпять"),
+                io.tima.domain.chat.ComposedItem.Text("шесть"),
+                io.tima.domain.chat.ComposedItem.Text("| ÷\$÷\"=\" |  |\n|---|---|\n|  |  |"),
+            ),
+        )
+        val body = ComposedBodiesOverKodium.encode(doc)!!
+        val opened = assertNotNull(TextBodyCodec.editDoc(body, emptyList()))
+        assertIs<EditBody.Same>(TextBodyCodec.encodeEditDoc(body, emptyList(), opened))
     }
 
     /** Таблицу правит редактор: знаками, со слитой ячейкой и выравниванием; меняется текст ячейки. */
