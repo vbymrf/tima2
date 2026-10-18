@@ -152,6 +152,45 @@ class EditorWordLikeTest {
         assertEquals("x\n", m.focusedText, "второе нажатие пустых строк не множит")
     }
 
+    /** Заказчик 2026-10-18: «Упрощённый формат не используем в редакторе» — набранные знаки остаются знаками. */
+    @Test
+    fun набранные_знаки_не_оформляют() {
+        val m = model("a")
+        m.type("**b**")
+        assertEquals("a\\*\\*b\\*\\*", m.focusedText, "звёздочки экранированы — жирного нет")
+        assertEquals("a\\*\\*b\\*\\*".length, m.field.selection.start, "курсор — за набранным")
+        val line = model("")
+        line.type("# x")
+        assertEquals("\\# x", line.focusedText, "решётка в начале строки — не заголовок")
+        val mid = model("a ")
+        mid.type("#тег")
+        assertEquals("a #тег", mid.focusedText, "посреди строки решётка — метка, не оформление")
+    }
+
+    @Test
+    fun простой_текст_из_буфера_знаками_не_оформляется() {
+        val m = model("")
+        m.paste("**x** | y", plain = true)
+        assertEquals("\\*\\*x\\*\\* \\| y", m.focusedText)
+        val styled = model("")
+        styled.paste("**x**")
+        assertEquals("**x**", styled.focusedText, "«С оформл.» — оформление переносится")
+    }
+
+    @Test
+    fun слияние_кнопкой_в_ряду() {
+        val m = EditorModel(ComposedDoc(listOf(ComposedItem.Row(listOf(io.tima.domain.chat.ComposedCell(50, "a"), io.tima.domain.chat.ComposedCell(50, "b"))))))
+        m.select(Spot(0, 1))
+        assertTrue(m.join("left"))
+        val row = m.doc.items[0] as ComposedItem.Row
+        assertEquals(listOf("", "left"), row.cells.map { it.merge })
+        assertEquals("a\nb", row.cells[0].text)
+        m.select(Spot(0, 0))
+        assertTrue(!m.join("left"), "в первом столбце слева не с чем")
+        m.undo()
+        assertEquals(listOf("", ""), (m.doc.items[0] as ComposedItem.Row).cells.map { it.merge }, "слияние отменяется")
+    }
+
     @Test
     fun без_знаков_md_прежняя_пара_у_курсора() {
         val m = EditorModel(ComposedDoc(listOf(ComposedItem.Text("a"))))

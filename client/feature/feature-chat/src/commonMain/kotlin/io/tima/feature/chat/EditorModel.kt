@@ -127,7 +127,7 @@ class EditorModel(initial: ComposedDoc) {
 
     private fun changedAt(at: Spot, typed: TextFieldValue) {
         val before = textAt(doc, at) ?: return
-        val value = typing?.let { marks -> wordLike(at, before, typed, marks) } ?: typed
+        val value = typing?.let { marks -> wordLike(at, before, escaped(before, typed), marks) } ?: typed
         if (at != spot) typingIn = null
         field = value
         val next = Snapshot(withText(doc, at, value.text), at.item, value.selection.start, value.selection.end, at.cell, at.widget)
@@ -207,6 +207,30 @@ class EditorModel(initial: ComposedDoc) {
             MarkEdits.covering(spans, s, e)
         }
         return here + listOfNotNull(pending)
+    }
+
+    /**
+     * Набранное (и вставленное клавиатурой) — знаками не оформляется (заказчик 2026-10-18): знаки
+     * разметки в нём экранируются; курсор и набор клавиатуры сдвигаются вслед.
+     */
+    private fun escaped(before: String, value: TextFieldValue): TextFieldValue {
+        val t = value.text
+        var p = 0
+        while (p < before.length && p < t.length && before[p] == t[p]) p++
+        var q = 0
+        while (q < before.length - p && q < t.length - p && before[before.length - 1 - q] == t[t.length - 1 - q]) q++
+        val end = t.length - q
+        val inserted = t.substring(p, end)
+        if (inserted.isEmpty()) return value
+        val safe = ComposedText.escapeTyped(t.substring(0, p), inserted)
+        if (safe == inserted) return value
+        val d = safe.length - inserted.length
+        fun shift(i: Int) = if (i >= end) i + d else i
+        return TextFieldValue(
+            t.substring(0, p) + safe + t.substring(end),
+            TextRange(shift(value.selection.start), shift(value.selection.end)),
+            value.composition?.let { TextRange(shift(it.start), shift(it.end)) },
+        )
     }
 
     /** Выделение без спрятанных знаков по краям. */
@@ -307,9 +331,14 @@ class EditorModel(initial: ComposedDoc) {
      * «С оформл.» и обычная вставка: текст со знаками — туда, где курсор, без экранирования (знаки
      * в нём и есть оформление). Курсор не в тексте — новым куском после выбранного.
      */
-    fun paste(text: String) {
+    fun paste(text: String, plain: Boolean = false) {
         if (text.isEmpty()) return
         val current = focusedText
+        if (plain && typing != null) {
+            // Простой текст из буфера знаками не оформляется — как набранный.
+            val at = minOf(snapshot.start, snapshot.end).coerceIn(0, current?.length ?: 0)
+            return paste(ComposedText.escapeTyped(current?.substring(0, at).orEmpty(), text))
+        }
         if (current == null) {
             insert(ComposedItem.Text(text))
             return
@@ -319,23 +348,14 @@ class EditorModel(initial: ComposedDoc) {
         applyText(TextEdit(current.substring(0, s) + text + current.substring(e), s + text.length, s + text.length))
     }
 
-    /**
-     * Объединить ячейку таблицы, где курсор, с левой (`<<`) или с верхней (`^^`) — Решения §10.3.
-     * Знак встаёт вместо содержимого ячейки: таблица разбирается по ячейке, равной знаку. Курсор не в
-     * строке таблицы — ничего не делается.
-     */
-    fun tableJoin(sign: String): Boolean {
-        val current = focusedText ?: return false
-        val at = minOf(snapshot.start, snapshot.end).coerceIn(0, current.length)
-        val lineStart = current.lastIndexOf('\n', (at - 1).coerceAtLeast(0)).let { if (it < 0 || at == 0) 0 else it + 1 }
-        val lineEnd = current.indexOf('\n', at).let { if (it < 0) current.length else it }
-        val line = current.substring(lineStart, lineEnd)
-        if (!line.trimStart().startsWith("|")) return false
-        val left = current.lastIndexOf('|', (at - 1).coerceAtLeast(lineStart)).takeIf { it >= lineStart } ?: return false
-        val right = current.indexOf('|', at).takeIf { it in left + 1..lineEnd } ?: return false
-        val replaced = current.substring(0, left + 1) + " $sign " + current.substring(right)
-        val cursor = left + 2 + sign.length
-        applyText(TextEdit(replaced, cursor, cursor))
+    /** Ширина рамкой (заказчик 2026-10-18): между столбцами [boundary] − 1 и [boundary] ряда [item]. */
+    fun resize(item: Int, boundary: Int, delta: Int) =
+        layout { d, s -> ComposedLayout.resize(d, item, boundary, delta) to s }
+
+    /** «С левой», «С верхней»: `false` — слить нельзя. */
+    fun join(direction: String): Boolean {
+        val joined = ComposedLayout.join(doc, spot, direction) ?: return false
+        layout { _, _ -> joined }
         return true
     }
 

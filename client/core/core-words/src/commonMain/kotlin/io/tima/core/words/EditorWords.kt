@@ -54,6 +54,14 @@ interface EditorWords {
     val apply: String
     val jsonBad: String
     fun tableTooWide(max: Int): String
+    /** Ряд не помещается (заказчик 2026-10-18): ячейке узко для её содержимого. */
+    val rowTooNarrow: String
+    /** «Разметка → Ряд»: сколько строк и столбцов (заказчик 2026-10-18). */
+    val gridLines: String
+    val gridColumns: String
+    val gridInsert: String
+    /** Слить нельзя: прямоугольник задел бы другое слитое лишь частью, или сливать не с чем. */
+    val joinRefused: String
     /** Вставленное из подборки: `full`, `cut`. */
     fun cutName(key: String): String
     val authorShown: String
@@ -115,12 +123,12 @@ object RussianEditorWords : EditorWords {
         "contact" -> "Контакт"
         "reply" -> "Ответ"
         "row" -> "Ряд"
-        "table" -> "Таблица"
+        "colAdd" -> "+Столбец"
+        "colRemove" -> "−Столбец"
+        "lineAdd" -> "+Строка"
+        "lineRemove" -> "−Строка"
         "joinLeft" -> "С левой"
         "joinUp" -> "С верхней"
-        "cellAdd" -> "+Ячейка"
-        "cellRemove" -> "−Ячейка"
-        "merge" -> "Объедин."
         "split" -> "Разъедин."
         "up" -> "Выше"
         "down" -> "Ниже"
@@ -210,6 +218,11 @@ object RussianEditorWords : EditorWords {
     override val apply = "Применить"
     override val jsonBad = "Это не JSON из строк: {\"свойство\": \"значение\"}"
     override fun tableTooWide(max: Int) = "Таблица не помещается: больше $max столбцов — в ячейку не влезет «99». Измените таблицу"
+    override val rowTooNarrow = "Ряд не помещается: ячейке узко для её содержимого — раздвиньте рамку или уберите столбец"
+    override val gridLines = "Строк"
+    override val gridColumns = "Столбцов"
+    override val gridInsert = "Вставить ряд"
+    override val joinRefused = "Слить нельзя: не с чем или слитое вышло бы не прямоугольником"
     override fun cutName(key: String) = if (key == "cut") "Обрезать" else "Полностью"
     override val authorShown = "Имя владельца"
     override val nothingChosen = "Выберите ряд, ячейку или виджет"
@@ -268,12 +281,12 @@ object EnglishEditorWords : EditorWords {
         "contact" -> "Contact"
         "reply" -> "Reply"
         "row" -> "Row"
-        "table" -> "Table"
+        "colAdd" -> "+Column"
+        "colRemove" -> "−Column"
+        "lineAdd" -> "+Line"
+        "lineRemove" -> "−Line"
         "joinLeft" -> "With left"
         "joinUp" -> "With above"
-        "cellAdd" -> "+Cell"
-        "cellRemove" -> "−Cell"
-        "merge" -> "Merge"
         "split" -> "Split"
         "up" -> "Up"
         "down" -> "Down"
@@ -363,6 +376,11 @@ object EnglishEditorWords : EditorWords {
     override val apply = "Apply"
     override val jsonBad = "Not a JSON of strings: {\"property\": \"value\"}"
     override fun tableTooWide(max: Int) = "The table does not fit: more than $max columns — \"99\" will not fit in a cell. Change the table"
+    override val rowTooNarrow = "The row does not fit: a cell is too narrow for its content — move the border or remove a column"
+    override val gridLines = "Lines"
+    override val gridColumns = "Columns"
+    override val gridInsert = "Insert row"
+    override val joinRefused = "Can't merge: nothing to merge with, or the merged area would not be a rectangle"
     override fun cutName(key: String) = if (key == "cut") "Trim" else "Full"
     override val authorShown = "Owner's name"
     override val nothingChosen = "Choose a row, cell or widget"
@@ -417,12 +435,12 @@ object SpanishEditorWords : EditorWords {
         "contact" -> "Contacto"
         "reply" -> "Respuesta"
         "row" -> "Fila"
-        "table" -> "Tabla"
+        "colAdd" -> "+Columna"
+        "colRemove" -> "−Columna"
+        "lineAdd" -> "+Línea"
+        "lineRemove" -> "−Línea"
         "joinLeft" -> "Con izquierda"
         "joinUp" -> "Con superior"
-        "cellAdd" -> "+Celda"
-        "cellRemove" -> "−Celda"
-        "merge" -> "Unir"
         "split" -> "Separar"
         "up" -> "Arriba"
         "down" -> "Abajo"
@@ -512,6 +530,11 @@ object SpanishEditorWords : EditorWords {
     override val apply = "Aplicar"
     override val jsonBad = "No es un JSON de cadenas: {\"propiedad\": \"valor\"}"
     override fun tableTooWide(max: Int) = "La tabla no cabe: más de $max columnas, \"99\" no cabe en una celda. Cambia la tabla"
+    override val rowTooNarrow = "La fila no cabe: una celda es estrecha para su contenido; mueve el borde o quita una columna"
+    override val gridLines = "Líneas"
+    override val gridColumns = "Columnas"
+    override val gridInsert = "Insertar fila"
+    override val joinRefused = "No se puede unir: no hay con qué o lo unido no sería un rectángulo"
     override fun cutName(key: String) = if (key == "cut") "Recortar" else "Completo"
     override val authorShown = "Nombre del dueño"
     override val nothingChosen = "Elige una fila, celda o widget"

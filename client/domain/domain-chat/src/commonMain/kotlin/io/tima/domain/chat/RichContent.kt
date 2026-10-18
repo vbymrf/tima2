@@ -93,10 +93,11 @@ sealed interface RichBlock {
     data class Table(val rows: List<List<TableCell>>, val style: BlockStyle = BlockStyle.NONE) : RichBlock
 
     /**
-     * Ряд — 1–4 ячейки в строку (ADR-0044 §2). Не вмещается в ширину — ячейки встают в столбик,
-     * горизонтальной прокрутки нет (§6).
+     * Ряд — строки × столбцы (ADR-0044 §2; заказчик 2026-10-18: до 20 строк и 7 столбцов): [cells]
+     * слева направо, строка за строкой, [columns] в строке. Всегда на одной строке — столбиком не
+     * встаёт, горизонтальной прокрутки нет (§6).
      */
-    data class Row(val cells: List<RowCell>, val style: BlockStyle = BlockStyle.NONE) : RichBlock
+    data class Row(val cells: List<RowCell>, val style: BlockStyle = BlockStyle.NONE, val columns: Int = cells.size) : RichBlock
 
     /** Картинка внутри сообщения: номер в [RichContent.media]. */
     data class Image(val media: Int) : RichBlock
@@ -145,12 +146,16 @@ sealed interface RichBlock {
     data class Fallback(val text: String) : RichBlock
 }
 
-/** Ячейка ряда: ширина в процентах (`null` — поровну), текст ячейки и виджеты под ним. */
+/**
+ * Ячейка ряда: ширина в процентах (`null` — поровну), текст ячейки и виджеты под ним; [merge] —
+ * слита с левой (`left`) или верхней (`up`) и сама не рисуется.
+ */
 data class RowCell(
     val width: Int?,
     val text: RichText?,
     val widgets: List<RichBlock> = emptyList(),
     val style: BlockStyle = BlockStyle.NONE,
+    val merge: String = "",
 )
 
 /** Пункт списка и вложенные в него пункты. */

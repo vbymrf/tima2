@@ -133,14 +133,19 @@ object ComposedBodiesOverKodium : ComposedBodies {
                     ),
                 )
             }
-            // Пустые ячейки не уходят (Решения §10.3), ширины оставшихся — снова 100.
-            is ComposedItem.Row -> listOf(
-                MarkupBlock(type = BlockType.FLEX, style = item.style, children = io.tima.domain.chat.ComposedLayout.compact(item).cells.map(::cell)),
-            )
+            // Пустая ячейка уходит (заказчик 2026-10-18): её фон виден. Однострочный ряд без слияний —
+            // прежним видом, ячейки прямо в ряду; иначе — строки `row` (2026-10-18).
+            is ComposedItem.Row -> {
+                val cells = item.cells.map(::cell)
+                val single = item.lines <= 1 && item.cells.none { it.merge.isNotEmpty() }
+                val children = if (single) cells else cells.chunked(item.columns.coerceAtLeast(1)).map { MarkupBlock(type = BlockType.ROW, children = it) }
+                listOf(MarkupBlock(type = BlockType.FLEX, style = item.style, children = children))
+            }
         }
 
-        /** Ячейка — один узел: из текста берётся только оформление внутри строки. */
+        /** Ячейка — один узел: из текста берётся только оформление внутри строки. Слитая — без содержимого. */
         private fun cell(c: ComposedCell): MarkupBlock {
+            if (c.merge.isNotEmpty()) return MarkupBlock(type = BlockType.CELL, style = mapOf("width" to c.width.toString(), "merge" to c.merge))
             val text = c.text.trim('\n')
             val nodeIds = if (text.isBlank()) {
                 emptyList()
@@ -162,7 +167,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
             return MarkupBlock(
                 type = BlockType.CELL,
                 nodeIds = nodeIds,
-                style = c.style + ("width" to c.width.toString()),
+                style = c.style - "merge" + ("width" to c.width.toString()),
                 children = c.widgets.map(::widget),
             )
         }
@@ -232,12 +237,14 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val cells: List<SavedCell>? = null,
         val style: Map<String, String> = emptyMap(),
         val continuation: Int? = null,
+        /** Столбцов ряда; нет — однострочный ряд (черновики до 2026-10-18). */
+        val columns: Int? = null,
     ) {
         fun toItem(): ComposedItem? = when {
             continuation != null -> ComposedItem.Continuation(continuation)
             text != null -> ComposedItem.Text(text, style)
             widget != null -> widget.toWidget()?.let { ComposedItem.Widget(it, style) }
-            cells != null -> ComposedItem.Row(cells.map { it.toCell() }, style)
+            cells != null -> ComposedItem.Row(cells.map { it.toCell() }, style, columns ?: cells.size)
             else -> null
         }
 
@@ -245,18 +252,24 @@ object ComposedBodiesOverKodium : ComposedBodies {
             fun of(item: ComposedItem) = when (item) {
                 is ComposedItem.Text -> SavedItem(text = item.source, style = item.style)
                 is ComposedItem.Widget -> SavedItem(widget = SavedWidget.of(item.widget), style = item.style)
-                is ComposedItem.Row -> SavedItem(cells = item.cells.map(SavedCell::of), style = item.style)
+                is ComposedItem.Row -> SavedItem(cells = item.cells.map(SavedCell::of), style = item.style, columns = item.columns)
                 is ComposedItem.Continuation -> SavedItem(continuation = item.level)
             }
         }
     }
 
     @Serializable
-    private data class SavedCell(val width: Int, val text: String = "", val widgets: List<SavedWidget> = emptyList(), val style: Map<String, String> = emptyMap()) {
-        fun toCell() = ComposedCell(width, text, widgets.mapNotNull { it.toWidget() }, style)
+    private data class SavedCell(
+        val width: Int,
+        val text: String = "",
+        val widgets: List<SavedWidget> = emptyList(),
+        val style: Map<String, String> = emptyMap(),
+        val merge: String = "",
+    ) {
+        fun toCell() = ComposedCell(width, text, widgets.mapNotNull { it.toWidget() }, style, merge)
 
         companion object {
-            fun of(c: ComposedCell) = SavedCell(c.width, c.text, c.widgets.map(SavedWidget::of), c.style)
+            fun of(c: ComposedCell) = SavedCell(c.width, c.text, c.widgets.map(SavedWidget::of), c.style, c.merge)
         }
     }
 

@@ -8,8 +8,13 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalDensity
+import io.tima.domain.chat.ComposedLayout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -155,7 +160,12 @@ internal fun EditorWidget(
     }
 }
 
-/** Ряд в редакторе: ячейки по ширинам, в каждой — текст (один узел) и виджеты друг под другом. */
+/**
+ * Ряд в редакторе — та же сетка, что у получателя ([SpanGrid]): строки × столбцы, слитые ячейки
+ * прямоугольником. Ряд выбран — между столбцами рамки: тянуть пальцем или мышью, ширина
+ * перераспределяется между двумя соседними ступенями по 5 % (заказчик 2026-10-18). Не помещается —
+ * красная рамка, отправить нельзя.
+ */
 @Composable
 internal fun EditorRow(
     row: ComposedItem.Row,
@@ -164,22 +174,80 @@ internal fun EditorRow(
     drag: EditorDrag,
     marks: TypingMarks?,
     preview: (ComposedDoc) -> RichContent?,
+    tooWide: Boolean = false,
 ) {
     val colors = Tima.colors
     val spot = model.spot
     val look = blockStyleOf(row.style)
-    Row(
-        Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(vertical = 4.dp)
-            .then(if (spot == Spot(index)) Modifier.border(2.dp, colors.navigation, RoundedCornerShape(8.dp)) else Modifier)
+    val columns = row.columns.coerceAtLeast(1)
+    val widths = row.cells.take(columns).map { it.width }
+    val spans = remember(row) { ComposedLayout.spans(row) }
+    val gap = 4.dp
+    val gapPx = with(LocalDensity.current) { gap.toPx() }
+    Box(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            .then(
+                when {
+                    tooWide -> Modifier.border(2.dp, colors.alarm, RoundedCornerShape(8.dp))
+                    spot == Spot(index) -> Modifier.border(2.dp, colors.navigation, RoundedCornerShape(8.dp))
+                    else -> Modifier
+                },
+            )
             .styled(look)
             .testTag(EditorTags.item(index)),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        row.cells.forEachIndexed { c, cell ->
-            EditorCell(cell, index, c, model, drag, marks, preview, Modifier.weight(cell.width.coerceAtLeast(1).toFloat()).fillMaxHeight())
+        // Ширина известна сразу (не после первого кадра): рамки встают на место в том же кадре.
+        // Ряд редактора никто не спрашивает «какой ты высоты по содержимому» — подсостав здесь можно.
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val gridPx = constraints.maxWidth
+            SpanGrid(columns, widths, spans, gap, Modifier.fillMaxWidth()) { c ->
+                val (w, _) = spans[c]
+                val percent = (c % columns until c % columns + w).sumOf { widths.getOrElse(it) { 0 } }
+                EditorCell(row.cells[c], index, c, percent, model, drag, marks, preview, Modifier)
+            }
+            // Рамки между столбцами — у выбранного ряда: иначе они перехватывали бы нажатия по ячейкам.
+            if (spot.item == index && columns > 1 && gridPx > 0) {
+                Box(Modifier.matchParentSize()) {
+                    val free = gridPx - gapPx * (columns - 1)
+                    for (boundary in 1 until columns) {
+                        val x = free * widths.take(boundary).sum() / 100f + gapPx * (boundary - 1) + gapPx / 2
+                        ColumnBorder(x, boundary, gridPx, index, model)
+                    }
+                }
+            }
         }
     }
     DividerAfter(look)
+}
+
+/** Рамка между столбцами [boundary] − 1 и [boundary]: тянуть — ширина ступенями по 5 %. */
+@Composable
+private fun ColumnBorder(x: Float, boundary: Int, gridPx: Int, item: Int, model: EditorModel) {
+    val colors = Tima.colors
+    val width by rememberUpdatedState(gridPx)
+    val half = with(LocalDensity.current) { 12.dp.toPx() }
+    Box(
+        Modifier.offset { IntOffset((x - half).roundToInt(), 0) }.width(24.dp).fillMaxHeight()
+            .pointerInput(item, boundary) {
+                var moved = 0f
+                detectHorizontalDragGestures(onDragStart = { moved = 0f }) { change, dx ->
+                    change.consume()
+                    moved += dx
+                    val step = width * ComposedLayout.STEP / 100f
+                    if (step > 0f) {
+                        val steps = (moved / step).toInt()
+                        if (steps != 0) {
+                            model.resize(item, boundary, steps * ComposedLayout.STEP)
+                            moved -= steps * step
+                        }
+                    }
+                }
+            }
+            .testTag(EditorTags.border(item, boundary)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.width(4.dp).fillMaxHeight().background(colors.navigation, RoundedCornerShape(2.dp)))
+    }
 }
 
 @Composable
@@ -187,6 +255,7 @@ private fun EditorCell(
     cell: ComposedCell,
     index: Int,
     c: Int,
+    percent: Int,
     model: EditorModel,
     drag: EditorDrag,
     marks: TypingMarks?,
@@ -204,7 +273,7 @@ private fun EditorCell(
         else -> colors.line
     }
     Column(
-        modifier
+        modifier.fillMaxSize()
             .border(if (cellChosen || drag.over(index, c)) 2.dp else 1.dp, border, RoundedCornerShape(6.dp))
             .onGloballyPositioned { drag.cell(index, c, it.boundsInRoot()) }
             .clickable { model.select(Spot(index, c)) }
@@ -217,7 +286,7 @@ private fun EditorCell(
             else -> Arrangement.Top
         },
     ) {
-        Caption("${cell.width}%", fontSize = 9.sp, color = colors.text3)
+        Caption("$percent%", fontSize = 9.sp, color = colors.text3)
         val value = if (spot == textSpot) model.field else TextFieldValue(cell.text)
         BasicTextField(
             value = value,

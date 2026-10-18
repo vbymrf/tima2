@@ -68,9 +68,18 @@ sealed interface ComposedItem {
         override val isEmpty: Boolean get() = false
     }
 
-    /** Ряд из 1–4 ячеек (Решения §10.3). */
-    data class Row(val cells: List<ComposedCell>, override val style: Map<String, String> = emptyMap()) : ComposedItem {
-        override val isEmpty: Boolean get() = cells.all { it.isEmpty }
+    /**
+     * Ряд строк × столбцов (Решения §10.3, заказчик 2026-10-18): до 20 строк и до 7 столбцов,
+     * [cells] — слева направо, строка за строкой. Пустой ряд — тоже содержимое: пустая ячейка уходит
+     * и её фон виден.
+     */
+    data class Row(
+        val cells: List<ComposedCell>,
+        override val style: Map<String, String> = emptyMap(),
+        val columns: Int = cells.size,
+    ) : ComposedItem {
+        override val isEmpty: Boolean get() = cells.isEmpty()
+        val lines: Int get() = if (columns <= 0) 0 else (cells.size + columns - 1) / columns
     }
 
     /**
@@ -85,13 +94,15 @@ sealed interface ComposedItem {
 
 /**
  * Ячейка ряда: один узел текста (оформление внутри строки) и виджеты под ним (ADR-0044: ячейка —
- * один узел). [width] — проценты, в ряду в сумме 100.
+ * один узел). [width] — проценты столбца, в строке в сумме 100. [merge] — слита с левой (`left`) или
+ * с верхней (`up`): своего содержимого нет, место занимает соседняя.
  */
 data class ComposedCell(
     val width: Int,
     val text: String = "",
     val widgets: List<ComposedWidget> = emptyList(),
     val style: Map<String, String> = emptyMap(),
+    val merge: String = "",
 ) {
     val isEmpty: Boolean get() = text.isBlank() && widgets.isEmpty()
 }
@@ -253,6 +264,27 @@ object ComposedText {
     private fun wider(around: String, sign: String, atEnd: Boolean = false): Boolean {
         if (sign != "*") return false
         return if (atEnd) around.length >= 2 && around[around.length - 2] == '*' else around.startsWith("**")
+    }
+
+    /**
+     * Набранное в редакторе знаками не оформляется (заказчик 2026-10-18: «Упрощённый формат не
+     * используем в редакторе»): знак разметки экранируется, как у «Символа». [before] — текст до
+     * места вставки: от него зависит, начало ли это строки.
+     */
+    fun escapeTyped(before: String, typed: String): String {
+        val out = StringBuilder()
+        var lineStart = before.substring(before.lastIndexOf('\n') + 1).isBlank()
+        for (ch in typed) {
+            if (ch == '\n') {
+                out.append(ch)
+                lineStart = true
+                continue
+            }
+            if (ch in INLINE_SIGNS || (lineStart && ch in LINE_SIGNS)) out.append('\\')
+            out.append(ch)
+            if (!ch.isWhitespace()) lineStart = false
+        }
+        return out.toString()
     }
 
     /**

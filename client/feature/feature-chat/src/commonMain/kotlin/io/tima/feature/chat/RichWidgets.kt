@@ -14,11 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -103,78 +102,25 @@ internal fun DividerAfter(style: BlockStyle) {
     Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(thickness.dp).background(color))
 }
 
-// ── Ряд: ячейки в строку, не вмещается — столбиком (ADR-0044 §6) ───────────
-
-/** Наименьшая ширина ячейки по её содержимому: невидимого не бывает. */
-private fun minWidthOf(cell: RowCell): Dp {
-    val widgets = cell.widgets.maxOfOrNull { minWidthOf(it) } ?: 0.dp
-    val text = if (cell.text != null) MIN_TEXT_CELL else 0.dp
-    return maxOf(widgets, text, MIN_TEXT_CELL)
-}
-
-private fun minWidthOf(widget: RichBlock): Dp = when (widget) {
-    is RichBlock.Image -> 96.dp
-    is RichBlock.Link -> if (widget.mode == "card") 140.dp else 96.dp
-    is RichBlock.Cloud, is RichBlock.Place, is RichBlock.Contact -> 120.dp
-    is RichBlock.Quoted, is RichBlock.Reply -> 140.dp
-    is RichBlock.Emoji -> 48.dp
-    is RichBlock.Table -> 160.dp
-    else -> MIN_TEXT_CELL
-}
-
-/** Ячейка с текстом — не уже этого: «99» шрифтом 22 и поля (Решения §10.3). */
-private val MIN_TEXT_CELL = 72.dp
+// ── Ряд: строки × столбцы, всегда в одну строку (ADR-0044 §6; заказчик 2026-10-18) ──
 
 private const val CELL_GAP = 6
 
 /**
- * Ряд — своей раскладкой, а не `BoxWithConstraints`: тот строится подсоставом и не отвечает на
- * вопрос «какой высоты ты по содержимому». Ряд сам задаёт его ячейкам (равная высота), и ряд с
- * виджетом в ячейке редактора тоже спрашивают — приложение падало (Samsung 2026-10-18, вставка из
- * подборки в ячейку: `IllegalStateException: Asking for intrinsic measurements of SubcomposeLayout`).
+ * Ряд — сеткой [SpanGrid]: столбцы по процентам, слитые ячейки прямоугольником. Столбиком не встаёт
+ * (заказчик 2026-10-18): не помещающийся ряд не отправляется, а у узкого получателя текст
+ * переносится, виджеты сжимаются.
  */
 @Composable
 internal fun RichRow(row: RichBlock.Row) {
-    val need = row.cells.sumOf { minWidthOf(it).value.toDouble() } + CELL_GAP * (row.cells.size - 1)
-    val total = row.cells.sumOf { it.width ?: 0 }
+    val columns = row.columns.coerceAtLeast(1)
+    val first = row.cells.take(columns)
     // Ширины в процентах; не названы (или сумма не 100) — поровну.
-    val weights = row.cells.map { cell -> if (total == 100 && cell.width != null) cell.width!!.toFloat() else 1f }
-    Layout(
-        content = { for (cell in row.cells) RowCellView(cell, Modifier) },
-        modifier = Modifier.fillMaxWidth().styled(row.style),
-    ) { cells, constraints ->
-        val gap = CELL_GAP.dp.roundToPx()
-        val needPx = need.dp.roundToPx()
-        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else maxOf(needPx, constraints.minWidth)
-        if (cells.isEmpty()) return@Layout layout(width, constraints.minHeight) {}
-        if (needPx > width) {
-            // Не вмещается — столбиком, каждая ячейка во всю ширину.
-            val placed = cells.map { it.measure(Constraints(minWidth = width, maxWidth = width)) }
-            val height = placed.sumOf { it.height } + gap * (placed.size - 1)
-            layout(width, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
-                var y = 0
-                for (p in placed) {
-                    p.place(0, y)
-                    y += p.height + gap
-                }
-            }
-        } else {
-            // В строку: ячейки одной высоты — по самой высокой.
-            val free = (width - gap * (cells.size - 1)).coerceAtLeast(0)
-            val sum = weights.sum()
-            val widths = weights.map { (free * it / sum).toInt() }.toMutableList()
-            widths[widths.lastIndex] += free - widths.sum()
-            val height = cells.mapIndexed { i, cell -> cell.minIntrinsicHeight(widths[i]) }.max()
-                .coerceIn(constraints.minHeight, constraints.maxHeight)
-            val placed = cells.mapIndexed { i, cell -> cell.measure(Constraints.fixed(widths[i], height)) }
-            layout(width, height) {
-                var x = 0
-                for (p in placed) {
-                    p.place(x, 0)
-                    x += p.width + gap
-                }
-            }
-        }
+    val named = first.all { it.width != null } && first.sumOf { it.width ?: 0 } == 100
+    val widths = first.map { if (named) it.width!! else 1 }
+    val spans = remember(row) { io.tima.domain.chat.GridSpans.of(row.cells.map { it.merge }, columns) }
+    SpanGrid(columns, widths, spans, CELL_GAP.dp, Modifier.fillMaxWidth().styled(row.style)) { i ->
+        RowCellView(row.cells[i], Modifier)
     }
     DividerAfter(row.style)
 }

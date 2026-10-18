@@ -62,17 +62,27 @@ internal object RichMapper {
                     },
                     style(block),
                 )
-                BlockType.FLEX -> RichBlock.Row(
-                    block.children.filter { it.type == BlockType.CELL }.map { cell ->
-                        RowCell(
-                            width = cell.style["width"]?.toIntOrNull(),
-                            text = cell.nodeIds.firstOrNull()?.let(::rich),
-                            widgets = cell.children.mapNotNull(::widget),
-                            style = style(cell),
-                        )
-                    },
-                    style(block),
-                )
+                BlockType.FLEX -> {
+                    // Однострочный ряд — ячейки прямо в нём; ряд из строк (2026-10-18) — строки `row`.
+                    val lines = if (block.children.isNotEmpty() && block.children.all { it.type == BlockType.ROW }) {
+                        block.children.map { line -> line.children.filter { it.type == BlockType.CELL } }
+                    } else {
+                        listOf(block.children.filter { it.type == BlockType.CELL })
+                    }
+                    RichBlock.Row(
+                        lines.flatten().map { cell ->
+                            RowCell(
+                                width = cell.style["width"]?.toIntOrNull(),
+                                text = cell.nodeIds.firstOrNull()?.let(::rich),
+                                widgets = cell.children.mapNotNull(::widget),
+                                style = style(cell),
+                                merge = cell.style["merge"].orEmpty(),
+                            )
+                        },
+                        style(block),
+                        columns = lines.first().size,
+                    )
+                }
                 // Виджеты и ответ; незнакомое от более новой версии — текстом своих узлов.
                 else -> widget(block) ?: RichBlock.Fallback(allNodes(block).joinToString("\n") { nodeText(it) }.trim())
             }

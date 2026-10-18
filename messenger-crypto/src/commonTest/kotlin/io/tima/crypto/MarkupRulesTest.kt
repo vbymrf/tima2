@@ -48,12 +48,43 @@ class MarkupRulesTest {
         assertTrue("width" in rules(c))
     }
 
+    /** Заказчик 2026-10-18: до 7 столбцов (было 4). */
     @Test
-    fun пять_ячеек_в_ряду_не_проходят() {
-        val c = MessageContent(nodes = listOf("x"), markup = Markup(n = listOf(1), blocks = listOf(
-            MarkupBlock(type = BlockType.FLEX, children = List(5) { cell(20) }),
+    fun восемь_ячеек_в_ряду_не_проходят_семь_проходят() {
+        val eight = MessageContent(nodes = listOf("x"), markup = Markup(n = listOf(1), blocks = listOf(
+            MarkupBlock(type = BlockType.FLEX, children = List(7) { cell(12) } + cell(16)),
         )))
-        assertTrue("cells" in rules(c))
+        assertTrue("cells" in rules(eight))
+        val seven = MessageContent(nodes = listOf("x"), markup = Markup(n = listOf(1), blocks = listOf(
+            MarkupBlock(type = BlockType.FLEX, children = List(6) { cell(14) } + cell(16)),
+            MarkupBlock(type = BlockType.PARAGRAPH, nodeIds = listOf(1)),
+        )))
+        assertEquals(emptyList(), rules(seven))
+    }
+
+    private fun line(vararg cells: MarkupBlock) = MarkupBlock(type = BlockType.ROW, children = cells.toList())
+
+    private fun merged(width: Int, merge: String) = MarkupBlock(type = BlockType.CELL, style = mapOf("width" to width.toString(), "merge" to merge))
+
+    /** Ряд строк × столбцов (2026-10-18): строки `row`, слияние с левой и с верхней — прямоугольником. */
+    @Test
+    fun ряд_из_строк_и_слитое_прямоугольником() {
+        fun grid(vararg lines: MarkupBlock) = MessageContent(nodes = listOf("x"), markup = Markup(n = listOf(1), blocks = listOf(
+            MarkupBlock(type = BlockType.FLEX, children = lines.toList()),
+            MarkupBlock(type = BlockType.PARAGRAPH, nodeIds = listOf(1)),
+        )))
+        // 2 × 2, слито всё в одну: справа — с левой, внизу — с верхней.
+        assertEquals(emptyList(), rules(grid(line(cell(50), merged(50, "left")), line(merged(50, "up"), merged(50, "up")))))
+        // Пустые ячейки — тоже ячейки.
+        assertEquals(emptyList(), rules(grid(line(cell(50), cell(50)), line(cell(50), cell(50)))))
+        // Слитое буквой «Г» — не прямоугольник.
+        assertTrue("merge" in rules(grid(line(cell(50), merged(50, "left")), line(merged(50, "up"), cell(50)))))
+        // «С верхней» в первой строке — не с чем.
+        assertTrue("merge" in rules(grid(line(merged(50, "up"), cell(50)), line(cell(50), cell(50)))))
+        // Строки с разным числом ячеек.
+        assertTrue("cells" in rules(grid(line(cell(50), cell(50)), line(cell(100)))))
+        // Больше 20 строк.
+        assertTrue("lines" in rules(grid(*Array(21) { line(cell(100)) })))
     }
 
     @Test

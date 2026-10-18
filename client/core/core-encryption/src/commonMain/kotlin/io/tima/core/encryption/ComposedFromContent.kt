@@ -46,47 +46,15 @@ internal object ComposedFromContent {
             items += when {
                 b.type == BlockType.FLEX -> flex(content, markup, b) ?: return null
                 b.type in WIDGETS -> ComposedItem.Widget(widget(content, b) ?: return null, b.style)
-                // Таблицу знаками строки ввода не выражают (её правит редактор) — свой обратный ход.
-                b.type == BlockType.TABLE -> ComposedItem.Text(tableOf(content, markup, b) ?: return null, b.style)
+                // Таблица быстрого оформления — только в старых сообщениях: в редакторе её больше нет
+                // (заказчик 2026-10-18), такое сообщение показывается как раньше и не правится.
+                b.type == BlockType.TABLE -> return null
                 // Каждый текстовый блок — свой кусок: склеенные, два простых абзаца разобрались бы
                 // обратно одним абзацем, и строение разошлось бы.
                 else -> ComposedItem.Text(textOf(content, markup, listOf(b.copy(style = emptyMap()))) ?: return null, b.style)
             }
         }
         return ComposedDoc(items.ifEmpty { listOf(ComposedItem.Text("")) })
-    }
-
-    /**
-     * Таблица знаками, как её набирают (Решения §10.3): строка `| … |` на ряд, под первой —
-     * разделитель с выравниванием столбцов; слитая ячейка — `^^` (с верхней) или `<<` (с левой).
-     */
-    private fun tableOf(content: MessageContent, markup: Markup, b: MarkupBlock): String? {
-        val rows = b.children
-        if (rows.isEmpty() || rows.any { it.type != BlockType.ROW }) return null
-        fun cell(c: MarkupBlock): String? {
-            if (c.type != BlockType.CELL) return null
-            return when (c.style["merge"]) {
-                "up" -> "^^"
-                "left" -> "<<"
-                else -> {
-                    val id = c.nodeIds.singleOrNull() ?: return null
-                    val text = textOf(content, markup, listOf(MarkupBlock(type = BlockType.PARAGRAPH, nodeIds = listOf(id)))) ?: return null
-                    val escaped = text.replace("|", "\\|")
-                    if (escaped == "^^" || escaped == "<<") "\\" + escaped else escaped
-                }
-            }
-        }
-        val lines = rows.map { r -> "| " + r.children.map { cell(it) ?: return null }.joinToString(" | ") + " |" }
-        val columns = rows.maxOf { it.children.size }
-        val aligns = (0 until columns).map { col -> rows.first().children.getOrNull(col)?.style?.get("align") }
-        val separator = "|" + aligns.joinToString("|") {
-            when (it) {
-                "center" -> ":---:"
-                "end" -> "---:"
-                else -> "---"
-            }
-        } + "|"
-        return (listOf(lines.first(), separator) + lines.drop(1)).joinToString("\n")
     }
 
     private fun flex(content: MessageContent, markup: Markup, b: MarkupBlock): ComposedItem? {
@@ -97,7 +65,11 @@ internal object ComposedFromContent {
         ) {
             return ComposedItem.Widget(widget(content, lone) ?: return null, b.style)
         }
-        val cells = b.children.map { c ->
+        // Однострочный ряд — ячейки прямо в нём; ряд из строк — строки `row` (2026-10-18).
+        val lines = if (b.children.all { it.type == BlockType.ROW }) b.children.map { it.children } else listOf(b.children)
+        val columns = lines.first().size
+        if (lines.any { it.size != columns }) return null
+        val cells = lines.flatten().map { c ->
             if (c.type != BlockType.CELL) return null
             val width = c.style["width"]?.toIntOrNull() ?: return null
             val text = when (c.nodeIds.size) {
@@ -105,9 +77,9 @@ internal object ComposedFromContent {
                 1 -> textOf(content, markup, listOf(MarkupBlock(type = BlockType.PARAGRAPH, nodeIds = c.nodeIds))) ?: return null
                 else -> return null
             }
-            ComposedCell(width, text, c.children.map { w -> widget(content, w) ?: return null }, c.style - "width")
+            ComposedCell(width, text, c.children.map { w -> widget(content, w) ?: return null }, c.style - "width" - "merge", c.style["merge"].orEmpty())
         }
-        return ComposedItem.Row(cells, b.style)
+        return ComposedItem.Row(cells, b.style, columns)
     }
 
     /** Блоки текста — знаками быстрого оформления, тем же разбором, что строка ввода (ADR-0045). */

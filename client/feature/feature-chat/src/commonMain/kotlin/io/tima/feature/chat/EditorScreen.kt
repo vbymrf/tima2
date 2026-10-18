@@ -106,14 +106,53 @@ object EditorTags {
     fun cellText(index: Int, cell: Int) = "editor:cell.$index.$cell.text"
     /** Виджет: во всю ширину — `editor:widget.N`, в ячейке — `editor:widget.N.C.W`. */
     fun spot(s: io.tima.domain.chat.Spot) = if (s.cell < 0) "editor:widget.${s.item}" else "editor:widget.${s.item}.${s.cell}.${s.widget}"
+    /** Рамка между столбцами ряда N: `editor:border.N.B`. */
+    fun border(item: Int, boundary: Int) = "editor:border.$item.$boundary"
+    const val GRID = "editor:grid"
 }
 
 /** Разделы редактора и кнопки ленты (Решения §10.2) — ключи подписей `EditorWords.button`. */
 internal enum class EditorTab(val key: String, val buttons: List<String>) {
-    TEXT("text", listOf("paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol", "paste", "marks")),
+    TEXT("text", listOf("paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol", "paste")),
     INSERT("insert", listOf("picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply")),
-    LAYOUT("layout", listOf("row", "table", "joinLeft", "joinUp", "cellAdd", "cellRemove", "merge", "split", "up", "down", "delete")),
+    LAYOUT("layout", listOf("row", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "up", "down", "delete")),
     STYLE("style", listOf("widget", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
+}
+
+/**
+ * «Ряд»: сколько строк (до 20) и столбцов (до 7) — числа кнопками «−» и «+» (заказчик 2026-10-18).
+ * Ряд встаёт с равными столбцами.
+ */
+@Composable
+private fun GridAsk(onInsert: (lines: Int, columns: Int) -> Unit) {
+    val colors = Tima.colors
+    val w = Tima.words.editor
+    var lines by remember { mutableStateOf(1) }
+    var columns by remember { mutableStateOf(2) }
+    Column(
+        Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+            .testTag(EditorTags.GRID),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Stepper(w.gridLines, lines, 1..io.tima.domain.chat.ComposedLayout.MAX_LINES, "lines") { lines = it }
+        Stepper(w.gridColumns, columns, 1..io.tima.domain.chat.ComposedLayout.MAX_COLUMNS, "columns") { columns = it }
+        io.tima.core.ui.Chip(
+            w.gridInsert,
+            kind = io.tima.core.ui.ChipKind.Selected,
+            onClick = { onInsert(lines, columns) },
+            modifier = Modifier.testTag("editor:grid.ok"),
+        )
+    }
+}
+
+@Composable
+private fun Stepper(label: String, value: Int, range: IntRange, key: String, onChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+        Caption(label, fontSize = TimaType.sz4, modifier = Modifier.width(110.dp))
+        HeaderGlyph("−", value > range.first, "editor:grid.$key.minus") { onChange(value - 1) }
+        Caption(value.toString(), fontSize = TimaType.sz4, weight = FontWeight.Bold, modifier = Modifier.testTag("editor:grid.$key"))
+        HeaderGlyph("+", value < range.last, "editor:grid.$key.plus") { onChange(value + 1) }
+    }
 }
 
 /** Значок кнопки ленты — постоянный; буквы оформления и подпись под значком — из словаря. */
@@ -133,12 +172,12 @@ internal fun editorGlyph(key: String): String = when (key) {
     "contact" -> "👤"
     "reply" -> "@"
     "row" -> "▥"
-    "table" -> "▦"
-    "joinLeft" -> "<<"
-    "joinUp" -> "^^"
-    "cellAdd" -> "+▯"
-    "cellRemove" -> "−▯"
-    "merge" -> "⬚"
+    "colAdd" -> "+‖"
+    "colRemove" -> "−‖"
+    "lineAdd" -> "+═"
+    "lineRemove" -> "−═"
+    "joinLeft" -> "⇤"
+    "joinUp" -> "⤒"
     "split" -> "⫼"
     "up" -> "↑"
     "down" -> "↓"
@@ -206,6 +245,8 @@ fun EditorScreen(
     var symbolArea by remember { mutableStateOf(false) }
     var emojiArea by remember { mutableStateOf(false) }
     var stylePanel by remember { mutableStateOf<String?>(null) }
+    // «Ряд»: сколько строк и столбцов (заказчик 2026-10-18).
+    var gridAsk by remember { mutableStateOf(false) }
     val clipboardHtml = io.tima.core.media.rememberClipboardHtml()
     val clipboardImage = io.tima.core.media.rememberClipboardImage()
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -218,7 +259,9 @@ fun EditorScreen(
     // Таблица шире пузыря — красная и просьба изменить; отправить нельзя (§10.3).
     val wide = remember(doc) { io.tima.domain.chat.TableFit.tooWide(doc) }
     val trouble = remember(doc, wide) {
-        problems(doc) + if (wide.isNotEmpty()) listOf(w.tableTooWide(io.tima.domain.chat.TableFit.maxColumns())) else emptyList()
+        problems(doc) + wide.map { i ->
+            if (doc.items.getOrNull(i) is ComposedItem.Row) w.rowTooNarrow else w.tableTooWide(io.tima.domain.chat.TableFit.maxColumns())
+        }.distinct()
     }
     val level = doc.level ?: defaultLevel
     // Знаки md включены — знаки в поле спрятаны, набор «как в Word» (EditorMarks).
@@ -260,22 +303,19 @@ fun EditorScreen(
                     onFiles?.invoke(listOf(picture))
                     return
                 }
-                val html = clipboardHtml()
-                val text = html?.let(io.tima.domain.chat.HtmlToMarks::convert)?.takeIf { it.isNotBlank() }
-                    ?: clipboard.getText()?.text.orEmpty()
-                model.paste(text)
+                // HTML — оформление знаками («С оформл.»); простой текст — как набранный, знаками не оформляется.
+                val marked = clipboardHtml()?.let(io.tima.domain.chat.HtmlToMarks::convert)?.takeIf { it.isNotBlank() }
+                if (marked != null) model.paste(marked) else model.paste(clipboard.getText()?.text.orEmpty(), plain = true)
             }
-            "marks" -> { model.toggleMarks(); hint = if (model.doc.marks) w.marksOn else w.marksOff }
-            // Раздел «Разметка» (§10.2–§10.3).
-            "row" -> model.layout(io.tima.domain.chat.ComposedLayout::addRow)
-            "table" -> model.insert(ComposedItem.Text(TABLE_TEMPLATE))
-            // Объединение ячеек таблицы (Решения §10.3): знак в ячейке, где курсор, — кнопкой, а не
-            // только набором. `<<` — с левой, `^^` — с верхней.
-            "joinLeft" -> if (!model.tableJoin("<<")) hint = w.button("table")
-            "joinUp" -> if (!model.tableJoin("^^")) hint = w.button("table")
-            "cellAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addCell)
-            "cellRemove" -> model.layout(io.tima.domain.chat.ComposedLayout::removeCell)
-            "merge" -> model.layout(io.tima.domain.chat.ComposedLayout::merge)
+            // Раздел «Разметка» (§10.2–§10.3; заказчик 2026-10-18): ряд строк × столбцов, слияние в оба
+            // направления; таблицы в редакторе больше нет — она стала рядом.
+            "row" -> { paragraphMenu = false; stylePanel = null; gridAsk = !gridAsk }
+            "colAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addColumn)
+            "colRemove" -> model.layout(io.tima.domain.chat.ComposedLayout::removeColumn)
+            "lineAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addLine)
+            "lineRemove" -> model.layout(io.tima.domain.chat.ComposedLayout::removeLine)
+            "joinLeft" -> if (!model.join("left")) hint = w.joinRefused
+            "joinUp" -> if (!model.join("up")) hint = w.joinRefused
             "split" -> model.layout(io.tima.domain.chat.ComposedLayout::split)
             "up" -> model.layout { d, s -> io.tima.domain.chat.ComposedLayout.shift(d, s, -1) }
             "down" -> model.layout { d, s -> io.tima.domain.chat.ComposedLayout.shift(d, s, 1) }
@@ -333,6 +373,12 @@ fun EditorScreen(
         Ribbon(tab, marksOn = doc.marks, active = active, scroll = ribbonScroll, onPress = ::press)
         if (paragraphMenu) ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); paragraphMenu = false }
         stylePanel?.let { StylePanel(it, model, problems) }
+        if (gridAsk) {
+            GridAsk { lines, columns ->
+                gridAsk = false
+                model.layout { d, s -> io.tima.domain.chat.ComposedLayout.addRow(d, s, lines, columns) }
+            }
+        }
 
         // Разделитель: что выбрано (§10.2) и подсказка последнего нажатия.
         Row(
@@ -463,8 +509,6 @@ internal fun editorCommand(key: Key, ctrl: Boolean, shift: Boolean, model: Edito
     }
 }
 
-/** «Таблица» — заготовка быстрым оформлением: две колонки, строка заголовка и одна строка. */
-private const val TABLE_TEMPLATE = "|  |  |\n|---|---|\n|  |  |"
 
 @Composable
 private fun HeaderGlyph(glyph: String, enabled: Boolean, tag: String, onClick: () -> Unit) {
@@ -620,7 +664,7 @@ private fun EditorItemView(
             EditorWidget(item.widget, io.tima.domain.chat.Spot(index), model.spot == io.tima.domain.chat.Spot(index), model, drag, preview)
             DividerAfter(look)
         }
-        is ComposedItem.Row -> EditorRow(item, index, model, drag, marks, preview)
+        is ComposedItem.Row -> EditorRow(item, index, model, drag, marks, preview, tooWide)
         is ComposedItem.Continuation -> ContinuationMarker(item, index, model, levels)
     }
 }

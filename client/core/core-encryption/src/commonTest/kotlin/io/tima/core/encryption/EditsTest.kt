@@ -111,18 +111,17 @@ class EditsTest {
     }
 
     /**
-     * Сообщение с Samsung 2026-10-18: абзацы, ряд, простые абзацы подряд разными кусками, таблица с
-     * пустыми ячейками. Склеенные простые абзацы разбирались обратно одним — «изменить нельзя».
+     * Сообщение с Samsung 2026-10-18 (без таблицы — её редактор больше не правит): абзацы, ряд, простые
+     * абзацы подряд разными кусками. Склеенные простые абзацы разбирались обратно одним — «изменить нельзя».
      */
     @Test
-    fun простые_абзацы_подряд_ряд_и_таблица_правятся_в_редакторе() {
+    fun простые_абзацы_подряд_и_ряд_правятся_в_редакторе() {
         val doc = io.tima.domain.chat.ComposedDoc(
             listOf(
                 io.tima.domain.chat.ComposedItem.Text("раз\nдва\n*три*"),
                 io.tima.domain.chat.ComposedItem.Row(listOf(io.tima.domain.chat.ComposedCell(50, "слева"), io.tima.domain.chat.ComposedCell(50, "справа"))),
                 io.tima.domain.chat.ComposedItem.Text("четыре\nпять"),
                 io.tima.domain.chat.ComposedItem.Text("шесть"),
-                io.tima.domain.chat.ComposedItem.Text("| ÷\$÷\"=\" |  |\n|---|---|\n|  |  |"),
             ),
         )
         val body = ComposedBodiesOverKodium.encode(doc)!!
@@ -130,16 +129,33 @@ class EditsTest {
         assertIs<EditBody.Same>(TextBodyCodec.encodeEditDoc(body, emptyList(), opened))
     }
 
-    /** Таблицу правит редактор: знаками, со слитой ячейкой и выравниванием; меняется текст ячейки. */
+    /**
+     * Таблицы в редакторе больше нет (заказчик 2026-10-18): старое сообщение с таблицей показывается
+     * как раньше, но не правится.
+     */
     @Test
-    fun таблицу_правит_редактор() {
-        val body = TextBodyCodec.encodeTyped("до\n| a | **b** |\n|---|:---:|\n| 1 | << |\n| x\\|y | 3 |")
+    fun старую_таблицу_редактор_не_правит() {
+        val body = TextBodyCodec.encodeTyped("до\n| a | **b** |\n|---|:---:|\n| 1 | << |")
+        assertNull(TextBodyCodec.editDoc(body, emptyList()))
+    }
+
+    /** Ряд из строк со слиянием и пустой ячейкой (2026-10-18) — собирается и открывается для правки. */
+    @Test
+    fun ряд_из_строк_со_слиянием_правится() {
+        val cells = listOf(
+            io.tima.domain.chat.ComposedCell(50, "шапка"), io.tima.domain.chat.ComposedCell(50, merge = "left"),
+            io.tima.domain.chat.ComposedCell(50, "", style = mapOf("background" to "amber-soft")), io.tima.domain.chat.ComposedCell(50, "справа"),
+        )
+        val doc = io.tima.domain.chat.ComposedDoc(listOf(io.tima.domain.chat.ComposedItem.Row(cells, columns = 2)))
+        val body = ComposedBodiesOverKodium.encode(doc)!!
+        val line = TextBodyCodec.decodeLine(body)!!
+        val row = line.rich!!.blocks.single() as io.tima.domain.chat.RichBlock.Row
+        assertEquals(2, row.columns)
+        assertEquals(listOf("", "left", "", ""), row.cells.map { it.merge })
         val opened = assertNotNull(TextBodyCodec.editDoc(body, emptyList()))
-        assertIs<EditBody.Same>(TextBodyCodec.encodeEditDoc(body, emptyList(), opened))
-        val table = opened.items.first { (it as? io.tima.domain.chat.ComposedItem.Text)?.source?.startsWith("|") == true } as io.tima.domain.chat.ComposedItem.Text
-        val changed = opened.copy(items = opened.items.map { if (it === table) table.copy(source = table.source.replace("| 1 |", "| 7 |")) else it })
-        val edit = assertIs<EditBody.Changes>(TextBodyCodec.encodeEditDoc(body, emptyList(), changed))
-        assertEquals(true, TextBodyCodec.decodeEdited(body, listOf(edit.body))!!.text.contains("7"))
+        assertEquals(doc.items.single(), opened.items.single(), "пустая ячейка с фоном и слитая — на месте")
+        val changed = opened.copy(items = listOf((opened.items.single() as io.tima.domain.chat.ComposedItem.Row).let { r -> r.copy(cells = r.cells.mapIndexed { i, c -> if (i == 3) c.copy(text = "иначе") else c }) }))
+        assertIs<EditBody.Changes>(TextBodyCodec.encodeEditDoc(body, emptyList(), changed))
     }
 
     @Test

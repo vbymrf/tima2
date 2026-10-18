@@ -22,7 +22,12 @@ object MarkupRules {
     const val MAX_ROWS = 20
 
     const val MIN_CELLS = 1
-    const val MAX_CELLS = 4
+
+    /** Столбцов в ряду (заказчик 2026-10-18: до 7; было 4). */
+    const val MAX_CELLS = 7
+
+    /** Строк в ряду (заказчик 2026-10-18). */
+    const val MAX_LINES = 20
 
     /** Картинок в сообщении. */
     const val MAX_IMAGES = 10
@@ -121,13 +126,24 @@ object MarkupRules {
         checkStyle(block, ctx)
         when (block.type) {
             BlockType.FLEX -> {
-                val cells = block.children
-                if (cells.size !in MIN_CELLS..MAX_CELLS) out += Problem("cells", "в ряду ${cells.size} ячеек, можно $MIN_CELLS–$MAX_CELLS")
-                if (cells.any { it.type != BlockType.CELL }) out += Problem("flex-children", "в ряду не только ячейки")
-                val widths = cells.map { it.style["width"]?.toIntOrNull() }
-                if (widths.any { it == null || it < 1 }) out += Problem("width", "у ячейки ряда нет ширины")
-                else if (widths.sumOf { it!! } != 100) out += Problem("width", "ширины ряда в сумме ${widths.sumOf { it!! }}, нужно 100")
-                for (cell in cells.filter { it.type == BlockType.CELL }) checkRowCell(cell, ctx)
+                // Однострочный ряд — ячейки прямо в нём; ряд из строк (2026-10-18) — строки `row` с ячейками.
+                val lines = if (block.children.isNotEmpty() && block.children.all { it.type == BlockType.ROW }) {
+                    block.children.map { it.children }
+                } else {
+                    listOf(block.children)
+                }
+                if (lines.size > MAX_LINES) out += Problem("lines", "в ряду ${lines.size} строк, можно до $MAX_LINES")
+                val columns = lines.first().size
+                if (lines.any { it.size != columns }) out += Problem("cells", "в строках ряда разное число ячеек")
+                for (cells in lines) {
+                    if (cells.size !in MIN_CELLS..MAX_CELLS) out += Problem("cells", "в ряду ${cells.size} ячеек, можно $MIN_CELLS–$MAX_CELLS")
+                    if (cells.any { it.type != BlockType.CELL }) out += Problem("flex-children", "в ряду не только ячейки")
+                    val widths = cells.map { it.style["width"]?.toIntOrNull() }
+                    if (widths.any { it == null || it < 1 }) out += Problem("width", "у ячейки ряда нет ширины")
+                    else if (widths.sumOf { it!! } != 100) out += Problem("width", "ширины ряда в сумме ${widths.sumOf { it!! }}, нужно 100")
+                    for (cell in cells.filter { it.type == BlockType.CELL }) checkRowCell(cell, ctx)
+                }
+                if (lines.all { it.size == columns }) checkMerges(lines.flatten(), columns, out)
             }
             BlockType.TABLE -> {
                 if (block.children.isEmpty()) out += Problem("table", "в таблице нет строк")
@@ -156,6 +172,32 @@ object MarkupRules {
                 }
             }
             else -> checkWidget(block, ctx)
+        }
+    }
+
+    /**
+     * Слияние в ряду (2026-10-18): «с левой» не в первом столбце, «с верхней» не в первой строке, у
+     * слитой ячейки нет своего содержимого, а слитое — прямоугольник.
+     */
+    private fun checkMerges(cells: List<MarkupBlock>, columns: Int, out: MutableList<Problem>) {
+        if (columns <= 0) return
+        val owner = IntArray(cells.size) { it }
+        for (p in cells.indices) {
+            val merge = cells[p].style["merge"] ?: continue
+            val c = p % columns
+            when {
+                merge == "left" && c > 0 -> owner[p] = owner[p - 1]
+                merge == "up" && p >= columns -> owner[p] = owner[p - columns]
+                else -> out += Problem("merge", "слияние «$merge» у ячейки, которой не с чем сливаться")
+            }
+            if (cells[p].nodeIds.isNotEmpty() || cells[p].children.isNotEmpty()) out += Problem("merge", "у слитой ячейки своё содержимое")
+        }
+        for (o in owner.toSet()) {
+            val places = owner.indices.filter { owner[it] == o }
+            val lines = places.map { it / columns }
+            val cols = places.map { it % columns }
+            val area = (lines.max() - lines.min() + 1) * (cols.max() - cols.min() + 1)
+            if (area != places.size) out += Problem("merge", "слитое в ряду не прямоугольник")
         }
     }
 

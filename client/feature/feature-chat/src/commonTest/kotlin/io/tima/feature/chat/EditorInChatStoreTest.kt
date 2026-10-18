@@ -293,18 +293,4 @@ class EditorInChatStoreTest {
         assertEquals(listOf("закрытое", "открытое|u:77"), sent, "основное ушло после перезапуска с подкладкой")
         assertNull(saved["chat-1|pending"], "ожидание снято")
     }
-
-    @Test
-    fun объединение_ячейки_таблицы_кнопкой() {
-        val table = "| a | b |\n|---|---|\n| c | d |"
-        val m = EditorModel(ComposedDoc.of(table))
-        // Курсор в ячейке «d» — с левой.
-        m.changed(0, TextFieldValue(table, TextRange(table.indexOf("d"))))
-        assertTrue(m.tableJoin("<<"))
-        assertEquals("| a | b |\n|---|---|\n| c | << |", m.focusedText)
-        // Курсор вне таблицы — ничего.
-        val plain = EditorModel(ComposedDoc.of("просто текст"))
-        plain.changed(0, TextFieldValue("просто текст", TextRange(3)))
-        assertFalse(plain.tableJoin("^^"))
-    }
 }

@@ -32,7 +32,8 @@ object ComposedStyle {
     /** Заменить стиль выбранного целиком (Сброс — пустым, JSON — разобранным). */
     fun setStyle(doc: ComposedDoc, at: Spot, style: Map<String, String>): ComposedDoc {
         val item = doc.items.getOrNull(at.item) ?: return doc
-        val clean = style.filterKeys { it != "width" }
+        // Ширину задаёт рамка, слияние — «С левой», «С верхней»: не стилем.
+        val clean = style.filterKeys { it != "width" && it != "merge" }
         val cell = cellOf(doc, at)
         val next: ComposedItem = if (cell != null) {
             val row = item as ComposedItem.Row
@@ -139,9 +140,12 @@ object TableFit {
         return n + 1
     }
 
-    /** Куски-тексты с таблицей шире пузыря. */
+    /** Куски, которые не помещаются: таблица знаками шире пузыря, ряд с узкой для содержимого ячейкой. */
     fun tooWide(doc: ComposedDoc): List<Int> = doc.items.mapIndexedNotNull { i, item ->
-        i.takeIf { item is ComposedItem.Text && widest(item.source) > maxColumns() }
+        i.takeIf {
+            (item is ComposedItem.Text && widest(item.source) > maxColumns()) ||
+                (item is ComposedItem.Row && RowFit.tooNarrow(item))
+        }
     }
 
     private val SEPARATOR = Regex("^\\s*\\|?\\s*:?-{3,}:?\\s*(\\|\\s*:?-{3,}:?\\s*)*\\|?\\s*$")
