@@ -135,7 +135,9 @@ type MessageBody struct {
 	//
 	// Тело записи правки — только изменённые узлы исходного; text, nodes и markup такой записи
 	// пусты. Строение сообщения правка не трогает: блоки разметки исходного остаются на месте.
-	Edits         []*NodeEdit `protobuf:"bytes,6,rep,name=edits,proto3" json:"edits,omitempty"`
+	//
+	// Номер 7, а не 6: поле 6 обещано `StickerRef` (doc_mig/СТИКЕР-В-ТЕЛЕ-СООБЩЕНИЯ.md).
+	Edits         []*NodeEdit `protobuf:"bytes,7,rep,name=edits,proto3" json:"edits,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -371,16 +373,19 @@ func (x *Entity) GetMediaId() string {
 }
 
 type MediaRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MediaId       string                 `protobuf:"bytes,1,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
-	MediaKey      []byte                 `protobuf:"bytes,2,opt,name=media_key,json=mediaKey,proto3" json:"media_key,omitempty"` // 32 B — ключ шифрования медиа-объекта (media-storage.md §5)
-	Mime          string                 `protobuf:"bytes,3,opt,name=mime,proto3" json:"mime,omitempty"`
-	SizeBytes     uint64                 `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
-	Width         uint32                 `protobuf:"varint,5,opt,name=width,proto3" json:"width,omitempty"`
-	Height        uint32                 `protobuf:"varint,6,opt,name=height,proto3" json:"height,omitempty"`
-	DurationMs    uint32                 `protobuf:"varint,7,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	Blurhash      string                 `protobuf:"bytes,8,opt,name=blurhash,proto3" json:"blurhash,omitempty"`                        // плейсхолдер до загрузки
-	ChunkCount    uint32                 `protobuf:"varint,9,opt,name=chunk_count,json=chunkCount,proto3" json:"chunk_count,omitempty"` // >1 → chunked (§10.3)
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	MediaId    string                 `protobuf:"bytes,1,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	MediaKey   []byte                 `protobuf:"bytes,2,opt,name=media_key,json=mediaKey,proto3" json:"media_key,omitempty"` // 32 B — ключ шифрования медиа-объекта (media-storage.md §5)
+	Mime       string                 `protobuf:"bytes,3,opt,name=mime,proto3" json:"mime,omitempty"`
+	SizeBytes  uint64                 `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Width      uint32                 `protobuf:"varint,5,opt,name=width,proto3" json:"width,omitempty"`
+	Height     uint32                 `protobuf:"varint,6,opt,name=height,proto3" json:"height,omitempty"`
+	DurationMs uint32                 `protobuf:"varint,7,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	Blurhash   string                 `protobuf:"bytes,8,opt,name=blurhash,proto3" json:"blurhash,omitempty"`                        // плейсхолдер до загрузки
+	ChunkCount uint32                 `protobuf:"varint,9,opt,name=chunk_count,json=chunkCount,proto3" json:"chunk_count,omitempty"` // >1 → chunked (§10.3)
+	// Превью фото от отправителя (doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §3): JPEG по большей стороне 320,
+	// качество 0,7, до 20 КБ — едет внутри зашифрованного тела, полное — по нажатию. Пусто — нет.
+	Preview       []byte `protobuf:"bytes,10,opt,name=preview,proto3" json:"preview,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -478,6 +483,13 @@ func (x *MediaRef) GetChunkCount() uint32 {
 	return 0
 }
 
+func (x *MediaRef) GetPreview() []byte {
+	if x != nil {
+		return x.Preview
+	}
+	return nil
+}
+
 var File_message_body_proto protoreflect.FileDescriptor
 
 const file_message_body_proto_rawDesc = "" +
@@ -489,7 +501,7 @@ const file_message_body_proto_rawDesc = "" +
 	"\x05media\x18\x03 \x03(\v2\x18.tima.crypto.v1.MediaRefR\x05media\x12\x14\n" +
 	"\x05nodes\x18\x04 \x03(\tR\x05nodes\x12\x16\n" +
 	"\x06markup\x18\x05 \x01(\tR\x06markup\x12.\n" +
-	"\x05edits\x18\x06 \x03(\v2\x18.tima.crypto.v1.NodeEditR\x05edits\"P\n" +
+	"\x05edits\x18\a \x03(\v2\x18.tima.crypto.v1.NodeEditR\x05edits\"P\n" +
 	"\bNodeEdit\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\rR\x05index\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x1a\n" +
@@ -501,7 +513,7 @@ const file_message_body_proto_rawDesc = "" +
 	"\x03url\x18\x04 \x01(\tR\x03url\x12\x17\n" +
 	"\auser_id\x18\x05 \x01(\tR\x06userId\x12\x1c\n" +
 	"\tattribute\x18\x06 \x01(\tR\tattribute\x12\x19\n" +
-	"\bmedia_id\x18\a \x01(\tR\amediaId\"\x81\x02\n" +
+	"\bmedia_id\x18\a \x01(\tR\amediaId\"\x9b\x02\n" +
 	"\bMediaRef\x12\x19\n" +
 	"\bmedia_id\x18\x01 \x01(\tR\amediaId\x12\x1b\n" +
 	"\tmedia_key\x18\x02 \x01(\fR\bmediaKey\x12\x12\n" +
@@ -514,7 +526,9 @@ const file_message_body_proto_rawDesc = "" +
 	"durationMs\x12\x1a\n" +
 	"\bblurhash\x18\b \x01(\tR\bblurhash\x12\x1f\n" +
 	"\vchunk_count\x18\t \x01(\rR\n" +
-	"chunkCount*\xdc\x01\n" +
+	"chunkCount\x12\x18\n" +
+	"\apreview\x18\n" +
+	" \x01(\fR\apreview*\xdc\x01\n" +
 	"\n" +
 	"EntityType\x12\x12\n" +
 	"\x0eET_UNSPECIFIED\x10\x00\x12\v\n" +

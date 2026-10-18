@@ -60,7 +60,7 @@ group_message_canonical_v3 =
 
 ### 4. Тело правки — изменённые узлы
 
-`MessageBody.edits = 6`, элементы `NodeEdit{index, text, entities}`. `text`, `nodes`, `markup` записи
+`MessageBody.edits = 7` (поле 6 обещано `StickerRef`), элементы `NodeEdit{index, text, entities}`. `text`, `nodes`, `markup` записи
 правки пусты.
 
 - `index` — **позиция** узла в `nodes` исходного, не идентификатор: у сообщения без разметки
