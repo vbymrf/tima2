@@ -54,7 +54,7 @@ const (
 // всех, кто это событие не получил.
 func LaneOf(eventType string) int16 {
 	switch eventType {
-	case "message.new", "message.group", "message.level_narrowed":
+	case "message.new", "message.group", "message.level_narrowed", "message.deleted":
 		return LanePts
 	case "key.rotated", "recovery.gk_request", "recovery.gk_ready", "group.rotation_needed":
 		return LaneQts

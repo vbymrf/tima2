@@ -18,6 +18,7 @@ import (
 type MessageStore interface {
 	SaveMessage(ctx context.Context, m store.Message) error
 	EditTarget(ctx context.Context, group bool, container string, messageID int64) (store.EditTarget, error)
+	DeleteMessage(ctx context.Context, group bool, container string, messageID int64, requesterID string, allowForeign bool) ([]string, error)
 	ProfileRevs(ctx context.Context, ids []string) (map[string]int32, error)
 	ListMessages(ctx context.Context, chatID, deviceID string, before uint64, limit int) ([]store.StoredMessage, error)
 	SigningKey(ctx context.Context, deviceID, userID string) ([]byte, error)
@@ -55,6 +56,7 @@ func RegisterMessages(
 	mux.HandleFunc("POST /api/v1/messages", requireDevice(postMessage(deps)))
 	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages", requireDevice(listMessages(deps)))
 	mux.HandleFunc("GET /api/v1/chats/{chatID}/messages/{messageID}", requireDevice(getPersonalMessage(deps)))
+	mux.HandleFunc("DELETE /api/v1/chats/{chatID}/messages/{messageID}", requireDevice(deletePersonalMessage(deps)))
 	mux.HandleFunc("POST /api/v1/chats/{chatID}/read", requireDevice(chatRead(deps)))
 	mux.HandleFunc("POST /api/v1/chats/{chatID}/typing", requireDevice(chatTyping(deps)))
 }
