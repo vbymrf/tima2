@@ -60,6 +60,12 @@ class GroupMessageSealerOverKodium(
         createdAtUnixMs: Long,
         /** Правка (ADR-0045): номер исправляемого; 0 — обычное сообщение. */
         editOf: Long = 0,
+        /**
+         * Корень ветки (ADR-0024): входит в подписываемые байты (`thread_root`), и сервер сверяет
+         * подпись с тем корнем, что пришёл в запросе. До 2026-10-18 здесь его не было — ответ в
+         * ветке уходил с подписью «без ветки» и получал 403 `bad_signature` (журнал работ, Н24).
+         */
+        threadRoot: Long = 0,
     ): SealedGroupBytes? {
         val meta = GroupMessageMeta(
             groupId = groupId,
@@ -67,6 +73,7 @@ class GroupMessageSealerOverKodium(
             senderDevice = senderDeviceId,
             kind = KIND_TEXT,
             createdAtUnixMs = createdAtUnixMs,
+            threadRoot = threadRoot.toULong(),
             gkVersion = gkVersion,
         )
         val assembled = if (gkVersion == 0) {

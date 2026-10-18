@@ -129,6 +129,8 @@ class GroupSender(
             body = entry.body,
             createdAtUnixMs = entry.createdAtMs,
             editOf = entry.editOf,
+            // Корень ветки — под подписью: сервер сверяет её с `thread_root` запроса (Н24).
+            threadRoot = entry.threadRoot,
         ) ?: return wait(entry, "не удалось собрать сообщение группы")
 
         val outcome = transport.send(
