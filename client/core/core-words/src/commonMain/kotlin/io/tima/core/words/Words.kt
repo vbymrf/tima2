@@ -1454,6 +1454,19 @@ interface ChatWords {
     /** Единицы размера файла: байты, килобайты, мегабайты. */
     val sizeUnits: List<String>
     val fileSaveAs: String
+    /** Просмотр фото (заказчик 2026-10-18): меню «≡», переслать, информация. */
+    val photoForward: String
+    val photoForwardTitle: String
+    val photoForwarded: String
+    val photoInfo: String
+    val photoName: String
+    val photoNoName: String
+    val photoSize: String
+    val photoPixels: String
+    val photoFrom: String
+    val photoShareNone: String
+    /** «3 из 12» — какое фото переписки открыто. */
+    fun photoOf(index: Int, count: Int): String
     val fileGone: String
     /** Срок почтальона прошёл — попросили прислать снова (Решения §6). */
     val fileAsked: String
@@ -3565,6 +3578,17 @@ object RussianWords : Words {
         override val fileDownload = "Скачать"
         override val sizeUnits = listOf("Б", "КБ", "МБ")
         override val fileSaveAs = "Сохранить как"
+        override val photoForward = "Переслать"
+        override val photoForwardTitle = "Переслать в переписку"
+        override val photoForwarded = "Фото переслано"
+        override val photoInfo = "Информация"
+        override val photoName = "Имя"
+        override val photoNoName = "не указано"
+        override val photoSize = "Размер"
+        override val photoPixels = "Точек"
+        override val photoFrom = "Прислал(а)"
+        override val photoShareNone = "Отсюда поделиться нельзя — сохраните фото и отправьте файлом"
+        override fun photoOf(index: Int, count: Int) = "$index из $count"
         override val fileGone = "Файла на сервере уже нет — попросить прислать снова"
         override val fileAsked = "Файла у сервера уже нет — попросили прислать снова; откроется, когда его загрузят"
         override val sending = "Отправляется…"

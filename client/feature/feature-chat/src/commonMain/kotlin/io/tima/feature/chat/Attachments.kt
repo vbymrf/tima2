@@ -14,14 +14,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -32,7 +43,6 @@ import io.tima.core.media.mediaUri
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
-import io.tima.core.ui.IconButton
 import io.tima.core.ui.MessagePicture
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
@@ -147,24 +157,178 @@ internal fun sizeText(bytes: Long, units: List<String>): String = when {
     }
 }
 
+/** Фото переписки для просмотра: само фото, сообщение, в котором оно пришло, и кто прислал. */
+class PhotoAt(val media: RichMedia, val line: io.tima.domain.chat.ChatLine, val from: String?)
+
+/** Что можно сделать с фото в просмотре — меню «≡»; `null` — пункта нет. */
+class PhotoActions(
+    val save: (PhotoAt) -> Unit = {},
+    val deleteForMe: ((PhotoAt) -> Unit)? = null,
+    val deleteForAll: ((PhotoAt) -> Unit)? = null,
+    val forward: ((PhotoAt) -> Unit)? = null,
+    val share: ((PhotoAt) -> Unit)? = null,
+)
+
+/** Метки окна просмотра фото (СЦЕНАРИИ-ПО-ОКНАМ, «Фото»). */
+object PhotoTags {
+    const val WINDOW = "msg:photo.full"
+    const val CLOSE = "msg:photo.close"
+    const val MENU = "msg:photo.menu"
+    const val PREV = "msg:photo.prev"
+    const val NEXT = "msg:photo.next"
+    const val COUNT = "msg:photo.count"
+    const val INFO = "msg:photo.info"
+    fun item(key: String) = "msg:photo.menu.$key"
+}
+
 /**
- * Полное фото поверх переписки (Решения §3: «полное — по нажатию»): грузится от почтальона и
- * открывается ключом из тела. Срок у почтальона вышел — место с подписью, превью остаётся в ленте.
+ * Просмотр фото переписки (заказчик 2026-10-18): полное фото — от почтальона, ключом из тела; срок
+ * вышел — место с подписью. Слева сверху «≡» — Сохранить как, Удалить у себя, у всех, Переслать,
+ * Поделиться, Информация (имя, размер); справа «✕». «‹» и «›» по краям и смахивание вбок — соседние
+ * фото переписки, вниз — закрыть. Кнопки — на сплошном фоне: на светлом фото прозрачная не видна.
  */
 @Composable
-fun FullPhoto(photo: RichMedia, onClose: () -> Unit) {
-    Box(
-        Modifier.fillMaxSize().background(Tima.colors.text.copy(alpha = 0.85f)).clickable(onClick = onClose).testTag("msg:photo.full"),
-        contentAlignment = Alignment.Center,
-    ) {
-        MessagePicture(
-            mediaUri(photo.mediaId, photo.key),
-            if (photo.width > 0 && photo.height > 0) photo.width.toFloat() / photo.height else null,
-            Tima.words.chat.fileGone,
-            Modifier.padding(12.dp),
-        )
-        Box(Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.TopEnd) {
-            IconButton(glyph = "✕", onClick = onClose, modifier = Modifier.testTag("msg:photo.close"))
+fun PhotoViewer(
+    photos: List<PhotoAt>,
+    start: Int,
+    actions: PhotoActions,
+    onClose: () -> Unit,
+    /** Одно предложение поверх фото — «не загрузилось», «переслано». */
+    notice: String? = null,
+) {
+    if (photos.isEmpty()) {
+        onClose()
+        return
+    }
+    val colors = Tima.colors
+    val w = Tima.words.chat
+    var index by remember(start) { mutableStateOf(start.coerceIn(0, photos.lastIndex)) }
+    val i = index.coerceIn(0, photos.lastIndex)
+    val photo = photos[i]
+    var menu by remember { mutableStateOf(false) }
+    var info by remember { mutableStateOf(false) }
+    var drag by remember { mutableStateOf(Offset.Zero) }
+    val density = LocalDensity.current
+    val turn = with(density) { 80.dp.toPx() }
+    val close = with(density) { 120.dp.toPx() }
+    fun go(to: Int) {
+        index = to.coerceIn(0, photos.lastIndex)
+        menu = false
+        info = false
+    }
+    Box(Modifier.fillMaxSize().background(colors.viewer).testTag(PhotoTags.WINDOW)) {
+        Box(
+            Modifier.fillMaxSize()
+                .offset { IntOffset(drag.x.roundToInt(), drag.y.coerceAtLeast(0f).roundToInt()) }
+                .pointerInput(i, photos.size) {
+                    detectDragGestures(
+                        onDragEnd = {
+                            val d = drag
+                            drag = Offset.Zero
+                            when {
+                                d.y > close && d.y > kotlin.math.abs(d.x) -> onClose()
+                                d.x < -turn && i < photos.lastIndex -> go(i + 1)
+                                d.x > turn && i > 0 -> go(i - 1)
+                            }
+                        },
+                        onDragCancel = { drag = Offset.Zero },
+                    ) { change, by ->
+                        change.consume()
+                        drag += by
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            MessagePicture(
+                mediaUri(photo.media.mediaId, photo.media.key),
+                if (photo.media.width > 0 && photo.media.height > 0) photo.media.width.toFloat() / photo.media.height else null,
+                w.fileGone,
+                Modifier.padding(12.dp),
+            )
+        }
+        Row(
+            Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SolidButton("≡", PhotoTags.MENU) { menu = !menu; info = false }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                if (photos.size > 1) {
+                    Caption(
+                        w.photoOf(i + 1, photos.size),
+                        fontSize = TimaType.sz5,
+                        weight = FontWeight.Bold,
+                        color = colors.text,
+                        modifier = Modifier.background(colors.surface, RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp)
+                            .testTag(PhotoTags.COUNT),
+                    )
+                }
+            }
+            SolidButton("✕", PhotoTags.CLOSE, onClose)
+        }
+        if (i > 0) {
+            Box(Modifier.align(Alignment.CenterStart).padding(12.dp)) { SolidButton("‹", PhotoTags.PREV) { go(i - 1) } }
+        }
+        if (i < photos.lastIndex) {
+            Box(Modifier.align(Alignment.CenterEnd).padding(12.dp)) { SolidButton("›", PhotoTags.NEXT) { go(i + 1) } }
+        }
+        if (menu) {
+            Column(
+                Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 72.dp).widthIn(min = 220.dp, max = 300.dp)
+                    .background(colors.surface, RoundedCornerShape(12.dp)).padding(vertical = 4.dp),
+            ) {
+                MenuRow("save", w.fileSaveAs) { menu = false; actions.save(photo) }
+                actions.deleteForMe?.let { act -> MenuRow("delete.me", w.menuDeleteForMe) { menu = false; act(photo) } }
+                // У всех — только своё отправленное (Решения §8).
+                actions.deleteForAll?.takeIf { photo.line.outgoing && photo.line.serverId > 0 }?.let { act ->
+                    MenuRow("delete.all", w.menuDeleteForAll) { menu = false; act(photo) }
+                }
+                actions.forward?.let { act -> MenuRow("forward", w.photoForward) { menu = false; act(photo) } }
+                actions.share?.let { act -> MenuRow("share", w.menuShare) { menu = false; act(photo) } }
+                MenuRow("info", w.photoInfo) { menu = false; info = true }
+            }
+        }
+        val bottom = when {
+            info -> listOf(
+                "${w.photoName}: ${photo.media.name.ifBlank { w.photoNoName }}",
+                "${w.photoSize}: ${sizeText(photo.media.size, w.sizeUnits).ifBlank { "—" }}",
+                "${w.photoPixels}: ${if (photo.media.width > 0) "${photo.media.width} × ${photo.media.height}" else "—"}",
+                "${w.photoFrom}: ${photo.from ?: "—"}",
+            )
+            notice != null -> listOf(notice)
+            else -> emptyList()
+        }
+        if (bottom.isNotEmpty()) {
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp)
+                    .background(colors.surface, RoundedCornerShape(12.dp)).clickable { info = false }.padding(12.dp)
+                    .testTag(PhotoTags.INFO),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                for (line in bottom) Caption(line, fontSize = TimaType.sz4, color = colors.text)
+            }
         }
     }
+}
+
+/** Кнопка поверх фото — на сплошном круге темы, без прозрачности: видна на любом фото. */
+@Composable
+private fun SolidButton(glyph: String, tag: String, onClick: () -> Unit) {
+    val colors = Tima.colors
+    Box(
+        Modifier.size(48.dp).background(colors.surface, CircleShape).clickable(onClick = onClick).testTag(tag),
+        contentAlignment = Alignment.Center,
+    ) {
+        Caption(glyph, fontSize = 30.sp, weight = FontWeight.Bold, color = colors.text)
+    }
+}
+
+@Composable
+private fun MenuRow(key: String, label: String, onClick: () -> Unit) {
+    Caption(
+        label,
+        fontSize = TimaType.sz4,
+        color = Tima.colors.text,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp)
+            .testTag(PhotoTags.item(key)),
+    )
 }

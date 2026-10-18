@@ -143,6 +143,11 @@ data class TimaColors(
      * ADR-0044 §4). Разметка несёт только имена; `*-soft` — подложки ряда и ячейки.
      */
     val messagePalette: Map<String, Color> = LightMessagePalette,
+    /**
+     * Фон просмотра фото во весь экран — почти чёрный в обеих темах (заказчик 2026-10-18): фото
+     * смотрят на тёмном, а кнопки поверх него — на сплошном [surface].
+     */
+    val viewer: Color = Color(0xFF101010),
 ) {
     companion object {
 

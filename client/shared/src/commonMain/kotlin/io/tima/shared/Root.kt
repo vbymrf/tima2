@@ -1009,6 +1009,8 @@ private fun App(
     // Суперсообщение группы из «Описания» (ПЛАН-(ЗО) ЗО5): переписка откроется с редактором, в
     // котором уже стоят подкладки всех сообщений уровня 0.
     var superDraft by remember { mutableStateOf<Pair<String, io.tima.domain.chat.ComposedDoc>?>(null) }
+    // Фото, пересылаемое из просмотра в другую переписку (2026-10-18): номер переписки, файл, вид.
+    var forwardPhoto by remember { mutableStateOf<Triple<String, ByteArray, String>?>(null) }
     // Куда человек ходил — второй вопрос правила журнала («что он делал»). Пишется смена,
     // а не каждая перерисовка: журнал должен читаться, а не разбухать.
     // Кодом, а не названием (заказчик 2026-09-27): код один на любом языке и находится
@@ -4072,6 +4074,13 @@ private fun App(
                         onSuperTaken = { superDraft = null },
                         finder = assembled.receiver.finder,
                         onOpenChat = { id -> where = Where.Chat(id, null) },
+                        forwardTargets = listState.chats.filter { it.chatId != current.chatId }.map { it.chatId to (it.title ?: wordsNow.chat.nameless) },
+                        onForward = { id, title, bytes, mime ->
+                            forwardPhoto = Triple(id, bytes, mime)
+                            where = Where.Chat(id, title)
+                        },
+                        incoming = forwardPhoto?.takeIf { it.first == current.chatId }?.let { it.second to it.third },
+                        onIncomingTaken = { forwardPhoto = null },
                         // «Сообщить о проблеме» из подокна неотправленного: отчёт с кодом
                         // причины уже в тексте — человеку не надо ничего пересказывать.
                         onReportFailed = { reason, waiting ->
@@ -4364,6 +4373,13 @@ private fun Chat(
     finder: io.tima.domain.chat.MessageFinder? = null,
     /** Открыть другую переписку — из сообщения, показанного одним. */
     onOpenChat: ((String) -> Unit)? = null,
+    /** Куда переслать фото из просмотра: переписки, кроме этой — номер и название. */
+    forwardTargets: List<Pair<String, String>> = emptyList(),
+    /** Переслать фото: открыть ту переписку, фото уйдёт там. */
+    onForward: ((chatId: String, title: String, bytes: ByteArray, mime: String) -> Unit)? = null,
+    /** Фото, пересланное сюда из другой переписки, — отправить; `onIncomingTaken` — ушло. */
+    incoming: Pair<ByteArray, String>? = null,
+    onIncomingTaken: () -> Unit = {},
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
     var chatMenu by remember { mutableStateOf(false) }
@@ -4606,6 +4622,11 @@ private fun Chat(
     var selectFor by remember { mutableStateOf<ChatLine?>(null) }
     // ── Вложения (Решения §2, §3, §6; ВЫБОР-РЕАЛИЗАЦИИ §11.2а) ─────────────────────
     var photoOpen by remember { mutableStateOf<io.tima.domain.chat.RichMedia?>(null) }
+    // Просмотр фото: что сказать поверх фото, какое пересылается, «Поделиться» платформы.
+    var photoNotice by remember { mutableStateOf<String?>(null) }
+    var forwardOf by remember { mutableStateOf<io.tima.feature.chat.PhotoAt?>(null) }
+    val shareImage = io.tima.core.media.rememberShareImage()
+    val photoWords = Tima.words.chat
     var asking by remember { mutableStateOf<AttachAsk?>(null) }
     var askTrouble by remember { mutableStateOf<String?>(null) }
     val photosPicker = io.tima.core.media.rememberPhotosPicker(io.tima.domain.chat.SendAttachments.MAX_PHOTOS) { list ->
@@ -4644,21 +4665,31 @@ private fun Chat(
         Journal.note(LogCode.FILE_STORE, "сохранено как", "вышло" to ok)
         if (!ok) store.said(saved.fileRefused(""))
     }
+    // Файл открытым: из своей папки, иначе у почтальона; срок прошёл — попросили прислать снова
+    // (Решения §6). Не вышло — сказать почему и вернуть `null`.
+    suspend fun plainOf(file: io.tima.domain.chat.RichMedia, say: (String) -> Unit): ByteArray? {
+        val got = postman?.obtain(file)
+            ?: network.media.download(file.mediaId)?.let { PostmanFiles.Obtained.Got(it) }
+            ?: PostmanFiles.Obtained.Failed
+        return when (got) {
+            is PostmanFiles.Obtained.Got -> io.tima.core.encryption.MediaFiles.open(file.key, got.sealed).also { if (it == null) say(saved.fileGone) }
+            PostmanFiles.Obtained.Asked -> null.also { say(saved.fileAsked) }
+            PostmanFiles.Obtained.Failed -> null.also { say(saved.sendFailed) }
+        }
+    }
     val saveFromChat: (io.tima.domain.chat.RichMedia) -> Unit = { file ->
         scope.launch {
-            // Из своей папки, иначе у почтальона; срок прошёл — попросили прислать снова (Решения §6).
-            val got = postman?.obtain(file)
-                ?: network.media.download(file.mediaId)?.let { PostmanFiles.Obtained.Got(it) }
-                ?: PostmanFiles.Obtained.Failed
-            when (got) {
-                is PostmanFiles.Obtained.Got -> {
-                    val plain = io.tima.core.encryption.MediaFiles.open(file.key, got.sealed)
-                    if (plain == null) store.said(saved.fileGone) else saver(file.name.ifBlank { "file" }, file.mime, plain)
-                }
-                PostmanFiles.Obtained.Asked -> store.said(saved.fileAsked)
-                PostmanFiles.Obtained.Failed -> store.said(saved.sendFailed)
-            }
+            plainOf(file, store::said)?.let { plain -> saver(file.name.ifBlank { "file" }, file.mime, plain) }
         }
+    }
+    // Пересланное сюда фото — уходит, как только переписка готова (у группы — известен её вид:
+    // от него круг быстрой отправки).
+    LaunchedEffect(incoming, kind) {
+        val photo = incoming ?: return@LaunchedEffect
+        if (group && kind == null) return@LaunchedEffect
+        store.sendPhotos(listOf(photo))
+        onIncomingTaken()
+        Journal.note(LogCode.FILE_SEND, "переслано сюда", "вид" to "фото")
     }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val shareOut = remember { io.tima.core.contacts.platformInvite() }
@@ -4861,7 +4892,58 @@ private fun Chat(
         )
     }
     // Меню сообщения — после экрана, как и лист неотправленного: что позже, то сверху.
-    photoOpen?.let { photo -> io.tima.feature.chat.FullPhoto(photo) { photoOpen = null } }
+    photoOpen?.let { opened ->
+        // Все фото переписки от старых к новым: «‹», «›» и смахивание вбок листают их (2026-10-18).
+        val photos = remember(state.lines, state.names) {
+            state.lines.asReversed().flatMap { line ->
+                val rich = line.rich ?: return@flatMap emptyList()
+                val from = if (line.outgoing) myName else line.senderId?.let { state.names[it]?.name } ?: name
+                rich.blocks.filterIsInstance<io.tima.domain.chat.RichBlock.Album>()
+                    .flatMap { album -> album.media.mapNotNull { rich.media.getOrNull(it) } }
+                    .map { io.tima.feature.chat.PhotoAt(it, line, from) }
+            }
+        }
+        val start = photos.indexOfFirst { it.media.mediaId == opened.mediaId }.coerceAtLeast(0)
+        val say: (String) -> Unit = { photoNotice = it }
+        io.tima.feature.chat.PhotoViewer(
+            photos = photos.ifEmpty { listOf(io.tima.feature.chat.PhotoAt(opened, ChatLine(dedupKey = "", chatId = chatId, display = MessageDisplay.SENT, text = null, outgoing = false, atMs = 0, localId = 0), null)) },
+            start = start,
+            notice = photoNotice,
+            onClose = { photoOpen = null; photoNotice = null },
+            actions = io.tima.feature.chat.PhotoActions(
+                save = { p -> scope.launch { plainOf(p.media, say)?.let { plain -> saver(p.media.name.ifBlank { "photo.jpg" }, p.media.mime, plain) } } },
+                // Удалить — сообщение, в котором фото пришло; у всех — своё и отправленное.
+                deleteForMe = { p -> photoOpen = null; store.deleteForMe(p.line) },
+                deleteForAll = { p -> photoOpen = null; store.deleteForAllAsked(p.line) },
+                forward = if (onForward != null && forwardTargets.isNotEmpty()) { p -> forwardOf = p } else null,
+                share = { p ->
+                    if (shareImage == null) {
+                        say(photoWords.photoShareNone)
+                    } else {
+                        scope.launch { plainOf(p.media, say)?.let { plain -> if (!shareImage(plain, p.media.mime)) say(photoWords.photoShareNone) } }
+                    }
+                },
+            ),
+        )
+    }
+    forwardOf?.let { p ->
+        io.tima.feature.chat.ChoiceSheet(
+            title = photoWords.photoForwardTitle,
+            items = forwardTargets.map { io.tima.feature.chat.Choice(title = it.second) },
+            empty = photoWords.photoForwardTitle,
+            onCancel = { forwardOf = null },
+            onPick = { i ->
+                val (target, title) = forwardTargets[i]
+                forwardOf = null
+                scope.launch {
+                    val plain = plainOf(p.media) { photoNotice = it } ?: return@launch
+                    photoOpen = null
+                    Journal.note(LogCode.FILE_SEND, "переслать", "вид" to "фото")
+                    onForward?.invoke(target, title, plain, p.media.mime)
+                }
+            },
+        )
+    }
     selectFor?.let { line ->
         val text = line.text.orEmpty()
         io.tima.feature.chat.SelectSheet(
