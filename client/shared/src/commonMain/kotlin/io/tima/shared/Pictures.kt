@@ -21,14 +21,20 @@ import kotlinx.coroutines.flow.getAndUpdate
  * хранилище, когда оно есть, загрузчик спрашивает её.
  *
  * Порядок источника по плану: своя папка → наше хранилище → расшифровка ключом из сообщения.
- * Сейчас из трёх есть только хранилище: своей папки ещё нет (ПЛАН-(РС) РС8), а аватары лежат
- * открытыми — расшифровывать нечего.
+ * Аватары лежат открытыми — расшифровывать нечего; картинка внутри сообщения закрыта ключом из
+ * его тела (ПЛАН-(РС) РС4), ключ приходит в адресе. Своей папки ещё нет (ПЛАН-(РС) РС8).
  */
 class PictureSource {
     /** Медиа-хранилище текущей сессии; `null` — сессии нет, картинки не грузятся. */
     var media: Media? = null
 
-    suspend fun bytes(mediaId: String): ByteArray? = media?.download(mediaId)
+    suspend fun bytes(mediaId: String, key: ByteArray? = null): ByteArray? {
+        val raw = media?.download(mediaId) ?: return null
+        if (key == null) return raw
+        // Ключ не подошёл — так и сказать журналу: «нет файла» и «не тот ключ» чинятся по-разному.
+        return io.tima.core.encryption.MediaFiles.open(key, raw)
+            ?: throw io.tima.core.media.MediaDecryptException("ключ файла $mediaId не подошёл")
+    }
 }
 
 /** Прослойка загрузчика — ставит корень, читает сессия. */
@@ -57,6 +63,6 @@ internal fun noteMediaFailure(mediaId: String, reason: MediaFailure, detail: Str
 internal fun rememberTimaSketch(source: PictureSource): Sketch {
     val context = LocalPlatformContext.current
     return remember(context, source) {
-        timaSketch(context, source = { id -> source.bytes(id) }, onFailure = ::noteMediaFailure)
+        timaSketch(context, source = { id, key -> source.bytes(id, key) }, onFailure = ::noteMediaFailure)
     }
 }

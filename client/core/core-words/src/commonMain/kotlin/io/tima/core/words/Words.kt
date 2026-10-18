@@ -1412,6 +1412,14 @@ interface ChatWords {
     val deleteForAllAsk: String
     val deleteOffline: String
     fun deleteRefused(code: String): String
+    // ── Виджеты в сообщении (ADR-0044 §3) ──
+    val pictureMissing: String
+    fun cloudKind(kind: String): String
+    val place: String
+    val contact: String
+    /** Вставленное из другой переписки, которого нет на устройстве. */
+    val quotedElsewhere: String
+    val continueReading: String
     /** Причина отказа словами по коду сервера; незнакомый код — `null`, покажется сам код. */
     fun failReason(code: String): String?
     val moveToSection: String
@@ -3455,6 +3463,17 @@ object RussianWords : Words {
             "not_allowed" -> "Удалить у всех может только автор"
             else -> "Не удалено: $code"
         }
+        override val pictureMissing = "Картинка не загрузилась"
+        override fun cloudKind(kind: String) = when (kind) {
+            "document" -> "Документ"
+            "audio" -> "Аудио"
+            "video" -> "Видео"
+            else -> "Файл"
+        }
+        override val place = "Место на карте"
+        override val contact = "Контакт"
+        override val quotedElsewhere = "Сообщение из другой переписки"
+        override val continueReading = "Продолжить чтение"
         override fun failReason(code: String): String? = when (code) {
             "level_in_private" -> "в личной группе такого круга нет — только «Зашифровано» и «Всем и всегда»"
             "secret_in_public" -> "публичная группа не шифруется — выберите открытый круг"

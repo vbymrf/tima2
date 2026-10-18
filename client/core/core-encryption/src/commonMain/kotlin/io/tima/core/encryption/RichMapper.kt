@@ -6,7 +6,10 @@ import io.tima.crypto.Markup
 import io.tima.crypto.MarkupBlock
 import io.tima.crypto.MarkupRules
 import io.tima.crypto.MessageContent
+import io.tima.domain.chat.BlockStyle
 import io.tima.domain.chat.Bullet
+import io.tima.domain.chat.RichMedia
+import io.tima.domain.chat.RowCell
 import io.tima.domain.chat.RichBlock
 import io.tima.domain.chat.RichContent
 import io.tima.domain.chat.RichSpan
@@ -34,8 +37,8 @@ internal object RichMapper {
 
         val blocks = markup.blocks.map { block ->
             when (block.type) {
-                BlockType.PARAGRAPH -> RichBlock.Paragraph(rich(block.nodeIds.firstOrNull() ?: -1))
-                BlockType.HEADING -> RichBlock.Heading(block.level.coerceIn(1, 3), rich(block.nodeIds.firstOrNull() ?: -1))
+                BlockType.PARAGRAPH -> RichBlock.Paragraph(rich(block.nodeIds.firstOrNull() ?: -1), style(block))
+                BlockType.HEADING -> RichBlock.Heading(block.level.coerceIn(1, 3), rich(block.nodeIds.firstOrNull() ?: -1), style(block))
                 BlockType.QUOTE -> RichBlock.Quote(block.nodeIds.map(::rich))
                 BlockType.LIST -> RichBlock.Bullets(bullets(block, ::rich))
                 BlockType.CODE_BLOCK -> RichBlock.CodeBlock(nodeText(block.nodeIds.firstOrNull() ?: -1))
@@ -50,14 +53,64 @@ internal object RichMapper {
                             )
                         }
                     },
+                    style(block),
                 )
-                BlockType.REPLY -> block.widget?.ref?.let { RichBlock.Reply(block.widget!!.userId, it.container, it.message) }
-                    ?: RichBlock.Fallback("")
-                // Ряд, виджеты, подкладка, незнакомое — пока текстом своих узлов (виджеты — РС4/РС6).
-                else -> RichBlock.Fallback(allNodes(block).joinToString("\n") { nodeText(it) }.trim())
+                BlockType.FLEX -> RichBlock.Row(
+                    block.children.filter { it.type == BlockType.CELL }.map { cell ->
+                        RowCell(
+                            width = cell.style["width"]?.toIntOrNull(),
+                            text = cell.nodeIds.firstOrNull()?.let(::rich),
+                            widgets = cell.children.mapNotNull(::widget),
+                            style = style(cell),
+                        )
+                    },
+                    style(block),
+                )
+                // Виджеты и ответ; незнакомое от более новой версии — текстом своих узлов.
+                else -> widget(block) ?: RichBlock.Fallback(allNodes(block).joinToString("\n") { nodeText(it) }.trim())
             }
         }.filterNot { it is RichBlock.Fallback && it.text.isEmpty() }
-        return RichContent(blocks)
+        val media = content.media.map {
+            RichMedia(it.media_id, it.media_key.toByteArray(), it.mime, it.width, it.height)
+        }
+        return RichContent(blocks, media)
+    }
+
+    /** Виджет — в ячейке ряда или сам по себе (ADR-0044 §3). Не виджет или без данных — `null`. */
+    private fun widget(block: MarkupBlock): RichBlock? {
+        val w = block.widget ?: return null
+        return when (block.type) {
+            BlockType.IMAGE -> w.media.takeIf { it >= 0 }?.let { RichBlock.Image(it) }
+            BlockType.LINK -> w.takeIf { it.url.isNotBlank() }?.let { RichBlock.Link(it.url, it.mode.ifEmpty { "plain" }, it.title, it.description, it.media) }
+            BlockType.CLOUD -> w.takeIf { it.url.isNotBlank() }?.let { RichBlock.Cloud(it.url, it.kind.ifEmpty { "file" }, it.title) }
+            BlockType.MAP -> {
+                val lat = w.lat
+                val lon = w.lon
+                if (lat != null && lon != null) RichBlock.Place(lat, lon, w.label) else null
+            }
+            BlockType.CONTACT -> RichBlock.Contact(w.userId, w.name, w.phone)
+            BlockType.EMOJI -> w.text.takeIf { it.isNotBlank() }?.let { RichBlock.Emoji(it) }
+            BlockType.REPLY -> w.ref?.let { RichBlock.Reply(w.userId, it.container, it.message) }
+            BlockType.QUOTED -> w.ref?.let { RichBlock.Quoted(it.kind, it.container, it.message, w.author, w.cut.ifEmpty { "cut" }) }
+            BlockType.UNDERLAY -> w.ref?.let { RichBlock.Underlay(it.kind, it.container, it.message, w.author, w.lines) }
+            else -> null
+        }
+    }
+
+    /** Стиль блока — только известные ключи; цвета — имена, их значения знает экран. */
+    private fun style(block: MarkupBlock): BlockStyle {
+        val st = block.style
+        if (st.isEmpty()) return BlockStyle.NONE
+        return BlockStyle(
+            background = st["background"],
+            color = st["color"],
+            size = st["size"],
+            align = st["align"],
+            valign = st["valign"],
+            padding = st["padding"],
+            divider = st["divider"],
+            dividerColor = st["divider_color"],
+        )
     }
 
     private fun bullets(list: MarkupBlock, rich: (Int) -> RichText): List<Bullet> =

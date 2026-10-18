@@ -10,7 +10,45 @@ package io.tima.domain.chat
  *
  * `null` у строки переписки — оформления нет: обычный текст, как раньше.
  */
-data class RichContent(val blocks: List<RichBlock>)
+data class RichContent(
+    val blocks: List<RichBlock>,
+    /** Файлы сообщения (`MessageBody.media`): виджет картинки и карточка ссылки ссылаются по номеру. */
+    val media: List<RichMedia> = emptyList(),
+)
+
+/**
+ * Файл внутри сообщения: номер в хранилище и ключ, которым он закрыт (ключ едет в зашифрованном
+ * теле, на сервере его нет). Размеры — от отправителя: место под картинку до её загрузки.
+ */
+class RichMedia(val mediaId: String, val key: ByteArray, val mime: String, val width: Int, val height: Int) {
+    override fun equals(other: Any?) = other is RichMedia && other.mediaId == mediaId
+    override fun hashCode() = mediaId.hashCode()
+    override fun toString() = "RichMedia($mediaId, $mime, ${width}x$height)"
+}
+
+/**
+ * Стиль блока — имена и ступени (ADR-0044 §4), `null` — по умолчанию. Цвета — **имена палитры**:
+ * у имени своё значение в светлой и тёмной теме, его знает экран.
+ */
+data class BlockStyle(
+    val background: String? = null,
+    val color: String? = null,
+    /** `smaller`, `normal`, `larger`. */
+    val size: String? = null,
+    /** `start`, `center`, `end`. */
+    val align: String? = null,
+    /** `top`, `center`, `bottom` — у ячейки. */
+    val valign: String? = null,
+    /** `none`, `small`, `normal`, `large`. */
+    val padding: String? = null,
+    /** Разделитель после блока: `hidden`, `1`, `2`, `4`. */
+    val divider: String? = null,
+    val dividerColor: String? = null,
+) {
+    companion object {
+        val NONE = BlockStyle()
+    }
+}
 
 /** Текст с отрезками оформления. Границы — в символах этого текста. */
 data class RichText(val text: String, val spans: List<RichSpan> = emptyList())
@@ -26,10 +64,10 @@ data class RichSpan(
 enum class SpanKind { BOLD, ITALIC, UNDERLINE, STRIKE, HIGHLIGHT, CODE, LINK, MENTION, HASHTAG }
 
 sealed interface RichBlock {
-    data class Paragraph(val text: RichText) : RichBlock
+    data class Paragraph(val text: RichText, val style: BlockStyle = BlockStyle.NONE) : RichBlock
 
     /** Уровень 1–3. */
-    data class Heading(val level: Int, val text: RichText) : RichBlock
+    data class Heading(val level: Int, val text: RichText, val style: BlockStyle = BlockStyle.NONE) : RichBlock
 
     /** Строки цитаты — каждая своей строкой. */
     data class Quote(val lines: List<RichText>) : RichBlock
@@ -41,7 +79,37 @@ sealed interface RichBlock {
     data object Divider : RichBlock
 
     /** Строки таблицы; ячейка `null` — слита с верхней или левой (`^^`, `<<`). */
-    data class Table(val rows: List<List<TableCell>>) : RichBlock
+    data class Table(val rows: List<List<TableCell>>, val style: BlockStyle = BlockStyle.NONE) : RichBlock
+
+    /**
+     * Ряд — 1–4 ячейки в строку (ADR-0044 §2). Не вмещается в ширину — ячейки встают в столбик,
+     * горизонтальной прокрутки нет (§6).
+     */
+    data class Row(val cells: List<RowCell>, val style: BlockStyle = BlockStyle.NONE) : RichBlock
+
+    /** Картинка внутри сообщения: номер в [RichContent.media]. */
+    data class Image(val media: Int) : RichBlock
+
+    /** Ссылка: `plain` — текстом, `button` — кнопкой, `card` — карточкой с заголовком и картинкой. */
+    data class Link(val url: String, val mode: String, val title: String, val description: String, val media: Int = -1) : RichBlock
+
+    /** Облако: файл по ссылке на чужое хранилище. `kind`: `file`, `document`, `audio`, `video`. */
+    data class Cloud(val url: String, val kind: String, val title: String) : RichBlock
+
+    /** Место на карте. */
+    data class Place(val lat: Double, val lon: Double, val label: String) : RichBlock
+
+    /** Контакт: человек в TIMa ([userId]) или имя и номер. */
+    data class Contact(val userId: String, val name: String, val phone: String) : RichBlock
+
+    /** Вставленное из подборки — ссылка, показывается по своей переписке. `cut`: `full` или `cut`. */
+    data class Quoted(val kind: String, val chatId: String, val messageId: Long, val author: Boolean, val cut: String) : RichBlock
+
+    /** Крупный эмоджи. */
+    data class Emoji(val text: String) : RichBlock
+
+    /** Подкладка в конце: [lines] строк исходного и «Продолжить чтение». */
+    data class Underlay(val kind: String, val chatId: String, val messageId: Long, val author: Boolean, val lines: Int) : RichBlock
 
     /**
      * Ответ (Решения §7 «`@Ник`», §11.1): чьё и какое сообщение. Имя и строку из него рисует экран
@@ -56,6 +124,14 @@ sealed interface RichBlock {
      */
     data class Fallback(val text: String) : RichBlock
 }
+
+/** Ячейка ряда: ширина в процентах (`null` — поровну), текст ячейки и виджеты под ним. */
+data class RowCell(
+    val width: Int?,
+    val text: RichText?,
+    val widgets: List<RichBlock> = emptyList(),
+    val style: BlockStyle = BlockStyle.NONE,
+)
 
 /** Пункт списка и вложенные в него пункты. */
 data class Bullet(val text: RichText, val children: List<Bullet> = emptyList())

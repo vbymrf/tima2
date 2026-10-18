@@ -77,6 +77,8 @@ fun Caption(
     weight: FontWeight = FontWeight.Normal,
     color: Color = Tima.colors.text,
     lineOne: Boolean = false,
+    /** Выравнивание строк — оформление сообщения (`align`, ADR-0044 §4); по умолчанию — к началу. */
+    textAlign: androidx.compose.ui.text.style.TextAlign = androidx.compose.ui.text.style.TextAlign.Unspecified,
 ) {
     BasicText(
         text = text,
@@ -86,6 +88,7 @@ fun Caption(
             fontSize = fontSize * LocalTextScale.current,
             fontWeight = weight,
             fontFamily = LocalFontFamily.current,
+            textAlign = textAlign,
         ),
         maxLines = if (lineOne) 1 else Int.MAX_VALUE,
         overflow = if (lineOne) TextOverflow.Ellipsis else TextOverflow.Clip,

@@ -1227,6 +1227,17 @@ object EnglishWords : Words {
             "not_allowed" -> "Only the author can delete for everyone"
             else -> "Not deleted: $code"
         }
+        override val pictureMissing = "The picture did not load"
+        override fun cloudKind(kind: String) = when (kind) {
+            "document" -> "Document"
+            "audio" -> "Audio"
+            "video" -> "Video"
+            else -> "File"
+        }
+        override val place = "Place on the map"
+        override val contact = "Contact"
+        override val quotedElsewhere = "A message from another chat"
+        override val continueReading = "Continue reading"
         override fun failReason(code: String): String? = when (code) {
             "level_in_private" -> "a private group has no such circle — only “Encrypted” and “Everyone, always”"
             "secret_in_public" -> "a public group is not encrypted — pick an open circle"

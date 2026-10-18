@@ -42,21 +42,47 @@ import io.tima.domain.chat.SpanKind
  */
 @Composable
 fun RichBody(content: RichContent, modifier: Modifier = Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        for (block in content.blocks) RichBlockView(block)
+    androidx.compose.runtime.CompositionLocalProvider(LocalRichMedia provides content.media) {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            for (block in content.blocks) RichBlockViewOf(block)
+        }
     }
 }
 
+/** Текст блока со стилем: цвет и размер — по именам и ступеням, фон и поля — у блока. */
 @Composable
-private fun RichBlockView(block: RichBlock) {
+internal fun StyledText(text: RichText, style: io.tima.domain.chat.BlockStyle, base: androidx.compose.ui.unit.TextUnit, weight: FontWeight = FontWeight.Normal) {
+    Caption(
+        annotated(text),
+        modifier = Modifier.fillMaxWidth().styled(style),
+        fontSize = sizeOf(style.size, base),
+        weight = weight,
+        color = io.tima.core.ui.paletteColor(style.color) ?: Tima.colors.text,
+        textAlign = alignOf(style.align),
+    )
+}
+
+@Composable
+internal fun RichBlockViewOf(block: RichBlock) {
     val colors = Tima.colors
     when (block) {
-        is RichBlock.Paragraph -> Caption(annotated(block.text), fontSize = TimaType.sz4)
-        is RichBlock.Heading -> Caption(
-            annotated(block.text),
-            fontSize = when (block.level) { 1 -> TimaType.sz2; 2 -> TimaType.sz3; else -> TimaType.sz4 },
-            weight = FontWeight.ExtraBold,
-        )
+        is RichBlock.Paragraph -> {
+            if (block.style == io.tima.domain.chat.BlockStyle.NONE) Caption(annotated(block.text), fontSize = TimaType.sz4)
+            else StyledText(block.text, block.style, TimaType.sz4)
+            DividerAfter(block.style)
+        }
+        is RichBlock.Heading -> {
+            StyledText(
+                block.text,
+                block.style,
+                when (block.level) { 1 -> TimaType.sz2; 2 -> TimaType.sz3; else -> TimaType.sz4 },
+                FontWeight.ExtraBold,
+            )
+            DividerAfter(block.style)
+        }
+        is RichBlock.Row -> RichRow(block)
+        is RichBlock.Image, is RichBlock.Link, is RichBlock.Cloud, is RichBlock.Place, is RichBlock.Contact,
+        is RichBlock.Emoji, is RichBlock.Quoted, is RichBlock.Underlay -> WidgetView(block)
         is RichBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(colors.line))
             Column(Modifier.padding(start = 8.dp)) {
@@ -70,7 +96,10 @@ private fun RichBlockView(block: RichBlock) {
             Caption(AnnotatedString(block.text, SpanStyle(fontFamily = FontFamily.Monospace)), fontSize = TimaType.sz5)
         }
         RichBlock.Divider -> Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(1.dp).background(colors.line))
-        is RichBlock.Table -> RichTable(block)
+        is RichBlock.Table -> {
+            Box(Modifier.fillMaxWidth().styled(block.style)) { RichTable(block) }
+            DividerAfter(block.style)
+        }
         is RichBlock.Fallback -> Caption(block.text, fontSize = TimaType.sz4)
         is RichBlock.Reply -> ReplyBlock(LocalReplyLook.current(block))
     }

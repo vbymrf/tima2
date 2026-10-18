@@ -29,11 +29,18 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 const val MEDIA_SCHEME = "tima-media"
 
-/** Адрес файла для загрузчика: номер, без сети. */
-fun mediaUri(mediaId: String): String = "$MEDIA_SCHEME://$mediaId"
+/**
+ * Адрес файла для загрузчика: номер, без сети. [key] — ключ файла из зашифрованного тела
+ * сообщения (картинка внутри сообщения, ПЛАН-(РС) РС4); едет после `#` и в памяти загрузчика
+ * остаётся частью адреса — на диск загрузчик ничего не пишет. Аватар — без ключа: он открыт.
+ */
+@OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+fun mediaUri(mediaId: String, key: ByteArray? = null): String =
+    if (key == null) "$MEDIA_SCHEME://$mediaId"
+    else "$MEDIA_SCHEME://$mediaId#" + kotlin.io.encoding.Base64.UrlSafe.encode(key).trimEnd('=')
 
-/** Байты по номеру файла: своя папка, хранилище, расшифровка. `null` — файла нет. */
-typealias MediaSource = suspend (mediaId: String) -> ByteArray?
+/** Байты по номеру файла: своя папка, хранилище, расшифровка ключом [key]. `null` — файла нет. */
+typealias MediaSource = suspend (mediaId: String, key: ByteArray?) -> ByteArray?
 
 /** Почему картинка не показалась — для журнала (ПЛАН-(ЖС) §1). */
 enum class MediaFailure {
@@ -56,16 +63,26 @@ private class MediaMissingException(mediaId: String) : Exception("файла $me
 fun mediaIdOf(uri: String): String? {
     val prefix = "$MEDIA_SCHEME://"
     if (!uri.startsWith(prefix)) return null
-    return uri.removePrefix(prefix).takeIf { it.isNotEmpty() && '/' !in it }
+    return uri.removePrefix(prefix).substringBefore('#').takeIf { it.isNotEmpty() && '/' !in it }
+}
+
+/** Ключ файла из адреса; нет его или битый — `null`. */
+@OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+fun mediaKeyOf(uri: String): ByteArray? {
+    val raw = uri.substringAfter('#', "").takeIf { it.isNotEmpty() } ?: return null
+    return runCatching {
+        kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT_OPTIONAL).decode(raw)
+    }.getOrNull()
 }
 
 class TimaMediaFetcher(
     private val mediaId: String,
     private val source: MediaSource,
+    private val key: ByteArray? = null,
 ) : Fetcher {
 
     override suspend fun fetch(): Result<FetchResult> = runCatching {
-        val bytes = source(mediaId) ?: throw MediaMissingException(mediaId)
+        val bytes = source(mediaId, key) ?: throw MediaMissingException(mediaId)
         FetchResult(ByteArrayDataSource(bytes, DataFrom.LOCAL), mimeType = null)
     }
 
@@ -75,8 +92,9 @@ class TimaMediaFetcher(
 
     class Factory(private val source: MediaSource) : Fetcher.Factory {
         override fun create(requestContext: RequestContext): TimaMediaFetcher? {
-            val id = mediaIdOf(requestContext.request.uri.toString()) ?: return null
-            return TimaMediaFetcher(id, source)
+            val uri = requestContext.request.uri.toString()
+            val id = mediaIdOf(uri) ?: return null
+            return TimaMediaFetcher(id, source, mediaKeyOf(uri))
         }
 
         override fun equals(other: Any?): Boolean = other is Factory && other.source === source

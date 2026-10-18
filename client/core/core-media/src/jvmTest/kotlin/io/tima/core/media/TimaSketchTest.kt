@@ -49,6 +49,12 @@ class TimaSketchTest {
         assertNull(mediaIdOf("https://example.com/a.png"), "чужой адрес — не наш")
         assertNull(mediaIdOf("tima-media://"), "пустой номер")
         assertNull(mediaIdOf("tima-media://a/b"), "номер без пути")
+        // Картинка внутри сообщения: ключ после «#», номер — без него (ПЛАН-(РС) РС4).
+        val key = ByteArray(32) { (it * 3).toByte() }
+        val withKey = mediaUri("m-7", key)
+        assertEquals("m-7", mediaIdOf(withKey))
+        assertEquals(key.toList(), mediaKeyOf(withKey)?.toList())
+        assertNull(mediaKeyOf(mediaUri("m-7")), "аватар — без ключа")
     }
 
     @Test
@@ -58,7 +64,7 @@ class TimaSketchTest {
         val stored = mapOf("p1" to seal(photo))
         assertFalse(stored.getValue("p1").copyOf(4).contentEquals(photo.copyOf(4)), "файл лежит открытым")
 
-        val sketch = timaSketch(PlatformContext.INSTANCE, source = { id -> stored[id]?.let(::unseal) })
+        val sketch = timaSketch(PlatformContext.INSTANCE, source = { id, _ -> stored[id]?.let(::unseal) })
         val frame = render(sketch, mediaUri("p1"))
         assertTrue(centre(frame) == 0xFF3D55AA.toInt(), "картинка не показана: в середине ${"%08X".format(centre(frame))}")
     }
@@ -72,7 +78,7 @@ class TimaSketchTest {
         )
         val sketch = timaSketch(
             PlatformContext.INSTANCE,
-            source = { id ->
+            source = { id, _ ->
                 if (id == "locked") throw MediaDecryptException("ключ не подошёл")
                 stored[id]
             },
@@ -89,7 +95,7 @@ class TimaSketchTest {
     @Test
     fun анимированный_WebP_даёт_разные_кадры() {
         val webp = checkNotNull(javaClass.getResourceAsStream("/media/animated.webp")).readBytes()
-        val sketch = timaSketch(PlatformContext.INSTANCE, source = { id -> if (id == "e1") webp else null })
+        val sketch = timaSketch(PlatformContext.INSTANCE, source = { id, _ -> if (id == "e1") webp else null })
         val scene = ImageComposeScene(width = 160, height = 160, density = Density(1f)) {
             Column { AsyncImage(uri = mediaUri("e1"), sketch = sketch, contentDescription = null, modifier = Modifier.size(160.dp)) }
         }

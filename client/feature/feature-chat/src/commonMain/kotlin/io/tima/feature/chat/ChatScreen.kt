@@ -286,7 +286,18 @@ fun ChatScreen(
             }
             ReplyLook(name = name, preview = found?.text, deleted = found?.deleted == true)
         }
-        androidx.compose.runtime.CompositionLocalProvider(LocalReplyLook provides replyLook) {
+        // Вставленное и подкладка — по этой же переписке; из другой — «Сообщение из другой переписки»
+        // до получения по номеру (ПЛАН-(РС) РС7).
+        val quoteLook: (String, String, Long) -> QuoteLook = { _, chat, number ->
+            val found = state.lines.firstOrNull { it.serverId == number && it.chatId == chat }
+            if (found == null) QuoteLook(null, null)
+            else QuoteLook(
+                name = if (found.outgoing) null else if (!state.group) peer else state.names[found.senderId]?.line(authorLook) ?: words.someone,
+                text = found.text,
+                deleted = found.deleted,
+            )
+        }
+        androidx.compose.runtime.CompositionLocalProvider(LocalReplyLook provides replyLook, LocalQuoteLook provides quoteLook) {
         Feed(
             lines = state.lines,
             // **В личной переписке подписи нет вовсе.** Так в макете: у чужой реплики
