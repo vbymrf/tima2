@@ -4390,6 +4390,12 @@ private fun Chat(
             ),
             peerId = if (group) null else (peerUser ?: myUserId.takeIf { it.isNotEmpty() }),
             selfChat = !group && (peerUser == null || peerUser == myUserId),
+            // Редактор (Решения §10): документ собирается тем же конвейером, что и набранное.
+            composer = io.tima.domain.chat.SendComposed(
+                queue = environment.queue,
+                bodies = io.tima.core.encryption.ComposedBodiesOverKodium,
+                keys = io.tima.core.outbox.UuidDedupKeys,
+            ),
         )
     }
     val state by store.state.collectAsState()
@@ -4482,6 +4488,7 @@ private fun Chat(
     InnerPopup(PopupCode.CHAT_FAILED, failed != null)
     InnerPopup(PopupCode.CHAT_COLOR, myColor)
     InnerPopup(PopupCode.CHAT_MESSAGE, menuFor != null)
+    InnerPopup(PopupCode.CHAT_EDITOR, state.editorOpen)
     var myColorTrouble by remember { mutableStateOf<String?>(null) }
     // Отправители, чья личность отменена владельцем (ДУ6, Р30) — из настроек аккаунта.
     // Поток запомнен: `settings.all()` каждый раз новый, и подписка без remember снималась и
@@ -4575,6 +4582,10 @@ private fun Chat(
         onEditCancel = store::editCancelled,
         onReplyCancel = store::replyCancelled,
         onEmojiSend = store::sendEmoji,
+        onEditor = if (store.canCompose) ({ store.openEditor() }) else null,
+        composed = state.composed?.let { io.tima.feature.chat.ComposedLook(it.firstLine, it.rows) },
+        onComposedDrop = store::dropComposed,
+        onComposedRestore = if (state.droppedComposed != null) store::restoreComposed else null,
         onAttach = if (store.canAttach) attachHandler else null,
         attachItems = attachItems,
         attachments = io.tima.feature.chat.AttachmentActions(
@@ -4645,6 +4656,21 @@ private fun Chat(
     }
     // Меню сообщения — после экрана, как и лист неотправленного: что позже, то сверху.
     photoOpen?.let { photo -> io.tima.feature.chat.FullPhoto(photo) { photoOpen = null } }
+    // Редактор поверх переписки (Решения §10). Модель живёт, пока окно открыто: закрыли — документ
+    // ушёл черновиком в store, следующее открытие начнёт историю заново.
+    if (state.editorOpen) {
+        val editorModel = remember { io.tima.feature.chat.EditorModel(state.composed ?: io.tima.domain.chat.ComposedDoc()) }
+        io.tima.feature.chat.EditorScreen(
+            model = editorModel,
+            levels = kind?.circles ?: listOf(io.tima.domain.chat.MessageCircle.Secret),
+            defaultLevel = state.level,
+            typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
+            preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
+            problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
+            onBack = store::editorBack,
+            onSend = { doc -> store.sendComposed(doc) },
+        )
+    }
     asking?.let { ask ->
         val w = Tima.words.chat
         val (title, fields) = when (ask) {

@@ -80,6 +80,8 @@ object PopupCode {
     const val CHAT_COLOR = "chat.color"
     /** Меню отправленного сообщения (Решения §11.1). */
     const val CHAT_MESSAGE = "chat.message"
+    /** Редактор сообщения поверх переписки (Решения §10). */
+    const val CHAT_EDITOR = "chat.editor"
 }
 
 /**

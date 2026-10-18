@@ -167,6 +167,7 @@ fun ChatScreen(
     /** Собрано в редакторе — чип над строкой; `null` — не собрано. */
     composed: ComposedLook? = null,
     onComposedDrop: (() -> Unit)? = null,
+    onComposedRestore: (() -> Unit)? = null,
     /** Галерея и Скрепка; `null` — кнопок нет. */
     onAttach: ((AttachItem) -> Unit)? = null,
     /** Эмоджи при пустой строке — отдельным сообщением. */
@@ -410,6 +411,7 @@ fun ChatScreen(
             onEditor = onEditor,
             composed = composed,
             onComposedDrop = onComposedDrop,
+            onComposedRestore = onComposedRestore,
             onAttach = onAttach,
             onEmojiSend = onEmojiSend,
             attachItems = attachItems,

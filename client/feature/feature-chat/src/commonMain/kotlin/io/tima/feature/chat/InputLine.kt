@@ -93,6 +93,8 @@ internal fun InputLine(
     onEditor: (() -> Unit)? = null,
     composed: ComposedLook? = null,
     onComposedDrop: (() -> Unit)? = null,
+    /** Сброшенное корзиной ещё можно вернуть (5 секунд); `null` — нечего. */
+    onComposedRestore: (() -> Unit)? = null,
     /** Скрепка и Галерея; `null` — кнопок нет. */
     onAttach: ((AttachItem) -> Unit)? = null,
     /** Эмоджи при пустой строке — отдельным сообщением; `null` — только вставка в набранное. */
@@ -109,6 +111,7 @@ internal fun InputLine(
     }
     Column(Modifier.fillMaxWidth().background(colors.functional)) {
         composed?.let { ComposedChip(it, onComposedDrop) }
+        if (composed == null && onComposedRestore != null) RestoreChip(onComposedRestore)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -204,6 +207,17 @@ private fun ComposedChip(look: ComposedLook, onDrop: (() -> Unit)?) {
     ) {
         Caption(Tima.words.chat.composedInEditor(look.rows), fontSize = TimaType.sz5, weight = FontWeight.Bold, modifier = Modifier.weight(1f))
         if (onDrop != null) IconButton(glyph = "🗑", onClick = onDrop, modifier = Modifier.testTag("chat:composed.drop"))
+    }
+}
+
+/** «Вернуть» — 5 секунд после корзины (Решения §9, В36). */
+@Composable
+private fun RestoreChip(onRestore: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3, vertical = 4.dp),
+        horizontalArrangement = Arrangement.End,
+    ) {
+        io.tima.core.ui.Chip(Tima.words.chat.undo, kind = io.tima.core.ui.ChipKind.Selected, onClick = onRestore, modifier = Modifier.testTag("chat:composed.undo"))
     }
 }
 

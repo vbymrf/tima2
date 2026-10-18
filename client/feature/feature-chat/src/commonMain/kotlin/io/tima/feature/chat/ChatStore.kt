@@ -9,6 +9,9 @@ import io.tima.core.media.FileRules
 import io.tima.core.media.PhotoPrep
 import io.tima.domain.chat.AttachResult
 import io.tima.domain.chat.ChatLine
+import io.tima.domain.chat.ComposedDoc
+import io.tima.domain.chat.ComposedResult
+import io.tima.domain.chat.SendComposed
 import io.tima.domain.chat.SendAttachments
 import io.tima.domain.chat.DeleteMessage
 import io.tima.domain.chat.DeleteResult
@@ -172,6 +175,8 @@ class ChatStore(
     private val peerId: String? = null,
     /** Переписка с собой: файл себе — до 50 МБ. */
     private val selfChat: Boolean = false,
+    /** Собранное в редакторе (Решения §10). `null` — редактора нет: кнопка не показывается. */
+    private val composer: SendComposed? = null,
 ) {
 
     /** Отложенная запись черновика: не на каждое нажатие клавиши. */
@@ -210,6 +215,9 @@ class ChatStore(
             scope.launch {
                 val saved = withContext(io) { port.load(chatId) }
                 if (!saved.isNullOrEmpty() && _state.value.draft.isEmpty()) _state.value = _state.value.copy(draft = saved)
+                // Собранное в редакторе — тоже черновик (Решения §10.1: «назад» сохраняет).
+                val doc = composer?.let { c -> withContext(io) { port.load(editorKey) }?.let(c::load) }
+                if (doc != null && !doc.isEmpty && _state.value.composed == null) _state.value = _state.value.copy(composed = doc)
             }
         }
         // Потерянное помечается сразу, а не после первой просьбы: «запросить» у него быть не должно.
@@ -655,6 +663,79 @@ class ChatStore(
         attachResult(port.link(chatId, _state.value.level, clean, title, cloudKind))
     }
 
+    // ── Редактор (Решения §9, §10) ──────────────────────────────────────────────
+
+    /** Есть ли редактор — кнопка слева от строки ввода. */
+    val canCompose: Boolean get() = composer != null
+
+    /** Черновик редактора — под своим ключом рядом с черновиком строки. */
+    private val editorKey: String get() = "$chatId|editor"
+
+    private fun keepComposed(doc: ComposedDoc?) {
+        val port = drafts ?: return
+        val c = composer ?: return
+        scope.launch { withContext(io) { port.save(editorKey, doc?.takeUnless { it.isEmpty }?.let(c::save).orEmpty()) } }
+    }
+
+    /**
+     * Открыть редактор. Собранного нет — в него переезжает набранное в строке: человек не теряет
+     * текста, нажав на три полосы посреди фразы.
+     */
+    fun openEditor(): ComposedDoc? {
+        if (composer == null || _state.value.editing > 0) return null
+        val s = _state.value
+        val doc = s.composed ?: ComposedDoc.of(s.draft)
+        _state.value = s.copy(editorOpen = true, composed = doc, draft = "", droppedComposed = null, notice = null)
+        if (s.draft.isNotEmpty()) keepDraft("")
+        return doc
+    }
+
+    /** «Назад» из редактора: собранное остаётся черновиком, в строке — чип (Решения §9). */
+    fun editorBack(doc: ComposedDoc) {
+        val kept = doc.takeUnless { it.isEmpty }
+        _state.value = _state.value.copy(editorOpen = false, composed = kept)
+        keepComposed(kept)
+    }
+
+    /** Отправить собранное — из редактора или стрелкой строки ввода. */
+    fun sendComposed(doc: ComposedDoc): ComposedResult? {
+        val c = composer ?: return null
+        val reply = _state.value.replyTo?.let {
+            ReplyTarget(kind = if (_state.value.group) "group" else "personal", chatId = chatId, messageId = it.serverId, userId = it.userId)
+        }
+        val result = c.send(chatId, doc, _state.value.level, reply)
+        _state.value = when (result) {
+            is ComposedResult.Queued -> _state.value.copy(editorOpen = false, composed = null, replyTo = null, notice = null)
+                .also { keepComposed(null) }
+            ComposedResult.Empty -> _state.value
+            is ComposedResult.Invalid -> _state.value.copy(
+                notice = ChatNotice.Said(words().editor.cannotSend + ": " + result.problems.firstOrNull().orEmpty()),
+            )
+        }
+        return result
+    }
+
+    /** Таймер «Вернуть» после корзины. */
+    private var dropTimer: kotlinx.coroutines.Job? = null
+
+    /** Корзина в чипе: строка как пустая, 5 секунд «Вернуть» (Решения §9, В36). */
+    fun dropComposed() {
+        val doc = _state.value.composed ?: return
+        _state.value = _state.value.copy(composed = null, droppedComposed = doc)
+        dropTimer?.cancel()
+        dropTimer = scope.launch {
+            kotlinx.coroutines.delay(UNDO_DROP_MS)
+            _state.value = _state.value.copy(droppedComposed = null)
+            keepComposed(null)
+        }
+    }
+
+    fun restoreComposed() {
+        val doc = _state.value.droppedComposed ?: return
+        dropTimer?.cancel()
+        _state.value = _state.value.copy(composed = doc, droppedComposed = null)
+    }
+
     /** Сказать человеку одно предложение — «Текст скопирован» и подобное. */
     fun said(text: String) {
         _state.value = _state.value.copy(notice = ChatNotice.Said(text))
@@ -663,6 +744,13 @@ class ChatStore(
     fun sendPressed(): SendMessageResult {
         // Идёт правка — отправка уходит правкой исходного, а не новым сообщением (ADR-0045).
         _state.value.editing.takeIf { it > 0 }?.let { return editPressed(it) }
+        // Собрано в редакторе — стрелка шлёт собранное (Решения §9).
+        _state.value.composed?.let { doc ->
+            return when (val r = sendComposed(doc)) {
+                is ComposedResult.Queued -> SendMessageResult.Queued(r.dedupKey)
+                else -> SendMessageResult.Empty
+            }
+        }
         val text = _state.value.draft
         // Круг едет в очередь вместе с сообщением: решение «нужен ли ключ» принимается
         // при отправке, а она может случиться после перезапуска.
@@ -769,6 +857,12 @@ data class ChatState(
     val lines: List<ChatLine> = emptyList(),
     /** Набранное, но не отправленное. Живёт до подтверждения постановки в очередь. */
     val draft: String = "",
+    /** Собранное в редакторе (Решения §9): в строке — чип, стрелка шлёт его. */
+    val composed: ComposedDoc? = null,
+    /** Редактор открыт поверх переписки. */
+    val editorOpen: Boolean = false,
+    /** Сброшено корзиной — ещё 5 секунд можно «Вернуть». */
+    val droppedComposed: ComposedDoc? = null,
     /** Серверный номер исправляемого (ADR-0045); 0 — правки нет, отправка — новое сообщение. */
     val editing: Long = 0,
     /** На что отвечаем (Решения §11.1); `null` — не ответ. */
@@ -841,6 +935,9 @@ data class ChatState(
 
 /** Через сколько после последнего нажатия черновик ложится на диск. */
 private const val DRAFT_DELAY_MS = 400L
+
+/** Сколько держится «Вернуть» после корзины в чипе (Решения §9, В36). */
+private const val UNDO_DROP_MS = 5_000L
 
 /** Задуманный ответ: номер сообщения, его автор и строка из него для полосы. */
 data class ReplyDraft(val serverId: Long, val userId: String, val preview: String?)
