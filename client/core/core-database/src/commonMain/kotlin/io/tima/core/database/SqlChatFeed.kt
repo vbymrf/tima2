@@ -50,7 +50,7 @@ class SqlChatFeed(
     private val myUserId: String,
     /** Прежние личности аккаунта (М6): их сообщения в перенесённой истории — тоже свои. */
     private val priorIds: () -> Set<String> = { emptySet() },
-) : ChatFeed, MessageBodies {
+) : ChatFeed, MessageBodies, io.tima.domain.chat.LocalMessages {
 
     override fun page(chatId: String, limit: Int): Flow<List<ChatLine>> =
         db.messagesQueries.chatPage(chatId, limit.toLong())
@@ -84,6 +84,12 @@ class SqlChatFeed(
             level = row.level.toInt(),
             own = own(row.direction, row.sender_id),
         )
+    }
+
+    /** Строка по номеру — вставленному, подкладке, переходу (Решения §11.3–§11.4). */
+    override fun line(chatId: String, serverId: Long): ChatLine? {
+        val row = db.messagesQueries.byServerId(chatId, serverId).executeAsOneOrNull() ?: return null
+        return row.toLine(editsOf(chatId))
     }
 
     /** Правка, открытая ключом покоя: тело правки и кто её написал. */

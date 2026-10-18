@@ -7,6 +7,8 @@ import io.tima.domain.chat.TypingStyle
 
 /** Строка ввода (ПЛАН-(РС) РС5): тот же разбор, что уходит в сообщение, в координатах набранного. */
 object TypingMarksOverQuickMarkdown : TypingMarks {
-    override fun of(text: String): List<TypingSpan> =
-        QuickMarkdown.typing(text).map { TypingSpan(TypingStyle.valueOf(it.kind.name), it.start, it.end) }
+    override fun of(text: String): List<TypingSpan> = CodecWatch.timed(
+        CodecWatch.PARSE_SLOW_MS,
+        { QuickMarkdown.typing(text).map { TypingSpan(TypingStyle.valueOf(it.kind.name), it.start, it.end) } },
+    ) { _, ms -> CodecWatch.slowParse?.invoke(text.length, ms) }
 }

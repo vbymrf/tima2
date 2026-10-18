@@ -1,5 +1,8 @@
 package io.tima.feature.chat
 
+import io.tima.domain.chat.FoundMessage
+import io.tima.domain.chat.MessageFinder
+import io.tima.domain.chat.references
 import io.tima.domain.chat.ChatPins
 import io.tima.domain.chat.PinStep
 import io.tima.core.words.CurrentWords
@@ -186,6 +189,11 @@ class ChatStore(
     private val pinMay: Boolean = false,
     /** Поставить суперсообщение описания по номеру (ПЛАН-(ЗО) ЗО5); `null` — не владелец. */
     private val setSuper: (suspend (Long) -> Boolean)? = null,
+    /**
+     * Сообщение по номеру — вставленное, подкладка, ответ из другой переписки или не загруженной
+     * части (Решения §11.3–§11.4). `null` — искать негде: показывается «Сообщение из другой переписки».
+     */
+    private val finder: MessageFinder? = null,
 ) {
 
     /** Отложенная запись черновика: не на каждое нажатие клавиши. */
@@ -269,6 +277,7 @@ class ChatStore(
                 known = lines
                 sendPendingMain(lines)
                 superSent(lines)
+                lookUpReferences(lines)
                 val replies = lines.filter { it.threadRoot != 0L }.groupingBy { it.threadRoot }.eachCount()
                 // «Только продолжение» в ленте не показывается (Решения §11.3): его видно через
                 // подкладку и прямой переход; в `known` оно остаётся — подкладке есть что показать.
@@ -622,7 +631,15 @@ class ChatStore(
     /** В группе файлы — только ссылкой на облако (Решения §2). */
     val filesByLink: Boolean get() = peerId == null
 
+    /** Отказ вложению — журналу (FILE-SEND): причина словом кода, без имени файла. */
+    var attachLog: ((reason: String) -> Unit)? = null
+
     private fun attachResult(result: AttachResult, warn: String? = null) {
+        when (result) {
+            AttachResult.TooMany -> attachLog?.invoke("too_many")
+            is AttachResult.Refused -> attachLog?.invoke(result.reason)
+            else -> Unit
+        }
         val w = words().chat
         val said = when (result) {
             is AttachResult.Queued -> warn
@@ -637,6 +654,7 @@ class ChatStore(
     fun sendPhotos(images: List<Pair<ByteArray, String>>) {
         val port = attach ?: return
         if (images.size > SendAttachments.MAX_PHOTOS) {
+            attachLog?.invoke("too_many")
             _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.photoTooMany))
             return
         }
@@ -747,6 +765,62 @@ class ChatStore(
             }
         }
         return result
+    }
+
+    /** Уже спрошенные ссылки: каждая — один раз за жизнь переписки на экране (кроме «нет сети»). */
+    private val asked = mutableSetOf<String>()
+
+    /** Журнал недоступного по ссылке — у вызывающего: модуль окна журнала не знает. */
+    var refLog: ((kind: String, number: Long, reason: String, level: Int?) -> Unit)? = null
+
+    /**
+     * Ссылки в загруженном, которых нет среди загруженного, — спросить по номеру (Решения §11.3):
+     * вставленное и подкладка из другой переписки, ответ на давнее. Ответ кладётся в [ChatState.found].
+     */
+    private fun lookUpReferences(lines: List<ChatLine>) {
+        val find = finder ?: return
+        val kind = if (_state.value.group) "group" else "personal"
+        val have = lines.mapTo(HashSet()) { "${it.chatId}/${it.serverId}" }
+        val wanted = lines.asSequence()
+            .mapNotNull { it.rich }
+            .flatMap { it.references(chatId, kind) }
+            .filter { (_, chat, number) -> number > 0 && "$chat/$number" !in have && asked.add("$chat/$number") }
+            .toList()
+        for ((refKind, chat, number) in wanted) {
+            scope.launch {
+                val found = withContext(io) { runCatching { find.find(refKind, chat, number) }.getOrDefault(FoundMessage.Offline) }
+                when (found) {
+                    // Сети нет — спросим при следующем обновлении ленты.
+                    FoundMessage.Offline -> asked.remove("$chat/$number")
+                    is FoundMessage.Unavailable -> refLog?.invoke(refKind, number, found.reason, found.level)
+                    else -> Unit
+                }
+                _state.value = _state.value.copy(found = _state.value.found + ("$chat/$number" to found))
+            }
+        }
+    }
+
+    /** Переход к сообщению, которого нет в ленте: спросить и показать одно (Решения §11.4). */
+    fun peek(kind: String, chat: String, number: Long) {
+        val key = "$chat/$number"
+        (known.firstOrNull { it.chatId == chat && it.serverId == number })?.let {
+            _state.value = _state.value.copy(peek = FoundMessage.Found(it))
+            return
+        }
+        _state.value.found[key]?.takeIf { it !is FoundMessage.Offline }?.let {
+            _state.value = _state.value.copy(peek = it)
+            return
+        }
+        val find = finder ?: return
+        scope.launch {
+            val found = withContext(io) { runCatching { find.find(kind, chat, number) }.getOrDefault(FoundMessage.Offline) }
+            if (found is FoundMessage.Unavailable) refLog?.invoke(kind, number, found.reason, found.level)
+            _state.value = _state.value.copy(peek = found, found = _state.value.found + (key to found))
+        }
+    }
+
+    fun peekClosed() {
+        _state.value = _state.value.copy(peek = null)
     }
 
     /** Право закреплять стало известно позже открытия: роль приезжает со списком групп. */
@@ -1025,6 +1099,10 @@ data class ChatState(
     val level: Int = -1,
     /** Открытая ветка (ADR-0024, К6). `null` — ветка закрыта. */
     val thread: ThreadState? = null,
+    /** Спрошенное по номеру: `"переписка/номер"` → сообщение или заглушка (Решения §11.3). */
+    val found: Map<String, FoundMessage> = emptyMap(),
+    /** Сообщение, открытое одним — переход к тому, чего нет в ленте (Решения §11.4). */
+    val peek: FoundMessage? = null,
     /** Номер закреплённого (ПЛАН-(ЗО) ЗО3); 0 — ничего не закреплено или не знаем. */
     val pinned: Long = 0,
     /** Могу ли закреплять и снимать здесь: личная — да, группа — модератор и выше. */

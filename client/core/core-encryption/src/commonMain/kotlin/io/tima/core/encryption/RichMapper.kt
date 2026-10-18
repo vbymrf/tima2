@@ -33,7 +33,11 @@ internal object RichMapper {
         // остальное — файлами.
         if (content.markup == null && content.media.isNotEmpty() && content.plainText().isBlank()) return attachments(content)
         val markup = content.markup ?: return null
-        if (MarkupRules.check(content, strict = false).isNotEmpty()) return null
+        MarkupRules.check(content, strict = false).takeIf { it.isNotEmpty() }?.let { problems ->
+            // Показано без оформления — журналу: какие правила и сколько весит разметка (MSG-MARKUP).
+            CodecWatch.markupDropped?.invoke(problems.map { it.rule }.distinct(), io.tima.crypto.Markup.encode(markup).encodeToByteArray().size)
+            return null
+        }
         val byId = markup.n.mapIndexed { index, id -> id to index }.toMap()
         fun nodeText(id: Int): String = byId[id]?.let { content.nodes.getOrNull(it) }.orEmpty()
         fun rich(id: Int): RichText = richText(nodeText(id), id, markup)

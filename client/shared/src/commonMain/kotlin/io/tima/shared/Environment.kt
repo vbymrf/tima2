@@ -584,6 +584,10 @@ class Network(
     override val showcase: io.tima.core.network.ShowcaseOverHttp =
         io.tima.core.network.ShowcaseOverHttp(link.route, link.client, token = { token() })
 
+    /** Сообщение по номеру (Решения §11.3–§11.4). */
+    override val byNumber: io.tima.core.network.MessageByNumberOverHttp =
+        io.tima.core.network.MessageByNumberOverHttp(link.route, link.client, token = { token() })
+
     /**
      * То же самое под именем порта групп.
      *
@@ -789,6 +793,9 @@ class Environment private constructor(
     private val chatFeed = SqlChatFeed(db, TextBodyCodec, cipher, myUserId, priorIdentities::ids)
 
     val chat: ObserveChat = ObserveChat(chatFeed)
+
+    /** Строка по номеру из базы — первое место, где ищется вставленное и подкладка. */
+    val localMessages: io.tima.domain.chat.LocalMessages = chatFeed
 
     /**
      * Местные записи в переписке: смена круга у сообщения и служебная строка о ней.

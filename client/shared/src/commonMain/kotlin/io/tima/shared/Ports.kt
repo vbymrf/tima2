@@ -63,6 +63,9 @@ interface ChatPorts {
     /** Описание — сообщения уровня 0 и суперсообщение (ПЛАН-(ЗО) ЗО4–ЗО5). */
     val showcase: io.tima.core.network.ShowcaseOverHttp
 
+    /** Сообщение по номеру — вставленное, подкладка, переход (Решения §11.3–§11.4). */
+    val byNumber: io.tima.core.network.MessageByNumberOverHttp
+
     /**
      * Сверка книги: кто из этих номеров в TIMa (Д4).
      *

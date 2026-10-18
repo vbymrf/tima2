@@ -31,6 +31,13 @@ interface ShowcaseWords {
     val sentToShowcase: String
     /** Окно одного сообщения описания — «без ничего». */
     val single: String
+
+    // ── Сообщение по ссылке, которого нет в ленте (Решения §11.4) ──
+    val peekTitle: String
+    val peekOffline: String
+    val peekOpenChat: String
+    /** Недоступно: `level` (уровень назван), `closed`, `missing`. */
+    fun peekUnavailable(reason: String, level: Int?): String
 }
 
 object RussianShowcaseWords : ShowcaseWords {
@@ -62,6 +69,14 @@ object RussianShowcaseWords : ShowcaseWords {
     override val superFailed = "Суперсообщение не поставлено — проверьте связь"
     override val sentToShowcase = "Ушло в описание: в переписке его нет, оно в окне «Описание»"
     override val single = "Сообщение описания"
+    override val peekTitle = "Сообщение"
+    override val peekOffline = "Нет связи — сообщение не получено"
+    override val peekOpenChat = "Открыть переписку"
+    override fun peekUnavailable(reason: String, level: Int?) = when (reason) {
+        "missing" -> "Сообщения нет: оно удалено"
+        "level" -> "Недоступно: оно для круга ${level ?: "выше"}, а вам этот круг не открыт — попросите доступ у админа"
+        else -> "Недоступно: это закрытая переписка или группа, где вас нет"
+    }
 }
 
 object EnglishShowcaseWords : ShowcaseWords {
@@ -93,6 +108,14 @@ object EnglishShowcaseWords : ShowcaseWords {
     override val superFailed = "Super message not set — check the connection"
     override val sentToShowcase = "Went to the description: it's not in the chat, it's in “About”"
     override val single = "Description message"
+    override val peekTitle = "Message"
+    override val peekOffline = "No connection — the message wasn't fetched"
+    override val peekOpenChat = "Open the chat"
+    override fun peekUnavailable(reason: String, level: Int?) = when (reason) {
+        "missing" -> "The message is gone: it was deleted"
+        "level" -> "Unavailable: it's for circle ${level ?: "above"}, which isn't open to you — ask an admin for access"
+        else -> "Unavailable: a closed chat or a group you're not in"
+    }
 }
 
 object SpanishShowcaseWords : ShowcaseWords {
@@ -124,4 +147,12 @@ object SpanishShowcaseWords : ShowcaseWords {
     override val superFailed = "Supermensaje no establecido: revise la conexión"
     override val sentToShowcase = "Pasó a la descripción: no está en el chat, está en «Descripción»"
     override val single = "Mensaje de la descripción"
+    override val peekTitle = "Mensaje"
+    override val peekOffline = "Sin conexión: no se obtuvo el mensaje"
+    override val peekOpenChat = "Abrir el chat"
+    override fun peekUnavailable(reason: String, level: Int?) = when (reason) {
+        "missing" -> "El mensaje no existe: fue eliminado"
+        "level" -> "No disponible: es para el círculo ${level ?: "superior"}, que no tiene abierto; pida acceso a un administrador"
+        else -> "No disponible: un chat cerrado o un grupo en el que no está"
+    }
 }

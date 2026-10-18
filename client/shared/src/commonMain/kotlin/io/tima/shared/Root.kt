@@ -4064,6 +4064,8 @@ private fun App(
                         },
                         superDraft = superDraft?.takeIf { it.first == current.chatId }?.second,
                         onSuperTaken = { superDraft = null },
+                        finder = assembled.receiver.finder,
+                        onOpenChat = { id -> where = Where.Chat(id, null) },
                         // «Сообщить о проблеме» из подокна неотправленного: отчёт с кодом
                         // причины уже в тексте — человеку не надо ничего пересказывать.
                         onReportFailed = { reason, waiting ->
@@ -4352,6 +4354,10 @@ private fun Chat(
     /** Черновик суперсообщения из «Описания»: открыть редактор с ним; `onSuperTaken` — взят. */
     superDraft: io.tima.domain.chat.ComposedDoc? = null,
     onSuperTaken: () -> Unit = {},
+    /** Сообщение по номеру — вставленное, подкладка, переход (Решения §11.3–§11.4). */
+    finder: io.tima.domain.chat.MessageFinder? = null,
+    /** Открыть другую переписку — из сообщения, показанного одним. */
+    onOpenChat: ((String) -> Unit)? = null,
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
     var chatMenu by remember { mutableStateOf(false) }
@@ -4529,7 +4535,16 @@ private fun Chat(
             pins = pins,
             pinMay = pinMay,
             setSuper = setSuper,
+            finder = finder,
         ).also { s ->
+            // Недоступное по ссылке (ПЛАН-(ЖС)): причина и уровень, без номеров чужих переписок.
+            s.attachLog = { reason -> Journal.note(LogCode.FILE_SEND, "отказ", "причина" to reason) }
+            s.refLog = { kind, number, reason, level ->
+                Journal.note(
+                    LogCode.REF_UNAVAILABLE, "недоступно по ссылке", "вид" to kind, "номер" to number,
+                    "причина" to reason, "уровень" to (level ?: -1),
+                )
+            }
             s.pinLog = { on, step ->
                 val outcome = when (step) {
                     io.tima.domain.chat.PinStep.Done -> "сделано"
@@ -4704,6 +4719,8 @@ private fun Chat(
         }
     }
     ChatScreen(
+        onPeek = if (finder != null) store::peek else null,
+        onPeekClose = store::peekClosed,
         onUnpin = if (pins != null) store::unpin else null,
         onShowcase = onShowcase,
         cancelledSenders = cancelledSenders,
@@ -5036,6 +5053,7 @@ private fun Chat(
                     // Вид ссылки — по переписке, где сообщение лежит: своя группа — `group`, иначе личная.
                     val kind = if (pick.chatId == chatId && group) "group" else if (pick.chatId == chatId) "personal" else "group"
                     put(io.tima.domain.chat.ComposedWidget.Quoted(kind, pick.chatId, pick.serverId))
+                    Journal.note(LogCode.PICKS, "вставлено", "уровень" to io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community).substringBefore(':'), "в подборке" to pickList.size)
                 },
             )
         }
@@ -5066,6 +5084,15 @@ private fun Chat(
                     AttachAsk.Contact -> { store.sendContact(values[0], values[1]); asking = null }
                 }
             },
+        )
+    }
+    state.peek?.let { found ->
+        val other = (found as? io.tima.domain.chat.FoundMessage.Found)?.line?.chatId?.takeIf { it != chatId }
+        io.tima.feature.chat.PeekSheet(
+            found = found,
+            onClose = store::peekClosed,
+            onOpenChat = if (other != null && onOpenChat != null) { { store.peekClosed(); onOpenChat(other) } } else null,
+            author = (found as? io.tima.domain.chat.FoundMessage.Found)?.line?.senderId?.let { state.names[it]?.line(authorLook) },
         )
     }
     menuFor?.let { line ->

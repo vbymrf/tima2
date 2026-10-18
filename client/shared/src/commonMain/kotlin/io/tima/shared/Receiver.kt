@@ -942,6 +942,43 @@ class Receiver(
     }
 
     /**
+     * Сообщение по номеру (Решения §11.3–§11.4): сначала база устройства, потом сервер. Группа —
+     * кадром с той же проверкой подписи и ключом, что лента; канал — открытым текстом; личное, которого
+     * нет на устройстве, сервер отдаёт только обёрткой для этого устройства — его догонит история, а
+     * здесь оно «недоступно».
+     */
+    val finder = io.tima.domain.chat.MessageFinder { kind, chatId, serverId ->
+        environment.localMessages.line(chatId, serverId)?.let { return@MessageFinder io.tima.domain.chat.FoundMessage.Found(it) }
+        when (val answer = network.byNumber.find(kind, chatId, serverId)) {
+            is io.tima.core.network.MessageByNumberOverHttp.Answer.GroupFrame -> {
+                val frame = GroupFrame.parse(answer.stored)
+                    ?: return@MessageFinder io.tima.domain.chat.FoundMessage.Unavailable("missing")
+                captionKey(frame.senderId, frame.senderDevice)
+                val opened = openGroupFrame(frame) as? OpenOutcome.Opened
+                    ?: return@MessageFinder io.tima.domain.chat.FoundMessage.Unavailable("closed")
+                val line = io.tima.core.encryption.TextBodyCodec.decodeLine(opened.body)
+                    ?: return@MessageFinder io.tima.domain.chat.FoundMessage.Unavailable("closed")
+                io.tima.domain.chat.FoundMessage.Found(remoteLine(chatId, serverId, frame.senderId, line, frame.createdAtUnixMs, frame.level.toInt()))
+            }
+            is io.tima.core.network.MessageByNumberOverHttp.Answer.Open -> {
+                val line = io.tima.core.encryption.ComposedBodiesOverKodium.readOpen(answer.nodes, answer.markup)
+                    ?: return@MessageFinder io.tima.domain.chat.FoundMessage.Unavailable("missing")
+                io.tima.domain.chat.FoundMessage.Found(remoteLine(chatId, serverId, answer.authorId, line, answer.atMs, 0))
+            }
+            io.tima.core.network.MessageByNumberOverHttp.Answer.Personal -> io.tima.domain.chat.FoundMessage.Unavailable("closed")
+            is io.tima.core.network.MessageByNumberOverHttp.Answer.Unavailable -> io.tima.domain.chat.FoundMessage.Unavailable(answer.reason, answer.level)
+            io.tima.core.network.MessageByNumberOverHttp.Answer.Offline -> io.tima.domain.chat.FoundMessage.Offline
+        }
+    }
+
+    private fun remoteLine(chatId: String, serverId: Long, sender: String?, line: io.tima.domain.chat.DecodedLine, atMs: Long, level: Int) =
+        io.tima.domain.chat.ChatLine(
+            dedupKey = "remote:$chatId:$serverId", chatId = chatId, display = io.tima.domain.chat.MessageDisplay.RECEIVED,
+            text = line.text, rich = line.rich, outgoing = sender != null && sender == session.userId, atMs = atMs,
+            localId = 0, serverId = serverId, senderId = sender, level = level,
+        )
+
+    /**
      * Описание (ПЛАН-(ЗО) ЗО4): у группы — кадрами с той же проверкой подписи, что и в ленте; у канала
      * и сообщества — открытым текстом. Нигде не хранится: окно забирает его при каждом открытии.
      */

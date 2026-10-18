@@ -40,8 +40,10 @@ object TextBodyCodec : MessageBodyCodec {
         return MessageSerializer.encodeBody(MessageContentCodec.toBody(content))
     }
 
-    override fun decodeLine(body: ByteArray): DecodedLine? =
-        decode(body).getOrNull()?.let { DecodedLine(it.displayText(), RichMapper.from(it)) }
+    override fun decodeLine(body: ByteArray): DecodedLine? = CodecWatch.timed(
+        CodecWatch.RENDER_SLOW_MS,
+        { decode(body).getOrNull()?.let { DecodedLine(it.displayText(), RichMapper.from(it)) } },
+    ) { line, ms -> CodecWatch.slowRender?.invoke(line?.rich?.blocks?.size ?: 0, ms) }
 
     /** Исходное с правками (ADR-0045). Нечитаемая правка пропускается — исходное важнее. */
     override fun decodeEdited(body: ByteArray, edits: List<ByteArray>): DecodedLine? =

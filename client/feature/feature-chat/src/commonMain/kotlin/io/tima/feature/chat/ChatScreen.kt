@@ -263,6 +263,14 @@ fun ChatScreen(
     onUnpin: (() -> Unit)? = null,
     /** Нажатие на текст шапки группы — окно «Описание» (ПЛАН-(ЗО) ЗО4); `null` — у личной. */
     onShowcase: (() -> Unit)? = null,
+    /**
+     * Переход к сообщению, которого нет в ленте: `(вид, переписка, номер)` — спросить и показать
+     * одно (Решения §11.4). `null` — переход только внутри загруженного.
+     */
+    onPeek: ((String, String, Long) -> Unit)? = null,
+    onPeekClose: () -> Unit = {},
+    /** Из показанного одним — открыть его переписку (другая переписка). `null` — кнопки нет. */
+    onOpenChat: ((String) -> Unit)? = null,
 ) {
     val cancelledMark = Tima.words.auth.identityCancelledMark
     val colors = Tima.colors
@@ -305,8 +313,11 @@ fun ChatScreen(
         banner?.invoke()
 
         // Блок ответа называет автора и строку из сообщения по этой же переписке (в теле — ссылка).
+        val remote: (String, Long) -> ChatLine? = { chat, number ->
+            (state.found["$chat/$number"] as? io.tima.domain.chat.FoundMessage.Found)?.line
+        }
         val replyLook: (io.tima.domain.chat.RichBlock.Reply) -> ReplyLook = { reply ->
-            val found = state.lines.firstOrNull { it.serverId == reply.messageId }
+            val found = state.lines.firstOrNull { it.serverId == reply.messageId } ?: remote(reply.chatId, reply.messageId)
             val name = when {
                 !state.group -> peer
                 else -> state.names[reply.userId]?.line(authorLook) ?: words.someone
@@ -318,10 +329,18 @@ fun ChatScreen(
         val quoteLook: (String, String, Long) -> QuoteLook = { _, chat, number ->
             // Продолжения в ленте нет, но подкладка показывает именно его (Решения §11.3).
             val found = (state.lines.firstOrNull { it.serverId == number && it.chatId == chat }
-                ?: state.continuations.firstOrNull { it.serverId == number && it.chatId == chat })
-            if (found == null) QuoteLook(null, null)
-            else QuoteLook(
-                name = if (found.outgoing) null else if (!state.group) peer else state.names[found.senderId]?.line(authorLook) ?: words.someone,
+                ?: state.continuations.firstOrNull { it.serverId == number && it.chatId == chat }
+                ?: remote(chat, number))
+            if (found == null) {
+                // Сервер ответил «нет такого» — так и сказать, а не «из другой переписки».
+                val stub = state.found["$chat/$number"] as? io.tima.domain.chat.FoundMessage.Unavailable
+                QuoteLook(null, null, deleted = stub?.reason == "missing")
+            } else QuoteLook(
+                name = when {
+                    found.outgoing -> null
+                    !state.group && found.chatId == state.lines.firstOrNull()?.chatId -> peer
+                    else -> state.names[found.senderId]?.line(authorLook) ?: words.someone
+                },
                 text = found.text,
                 deleted = found.deleted,
             )
@@ -329,8 +348,9 @@ fun ChatScreen(
         // Переходы по ответу, вставленному и «Продолжить чтение» — внутри переписки (§11.4).
         val jumps = remember { FeedJumps() }
         jumps.onJump = onJump
-        val openMessage: (String, String, Long) -> Unit = { _, _, number ->
-            if (state.lines.any { it.serverId == number }) jumps.go(number)
+        val openMessage: (String, String, Long) -> Unit = { kind, chat, number ->
+            if (state.lines.any { it.serverId == number && it.chatId == chat }) jumps.go(number)
+            else onPeek?.invoke(kind, chat, number)
         }
         // Закреплённое — полоса под шапкой: строка сообщения, нажатие — переход к нему (§11.4),
         // ✕ — снять, у кого право (ПЛАН-(ЗО) ЗО3). Не загружено — заглушка.

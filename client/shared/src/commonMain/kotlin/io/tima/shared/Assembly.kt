@@ -296,6 +296,21 @@ fun buildAssembled(
             scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
         )
 
+        // Разбор тела — в журнал (ПЛАН-(ЖС) §2, §4): без оформления, медленный разбор строки ввода и
+        // показа. Одна строка на сочетание правил за запуск: лента пересобирается часто, а сказать
+        // «это было» достаточно раз.
+        val markupSeen = mutableSetOf<String>()
+        io.tima.core.encryption.CodecWatch.markupDropped = { rules, bytes ->
+            val key = rules.joinToString(",")
+            if (markupSeen.add(key)) Journal.note(LogCode.MSG_MARKUP, "показано без оформления", "правила" to key, "разметка байт" to bytes)
+        }
+        io.tima.core.encryption.CodecWatch.slowParse = { length, ms ->
+            Journal.note(LogCode.MD_PARSE, "разбор строки медленный", "длина" to length, "мс" to ms)
+        }
+        io.tima.core.encryption.CodecWatch.slowRender = { blocks, ms ->
+            Journal.note(LogCode.RENDER_SLOW, "показ сообщения медленный", "блоков" to blocks, "мс" to ms)
+        }
+
         val notices = Notices(
             notifier = platformNotifier(),
             me = device.session.userId,
