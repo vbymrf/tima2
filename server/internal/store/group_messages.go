@@ -88,7 +88,10 @@ func (s *Store) SaveGroupMessage(ctx context.Context, m GroupMessage) (int64, bo
 // Считает её вызывающий по правам просящего, а не хранилище: право — предмет API,
 // а не SQL. Шифр (-1) проходит эту границу всегда, и это верно: расшифровать его
 // сервер не может, а участник без ключа увидит непрозрачные байты.
-func (s *Store) ListGroupMessages(ctx context.Context, groupID string, threadRoot, before int64, limit int, maxLevel int16) ([]GroupMessage, error) {
+//
+// noShowcase — без уровня 0: описание в ленту не идёт (ПЛАН-(ЗО) ЗО2), его забирают окном
+// «Описание». Необязательное у API: установленные клиенты шлют запрос без него.
+func (s *Store) ListGroupMessages(ctx context.Context, groupID string, threadRoot, before int64, limit int, maxLevel int16, noShowcase bool) ([]GroupMessage, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -103,8 +106,9 @@ func (s *Store) ListGroupMessages(ctx context.Context, groupID string, threadRoo
 		WHERE group_id = $1 AND message_id < $2 AND NOT deleted
 		  AND ($3::bigint = 0 OR thread_root = $3)
 		  AND level <= $5
+		  AND NOT ($6 AND level = 0)
 		ORDER BY message_id DESC
-		LIMIT $4`, groupID, before, threadRoot, limit, maxLevel)
+		LIMIT $4`, groupID, before, threadRoot, limit, maxLevel, noShowcase)
 	if err != nil {
 		return nil, err
 	}

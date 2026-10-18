@@ -219,6 +219,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Сообщества: контейнер, который связывает готовые группы и каналы. Стоит рядом с
 	// каналами, потому что в них и складывается.
 	RegisterCommunities(mux, s.Store, s.requireActiveDevice)
+	// Закреплённое и описание (ПЛАН-(ЗО) ЗО1–ЗО2).
+	RegisterShowcase(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	// Страна и язык человека: две задачи — отсев у клиента и региональные ленты у
 	// сервера (ПЛАН-(Я)-ЯЗЫКА). Ни перевода, ни определения языка по тексту здесь нет.
 	RegisterLocale(mux, s.Store, s.requireActiveDevice)

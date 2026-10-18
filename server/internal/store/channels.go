@@ -249,7 +249,9 @@ func (s *Store) CreatePost(ctx context.Context, p ChannelPost) (uint64, error) {
 // **Комментарии исключены здесь и в ListFeed** условием `parent_post_id IS NULL`. Они
 // лежат в той же таблице, и без этого условия ветка вылезает в ленту как запись
 // (ADR-0024, следствие 1). Условие покрыто отдельным тестом.
-func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16, viewerID string) ([]ChannelPost, error) {
+//
+// noShowcase — без уровня 0 (ПЛАН-(ЗО) ЗО2): описание канала забирается окном «Описание».
+func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16, viewerID string, noShowcase bool) ([]ChannelPost, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -268,7 +270,8 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 		  AND p.parent_post_id IS NULL
 		  AND NOT p.only_continuation
 		  AND (p.level <= $4 OR fg.user_id IS NOT NULL)
-		ORDER BY p.post_id DESC LIMIT $3`, channelID, before, limit, maxLevel, viewerID)
+		  AND NOT ($6 AND p.level = 0)
+		ORDER BY p.post_id DESC LIMIT $3`, channelID, before, limit, maxLevel, viewerID, noShowcase)
 	if err != nil {
 		return nil, err
 	}

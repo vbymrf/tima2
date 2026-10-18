@@ -39,7 +39,7 @@ type GroupStore interface {
 	SearchOpen(ctx context.Context, channel bool, container, q string, maxLevel int16, limit int) ([]store.SearchHit, error)
 	EditTarget(ctx context.Context, group bool, container string, messageID int64) (store.EditTarget, error)
 	DeleteMessage(ctx context.Context, group bool, container string, messageID int64, requesterID string, allowForeign bool) ([]string, error)
-	ListGroupMessages(ctx context.Context, groupID string, threadRoot, before int64, limit int, maxLevel int16) ([]store.GroupMessage, error)
+	ListGroupMessages(ctx context.Context, groupID string, threadRoot, before int64, limit int, maxLevel int16, noShowcase bool) ([]store.GroupMessage, error)
 	AskForLevel(ctx context.Context, groupID, userID string, level int16) (string, error)
 	GrantLevel(ctx context.Context, groupID, userID string, level int16, untilEpoch, grantedBy string, grant bool) error
 	ListLevelGrants(ctx context.Context, groupID string) ([]store.LevelGrant, error)
@@ -54,6 +54,8 @@ type GroupStore interface {
 	SetGroupCardAudience(ctx context.Context, groupID string, userIDs []string) error
 	CardsFor(ctx context.Context, userID string) ([]store.GroupCardRow, error)
 	GroupCardOpenTo(ctx context.Context, groupID, userID string) (bool, error)
+	// Предел описания — не больше 50 сообщений уровня 0 (ПЛАН-(ЗО) ЗО2).
+	ShowcaseCount(ctx context.Context, kind, container string) (int, error)
 	NarrowGroupMessageLevel(ctx context.Context, groupID string, messageID int64, level int16, requesterID string, allowForeign bool) (string, error)
 	GroupMessageExists(ctx context.Context, groupID string, messageID int64) (bool, error)
 	SenderPostedWithin(ctx context.Context, groupID, senderID string, seconds int32) (bool, error)

@@ -243,6 +243,10 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			level = target.Level
 		}
 
+		if level == levelPublicShowcase && req.EditOf == 0 && showcaseFull(w, r, deps.store, store.PinGroup, groupID) {
+			return
+		}
+
 		msg := store.GroupMessage{
 			GroupID:         groupID,
 			ClientMsgID:     req.ClientMsgID,
@@ -278,6 +282,14 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			return
 		}
 		msg.MessageID = messageID
+
+		// Описание (уровень 0) никому не рассылается и вершину не поднимает: его забирают окном
+		// «Описание», как страницу человека — «не зашёл, ничего не увидел» (заказчик 2026-10-18).
+		if level == levelPublicShowcase {
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"message_id": messageID})
+			return
+		}
 
 		// Доставка активным участникам (кроме устройства отправителя):
 		// event log + live онлайн-устройствам
@@ -393,7 +405,8 @@ func readerMaxLevel(deps groupsDeps, r *http.Request, role string) int16 {
 	return max
 }
 
-// listGroupMessages — GET /groups/{groupID}/messages?before=&limit=&thread=.
+// listGroupMessages — GET /groups/{groupID}/messages?before=&limit=&thread=&no_showcase=1.
+// no_showcase=1 — без уровня 0: описание в ленту не идёт (ПЛАН-(ЗО) ЗО2).
 func listGroupMessages(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		g, role, ok := groupAndRole(deps, w, r)
@@ -425,7 +438,8 @@ func listGroupMessages(deps groupsDeps) http.HandlerFunc {
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
 		max := readerMaxLevel(deps, r, role)
-		msgs, err := deps.store.ListGroupMessages(r.Context(), r.PathValue("groupID"), thread, before, limit, max)
+		msgs, err := deps.store.ListGroupMessages(r.Context(), r.PathValue("groupID"), thread, before, limit, max,
+			r.URL.Query().Get("no_showcase") == "1")
 		if err != nil {
 			log.Printf("listGroupMessages: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

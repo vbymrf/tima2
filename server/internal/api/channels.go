@@ -45,7 +45,9 @@ type ChannelStore interface {
 	// Вершина канала подписчикам вместо копии поста (ПЛАН-(ОУ) ОУ1, ОУ2).
 	RaiseTopsStore
 	CreatePost(ctx context.Context, p store.ChannelPost) (uint64, error)
-	ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16, viewerID string) ([]store.ChannelPost, error)
+	// Предел описания — не больше 50 записей уровня 0 (ПЛАН-(ЗО) ЗО2).
+	ShowcaseCount(ctx context.Context, kind, container string) (int, error)
+	ListPosts(ctx context.Context, channelID string, before uint64, limit int, maxLevel int16, viewerID string, noShowcase bool) ([]store.ChannelPost, error)
 
 	// Комментарии (ADR-0024): та же таблица, тот же вид записи — отсюда и то, что
 	// методы лежат в этом же интерфейсе, а не в отдельном.
@@ -292,6 +294,9 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_level", "круг вне 0…3")
 			return
 		}
+		if level == levelPublicShowcase && showcaseFull(w, r, st, store.PinChannel, channelID) {
+			return
+		}
 		now := time.Now().UnixMilli()
 		postID, err := st.CreatePost(r.Context(), store.ChannelPost{
 			ChannelID: channelID, AuthorID: id.UserID, Text: req.Text,
@@ -310,7 +315,8 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 		// («незнакомый кадр»), ленту же брало заново при открытии канала. Теперь подписчику —
 		// одна строка «в канале новое до №N» в ленте состояний; сигнал — тем, у кого
 		// уведомления канала не отключены. Автору — нет: своё новым не бывает.
-		if subs, err := st.SubscriberIDs(r.Context(), channelID); err == nil {
+		// Описание (уровень 0) вершину не поднимает: его забирают окном «Описание» (ПЛАН-(ЗО) ЗО2).
+		if subs, err := st.SubscriberIDs(r.Context(), channelID); err == nil && level != levelPublicShowcase {
 			owners := make([]string, 0, len(subs))
 			for _, s := range subs {
 				if s != id.UserID {
@@ -370,7 +376,8 @@ func listChannelPosts(st ChannelStore) http.HandlerFunc {
 			before, _ = strconv.ParseUint(v, 10, 64)
 		}
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		posts, err := st.ListPosts(r.Context(), channelID, before, limit, maxLevelInChannel(r, st, ch, id.UserID), id.UserID)
+		posts, err := st.ListPosts(r.Context(), channelID, before, limit, maxLevelInChannel(r, st, ch, id.UserID), id.UserID,
+			r.URL.Query().Get("no_showcase") == "1")
 		if err != nil {
 			log.Printf("listChannelPosts: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

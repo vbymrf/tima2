@@ -118,7 +118,7 @@ func getGroupMessage(deps groupsDeps) http.HandlerFunc {
 		max := readerMaxLevel(deps, r, role)
 		// Одним запросом с верхней границей: так известен и сам уровень сообщения, если оно
 		// читателю не положено. Сравнение с правом — здесь, а не в SQL.
-		msgs, err := deps.store.ListGroupMessages(r.Context(), g.GroupID, 0, int64(number)+1, 1, levelByGrant)
+		msgs, err := deps.store.ListGroupMessages(r.Context(), g.GroupID, 0, int64(number)+1, 1, levelByGrant, false)
 		if err != nil {
 			log.Printf("getGroupMessage: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -191,7 +191,7 @@ func getChannelPost(st ChannelStore) http.HandlerFunc {
 		}
 		// Сначала — по праву читателя (с поимённым разрешением, его проверяет ListPosts);
 		// не нашлось — с верхней границей, чтобы назвать уровень.
-		posts, err := st.ListPosts(r.Context(), channelID, number+1, 1, maxLevelInChannel(r, st, ch, id.UserID), id.UserID)
+		posts, err := st.ListPosts(r.Context(), channelID, number+1, 1, maxLevelInChannel(r, st, ch, id.UserID), id.UserID, false)
 		if err == nil && len(posts) == 1 && posts[0].PostID == number {
 			counts, cerr := st.CommentCounts(r.Context(), channelID, []uint64{number})
 			if cerr != nil {
@@ -206,7 +206,7 @@ func getChannelPost(st ChannelStore) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		all, err := st.ListPosts(r.Context(), channelID, number+1, 1, levelByGrant, id.UserID)
+		all, err := st.ListPosts(r.Context(), channelID, number+1, 1, levelByGrant, id.UserID, false)
 		if err != nil {
 			log.Printf("getChannelPost: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

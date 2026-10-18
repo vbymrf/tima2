@@ -111,7 +111,10 @@ func (s *Store) DeleteChannelPost(ctx context.Context, channelID string, postID 
 	if ct.RowsAffected() == 0 {
 		return ErrNotAllowed
 	}
-	return nil
+	// Закреплённое удалённое открепляется само (ПЛАН-(ЗО) ЗО1). Отдельной транзакцией не
+	// обёрнуто: строка закрепления на удалённую запись безвредна — выдача её не покажет.
+	_, err = s.pool.Exec(ctx, unpinDeletedSQL, PinChannel, channelID, int64(postID))
+	return err
 }
 
 // SetChannelModerator — назначить или снять модератора. Только владелец.

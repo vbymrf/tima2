@@ -53,6 +53,13 @@ func (s *Store) DeleteMessage(
 		container, messageID, requesterID); err != nil {
 		return nil, err
 	}
+	pinKind := PinPersonal
+	if group {
+		pinKind = PinGroup
+	}
+	if _, err = tx.Exec(ctx, unpinDeletedSQL, pinKind, container, messageID); err != nil {
+		return nil, err
+	}
 	var devices []string
 	if !group {
 		rows, err := tx.Query(ctx, `SELECT DISTINCT recipient FROM personal_message_keys

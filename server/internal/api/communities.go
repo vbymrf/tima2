@@ -44,6 +44,8 @@ type CommunityStore interface {
 	CommunityAdmins(ctx context.Context, communityID string) ([]string, error)
 	AddCommunityMessage(ctx context.Context, m store.CommunityMessage, actorID string) (int64, error)
 	CommunityMessages(ctx context.Context, communityID string, limit int) ([]store.CommunityMessage, error)
+	ShowcaseCount(ctx context.Context, kind, container string) (int, error)
+	ShowcaseSuper(ctx context.Context, kind, container string) (int64, error)
 }
 
 var _ CommunityStore = (*store.Store)(nil)
@@ -410,6 +412,9 @@ func addCommunityMessage(st CommunityStore) http.HandlerFunc {
 				return
 			}
 			markup = []byte(req.Markup)
+		}
+		if showcaseFull(w, r, st, store.ShowcaseCommunity, r.PathValue("communityID")) {
+			return
 		}
 		id, _ := auth.FromContext(r.Context())
 		messageID, err := st.AddCommunityMessage(r.Context(), store.CommunityMessage{
