@@ -123,3 +123,40 @@ func TestПереносБезВидаКонтейнераОтвергается(
 		t.Fatalf("тело без kind: %d, ожидалось 400", code)
 	}
 }
+
+// Разметка записи — в выдаче страницы (журнал работ, строка 30): запись из редактора и
+// принесённая из канала показываются с оформлением, а не текстом.
+func TestРазметкаЗаписиВВыдачеСтраницы(t *testing.T) {
+	ts, _ := setup(t)
+	owner := registerDevice(t, ts, "+79990000140")
+	reader := registerDevice(t, ts, "+79990000141")
+	var created struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels", map[string]string{"title": "Разметка"}, &created); code != 201 {
+		t.Fatalf("канал: %d", code)
+	}
+	var posted struct {
+		PostID uint64 `json:"post_id"`
+	}
+	markup := `{"n":[0],"blocks":[{"type":"heading","nodes":[0],"level":1}]}`
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels/"+created.ChannelID+"/posts",
+		map[string]any{"text": "Заголовок", "nodes": []string{"Заголовок"}, "markup": markup}, &posted); code != 201 {
+		t.Fatalf("запись: %d", code)
+	}
+	if code := postAuthed(t, ts, reader.token, "POST", "/api/v1/users/me/feed/items",
+		map[string]any{"kind": "channel", "container_id": created.ChannelID, "message_id": posted.PostID}, nil); code != 201 {
+		t.Fatalf("перенос: %d", code)
+	}
+	var feed struct {
+		Items []struct {
+			Markup map[string]any `json:"markup"`
+		} `json:"items"`
+	}
+	if code := getAuthed(t, ts, reader.token, "/api/v1/users/me/feed", &feed); code != 200 || len(feed.Items) != 1 {
+		t.Fatalf("страница: %d, %d записей", code, len(feed.Items))
+	}
+	if feed.Items[0].Markup["blocks"] == nil {
+		t.Fatalf("разметки в выдаче нет: %+v", feed.Items[0])
+	}
+}

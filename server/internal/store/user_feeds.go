@@ -38,6 +38,9 @@ type FeedItem struct {
 	AuthorID        string
 	Text            string
 	Nodes           []string
+	// Markup — разметка своей записи или записи канала-оригинала (ADR-0011 §4, открытый контур):
+	// без неё запись из редактора страницы показывалась текстом (журнал работ, строка 30). nil — нет.
+	Markup []byte
 	// CarriedBy — кто принёс. Пусто у собственной записи.
 	CarriedBy string
 	// RefKind/RefContainerID/RefMessageID — адрес оригинала: вид контейнера, сам
@@ -241,6 +244,7 @@ func (s *Store) ListFeed(
 		SELECT p.post_id, p.level, p.created_at_unix_ms, p.comments_closed,
 		       COALESCE(src.text, p.text) AS text,
 		       COALESCE(src.nodes, p.nodes) AS nodes,
+		       COALESCE(src.markup, p.markup)::text AS markup,
 		       COALESCE(o.sender_id::text, src.author_id::text, p.author_id::text) AS author_id,
 		       CASE WHEN p.ref_container_id IS NULL THEN '' ELSE p.author_id::text END AS carried_by,
 		       COALESCE(p.ref_kind, ''),
@@ -282,16 +286,21 @@ func (s *Store) ListFeed(
 	for rows.Next() {
 		var it FeedItem
 		var available bool
-		if err := rows.Scan(&it.PostID, &it.Level, &it.CreatedAtUnixMs, &it.CommentsClosed, &it.Text, &it.Nodes,
+		var markup *string
+		if err := rows.Scan(&it.PostID, &it.Level, &it.CreatedAtUnixMs, &it.CommentsClosed, &it.Text, &it.Nodes, &markup,
 			&it.AuthorID, &it.CarriedBy, &it.RefKind, &it.RefContainerID,
 			&it.RefMessageID, &it.SourceTitle,
 			&it.Payload, &it.Signature, &it.SenderDevice, &it.Kind, &available, &it.OriginalLevel); err != nil {
 			return nil, err
 		}
+		if markup != nil {
+			it.Markup = []byte(*markup)
+		}
 		if !available {
 			// Заглушка: содержимое оригинала не отдаётся ни в каком виде.
 			it.Unavailable = true
 			it.Text, it.Nodes, it.Payload, it.Signature, it.SenderDevice, it.Kind = "", nil, nil, nil, "", 0
+			it.Markup = nil
 		}
 		out = append(out, it)
 	}

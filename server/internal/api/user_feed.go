@@ -425,6 +425,8 @@ func writeFeedLevels(
 			"created_at_unix_ms": it.CreatedAtUnixMs,
 			"author_id":          it.AuthorID,
 			"nodes":              it.Nodes,
+			// Разметка — расширение выдачи (журнал работ, строка 30): прежние клиенты её не читают.
+			"markup": markupJSON(it.Markup),
 			// Пусто у своей записи, заполнено у принесённой. По этим трём полям экран
 			// показывает её «от лица группы», а не как свою.
 			"carried_by": it.CarriedBy,
@@ -589,4 +591,12 @@ func removeFeedItem(st FeedStore) http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// markupJSON — разметка как объект JSON (так её отдаёт и лента канала); нет — null.
+func markupJSON(raw []byte) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return json.RawMessage(raw)
 }
