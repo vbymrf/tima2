@@ -30,6 +30,8 @@ class LinkCardsOverHttp(
             connectTimeoutMillis = TIMEOUT_MS
         }
     },
+    /** Во внутренний ли адрес превращается имя — DNS платформы; проверки подставляют свой ответ. */
+    private val inside: suspend (String) -> Boolean = ::resolvesInside,
 ) : LinkCards {
 
     override suspend fun card(url: String): LinkCard? = runCatching {
@@ -48,6 +50,8 @@ class LinkCardsOverHttp(
         var url = start
         repeat(MAX_REDIRECTS + 1) {
             if (!LinkSafety.allowed(url)) return null
+            // Имя, которое DNS превращает во внутренний адрес, — тоже внутренняя сеть (Решения §4).
+            if (inside(LinkSafety.hostOf(url) ?: return null)) return null
             val result = client.prepareGet(url) { header(HttpHeaders.Accept, "text/html,image/*;q=0.9,*/*;q=0.5") }.execute { resp ->
                 val location = resp.headers[HttpHeaders.Location]
                 when {

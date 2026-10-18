@@ -9,10 +9,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
+import io.tima.core.ui.Chip
+import io.tima.core.ui.ChipKind
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
 import io.tima.core.ui.Secondary
@@ -108,6 +111,9 @@ fun StorageScreen(
     media: List<MediaKindState> = emptyList(),
     onMediaLimits: (kind: String, keep: KeepFor?, megabytes: Int) -> Unit = { _, _, _ -> },
     onMediaClear: (kind: String) -> Unit = {},
+    /** Карточки ссылок (Решения §4); `null` — выключателя нет. */
+    linkCards: Boolean? = null,
+    onLinkCards: (Boolean) -> Unit = {},
 ) = Column(
     modifier.fillMaxSize().padding(TimaSpacing.about4).verticalScroll(rememberScrollState()),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
@@ -120,6 +126,14 @@ fun StorageScreen(
     for (m in media) MediaKindSection(m, words, onMediaLimits, onMediaClear)
     if (media.isNotEmpty()) {
         ListLine(middle = { Name(words.mediaInline) }, right = { Secondary(words.mediaInlineAbout) })
+    }
+    linkCards?.let { on ->
+        ListLine(
+            modifier = Modifier.testTag(LINK_CARDS_TAG),
+            onClick = { onLinkCards(!on) },
+            middle = { Column { Name(words.linkCards); Tertiary(words.linkCardsAbout) } },
+            right = { Chip(if (on) words.linkCardsOn else words.linkCardsOff, kind = if (on) ChipKind.Selected else ChipKind.Quiet, onClick = { onLinkCards(!on) }) },
+        )
     }
 
     Caption(words.messages, fontSize = TimaType.sz4, weight = FontWeight.Bold)
@@ -302,3 +316,6 @@ private fun megabytes(bytes: Long, words: StorageWords = RussianWords.storage): 
     val tenths = (bytes * 10 + 524_288) / 1_048_576
     return words.megabytesOccupied((tenths / 10).toString() + "," + (tenths % 10))
 }
+
+/** Метка выключателя карточек ссылок (СЦЕНАРИИ-ПО-ОКНАМ.md). */
+const val LINK_CARDS_TAG = "storage:link.cards"

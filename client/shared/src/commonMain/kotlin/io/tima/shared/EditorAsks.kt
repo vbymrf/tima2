@@ -26,11 +26,14 @@ internal fun EditorAskSheet(
     put: (ComposedWidget) -> Unit,
     onNotice: (String?) -> Unit,
     onClose: () -> Unit,
+    /** Карточки ссылок включены в «Память и трафик» (Решения §4); выключены — вида «карточка» нет. */
+    cardsOn: Boolean = true,
 ) {
     val cw = Tima.words.chat
     val ew = Tima.words.editor
+    val modes = if (cardsOn) listOf("plain", "button", "card") else listOf("plain", "button")
     val (title, fields, options) = when (ask) {
-        "link" -> Triple(cw.linkAsk, listOf(ew.linkAddress, ew.linkTitle), listOf("plain", "button", "card").map { it to ew.linkMode(it) })
+        "link" -> Triple(cw.linkAsk, listOf(ew.linkAddress, ew.linkTitle), modes.map { it to ew.linkMode(it) })
         "cloud" -> Triple(cw.linkPlace, listOf(ew.linkAddress, ew.linkTitle), listOf("file", "document", "audio", "video").map { it to cw.cloudKind(it) })
         "place" -> Triple(cw.attachItem("place"), listOf(cw.placeAsk), emptyList())
         else -> Triple(cw.attachItem("contact"), listOf(cw.contact, "+7"), emptyList())
@@ -82,3 +85,6 @@ internal fun EditorAskSheet(
         },
     )
 }
+
+/** Ключ выключателя карточек ссылок в настройках аккаунта: `"0"` — выключены, нет или иное — включены. */
+internal const val LINK_CARDS_KEY = "link.cards"

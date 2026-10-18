@@ -478,6 +478,11 @@ interface StorageWords {
     val mediaFiles: String
     val mediaInline: String
     val mediaInlineAbout: String
+    /** Карточки ссылок (Решения §4): запрос к сайту делает телефон отправителя — можно выключить. */
+    val linkCards: String
+    val linkCardsAbout: String
+    val linkCardsOn: String
+    val linkCardsOff: String
     val always: String
     val clearNow: String
     val messages: String
@@ -3025,6 +3030,10 @@ object RussianWords : Words {
         override val mediaFiles = "Файлы"
         override val mediaInline = "Картинки в сообщениях"
         override val mediaInlineAbout = "Кеш загрузчика: докачиваются сами, пока живо сообщение"
+        override val linkCards = "Карточки ссылок"
+        override val linkCardsAbout = "Название и картинку для карточки телефон берёт с сайта сам — сайт видит ваш адрес. Выключено — ссылка уходит кнопкой"
+        override val linkCardsOn = "Включены"
+        override val linkCardsOff = "Выключены"
         override val always = "Всегда"
         override val clearNow = "Очистить сейчас"
         override val messages = "Сообщения"

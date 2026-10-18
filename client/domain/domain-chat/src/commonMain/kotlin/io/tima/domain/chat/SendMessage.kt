@@ -166,6 +166,13 @@ interface MessageBodyCodec {
     fun decodeLine(body: ByteArray): DecodedLine? = decodeText(body)?.let { DecodedLine(it, null) }
 
     /**
+     * Открытая запись — узлы и разметка открытым текстом (ADR-0011 §4): запись страницы, канала,
+     * описания. По умолчанию — текст узлов без оформления.
+     */
+    fun decodeOpen(nodes: List<String>, markup: String): DecodedLine? =
+        nodes.joinToString("").takeIf { it.isNotEmpty() }?.let { DecodedLine(it, null) }
+
+    /**
      * Обратный ход: текст из тела, лежащего в базе.
      *
      * Не отдельный порт, а вторая половина этого: кодек один на провод и на диск, и

@@ -158,10 +158,16 @@ private fun PageRow(
     if (entry.carriedBy.isNotBlank()) {
         Tertiary(words.carriedByYou, lineOne = true)
     }
-    Caption(
-        entry.text ?: words.entryUnavailable,
-        fontSize = TimaType.sz4,
-    )
+    // Оформленная запись (редактор страницы, разметка канала) — тем же рисованием, что в переписке.
+    val rich = entry.rich
+    if (rich != null) {
+        RichBody(rich, Modifier.fillMaxWidth())
+    } else {
+        Caption(
+            entry.text ?: words.entryUnavailable,
+            fontSize = TimaType.sz4,
+        )
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2, Alignment.End),

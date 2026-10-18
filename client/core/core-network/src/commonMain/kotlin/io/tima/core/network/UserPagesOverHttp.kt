@@ -116,6 +116,12 @@ class UserPagesOverHttp(
         val items = runCatching { body?.get("items")?.jsonArray }.getOrNull() ?: return emptyList()
         return items.mapNotNull { element ->
             val row = element.jsonObjectOrNull() ?: return@mapNotNull null
+            // Оформление: у принесённого из группы — из тела оригинала, у своей записи и записи
+            // канала — узлы и разметка открытым текстом (журнал работ, строка 30).
+            val payload = row.str("payload")?.let { runCatching { decodeBase64Url(it) }.getOrNull() }?.takeIf { it.isNotEmpty() }
+            val markup = row["markup"]?.let { m -> (m as? JsonPrimitive)?.content ?: m.toString() }?.takeIf { it != "null" }.orEmpty()
+            val nodes = runCatching { row["nodes"]?.jsonArray?.mapNotNull { (it as? JsonPrimitive)?.content } }.getOrNull().orEmpty()
+            val decoded = if (payload != null) codec.decodeLine(payload) else codec.decodeOpen(nodes, markup)
             PageEntry(
                 postId = row.long("post_id") ?: return@mapNotNull null,
                 level = row.int("level") ?: 1,
@@ -129,6 +135,7 @@ class UserPagesOverHttp(
                     ?.let { codec.decodeText(it) }
                     // Своя запись — без конверта: текст узлами (запись из редактора страницы).
                     ?: nodesText(row),
+                rich = decoded?.rich,
                 carriedBy = row.str("carried_by").orEmpty(),
                 sourceTitle = row.str("source_title").orEmpty(),
                 refKind = row.str("ref_kind").orEmpty(),

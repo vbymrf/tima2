@@ -1304,6 +1304,9 @@ private fun App(
             network.pages, scope, switches = network.commentSwitches,
             // Своя запись — тем же редактором, что сообщение (Решения §10.2).
             writer = io.tima.domain.chat.WriteToPage(network.pagePosts, io.tima.core.encryption.ComposedBodiesOverKodium),
+            // Черновик записи — зашифрованным, переживает перезапуск (журнал работ, строка 30).
+            drafts = LoggedDrafts(environment.drafts),
+            bodies = io.tima.core.encryption.ComposedBodiesOverKodium,
         )
     }
 
@@ -3512,7 +3515,10 @@ private fun App(
                             onCloseTrouble = page::troubleDismissed,
                             onWrite = if (page.canWrite && state.channelId.isNotBlank()) page::openEditor else null,
                         )
-                        if (state.editorOpen) PageEditor(page, state, scope)
+                        if (state.editorOpen) {
+                            val settingsNow by environment.settings.all().collectAsState(initial = emptyMap())
+                            PageEditor(page, state, scope, cardsOn = settingsNow[LINK_CARDS_KEY] != "0")
+                        }
                     },
                 )
             }
@@ -4977,10 +4983,12 @@ private fun Chat(
             },
         )
         editorAsk?.let { ask ->
+            val settingsNow by environment.settings.all().collectAsState(initial = emptyMap())
             EditorAskSheet(
                 ask = ask,
                 scope = scope,
                 cards = linkCards,
+                cardsOn = settingsNow[LINK_CARDS_KEY] != "0",
                 cardImage = { bytes ->
                     val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(bytes) }
                     val up = prepared?.let { editorUploads.upload(it.full, "image/jpeg", null, null) }
@@ -5874,6 +5882,9 @@ private fun Storage(
             Journal.note(LogCode.FILE_STORE, "очищено", "раздел" to kind)
             mediaTick++
         },
+        // Карточки ссылок (Решения §4): выключены — запросов к сайтам с телефона нет вовсе.
+        linkCards = settings?.let { saved[LINK_CARDS_KEY] != "0" },
+        onLinkCards = { on -> mediaScope.launch { settings?.put(LINK_CARDS_KEY, if (on) "1" else "0") } },
     )
 }
 

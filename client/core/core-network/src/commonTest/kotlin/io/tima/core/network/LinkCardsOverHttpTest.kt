@@ -20,6 +20,9 @@ class LinkCardsOverHttpTest {
 
     private val asked = mutableListOf<String>()
 
+    /** Имена, которые «DNS» превращает во внутренний адрес. */
+    private val insideNames = mutableSetOf<String>()
+
     private fun cards(pages: Map<String, Triple<HttpStatusCode, String, ByteArray>>) = LinkCardsOverHttp(
         HttpClient(
             MockEngine { req ->
@@ -29,6 +32,7 @@ class LinkCardsOverHttpTest {
                 respond(body, status, if (location.isEmpty()) headersOf() else headersOf(HttpHeaders.Location, location))
             },
         ) { followRedirects = false },
+        inside = { it in insideNames },
     )
 
     private fun page(html: String) = Triple(HttpStatusCode.OK, "", html.encodeToByteArray())
@@ -90,5 +94,12 @@ class LinkCardsOverHttpTest {
         assertEquals("https://a.example/x.png", LinkCardsOverHttp.resolve("https://a.example/p/q", "/x.png"))
         assertEquals("https://a.example/p/x.png", LinkCardsOverHttp.resolve("https://a.example/p/q", "x.png"))
         assertEquals("https://cdn.example/x.png", LinkCardsOverHttp.resolve("https://a.example/p", "//cdn.example/x.png"))
+    }
+
+    @Test
+    fun имя_во_внутреннюю_сеть_не_запрашивается() = runTest {
+        insideNames += "intranet.example"
+        assertNull(cards(mapOf("https://intranet.example/" to page("<title>Внутри</title>"))).card("https://intranet.example/"))
+        assertTrue(asked.isEmpty(), "запроса не было вовсе")
     }
 }

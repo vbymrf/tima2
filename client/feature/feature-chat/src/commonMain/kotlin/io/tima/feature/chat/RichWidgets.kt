@@ -226,7 +226,7 @@ private fun LinkWidget(link: RichBlock.Link) {
 }
 
 /** Домен ссылки — то, что человек видит до перехода (Решения §4). */
-internal fun hostOf(url: String): String = url.substringAfter("://").substringBefore('/').removePrefix("www.")
+internal fun hostOf(url: String): String = io.tima.domain.chat.LinkSafety.displayHost(url)
 
 /** Путь ссылки без схемы и домена — обрезается он, а не домен. */
 internal fun pathOf(url: String): String = url.substringAfter("://").substringAfter('/', "").let { if (it.isEmpty()) "" else "/$it" }

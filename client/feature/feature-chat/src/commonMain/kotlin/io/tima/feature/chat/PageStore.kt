@@ -49,7 +49,33 @@ class PageStore(
     private val words: () -> Words = { CurrentWords.value },
     /** Своя запись редактором (Решения §10.2). `null` — страница чужая или писать нечем. */
     private val writer: io.tima.domain.chat.WriteToPage? = null,
+    /**
+     * Черновик записи — зашифрованным, как у переписки (Решения §9): переживает перезапуск
+     * приложения. `null` — живёт до закрытия приложения (журнал работ, строка 30).
+     */
+    private val drafts: io.tima.domain.chat.Drafts? = null,
+    /** Документ редактора строкой и обратно — для [drafts]. */
+    private val bodies: io.tima.domain.chat.ComposedBodies? = null,
 ) {
+
+    init {
+        val d = drafts
+        val b = bodies
+        if (d != null && b != null && writer != null) {
+            scope.launch {
+                val saved = runCatching { d.load(PAGE_DRAFT_KEY) }.getOrNull()
+                if (!saved.isNullOrEmpty() && _state.value.draft == null) {
+                    _state.value = _state.value.copy(draft = runCatching { b.load(saved) }.getOrNull()?.takeUnless { it.isEmpty })
+                }
+            }
+        }
+    }
+
+    private fun keepDraft(doc: io.tima.domain.chat.ComposedDoc?) {
+        val d = drafts ?: return
+        val b = bodies ?: return
+        scope.launch { runCatching { d.save(PAGE_DRAFT_KEY, doc?.takeUnless { it.isEmpty }?.let(b::save).orEmpty()) } }
+    }
 
     /** Можно ли писать на этой странице — кнопка «Написать». */
     val canWrite: Boolean get() = writer != null && userId == ReadPage.PAGE_MINE
@@ -63,6 +89,7 @@ class PageStore(
     /** «Назад» из редактора: документ остаётся до следующего открытия. */
     fun editorBack(doc: io.tima.domain.chat.ComposedDoc) {
         _state.value = _state.value.copy(editorOpen = false, draft = doc.takeUnless { it.isEmpty })
+        keepDraft(doc)
     }
 
     /** Опубликовать собранное: удалось — окно закрывается и страница перечитывается. */
@@ -88,6 +115,7 @@ class PageStore(
                     is io.tima.domain.chat.PageWriteResult.Refused -> words().trouble.refused(result.reason)
                 },
             )
+            keepDraft(if (result is io.tima.domain.chat.PageWriteResult.Published) null else doc)
             if (result is io.tima.domain.chat.PageWriteResult.Published) refresh()
         }
     }
@@ -250,3 +278,6 @@ data class PageState(
 
 /** Уровень записи страницы по умолчанию — «всем» (ADR-0019): страница для того и есть. */
 const val LEVEL_PAGE = 1
+
+/** Ключ черновика своей страницы в хранилище черновиков — рядом с ключами переписок. */
+const val PAGE_DRAFT_KEY = "page:self"

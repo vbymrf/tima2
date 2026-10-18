@@ -22,7 +22,7 @@ import kotlinx.coroutines.CoroutineScope
  * по умолчанию «всем». Картинок в записи страницы нет: у записи канала нет файлов.
  */
 @Composable
-internal fun PageEditor(page: PageStore, state: PageState, scope: CoroutineScope) {
+internal fun PageEditor(page: PageStore, state: PageState, scope: CoroutineScope, cardsOn: Boolean = true) {
     val model = remember { EditorModel(state.draft ?: ComposedDoc()) }
     val ew = Tima.words.editor
     var ask by remember { mutableStateOf<String?>(null) }
@@ -63,6 +63,7 @@ internal fun PageEditor(page: PageStore, state: PageState, scope: CoroutineScope
             put = ::put,
             onNotice = page::editorNoticeShown,
             onClose = { ask = null },
+            cardsOn = cardsOn,
         )
     }
 }

@@ -40,6 +40,9 @@ object TextBodyCodec : MessageBodyCodec {
         return MessageSerializer.encodeBody(MessageContentCodec.toBody(content))
     }
 
+    override fun decodeOpen(nodes: List<String>, markup: String): DecodedLine? =
+        ComposedBodiesOverKodium.readOpen(nodes, markup)
+
     override fun decodeLine(body: ByteArray): DecodedLine? = CodecWatch.timed(
         CodecWatch.RENDER_SLOW_MS,
         { decode(body).getOrNull()?.let { DecodedLine(it.displayText(), RichMapper.from(it)) } },
