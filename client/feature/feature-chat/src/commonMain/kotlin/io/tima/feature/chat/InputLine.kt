@@ -125,7 +125,7 @@ internal fun InputLine(
                 modifier = Modifier
                     .weight(1f)
                     .background(colors.surface, CircleShape)
-                    .padding(start = TimaSpacing.about4, end = TimaSpacing.about1, top = 6.dp, bottom = 6.dp),
+                    .padding(start = TimaSpacing.about4, end = BUBBLE_END, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f).padding(vertical = 4.dp)) {
@@ -145,10 +145,14 @@ internal fun InputLine(
                     )
                 }
                 // Набран символ — остаётся Эмоджи: Галерея и Скрепка шлют отдельное сообщение.
-                InBubble("🙂", InputTags.EMOJI) { open(InputArea.EMOJI) }
-                if (typed.isEmpty() && composed == null && onAttach != null) {
-                    InBubble("🖼", InputTags.GALLERY) { keyboard?.hide(); area = null; onAttach(AttachItem.PICTURE) }
-                    InBubble("📎", InputTags.ATTACH) { open(InputArea.ATTACH) }
+                // Отступы между значками и до «отправить» — вдвое шире прежних (заказчик 2026-10-18), за
+                // счёт места внутри пузыря: поле набора уже, пузырь и строка те же.
+                Row(horizontalArrangement = Arrangement.spacedBy(ICON_GAP), verticalAlignment = Alignment.CenterVertically) {
+                    InBubble("🙂", InputTags.EMOJI) { open(InputArea.EMOJI) }
+                    if (typed.isEmpty() && composed == null && onAttach != null) {
+                        InBubble("🖼", InputTags.GALLERY) { keyboard?.hide(); area = null; onAttach(AttachItem.PICTURE) }
+                        InBubble("📎", InputTags.ATTACH) { open(InputArea.ATTACH) }
+                    }
                 }
             }
             ButtonCircle(onClick = onSend, live = true, modifier = Modifier.testTag(CHAT_SEND_TAG)) {
@@ -182,6 +186,17 @@ private fun EditorButton(composed: Boolean, onClick: () -> Unit) {
         }
     }
 }
+
+/**
+ * Добавка между значками в пузыре: прежний видимый зазор — поле значка 32 без знака 18 — ещё раз.
+ */
+private val ICON_GAP = 14.dp
+
+/**
+ * Поле пузыря справа: прежний зазор от скрепки до «отправить» (половина поля значка 7, поле пузыря 4,
+ * промежуток строки 8 — 19) вдвое: 4 + 19.
+ */
+private val BUBBLE_END = 23.dp
 
 @Composable
 private fun InBubble(glyph: String, tag: String, onClick: () -> Unit) {
