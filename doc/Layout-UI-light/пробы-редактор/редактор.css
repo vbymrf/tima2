@@ -376,3 +376,24 @@
 .сетка-симв { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; padding: 0 10px 10px; }
 .сетка-симв span { height: 34px; border-radius: 8px; background: var(--чёрный-6); display: flex; align-items: center; justify-content: center; font-size: 17px; }
 .сетка-симв span.мелк { font-size: 9px; font-weight: 800; color: var(--чёрный-70); }
+
+/* ── Подборка сообщений и подкладка (2026-10-18) ─────────────────────────── */
+
+/* Выделение части сообщения долгим нажатием */
+.выд-часть { background: rgba(138,196,74,0.35); position: relative; }
+.ручка-выд { display: inline-block; width: 10px; height: 10px; background: var(--навигация); border-radius: 0 50% 50% 50%; vertical-align: -9px; }
+.ручка-выд.нач { border-radius: 50% 0 50% 50%; }
+.полоска-выд { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--текст); }
+.полоска-выд span { color: #fff; font-size: 12px; font-weight: 800; padding: 4px 9px; border-radius: 6px; }
+
+/* Подкладка: часть другого сообщения, приклеенная в конце — без пузыря и рамки */
+.подкл { margin-top: 8px; font-size: var(--щ5); line-height: 1.4; }
+.подкл .автор-подкл { font-size: 11.5px; font-weight: 800; color: #3d55aa; margin-bottom: 2px; }
+.подкл .часть { overflow: hidden; position: relative; }
+.подкл .часть.строк3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.подкл .часть.строк2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.подкл .дальше-чит { display: inline-block; margin-top: 3px; font-size: 11.5px; font-weight: 800; color: var(--подтверждено); }
+.ред-подкл { position: relative; margin-top: 12px; border: 1px dashed var(--чёрный-35); border-radius: 6px; padding: 8px 6px 4px; }
+.ред-подкл .ручка { position: absolute; top: -9px; left: 4px; font-size: 8.5px; font-weight: 800; padding: 1px 6px; border-radius: 999px; background: var(--текст); color: #fff; }
+.ред-подкл.выбран { border: 2px solid var(--навигация); }
+.ред-подкл.выбран .ручка { background: var(--навигация); color: #000; }
