@@ -305,3 +305,74 @@
 .тост { margin: 8px auto 0; background: var(--текст); color: #fff; border-radius: 12px; padding: 8px 12px; font-size: 11.5px; font-weight: 700; display: flex; gap: 10px; align-items: center; width: fit-content; }
 .тост a { color: var(--навигация); text-decoration: none; }
 .затемнение { background: rgba(0,0,0,0.35); padding: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+
+/* ── Редактор, третья проба (2026-10-18): разделы и лента кнопок ─────────── */
+
+/* Шапка: значки без подписи — отменить, повторить */
+.кн-ш {
+  width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%; background: var(--чёрный-6);
+  display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; color: var(--текст);
+}
+.кн-ш.откл { color: var(--чёрный-35); }
+.зона-1.подокно .тянуть.жмётся { cursor: pointer; }
+.подсказка-шапки { font-size: 9.5px; font-weight: 800; color: var(--подтверждено); }
+
+/* Разделы: размер — из настройки «Шрифты и размеры», группа «Вкладки» (13 по умолчанию) */
+.ред-панель2 { background: var(--функц); }
+.разделы { display: flex; gap: 4px; padding: 6px 8px 4px; overflow: hidden; white-space: nowrap; }
+.разд-ред { padding: 4px 11px; border-radius: 999px; font-size: var(--вкладки, 13px); font-weight: 700; color: var(--чёрный-70); }
+.разд-ред.тек { background: var(--навигация); color: #fff; }
+
+/* Лента: на экране шесть с половиной кнопок — седьмая обрезана, видно, что есть ещё */
+.лента { display: flex; overflow: hidden; padding: 2px 0 6px; }
+.кн-л {
+  flex: 0 0 calc(100% / 6.5); box-sizing: border-box; padding: 0 2px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: var(--текст);
+}
+.кн-л.двойная { flex-basis: calc(200% / 6.5); }
+.кн-л .зн {
+  width: 100%; height: 34px; border-radius: 10px; box-sizing: border-box;
+  background: var(--поверхность); border: 1px solid var(--чёрный-12);
+  display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; position: relative;
+}
+.кн-л.вкл .зн { background: var(--акцент-мягкий); border-color: var(--навигация); }
+.кн-л.откл { opacity: 0.4; }
+/* Подпись под значком — постоянного размера, настройке не подчиняется */
+.кн-л .пд { font-size: 9.5px; font-weight: 700; color: var(--чёрный-70); white-space: nowrap; max-width: 100%; overflow: hidden; }
+.кн-л .зн .счёт { position: absolute; top: -5px; right: -3px; }
+.кн-л .переключ { width: 26px; height: 15px; border-radius: 8px; background: var(--чёрный-35); position: relative; }
+.кн-л .переключ::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; }
+.кн-л.вкл .переключ { background: var(--навигация); }
+.кн-л.вкл .переключ::after { left: 13px; }
+
+/* Разделитель между кнопками и содержимым; на ПК в нём стрелки ленты */
+.раздел-ленты { position: relative; height: 1px; background: var(--чёрный-12); }
+.раздел-ленты.с-подп { height: 18px; background: none; border-bottom: 1px solid var(--чёрный-12); display: flex; align-items: center; padding: 0 10px; font-size: 9.5px; font-weight: 800; color: var(--чёрный-50); }
+.стрелка-л {
+  position: absolute; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: var(--текст); color: #fff;
+  font-size: 11px; font-weight: 900; display: flex; align-items: center; justify-content: center; z-index: 2;
+}
+.стрелка-л.лев { left: 6px; } .стрелка-л.прав { right: 6px; }
+.лента.пк .кн-л { flex-basis: calc(100% / 8); }
+
+/* Список «Абзац ▾» и список уровня с описанием */
+.выпад {
+  position: absolute; z-index: 3; background: var(--поверхность); border: 1px solid var(--чёрный-12);
+  border-radius: 12px; box-shadow: 0 8px 22px rgba(0,0,0,0.2); padding: 4px; min-width: 170px;
+}
+.выпад > div { padding: 7px 10px; border-radius: 8px; display: flex; align-items: center; gap: 10px; }
+.выпад > div.тек { background: var(--акцент-мягкий); outline: 2px solid var(--навигация); outline-offset: -2px; }
+.выпад .опис-ур { flex: 1 1 auto; min-width: 0; }
+.выпад .опис-ур b { display: block; font-size: 12.5px; }
+.выпад .опис-ур span { display: block; font-size: 10px; color: var(--чёрный-50); font-weight: 600; line-height: 1.3; }
+.выпад .цифра-ур { flex: 0 0 auto; min-width: 30px; height: 26px; border-radius: 999px; border: 2px solid var(--текст); font: 900 13px/1 ui-monospace, Consolas, monospace; display: flex; align-items: center; justify-content: center; }
+
+/* Системный буфер — источник вставки */
+.источник { border: 1px dashed var(--чёрный-35); border-radius: 10px; padding: 10px 12px; background: #fff; font-size: 12px; line-height: 1.4; width: 300px; box-sizing: border-box; }
+.источник .метка-ист { font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--чёрный-50); margin-bottom: 6px; }
+.знаки-как-есть { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; }
+
+/* Область спецсимволов */
+.сетка-симв { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; padding: 0 10px 10px; }
+.сетка-симв span { height: 34px; border-radius: 8px; background: var(--чёрный-6); display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.сетка-симв span.мелк { font-size: 9px; font-weight: 800; color: var(--чёрный-70); }

@@ -8,8 +8,9 @@
 <div class="путь"><a href="../индекс.html">Layout-UI-light</a> / пробы-редактор / редактор.html</div>
 <h1>Пробы: редактор сообщения</h1>
 <p class="подзаголовок">
-  Вторая проба (заказчик 2026-10-17): редактор устроен как классический редактор WordPress —
-  сверху ряд быстрого оформления, под ним кнопки разметки и виджетов. Сообщение собирается из
+  Третья проба (заказчик 2026-10-18): кнопки разложены по <b>разделам</b> — Текст, Вставка,
+  Разметка, Стиль; у каждого раздела лента кнопок с подписями, которая листается вбок.
+  Вторая проба (2026-10-17) — редактор как классический редактор WordPress. Сообщение собирается из
   <b>рядов</b> с ячейками, в ячейки кладутся <b>виджеты</b>, виджет переносится пальцем или
   мышью. Соседние страницы: <a href="окно-ввода.html">строка ввода</a> ·
   <a href="подокна.html">Эмоджи, Галерея, Скрепка, Голос</a> ·
@@ -19,15 +20,15 @@
 <div class="оговорка">
   <b>Как я понял задачу</b> — проверить и поправить:
   <ul class="кратко" style="margin-top:6px">
-    <li><b>Первая строка кнопок — только наше быстрое оформление</b>, ничего сверх него: Ж, К, Ч, З, М (маркер), код, цитата, список, заголовок. Таблицы здесь нет — она в разметке.</li>
+    <li><b>Кнопки — по разделам</b> (2026-10-18): Текст, Вставка, Разметка, Стиль. У каждой кнопки подпись под значком; на экране шесть, остальные — прокруткой. Отменить, повторить и уровень — в шапке.</li>
     <li><b>Ряд</b> — контейнер со своими стилями, похожий на строку таблицы: задаём, сколько в нём ячеек и какой они ширины в процентах (например 33 % и 67 %). Высоту задаёт содержимое, её не задают.</li>
     <li><b>Ячейка</b> — место в ряду со своими стилями. Нажали на ячейку — пишем. Переключились на другую — написанное стало <b>виджетом «Текст»</b>.</li>
     <li><b>Виджет</b> — сущность внутри ячейки: текст, картинка, ссылка и всё, что у нас будет. Его переносят: палец — держим и ведём, мышь — тащим за ручку. Переносят в другую ячейку или за пределы ряда.</li>
     <li><b>Размер виджета следует за ячейкой.</b> Картинку перенесли в узкую ячейку — она заново сделана из исходного файла под новую ширину.</li>
     <li><b>Таблица</b> — вторая кнопка разметки: обычная сетка строк и столбцов с текстом, та же, что знаковая таблица быстрого оформления. Стили задаются отдельно для таблицы и для каждой ячейки.</li>
-    <li><b>Отдельные кнопки виджетов</b> для частых (картинка, ссылка) и <b>одна кнопка «все виджеты»</b>.</li>
-    <li><b>Буфер сообщений</b> — свои ссылки на найденные сообщения, вставляются виджетом со своим видом показа (<a href="буфер.html">буфер.html</a>).</li>
-    <li><b>Уровень сообщения</b> (ADR-0019) — кнопка с цифрой в редакторе, и только она. Быстрая отправка без редактора не спрашивает: зашифрованное — <b>−1</b>, нешифрованное — <b>2</b>.</li>
+    <li><b>Виджеты</b> — отдельными кнопками в разделе «Вставка».</li>
+    <li><b>Буфер сообщений</b> — свои ссылки на найденные сообщения, вставляются виджетом со своим видом показа (<a href="буфер.html">буфер.html</a>). В редакторе — кнопка <b>«Подборка»</b>, чтобы не путать с системным буфером (название — предложение).</li>
+    <li><b>Уровень сообщения</b> (ADR-0019) — кнопка с цифрой в шапке редактора, и только она; в её списке перед цифрой описание. Быстрая отправка без редактора не спрашивает: зашифрованное — <b>−1</b>, нешифрованное — <b>2</b>.</li>
   </ul>
 </div>
 
@@ -44,53 +45,30 @@
 
 <div class="навигация-проб">
   <a href="#р01">01 · редактор</a>
-  <a href="#р02">02 · ряд</a>
-  <a href="#р03">03 · ячейка → Текст</a>
-  <a href="#р04">04 · перенос</a>
-  <a href="#р05">05 · виджеты и размер</a>
-  <a href="#р06">06 · таблица</a>
-  <a href="#р07">07 · выделение</a>
-  <a href="#р08">08 · свойства и JSON</a>
-  <a href="#р09">09 · уровень</a>
-  <a href="#р10">10 · кнопки и виджеты списком</a>
+  <a href="#р02">02 · разделы и прокрутка</a>
+  <a href="#р03">03 · абзац</a>
+  <a href="#р04">04 · знаки md</a>
+  <a href="#р05">05 · с оформлением</a>
+  <a href="#р06">06 · символ</a>
+  <a href="#р07">07 · показать</a>
+  <a href="#р08">08 · уровень</a>
+  <a href="#р09">09 · ряд</a>
+  <a href="#р10">10 · ячейка → Текст</a>
+  <a href="#р11">11 · перенос</a>
+  <a href="#р12">12 · вставка и размер</a>
+  <a href="#р13">13 · таблица</a>
+  <a href="#р14">14 · выделение</a>
+  <a href="#р15">15 · стиль и JSON</a>
+  <a href="#р16">16 · списком</a>
 </div>
 
 <!-- ── 01 ───────────────────────────────────────────────────────────────── -->
 <div class="проба" id="р01">
-  <div class="шапка-пробы"><span class="номер">01</span><span class="опис">Редактор: быстрое оформление, разметка и виджеты, уровень цифрой</span></div>
+  <div class="шапка-пробы"><span class="номер">01</span><span class="опис">Редактор: шапка, разделы, лента кнопок — шесть с половиной на экране</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
-        <div class="зона-1 подокно">
-          <a class="икона" href="окно-ввода.html#п04">‹</a>
-          <div class="тянуть"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет">Поход выходного дня · 3 ряда</div></div>
-          <a class="кн-ур" href="#р09" title="Уровень сообщения">2</a>
-          <span class="икона жив" title="Отправить">➤</span>
-        </div>
-        <div class="ред-панель">
-          <div class="ред-ряд">
-            <span class="кн-ф" style="font-weight:900">Ж</span>
-            <span class="кн-ф" style="font-style:italic;font-weight:700">К</span>
-            <span class="кн-ф" style="text-decoration:underline;font-weight:700">Ч</span>
-            <span class="кн-ф" style="text-decoration:line-through;font-weight:700">З</span>
-            <span class="кн-ф"><span class="маркер" style="font-weight:800">М</span></span>
-            <span class="кн-ф моно">&lt;/&gt;</span>
-            <span class="кн-ф" style="font-weight:800">❝</span>
-            <span class="кн-ф" style="font-weight:800">•≡</span>
-            <span class="кн-ф" style="font-weight:900">H</span>
-          </div>
-          <div class="ред-ряд с-подп">
-            <a class="кн-ф" href="#р02" style="text-decoration:none">▥<span class="подп-кн">Ряд</span></a>
-            <a class="кн-ф" href="#р06" style="text-decoration:none">▦<span class="подп-кн">Таблица</span></a>
-            <span class="кн-ф">🖼<span class="подп-кн">Картинка</span></span>
-            <span class="кн-ф">🔗<span class="подп-кн">Ссылка</span></span>
-            <a class="кн-ф" href="#р05" style="text-decoration:none;font-weight:900">＋<span class="подп-кн">Виджеты</span></a>
-            <a class="кн-ф" href="буфер.html#б03" style="text-decoration:none">📋<span class="подп-кн">Буфер</span><span class="счёт">3</span></a>
-            <a class="кн-ф моно" href="#р08" style="text-decoration:none">{ }<span class="подп-кн" style="font-family:inherit">Свойства</span></a>
-          </div>
-        </div>
-        <div class="лист-ред">
-          <div class="подпись-лист">так увидят в группе</div>
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Поход выходного дня · 3 ряда</div><div class="подсказка-шапки обрез">нажмите — показать</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур" href="#р08">2</a><span class="икона жив">➤</span></div><div class="ред-панель2"><div class="разделы"><span class="разд-ред тек">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span class="кн-л двойная"><span class="зн">Абзац ▾</span><span class="пд">Абзац</span></span><span class="кн-л"><span class="зн" style="font-weight:900">Ж</span><span class="пд">Жирный</span></span><span class="кн-л"><span class="зн" style="font-style:italic">К</span><span class="пд">Курсив</span></span><span class="кн-л"><span class="зн" style="text-decoration:underline">Ч</span><span class="пд">Подчёрк.</span></span><span class="кн-л"><span class="зн" style="text-decoration:line-through">З</span><span class="пд">Зачёрк.</span></span><span class="кн-л"><span class="зн"><span class="маркер">М</span></span><span class="пд">Маркер</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">&lt;/&gt;</span><span class="пд">Код</span></span><span class="кн-л"><span class="зн">Ω</span><span class="пд">Символ</span></span><span class="кн-л"><span class="зн">📋</span><span class="пд">С оформл.</span></span><span class="кн-л вкл"><span class="зн"><span class="переключ"></span></span><span class="пд">Знаки md</span></span></div></div><div class="раздел-ленты"></div><div class="лист-ред">
           <div class="реплика моя"><div class="пузырь">
             <div class="ряд"><div class="ячейка" style="flex:0 0 100%"><div class="виджет"><b style="font-size:14px">Поход в субботу</b></div><span class="шир">100 %</span></div></div>
             <div class="ряд">
@@ -100,29 +78,254 @@
             <div class="ряд"><div class="ячейка" style="flex:0 0 100%"><div class="виджет покой"><span class="ручка">⠿ Сообщение</span><div class="вст"><div class="кто">Олег Ветров</div><div class="тело-вст три">Маршрут: от станции 4 км лесом, потом вдоль реки до моста — там привал.</div></div></div><span class="шир">100 %</span></div></div>
             <div class="низ-пузыря"><span>черновик</span></div>
           </div></div>
-        </div>
-        <div class="клав">клавиатура</div>
+        </div><div class="клав">клавиатура</div>
       </div>
-      <div class="трет">публичная группа, пишем во второй ячейке второго ряда</div>
+      <div class="трет">публичная группа, раздел «Текст», пишем во второй ячейке</div>
     </div>
     <div class="разбор-пробы">
-      <b>Шапка:</b> «назад» — в переписку, черновик сохраняется, кнопка редактора в строке ввода зелёная (<a href="окно-ввода.html#п04">строка ввода, 04</a>). Справа — <b>цифра уровня</b> (<a href="#р09">09</a>) и <b>отправить</b>.
-      <br><br><b>Первая строка — быстрое оформление, и только оно:</b> Ж, К, Ч, З, М, код, цитата, список, заголовок. Это то же, что знаки <code>**…**</code>, <code>++…++</code>, <code>==…==</code>: ставится к выделенному (<a href="#р07">07</a>).
-      <br><br><b>Вторая строка — разметка и виджеты</b>, у каждой кнопки подпись:
+      <b>Сверху вниз:</b>
       <ul>
-        <li><b>Ряд</b> и <b>Таблица</b> — две кнопки разметки (<a href="#р02">02</a>, <a href="#р06">06</a>).</li>
-        <li><b>Картинка, Ссылка</b> — частые виджеты отдельной кнопкой; <b>＋ Виджеты</b> — все, в том числе Эмоджи (<a href="#р05">05</a>).</li>
-        <li><b>Буфер</b> — с числом сообщений в нём (<a href="буфер.html#б03">буфер, 03</a>).</li>
-        <li><b>{ } Свойства</b> — стили выбранного ряда, ячейки или виджета и JSON (<a href="#р08">08</a>).</li>
+        <li><b>Шапка</b>: ‹ назад (черновик сохраняется, редактор в строке ввода зелёный) · название — нажатие <b>показывает сообщение</b> (<a href="#р07">07</a>) · <b>↶ ↷</b> отменить и повторить, значками без подписи · <b>цифра уровня</b> (<a href="#р08">08</a>) · ➤ отправить.</li>
+        <li><b>Разделы</b>: Текст, Вставка, Разметка, Стиль. Размер названий — из настройки «Шрифты и размеры», группа «Вкладки».</li>
+        <li><b>Лента кнопок раздела</b>: у каждой кнопки значок и подпись. Подпись постоянного размера, настройке не подчиняется. На экране шесть кнопок и половина седьмой — видно, что есть ещё; лента листается вбок.</li>
+        <li><b>Разделитель</b> отделяет кнопки от сообщения. На телефоне он пустой, на ПК в нём стрелки ленты (<a href="#р02">02</a>).</li>
       </ul>
-      <b>Пунктир ячеек и подписи ширины видны только в редакторе</b>, получатель их не видит. Ячейка, где курсор, — зелёная рамка. Виджеты в остальных ячейках несут ярлык с ручкой <b>⠿</b> — за неё и переносят.
+      <b>Первым открывается «Текст»</b>, последний открытый раздел запоминается. Кто не заходит в «Разметку», видит обычный редактор текста.
     </div>
   </div>
 </div>
 
 <!-- ── 02 ───────────────────────────────────────────────────────────────── -->
 <div class="проба" id="р02">
-  <div class="шапка-пробы"><span class="номер">02</span><span class="опис">Ряд — число ячеек и их ширина; высоту задаёт содержимое</span></div>
+  <div class="шапка-пробы"><span class="номер">02</span><span class="опис">Разделы и прокрутка — половинка кнопки на телефоне, стрелки на ПК</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="подпись-лист" style="padding:8px 10px 0">Текст</div><div class="ред-панель2"><div class="разделы"><span class="разд-ред тек">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span class="кн-л двойная"><span class="зн">Абзац ▾</span><span class="пд">Абзац</span></span><span class="кн-л"><span class="зн" style="font-weight:900">Ж</span><span class="пд">Жирный</span></span><span class="кн-л"><span class="зн" style="font-style:italic">К</span><span class="пд">Курсив</span></span><span class="кн-л"><span class="зн" style="text-decoration:underline">Ч</span><span class="пд">Подчёрк.</span></span><span class="кн-л"><span class="зн" style="text-decoration:line-through">З</span><span class="пд">Зачёрк.</span></span><span class="кн-л"><span class="зн"><span class="маркер">М</span></span><span class="пд">Маркер</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">&lt;/&gt;</span><span class="пд">Код</span></span><span class="кн-л"><span class="зн">Ω</span><span class="пд">Символ</span></span><span class="кн-л"><span class="зн">📋</span><span class="пд">С оформл.</span></span><span class="кн-л вкл"><span class="зн"><span class="переключ"></span></span><span class="пд">Знаки md</span></span></div></div><div class="раздел-ленты"></div><div class="подпись-лист" style="padding:8px 10px 0">Вставка</div><div class="ред-панель2"><div class="разделы"><span class="разд-ред">Текст</span><span class="разд-ред тек">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span class="кн-л"><span class="зн">🖼</span><span class="пд">Картинка</span></span><span class="кн-л"><span class="зн">🔗</span><span class="пд">Ссылка</span></span><span class="кн-л"><span class="зн">🙂</span><span class="пд">Эмоджи</span></span><span class="кн-л"><span class="зн">🗂<span class="счёт">3</span></span><span class="пд">Подборка</span></span><span class="кн-л"><span class="зн">☁</span><span class="пд">Облако</span></span><span class="кн-л"><span class="зн">📍</span><span class="пд">Карта</span></span><span class="кн-л"><span class="зн">👤</span><span class="пд">Контакт</span></span><span class="кн-л"><span class="зн">@</span><span class="пд">Ответ</span></span></div></div><div class="раздел-ленты"></div><div class="подпись-лист" style="padding:8px 10px 0">Разметка</div><div class="ред-панель2"><div class="разделы"><span class="разд-ред">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред тек">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span class="кн-л"><span class="зн">▥</span><span class="пд">Ряд</span></span><span class="кн-л"><span class="зн">▦</span><span class="пд">Таблица</span></span><span class="кн-л"><span class="зн">⊞</span><span class="пд">+Ячейка</span></span><span class="кн-л"><span class="зн">⊟</span><span class="пд">−Ячейка</span></span><span class="кн-л"><span class="зн">⇲</span><span class="пд">Объедин.</span></span><span class="кн-л"><span class="зн">⇱</span><span class="пд">Разъедин.</span></span><span class="кн-л"><span class="зн">↑</span><span class="пд">Выше</span></span><span class="кн-л"><span class="зн">↓</span><span class="пд">Ниже</span></span><span class="кн-л"><span class="зн">✕</span><span class="пд">Удалить</span></span></div></div><div class="раздел-ленты"></div><div class="подпись-лист" style="padding:8px 10px 0">Стиль</div><div class="ред-панель2"><div class="разделы"><span class="разд-ред">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред тек">Стиль</span></div><div class="лента"><span class="кн-л"><span class="зн">⚙</span><span class="пд">Виджет</span></span><span class="кн-л"><span class="зн">◧</span><span class="пд">Фон</span></span><span class="кн-л"><span class="зн"><span style="color:#3d55aa">A</span></span><span class="пд">Цвет</span></span><span class="кн-л"><span class="зн">Aa</span><span class="пд">Размер</span></span><span class="кн-л"><span class="зн">≡</span><span class="пд">Выровн.</span></span><span class="кн-л"><span class="зн">⬚</span><span class="пд">Отступ</span></span><span class="кн-л"><span class="зн">―</span><span class="пд">Раздел.</span></span><span class="кн-л"><span class="зн">↺</span><span class="пд">Сброс</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">{ }</span><span class="пд">JSON</span></span></div></div><div class="раздел-ленты"></div>
+      </div>
+      <div class="трет">четыре раздела, у каждого своя лента</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="подпись-лист" style="padding:8px 10px 0">«Текст» пролистан вправо</div><div class="ред-панель2"><div class="разделы"><span class="разд-ред тек">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span style="margin-left:calc(-50% / 6.5)" class="кн-л"><span class="зн" style="text-decoration:line-through">З</span><span class="пд">Зачёрк.</span></span><span class="кн-л"><span class="зн"><span class="маркер">М</span></span><span class="пд">Маркер</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">&lt;/&gt;</span><span class="пд">Код</span></span><span class="кн-л"><span class="зн">Ω</span><span class="пд">Символ</span></span><span class="кн-л"><span class="зн">📋</span><span class="пд">С оформл.</span></span><span class="кн-л вкл"><span class="зн"><span class="переключ"></span></span><span class="пд">Знаки md</span></span></div></div><div class="раздел-ленты"></div><div class="подпись-лист" style="padding:8px 10px 0">«Вкладки» в настройке — 17</div><div class="ред-панель2"><div class="разделы" style="--вкладки:17px"><span class="разд-ред">Текст</span><span class="разд-ред тек">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span class="кн-л"><span class="зн">🖼</span><span class="пд">Картинка</span></span><span class="кн-л"><span class="зн">🔗</span><span class="пд">Ссылка</span></span><span class="кн-л"><span class="зн">🙂</span><span class="пд">Эмоджи</span></span><span class="кн-л"><span class="зн">🗂<span class="счёт">3</span></span><span class="пд">Подборка</span></span><span class="кн-л"><span class="зн">☁</span><span class="пд">Облако</span></span><span class="кн-л"><span class="зн">📍</span><span class="пд">Карта</span></span><span class="кн-л"><span class="зн">👤</span><span class="пд">Контакт</span></span><span class="кн-л"><span class="зн">@</span><span class="пд">Ответ</span></span></div></div><div class="раздел-ленты"></div>
+      </div>
+      <div class="трет">пролистано; крупные названия разделов</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез" style="width:520px">
+        <div class="ред-панель2"><div class="разделы"><span class="разд-ред тек">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента пк"><span class="кн-л"><span class="зн" style="font-weight:900">Ж</span><span class="пд">Жирный</span></span><span class="кн-л"><span class="зн" style="font-style:italic">К</span><span class="пд">Курсив</span></span><span class="кн-л"><span class="зн" style="text-decoration:underline">Ч</span><span class="пд">Подчёрк.</span></span><span class="кн-л"><span class="зн" style="text-decoration:line-through">З</span><span class="пд">Зачёрк.</span></span><span class="кн-л"><span class="зн"><span class="маркер">М</span></span><span class="пд">Маркер</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">&lt;/&gt;</span><span class="пд">Код</span></span><span class="кн-л"><span class="зн">Ω</span><span class="пд">Символ</span></span><span class="кн-л"><span class="зн">📋</span><span class="пд">С оформл.</span></span><span class="кн-л вкл"><span class="зн"><span class="переключ"></span></span><span class="пд">Знаки md</span></span></div></div><div class="раздел-ленты"><span class="стрелка-л лев">‹</span><span class="стрелка-л прав">›</span></div><div class="лист-ред" style="min-height:60px"><div class="реплика моя"><div class="пузырь"><div class="текст">Сбор в 9:00 у главного входа.</div></div></div></div>
+      </div>
+      <div class="трет">ПК: окно шире, кнопок больше, стрелки в разделителе</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>Четыре раздела</b> — Текст, Вставка, Разметка, Стиль. «Отменить», «Повторить», уровень и «Отправить» в разделы не входят: они нужны всегда и живут в шапке.</li>
+        <li><b>Телефон</b>: кнопка шириной в 1/6,5 строки — шесть целиком и половина седьмой. Пролистали — так же обрезана крайняя слева. Больше никаких знаков.</li>
+        <li><b>ПК</b>: кнопки той же ширины, их влезает больше; колесо мыши ленту вбок не крутит, поэтому в разделителе <b>стрелки</b> ‹ › — видны, только если с той стороны что-то есть, и нажимаются.</li>
+        <li><b>Названия разделов</b> крупнеют вместе с настройкой «Вкладки» (11–19); ряд разделов тоже листается, стрелок у него нет.</li>
+        <li><b>Подписи под значками</b> — постоянного размера, до 9 букв; длинные сокращены («Подчёрк.», «С оформл.»).</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── 03 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р03">
+  <div class="шапка-пробы"><span class="номер">03</span><span class="опис">Абзац ▾ — что сейчас и во что превратить</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез" style="position:relative">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Поход выходного дня · 1 ряд</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур" href="#р08">2</a><span class="икона жив">➤</span></div><div class="ред-панель2"><div class="разделы"><span class="разд-ред тек">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span class="кн-л двойная вкл"><span class="зн">Абзац ▾</span><span class="пд">Абзац</span></span><span class="кн-л"><span class="зн" style="font-weight:900">Ж</span><span class="пд">Жирный</span></span><span class="кн-л"><span class="зн" style="font-style:italic">К</span><span class="пд">Курсив</span></span><span class="кн-л"><span class="зн" style="text-decoration:underline">Ч</span><span class="пд">Подчёрк.</span></span><span class="кн-л"><span class="зн" style="text-decoration:line-through">З</span><span class="пд">Зачёрк.</span></span><span class="кн-л"><span class="зн"><span class="маркер">М</span></span><span class="пд">Маркер</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">&lt;/&gt;</span><span class="пд">Код</span></span><span class="кн-л"><span class="зн">Ω</span><span class="пд">Символ</span></span><span class="кн-л"><span class="зн">📋</span><span class="пд">С оформл.</span></span><span class="кн-л вкл"><span class="зн"><span class="переключ"></span></span><span class="пд">Знаки md</span></span></div></div><div class="раздел-ленты"></div><div class="выпад" style="top:150px;left:6px">
+          <div class="тек"><b>Абзац</b></div>
+          <div><b style="font-size:17px">Заголовок 1</b></div>
+          <div><b style="font-size:15px">Заголовок 2</b></div>
+          <div><b style="font-size:13px">Заголовок 3</b></div>
+          <div><span class="цитата-р" style="font-style:italic">Цитата</span></div>
+          <div>• Список</div>
+          <div>&nbsp;&nbsp;◦ Список, 2-й уровень</div>
+          <div><span style="font-family:ui-monospace,Consolas,monospace;font-size:11.5px">Блок кода</span></div>
+        </div><div class="лист-ред" style="min-height:300px"><div class="реплика моя"><div class="пузырь"><div class="ряд"><div class="ячейка актив" style="flex:0 0 100%">Сбор в 9:00 у главного входа<span class="курсор-р"></span><span class="шир">100 %</span></div></div></div></div></div>
+      </div>
+      <div class="трет">курсор в абзаце; нажата «Абзац ▾»</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>На кнопке — вид абзаца, где курсор</b>: «Абзац», «Заголовок 2», «Цитата»… Кнопка двойной ширины — название должно читаться.</li>
+        <li><b>Нажатие — список</b>: Абзац · Заголовок 1, 2, 3 · Цитата · Список · Список, 2-й уровень · Блок кода. Каждый пункт нарисован так, как будет выглядеть.</li>
+        <li><b>Действует на весь абзац</b> — то же, что знаки <code>#</code>, <code>##</code>, <code>###</code>, <code>--&gt;</code>, <code>- </code>, три обратные кавычки (§6.2). Отдельные кнопки цитаты, списка и заголовка больше не нужны.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── 04 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р04">
+  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">Знаки md — включены: <code>**1**</code> жирное; выключены: знаки как есть</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Анна Ковалёва · личная</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур откл" href="#р08">−1</a><span class="икона жив">➤</span></div><div class="ред-панель2"><div class="разделы"><span class="разд-ред тек">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span style="margin-left:calc(-50% / 6.5)" class="кн-л"><span class="зн" style="text-decoration:line-through">З</span><span class="пд">Зачёрк.</span></span><span class="кн-л"><span class="зн"><span class="маркер">М</span></span><span class="пд">Маркер</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">&lt;/&gt;</span><span class="пд">Код</span></span><span class="кн-л"><span class="зн">Ω</span><span class="пд">Символ</span></span><span class="кн-л"><span class="зн">📋</span><span class="пд">С оформл.</span></span><span class="кн-л вкл"><span class="зн"><span class="переключ"></span></span><span class="пд">Знаки md</span></span></div></div><div class="раздел-ленты"></div><div class="лист-ред"><div class="реплика моя"><div class="пузырь"><div class="ряд"><div class="ячейка актив" style="flex:0 0 100%">Итого <b>1</b> место<span class="курсор-р"></span><span class="шир">100 %</span></div></div></div></div></div>
+      </div>
+      <div class="трет">а) «Знаки md» включены — набрано <code>**1**</code></div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Анна Ковалёва · личная</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур откл" href="#р08">−1</a><span class="икона жив">➤</span></div><div class="ред-панель2"><div class="разделы"><span class="разд-ред тек">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span style="margin-left:calc(-50% / 6.5)" class="кн-л"><span class="зн" style="text-decoration:line-through">З</span><span class="пд">Зачёрк.</span></span><span class="кн-л"><span class="зн"><span class="маркер">М</span></span><span class="пд">Маркер</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">&lt;/&gt;</span><span class="пд">Код</span></span><span class="кн-л"><span class="зн">Ω</span><span class="пд">Символ</span></span><span class="кн-л"><span class="зн">📋</span><span class="пд">С оформл.</span></span><span class="кн-л"><span class="зн"><span class="переключ"></span></span><span class="пд">Знаки md</span></span></div></div><div class="раздел-ленты"></div><div class="лист-ред"><div class="реплика моя"><div class="пузырь"><div class="ряд"><div class="ячейка актив" style="flex:0 0 100%">Итого <span class="знаки-как-есть">**1**</span> место<span class="курсор-р"></span><span class="шир">100 %</span></div></div></div></div></div>
+      </div>
+      <div class="трет">б) выключены — то же самое набранное</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>Переключатель «Знаки md»</b> — последняя кнопка раздела «Текст». Включён — зелёный.</li>
+        <li><b>Включён</b>: набранное <code>**1**</code> сразу становится жирной «1», знаки уходят.</li>
+        <li><b>Выключен</b>: знаки экранируются и уходят как есть — получатель видит <code>**1**</code>. В разметке это <code>\*\*1\*\*</code>.</li>
+        <li><b>Настройка одна на все сообщения</b> (заказчик 2026-10-18), включена по умолчанию; переключили — запомнилось.</li>
+        <li>Кнопки Ж, К и прочие работают при любом положении: они ставят оформление, а не знаки.</li>
+        <li><b>Вопрос:</b> действует ли переключатель и в строке ввода без редактора — там знаки сейчас работают всегда.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── 05 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р05">
+  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">Вставить с оформлением — простое оформление и картинки из буфера</span></div>
+  <div class="срезы">
+<div class="с-подписью">
+      <div class="источник">
+        <div class="метка-ист">в системном буфере — скопировано со страницы</div>
+        <div style="font-size:15px;font-weight:800;font-family:Georgia,serif;color:#7a2e00">Маршрут выходного дня</div>
+        <div style="margin:4px 0">От станции идём <b>лесной тропой</b>, потом <i>вдоль реки</i>. <span style="color:#c62828;font-size:14px">Внимание: брод!</span></div>
+        <ul style="margin:4px 0;padding-left:18px"><li>4 км лесом</li><li>привал у моста</li></ul>
+        <div class="картинка-в" style="height:70px">картинка со страницы</div>
+        <div style="margin-top:4px"><a href="#" style="color:#0645ad">схема на сайте парка</a></div>
+      </div>
+      <div class="трет">что лежит в буфере телефона или ПК</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Поход выходного дня · 2 ряда</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур" href="#р08">2</a><span class="икона жив">➤</span></div><div class="ред-панель2"><div class="разделы"><span class="разд-ред тек">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span style="margin-left:calc(-50% / 6.5)" class="кн-л"><span class="зн" style="text-decoration:line-through">З</span><span class="пд">Зачёрк.</span></span><span class="кн-л"><span class="зн"><span class="маркер">М</span></span><span class="пд">Маркер</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">&lt;/&gt;</span><span class="пд">Код</span></span><span class="кн-л"><span class="зн">Ω</span><span class="пд">Символ</span></span><span class="кн-л вкл"><span class="зн">📋</span><span class="пд">С оформл.</span></span><span class="кн-л вкл"><span class="зн"><span class="переключ"></span></span><span class="пд">Знаки md</span></span></div></div><div class="раздел-ленты"></div><div class="лист-ред">
+          <div class="реплика моя"><div class="пузырь">
+            <div class="ряд"><div class="ячейка актив" style="flex:0 0 100%"><div class="виджет">
+              <b style="font-size:15px">Маршрут выходного дня</b><br>
+              От станции идём <b>лесной тропой</b>, потом <i>вдоль реки</i>. Внимание: брод!<br>
+              • 4 км лесом<br>• привал у моста<br>
+              <u>схема на сайте парка</u>
+            </div><span class="шир">100 %</span></div></div>
+            <div class="ряд"><div class="ячейка" style="flex:0 0 100%"><div class="виджет покой"><span class="ручка">⠿ Картинка</span><div class="картинка-яч" style="height:90px">720 · перекодирована</div></div><span class="шир">100 %</span></div></div>
+            <div class="низ-пузыря"><span>черновик</span></div>
+          </div></div>
+        </div>
+      </div>
+      <div class="трет">нажата «С оформл.»</div>
+    </div>
+    <div class="разбор-пробы">
+      <b>«С оформл.»</b> — вставка из системного буфера с переводом в наше:
+      <ul>
+        <li><b>Остаётся</b>: заголовки, жирный, курсив, подчёркнутый, зачёркнутый, списки, цитаты, код, ссылки — переведены в наши знаки; таблица — в нашу таблицу.</li>
+        <li><b>Картинки вставляются тоже</b> (заказчик 2026-10-18) — отдельным виджетом «Картинка» под текстом, ширина от ячейки, перекодирована у отправителя по нашим правилам (§3.2).</li>
+        <li><b>Уходит</b>: цвет, шрифт, размер, фон — у нас их задаёт только стиль ячейки. Красное «Внимание: брод!» стало обычным текстом.</li>
+        <li><b>Обычная вставка</b> (долгое нажатие → «Вставить») — только текст, как сейчас.</li>
+        <li><b>Не путать с подборкой</b>: «С оформл.» берёт из системного буфера, «Подборка» в разделе «Вставка» — сообщения TIMA.</li>
+      </ul>
+      <b>Обсуждается</b>: что именно можно забрать из HTML в буфере — стили и картинки, особенно картинку по адресу сайта.
+    </div>
+  </div>
+</div>
+
+<!-- ── 06 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р06">
+  <div class="шапка-пробы"><span class="номер">06</span><span class="опис">Символ — спецсимволы на месте клавиатуры</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Поход выходного дня · 1 ряд</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур" href="#р08">2</a><span class="икона жив">➤</span></div><div class="ред-панель2"><div class="разделы"><span class="разд-ред тек">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span style="margin-left:calc(-50% / 6.5)" class="кн-л"><span class="зн" style="text-decoration:underline">Ч</span><span class="пд">Подчёрк.</span></span><span class="кн-л"><span class="зн" style="text-decoration:line-through">З</span><span class="пд">Зачёрк.</span></span><span class="кн-л"><span class="зн"><span class="маркер">М</span></span><span class="пд">Маркер</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">&lt;/&gt;</span><span class="пд">Код</span></span><span class="кн-л вкл"><span class="зн">Ω</span><span class="пд">Символ</span></span><span class="кн-л"><span class="зн">📋</span><span class="пд">С оформл.</span></span><span class="кн-л вкл"><span class="зн"><span class="переключ"></span></span><span class="пд">Знаки md</span></span></div></div><div class="раздел-ленты"></div><div class="лист-ред"><div class="реплика моя"><div class="пузырь"><div class="ряд"><div class="ячейка актив" style="flex:0 0 100%">Температура −5 °C, ветер 3 м/с → берём тёплое<span class="курсор-р"></span><span class="шир">100 %</span></div></div></div></div></div><div class="область" style="height:auto">
+          <div class="область-шапка"><span class="вкладка-обл тек">Недавние</span><span class="вкладка-обл">Знаки</span><span class="вкладка-обл">Стрелки</span><span class="вкладка-обл">Валюта</span></div>
+          <a class="закрыть" href="#р01">✕</a>
+          <div class="сетка-симв"><span>—</span><span>«</span><span>»</span><span>„</span><span>“</span><span>…</span><span>№</span><span>§</span><span>°</span><span>·</span><span>±</span><span>×</span><span>÷</span><span>≈</span><span>≠</span><span>≤</span><span>≥</span><span>→</span><span>←</span><span>↑</span><span>↓</span><span>⇒</span><span>₽</span><span>€</span><span>$</span><span>£</span><span>¥</span><span>✓</span><span>✗</span><span>★</span><span class="мелк">нрзр. пробел</span></div>
+        </div>
+      </div>
+      <div class="трет">нажата «Символ»</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>Область на месте клавиатуры</b> с крестиком, как остальные. Вкладки: Недавние · Знаки (типографика и отметки) · Стрелки · Валюта. Эмоджи здесь нет — у них своя кнопка.</li>
+        <li><b>Нажатие вставляет символ в место курсора</b>, область не закрывается.</li>
+        <li><b>Вставленный кнопкой символ всегда идёт как есть.</b> Если это знак разметки (<code>*</code>, <code>#</code>, <code>\</code>…), он экранируется сам и оформлением не становится.</li>
+        <li><b>Неразрывный пробел</b> — отдельной плиткой: «5 км» не разорвётся по строкам.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── 07 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р07">
+  <div class="шапка-пробы"><span class="номер">07</span><span class="опис">Показать сообщение — нажатие на название в шапке</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="#р01">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Как увидят</div><div class="трет">нажмите — назад к правке</div></div><span class="кн-ур">2</span><span class="икона жив">➤</span></div><div class="зона-2"><div class="поток">
+          <div class="реплика моя"><div class="пузырь">
+            <div><b style="font-size:14px">Поход в субботу</b></div>
+            <div class="ряд" style="gap:6px;margin-top:6px">
+              <div style="flex:0 0 33%"><div class="картинка-яч" style="height:78px"></div></div>
+              <div style="flex:1 1 auto">Сбор <b>в 9:00</b> у <u>главного входа</u>. Взять <span class="маркер">воду и зонт</span></div>
+            </div>
+            <div class="вст" style="margin-top:6px"><div class="кто">Олег Ветров</div><div class="тело-вст три">Маршрут: от станции 4 км лесом, потом вдоль реки до моста — там привал.</div></div>
+            <div class="низ-пузыря"><span>12:40</span></div>
+          </div></div>
+        </div></div>
+      </div>
+      <div class="трет">режим показа: без пунктира, ярлыков и ширин</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>Нажатие на название в шапке</b> («Редактор» и строка под ним) — сообщение <b>глазами получателя</b>: пузырь как в переписке, без пунктира ячеек, ярлыков виджетов, подписей ширины, без лент кнопок.</li>
+        <li>Обратно — тем же нажатием или «назад». Отправить можно и отсюда.</li>
+        <li>Подсказка «нажмите — показать» под названием — при первых открытиях редактора, потом пропадает.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── 08 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р08">
+  <div class="шапка-пробы"><span class="номер">08</span><span class="опис">Уровень — на кнопке цифра, в списке описание перед цифрой</span></div>
+  <div class="срезы">
+    <div class="с-подписью">
+      <div class="окно срез" style="position:relative">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Поход · публичная</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур открыт" href="#р08">2</a><span class="икона жив">➤</span></div><div class="выпад" style="top:46px;right:44px;min-width:240px">
+          <div><span class="опис-ур"><b>Всем и всегда</b><span>описание группы, видят даже не вступившие</span></span><span class="цифра-ур">0</span></div>
+          <div><span class="опис-ур"><b>Всем</b><span>попадёт в ленты, унести к себе смогут все</span></span><span class="цифра-ур">1</span></div>
+          <div class="тек"><span class="опис-ур"><b>Своим</b><span>только вступившим</span></span><span class="цифра-ур">2</span></div>
+          <div><span class="опис-ур"><b>По разрешению</b><span>тем, кому админ открыл доступ</span></span><span class="цифра-ур">3</span></div>
+        </div><div class="лист-ред" style="min-height:250px"></div>
+      </div>
+      <div class="трет">а) публичная группа: нажата цифра</div>
+    </div>
+    <div class="с-подписью">
+      <div class="окно срез" style="position:relative">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Семья · личная группа</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур открыт" href="#р08">−1</a><span class="икона жив">➤</span></div><div class="выпад" style="top:46px;right:44px;min-width:240px">
+          <div class="тек"><span class="опис-ур"><b>Зашифровано</b><span>прочтут только участники, по ключу группы</span></span><span class="цифра-ур">−1</span></div>
+          <div><span class="опис-ур"><b>Всем и всегда</b><span>описание группы, открыто всем</span></span><span class="цифра-ур">0</span></div>
+        </div><div class="лист-ред" style="min-height:150px"></div>
+      </div>
+      <div class="трет">б) личная группа: −1 или 0; в личной переписке кнопка серая, только −1</div>
+    </div>
+    <div class="разбор-пробы">
+      <ul>
+        <li><b>На кнопке в шапке — только цифра</b>. Нажатие — список, где у каждой строки <b>сначала описание, потом цифра</b>: название круга крупно и одна строка последствия мелко (заказчик 2026-10-18: «−1» или «3» без слов непонятны).</li>
+        <li>Слова — те же, что в домене (<code>MessageCircle</code>): «Зашифровано», «Всем и всегда», «Всем», «Своим», «По разрешению».</li>
+        <li><b>Какие строки</b>: личная переписка — только −1, кнопка серая и не открывается; личная группа — −1 и 0; публичная группа и канал — 0, 1, 2, 3.</li>
+        <li><b>Быстрая отправка не спрашивает</b>: зашифрованное −1, нешифрованное 2. Над строкой ввода выбора нет.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── 09 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р09">
+  <div class="шапка-пробы"><span class="номер">09</span><span class="опис">Ряд — «Разметка → Ряд»: число ячеек и их ширина; высоту задаёт содержимое</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
@@ -160,16 +363,16 @@
         <li><b>Ячеек — от 1 до 4.</b> Ширина — готовая раскладка одним нажатием или своя, в процентах; сумма всегда 100 — правка одной ячейки отнимает у соседней.</li>
         <li><b>Высота не задаётся</b>: ряд высотой с самую высокую ячейку.</li>
         <li>Новый ряд встаёт под курсором, пустые ячейки зовут «нажмите — писать».</li>
-        <li><b>Стили ряда</b> — фон, отступ, разделитель после ряда, выравнивание ячеек по высоте — в «Свойствах» (<a href="#р08">08</a>), не здесь: здесь только каркас.</li>
+        <li><b>Стили ряда</b> — фон, отступ, разделитель после ряда, выравнивание ячеек по высоте — в разделе «Стиль» (<a href="#р15">15</a>), не здесь: здесь только каркас.</li>
       </ul>
       <b>Узкий экран</b> — вопрос: 4 ячейки по 25 % в пузыре телефона — это около 60 dp. Предложение: ячейки уже 96 dp у получателя складываются в столбик, сверху вниз в их порядке.
     </div>
   </div>
 </div>
 
-<!-- ── 03 ───────────────────────────────────────────────────────────────── -->
-<div class="проба" id="р03">
-  <div class="шапка-пробы"><span class="номер">03</span><span class="опис">Ячейка: пишем — переключились — написанное стало виджетом «Текст»</span></div>
+<!-- ── 10 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р10">
+  <div class="шапка-пробы"><span class="номер">10</span><span class="опис">Ячейка: пишем — переключились — написанное стало виджетом «Текст»</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
@@ -204,7 +407,7 @@
     <div class="разбор-пробы">
       <ul>
         <li><b>Нажали на ячейку — пишем</b>, как в обычной строке: быстрые знаки и первая строка кнопок работают.</li>
-        <li><b>Переключились — появился виджет «Текст»</b>: ярлык с ручкой ⠿ над написанным. Теперь его можно перенести (<a href="#р04">04</a>) или выбрать для свойств.</li>
+        <li><b>Переключились — появился виджет «Текст»</b>: ярлык с ручкой ⠿ над написанным. Теперь его можно перенести (<a href="#р11">11</a>) или выбрать для свойств.</li>
         <li><b>Вернулись в ячейку</b> — ярлык уходит, снова пишем в тот же виджет.</li>
         <li><b>В ячейке может быть несколько виджетов</b> — друг под другом: текст, под ним картинка, под ней ещё текст. Enter в конце текста продолжает тот же виджет; новый виджет — только кнопкой или переносом.</li>
       </ul>
@@ -212,9 +415,9 @@
   </div>
 </div>
 
-<!-- ── 04 ───────────────────────────────────────────────────────────────── -->
-<div class="проба" id="р04">
-  <div class="шапка-пробы"><span class="номер">04</span><span class="опис">Перенос виджета: палец — держим и ведём, мышь — тащим за ручку</span></div>
+<!-- ── 11 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р11">
+  <div class="шапка-пробы"><span class="номер">11</span><span class="опис">Перенос виджета: палец — держим и ведём, мышь — тащим за ручку</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
@@ -247,7 +450,7 @@
             <li>выше или ниже в своей ячейке — смена порядка.</li>
           </ul>
         </li>
-        <li><b>Ряд целиком</b> переносится так же — за его ручку в «Свойствах» или долгим нажатием на пустое место ряда.</li>
+        <li><b>Ряд целиком</b> переносится так же — кнопками «Выше» и «Ниже» раздела «Разметка» или долгим нажатием на пустое место ряда.</li>
         <li><b>Опустевшая ячейка остаётся</b> («нажмите — писать»): каркас ряда меняет только сам человек. Пустые ячейки и ряды при отправке не уходят.</li>
         <li>Отмена — кнопкой системы «назад» в первые секунды или жестом отмены клавиатуры — <b>вопрос</b>: отдельной кнопки «отменить» в строке нет.</li>
       </ul>
@@ -255,42 +458,13 @@
   </div>
 </div>
 
-<!-- ── 05 ───────────────────────────────────────────────────────────────── -->
-<div class="проба" id="р05">
-  <div class="шапка-пробы"><span class="номер">05</span><span class="опис">Все виджеты — и размер, который следует за ячейкой</span></div>
+<!-- ── 12 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р12">
+  <div class="шапка-пробы"><span class="номер">12</span><span class="опис">Вставка — виджеты отдельными кнопками; размер картинки следует за ячейкой</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
-        <div class="лист-ред">
-          <div class="реплика моя"><div class="пузырь">
-            <div class="ряд">
-              <div class="ячейка" style="flex:0 0 33%"><div class="виджет покой"><span class="ручка">⠿ Текст</span>Сбор в 9:00 у входа</div><span class="шир">33 %</span></div>
-              <div class="ячейка актив" style="flex:1 1 auto"><span class="курсор-р"></span><span class="шир">67 %</span></div>
-            </div>
-            <div class="низ-пузыря"><span>черновик</span></div>
-          </div></div>
-        </div>
-        <div class="область" style="height:auto">
-          <div class="область-шапка"><span class="вкладка-обл тек">Виджеты</span></div>
-          <a class="закрыть" href="#р01">✕</a>
-          <div class="сетка-скрепки" style="padding:4px 8px 12px">
-            <span class="ярлык"><span class="круг-ярлыка" style="--я:#e8f3dc">¶</span>Текст</span>
-            <span class="ярлык"><span class="круг-ярлыка" style="--я:#cfe6b6">🖼</span>Картинка</span>
-            <span class="ярлык"><span class="круг-ярлыка" style="--я:#e3eafa">🔗</span>Ссылка</span>
-            <span class="ярлык"><span class="круг-ярлыка" style="--я:#e3eafa">☁</span>Файл в облаке</span>
-            <span class="ярлык"><span class="круг-ярлыка" style="--я:#f6e0e0">📍</span>Карта</span>
-            <span class="ярлык"><span class="круг-ярлыка" style="--я:#fff3cd">👤</span>Контакт</span>
-            <span class="ярлык"><span class="круг-ярлыка" style="--я:#e3eafa;font-weight:900">@</span>Ответ</span>
-            <a class="ярлык" href="буфер.html#б03"><span class="круг-ярлыка" style="--я:#e3eafa">📋</span>Из буфера</a>
-            <span class="ярлык"><span class="круг-ярлыка" style="--я:#fff3cd">🙂</span>Эмоджи</span>
-          </div>
-        </div>
-      </div>
-      <div class="трет">нажата «＋ Виджеты» во второй ячейке</div>
-    </div>
-    <div class="с-подписью">
-      <div class="окно срез">
-        <div class="лист-ред">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Поход выходного дня · 1 ряд</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур" href="#р08">2</a><span class="икона жив">➤</span></div><div class="ред-панель2"><div class="разделы"><span class="разд-ред">Текст</span><span class="разд-ред тек">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span class="кн-л"><span class="зн">🖼</span><span class="пд">Картинка</span></span><span class="кн-л"><span class="зн">🔗</span><span class="пд">Ссылка</span></span><span class="кн-л"><span class="зн">🙂</span><span class="пд">Эмоджи</span></span><span class="кн-л"><span class="зн">🗂<span class="счёт">3</span></span><span class="пд">Подборка</span></span><span class="кн-л"><span class="зн">☁</span><span class="пд">Облако</span></span><span class="кн-л"><span class="зн">📍</span><span class="пд">Карта</span></span><span class="кн-л"><span class="зн">👤</span><span class="пд">Контакт</span></span><span class="кн-л"><span class="зн">@</span><span class="пд">Ответ</span></span></div></div><div class="раздел-ленты"></div><div class="лист-ред">
           <div class="подпись-лист">картинка в 67 %</div>
           <div class="реплика моя"><div class="пузырь">
             <div class="ряд">
@@ -308,24 +482,22 @@
           </div></div>
         </div>
       </div>
-      <div class="трет">одна и та же картинка: ширина — от ячейки</div>
+      <div class="трет">раздел «Вставка»; одна картинка в двух ячейках</div>
     </div>
     <div class="разбор-пробы">
-      <b>Виджет вставляется в ячейку, где курсор</b>; курсора нет — новым рядом под выбранным.
+      <b>Раздел «Вставка»</b>: Картинка · Ссылка · Эмоджи · Подборка · Облако · Карта · Контакт · Ответ. Виджет встаёт в ячейку, где курсор; курсора нет — новым рядом под выбранным.
       <ul>
-        <li><b>Отдельные кнопки</b> во второй строке — для частых: Картинка и Ссылка. <b>＋ Виджеты</b> открывает все на месте клавиатуры, как скрепка: ярлычок и подпись.</li>
-        <li><b>Размер картинки — от ячейки</b>: ширина ячейки в долях от 720. 67 % — 482, 33 % — 238, ряд целиком — 720. Перенесли в другую ячейку или поменяли ширину ряда — картинка <b>заново сделана из исходного файла</b>, а не растянута из уже ужатой.</li>
-        <li><b>Исходный файл держит отправитель</b>, пока открыт черновик. Уходит только готовый размер — у получателя пересчёта нет, и прежнее решение §3.2 (без превью, рамка с крестиком) остаётся.</li>
-        <li>Прежние «720 во всё / 360 в половину» становятся частным случаем: ряд 100 % и ряд 50 · 50.</li>
+        <li><b>Подборка</b> — бывший «буфер сообщений» (<a href="буфер.html">буфер.html</a>); число на значке — сколько в ней. Название — предложение.</li>
+        <li><b>Размер картинки — от ячейки</b>: ширина в долях от 720 — 67 % дают 482, 33 % — 238. Перенесли или сменили ширину — сделана <b>заново из исходного файла</b>.</li>
+        <li><b>Исходный файл держит отправитель</b>, пока жив черновик; уходит готовый размер. «720 во всё / 360 в половину» §3.2 — ряд 100 % и ряд 50 · 50.</li>
       </ul>
-      Список виджетов и что каждый делает — <a href="#р10">10</a>.
     </div>
   </div>
 </div>
 
-<!-- ── 06 ───────────────────────────────────────────────────────────────── -->
-<div class="проба" id="р06">
-  <div class="шапка-пробы"><span class="номер">06</span><span class="опис">Таблица — сетка строк и столбцов, стиль у таблицы и у каждой ячейки</span></div>
+<!-- ── 13 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р13">
+  <div class="шапка-пробы"><span class="номер">13</span><span class="опис">Таблица — сетка строк и столбцов, стиль у таблицы и у каждой ячейки</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
@@ -357,7 +529,7 @@
       <div class="трет">выбрана ячейка «на всех», объединена с верхней</div>
     </div>
     <div class="разбор-пробы">
-      <b>Ряд и таблица — разные кнопки</b>, потому что отвечают на разное:
+      <b>Ряд и таблица — разные кнопки раздела «Разметка»</b>, потому что отвечают на разное:
       <ul>
         <li><b>Ряд</b> — раскладка: в ячейках виджеты (текст, картинка, ссылка…), ширина в процентах, строка одна.</li>
         <li><b>Таблица</b> — данные: сетка строк и столбцов, в ячейках только текст с быстрым оформлением, объединение <code>^^</code> и <code>&lt;&lt;</code>. Это та же таблица, что пишется знаками, — собранная здесь в знаки не переводится.</li>
@@ -368,26 +540,13 @@
   </div>
 </div>
 
-<!-- ── 07 ───────────────────────────────────────────────────────────────── -->
-<div class="проба" id="р07">
-  <div class="шапка-пробы"><span class="номер">07</span><span class="опис">Выделение — быстрое оформление части текста в виджете</span></div>
+<!-- ── 14 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р14">
+  <div class="шапка-пробы"><span class="номер">14</span><span class="опис">Выделение — быстрое оформление части текста</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
-        <div class="ред-панель">
-          <div class="ред-ряд">
-            <span class="кн-ф вкл" style="font-weight:900">Ж</span>
-            <span class="кн-ф" style="font-style:italic;font-weight:700">К</span>
-            <span class="кн-ф" style="text-decoration:underline;font-weight:700">Ч</span>
-            <span class="кн-ф" style="text-decoration:line-through;font-weight:700">З</span>
-            <span class="кн-ф"><span class="маркер" style="font-weight:800">М</span></span>
-            <span class="кн-ф моно">&lt;/&gt;</span>
-            <span class="кн-ф откл" style="font-weight:800">❝</span>
-            <span class="кн-ф откл" style="font-weight:800">•≡</span>
-            <span class="кн-ф откл" style="font-weight:900">H</span>
-          </div>
-        </div>
-        <div class="лист-ред" style="padding-top:44px">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Поход выходного дня · 1 ряд</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур" href="#р08">2</a><span class="икона жив">➤</span></div><div class="ред-панель2"><div class="разделы"><span class="разд-ред тек">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред">Стиль</span></div><div class="лента"><span class="кн-л двойная"><span class="зн">Абзац ▾</span><span class="пд">Абзац</span></span><span class="кн-л вкл"><span class="зн" style="font-weight:900">Ж</span><span class="пд">Жирный</span></span><span class="кн-л"><span class="зн" style="font-style:italic">К</span><span class="пд">Курсив</span></span><span class="кн-л"><span class="зн" style="text-decoration:underline">Ч</span><span class="пд">Подчёрк.</span></span><span class="кн-л"><span class="зн" style="text-decoration:line-through">З</span><span class="пд">Зачёрк.</span></span><span class="кн-л"><span class="зн"><span class="маркер">М</span></span><span class="пд">Маркер</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">&lt;/&gt;</span><span class="пд">Код</span></span><span class="кн-л"><span class="зн">Ω</span><span class="пд">Символ</span></span><span class="кн-л"><span class="зн">📋</span><span class="пд">С оформл.</span></span><span class="кн-л вкл"><span class="зн"><span class="переключ"></span></span><span class="пд">Знаки md</span></span></div></div><div class="раздел-ленты"></div><div class="лист-ред" style="padding-top:44px">
           <div class="реплика моя"><div class="пузырь">
             <div class="ряд"><div class="ячейка актив" style="flex:0 0 100%">
               <span class="над-выделением" style="top:-38px"><span class="вкл">Ж</span><span>К</span><span>Ч</span><span>З</span><span>М</span><span>&lt;/&gt;</span></span>
@@ -401,199 +560,130 @@
     </div>
     <div class="разбор-пробы">
       <ul>
-        <li><b>Выделили — над выделением чёрная полоска</b> с тем же набором, что первая строка; включённое — зелёным. Цитата, список, заголовок — про весь абзац, к части текста не применимы и гаснут.</li>
-        <li><b>Нажатие подставляет быстрое оформление</b> — ту же сущность, что знаки <code>**…**</code>. Отдельного «редакторского жирного» нет: выделить часть текста можно только так.</li>
-        <li><b>Цвет и размер части текста задать нельзя</b> — они есть только у ячейки, ряда и таблицы целиком (<a href="#р08">08</a>).</li>
+        <li><b>Выделили — над выделением чёрная полоска</b> с Ж, К, Ч, З, М, код; включённое — зелёным, и та же кнопка зелёная в ленте.</li>
+        <li><b>Нажатие подставляет быстрое оформление</b> — ту же сущность, что знаки. Выделить часть текста можно только так.</li>
+        <li><b>Цвет и размер части текста задать нельзя</b> — они есть только у ячейки, ряда и таблицы (<a href="#р15">15</a>).</li>
       </ul>
     </div>
   </div>
 </div>
 
-<!-- ── 08 ───────────────────────────────────────────────────────────────── -->
-<div class="проба" id="р08">
-  <div class="шапка-пробы"><span class="номер">08</span><span class="опис">Свойства — ряд, ячейка, виджет; JSON — то же текстом</span></div>
+<!-- ── 15 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р15">
+  <div class="шапка-пробы"><span class="номер">15</span><span class="опис">Стиль — кнопки для выбранного; отступ ступенями; JSON</span></div>
   <div class="срезы">
     <div class="с-подписью">
       <div class="окно срез">
-        <div class="лист-ред">
+        <div class="зона-1 подокно" style="flex-wrap:nowrap"><a class="икона" href="окно-ввода.html#п04">‹</a><div class="тянуть жмётся" style="min-width:0"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет обрез">Поход выходного дня · 1 ряд</div></div><span class="кн-ш">↶</span><span class="кн-ш">↷</span><a class="кн-ур" href="#р08">2</a><span class="икона жив">➤</span></div><div class="ред-панель2"><div class="разделы"><span class="разд-ред">Текст</span><span class="разд-ред">Вставка</span><span class="разд-ред">Разметка</span><span class="разд-ред тек">Стиль</span></div><div class="лента"><span class="кн-л"><span class="зн">⚙</span><span class="пд">Виджет</span></span><span class="кн-л"><span class="зн">◧</span><span class="пд">Фон</span></span><span class="кн-л"><span class="зн"><span style="color:#3d55aa">A</span></span><span class="пд">Цвет</span></span><span class="кн-л"><span class="зн">Aa</span><span class="пд">Размер</span></span><span class="кн-л"><span class="зн">≡</span><span class="пд">Выровн.</span></span><span class="кн-л вкл"><span class="зн">⬚</span><span class="пд">Отступ</span></span><span class="кн-л"><span class="зн">―</span><span class="пд">Раздел.</span></span><span class="кн-л"><span class="зн">↺</span><span class="пд">Сброс</span></span><span class="кн-л"><span class="зн" style="font-family:ui-monospace,Consolas,monospace;font-size:12px">{ }</span><span class="пд">JSON</span></span></div></div><div class="раздел-ленты с-подп">Стиль: ячейка 2 · ряд 1</div><div class="лист-ред">
           <div class="реплика моя"><div class="пузырь">
             <div class="ряд с-фоном">
               <div class="ячейка" style="flex:0 0 33%"><div class="виджет покой"><span class="ручка">⠿ Картинка</span><div class="картинка-яч" style="height:60px">238</div></div><span class="шир">33 %</span></div>
-              <div class="ячейка актив" style="flex:1 1 auto;background:#ffffff">Сбор в 9:00 у главного входа.<span class="шир">67 %</span></div>
+              <div class="ячейка актив" style="flex:1 1 auto;background:#ffffff;padding:12px 12px 14px">Сбор в 9:00 у главного входа.<span class="шир">67 %</span></div>
             </div>
-            <div class="раздел-блока"></div>
             <div class="низ-пузыря"><span>черновик</span></div>
           </div></div>
         </div>
         <div class="область" style="height:auto">
-          <div class="область-шапка"><span class="вкладка-обл">Ряд</span><span class="вкладка-обл тек">Ячейка</span><span class="вкладка-обл">Виджет</span><span class="вкладка-обл">JSON</span></div>
+          <div class="область-шапка"><span class="вкладка-обл тек">Отступ</span></div>
           <a class="закрыть" href="#р01">✕</a>
           <div class="свойства">
-            <div class="свойство"><span class="ярл">Фон</span>
-              <div class="образцы"><span class="образец нет"></span><span class="образец тек" style="background:#fff"></span><span class="образец" style="background:#fff3cd"></span><span class="образец" style="background:#e8f3dc"></span><span class="образец" style="background:#e3eafa"></span><span class="выбор-чип">🖼 картинка</span></div></div>
-            <div class="свойство"><span class="ярл">Цвет текста</span>
-              <div class="образцы"><span class="образец тек" style="background:#000"></span><span class="образец" style="background:#3bb300"></span><span class="образец" style="background:#3d55aa"></span><span class="образец" style="background:#c62828"></span></div></div>
-            <div class="свойство"><span class="ярл">Размер</span>
-              <div class="образцы"><span class="выбор-чип">мельче</span><span class="выбор-чип тек">обычный</span><span class="выбор-чип">крупнее</span></div></div>
-            <div class="свойство"><span class="ярл">По ширине</span>
-              <div class="образцы"><span class="выбор-чип тек">⇤</span><span class="выбор-чип">↔</span><span class="выбор-чип">⇥</span></div></div>
-            <div class="свойство"><span class="ярл">По высоте</span>
-              <div class="образцы"><span class="выбор-чип тек">сверху</span><span class="выбор-чип">по центру</span><span class="выбор-чип">снизу</span></div></div>
-            <div class="свойство"><span class="ярл"></span><span class="по-умолч">не тронуто — по умолчанию · <u>сбросить ячейку</u></span></div>
+            <div class="свойство"><span class="ярл">Внутри ячейки</span>
+              <div class="образцы"><span class="выбор-чип">нет</span><span class="выбор-чип">малый</span><span class="выбор-чип">обычный</span><span class="выбор-чип тек">большой</span></div></div>
+            <div class="по-умолч">Ступени, а не пиксели. Не тронуто — обычный.</div>
           </div>
         </div>
       </div>
-      <div class="трет">выбрана ячейка 67 %, у ряда — свой фон</div>
+      <div class="трет">раздел «Стиль», выбрана ячейка 2, нажат «Отступ»</div>
     </div>
     <div class="с-подписью">
       <div class="окно срез">
         <div class="область" style="height:auto">
-          <div class="область-шапка"><span class="вкладка-обл">Ряд</span><span class="вкладка-обл">Ячейка</span><span class="вкладка-обл">Виджет</span><span class="вкладка-обл тек">JSON</span></div>
+          <div class="область-шапка"><span class="вкладка-обл тек">JSON</span></div>
           <a class="закрыть" href="#р01">✕</a>
           <div class="свойства">
 <div class="json">{
   <span class="к">"type"</span>: <span class="з">"row"</span>,
-  <span class="к">"style"</span>: {
-    <span class="к">"background"</span>: <span class="з">"amber-soft"</span>,
-    <span class="к">"divider"</span>: { <span class="к">"width"</span>: 2, <span class="к">"color"</span>: <span class="з">"accent"</span> }
-  },
+  <span class="к">"style"</span>: { <span class="к">"background"</span>: <span class="з">"amber-soft"</span> },
   <span class="к">"cells"</span>: [
     { <span class="к">"width"</span>: 33, <span class="к">"widgets"</span>: [
       { <span class="к">"type"</span>: <span class="з">"image"</span>, <span class="к">"media"</span>: <span class="з">"m1"</span>, <span class="к">"w"</span>: 238 } ] },
     { <span class="к">"width"</span>: 67,
-      <span class="к">"style"</span>: { <span class="к">"background"</span>: <span class="з">"surface"</span> },
-      <span class="к">"widgets"</span>: [
-      { <span class="к">"type"</span>: <span class="з">"text"</span>,
+      <span class="к">"style"</span>: { <span class="к">"background"</span>: <span class="з">"surface"</span>,
+                 <span class="к">"padding"</span>: <span class="з">"large"</span> },
+      <span class="к">"widgets"</span>: [ { <span class="к">"type"</span>: <span class="з">"text"</span>,
         <span class="к">"md"</span>: <span class="з">"Сбор в 9:00 у главного входа."</span> } ] }
   ]
 }</div>
-            <div class="проверка">✓ каталог виджетов · ✓ ширины = 100 · ✓ палитра · ✓ защитный пол</div>
+            <div class="проверка">✓ каталог виджетов · ✓ ширины = 100 · ✓ палитра · ✓ ступени · ✓ защитный пол</div>
             <div style="display:flex;gap:8px"><span class="кн тихая" style="min-height:32px;padding:0 14px">Вставить JSON</span><span class="кн" style="min-height:32px;padding:0 14px">Применить</span></div>
           </div>
         </div>
       </div>
-      <div class="трет">тот же ряд во вкладке JSON</div>
+      <div class="трет">кнопка «JSON» того же ряда</div>
     </div>
     <div class="разбор-пробы">
-      <b>Три вкладки — три уровня стиля</b>, и у каждого свои свойства:
+      <b>Кнопки раздела действуют на выбранное</b> — ряд, ячейку или виджет; что выбрано, написано в разделителе («Стиль: ячейка 2 · ряд 1»). Вкладки свойств больше не нужны.
       <ul>
-        <li><b>Ряд</b> — фон (цвет или картинка), отступ внутри, разделитель после (толщина, цвет или скрыт), ширины ячеек, удалить ряд.</li>
-        <li><b>Ячейка</b> — фон, цвет и размер текста, выравнивание по ширине и по высоте.</li>
-        <li><b>Виджет</b> — своё у каждого вида: у картинки — вписать или заполнить ячейку; у ссылки — три режима §3.1; у сообщения из буфера — имя и обрезка (<a href="буфер.html#б04">буфер, 04</a>).</li>
+        <li><b>Виджет</b> — свои настройки вида: у картинки вписать или заполнить, у ссылки три режима, у сообщения из подборки имя и обрезка. Есть, только когда выбран виджет.</li>
+        <li><b>Фон, Цвет, Размер, Выровн.</b> — у ячейки; фон ещё у ряда и таблицы.</li>
+        <li><b>Отступ</b> — у ряда и у ячейки, <b>ступенями</b>: нет, малый, обычный, большой (заказчик 2026-10-18). У виджета отступа нет — ему хватает отступа ячейки.</li>
+        <li><b>Раздел.</b> — разделитель после ряда; <b>Сброс</b> — убрать все стили выбранного; <b>JSON</b> — тот же ряд текстом, только изменённое, с проверкой до «Применить».</li>
       </ul>
-      <b>JSON — тот же ряд текстом</b>, только изменённое. Текст виджета внутри — быстрым оформлением (<code>md</code>), так один формат знаков служит и строке ввода, и редактору.
-      <br><br><b>Проверка до «Применить»:</b> незнакомый виджет, ширины не в сумме 100, цвет не из палитры, нарушение защитного пола — строка красным, применить нельзя. Цвета — именами палитры: в тёмной теме у имени своё значение.
-      <br><br><b>Уровень в JSON сообщения не входит</b> — он у конверта, а не у тела; меняется только цифрой (<a href="#р09">09</a>).
+      <b>Не перегрузим ли.</b> Открытие сообщения зависит от того, что уходит в JSON, а не от кнопок. Поэтому: вложенность постоянная (ряд → ячейка → виджет), стили — имена и ступени, умолчания не пишутся, до 4 ячеек в ряду и до 20 рядов в сообщении. <b>Проверка после постройки</b>: сообщение 20 × 4 с картинками на Redmi — разбор и первая отрисовка, прокрутка ленты таких сообщений без пропуска кадров. Не уложились — урезаем пределы, а не кнопки.
     </div>
   </div>
 </div>
 
-<!-- ── 09 ───────────────────────────────────────────────────────────────── -->
-<div class="проба" id="р09">
-  <div class="шапка-пробы"><span class="номер">09</span><span class="опис">Уровень сообщения — только кнопка-цифра в редакторе</span></div>
-  <div class="срезы">
-    <div class="с-подписью">
-      <div class="окно срез">
-        <div class="зона-1 подокно">
-          <span class="икона">‹</span>
-          <div class="тянуть"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет">Анна Ковалёва · личная</div></div>
-          <span class="кн-ур откл">−1</span>
-          <span class="икона жив">➤</span>
-        </div>
-      </div>
-      <div class="трет">а) личная переписка: −1, выбора нет</div>
-      <div class="окно срез" style="margin-top:14px;position:relative">
-        <div class="зона-1 подокно">
-          <span class="икона">‹</span>
-          <div class="тянуть"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет">Семья · личная группа</div></div>
-          <span class="кн-ур">−1</span>
-          <span class="икона жив">➤</span>
-        </div>
-      </div>
-      <div class="трет">б) личная группа: −1 или 0</div>
-    </div>
-    <div class="с-подписью">
-      <div class="окно срез" style="position:relative">
-        <div class="зона-1 подокно">
-          <span class="икона">‹</span>
-          <div class="тянуть"><div class="имя обрез" style="font-size:14px">Редактор</div><div class="трет">Поход · публичная</div></div>
-          <span class="кн-ур открыт">2</span>
-          <span class="икона жив">➤</span>
-        </div>
-        <div class="меню-ур"><span>0</span><span>1</span><span class="тек">2</span><span>3</span></div>
-        <div class="лист-ред" style="min-height:150px">
-          <div class="реплика моя"><div class="пузырь"><div class="текст">Сбор в 9:00 у главного входа.</div><div class="низ-пузыря"><span>черновик</span></div></div></div>
-        </div>
-      </div>
-      <div class="трет">в) публичная группа: нажата цифра — список цифр</div>
-      <div class="окно срез" style="margin-top:14px">
-        <div class="строка-ввода">
-          <a class="кн-ред" href="#р01"><span class="полосы"><i></i><i></i><i></i></span></a>
-          <div class="пилюля"><div class="набор">Сбор в 9:00<span class="курсор"></span></div><span class="серая">🙂</span></div>
-          <span class="кн-отпр">➤</span>
-        </div>
-      </div>
-      <div class="трет">г) быстрая отправка в группе: выбора над строкой нет, уходит 2</div>
-    </div>
-    <div class="разбор-пробы">
-      <b>Выбор уровня — только цифра в шапке редактора</b> (заказчик 2026-10-17). Ни чипов со словами над строкой ввода, ни подписи — как сейчас в группе — больше нет.
-      <ul>
-        <li><b>Нажатие на цифру</b> — короткий список цифр, которые есть у этой переписки; выбранная — зелёной рамкой.</li>
-        <li><b>Какие цифры</b> (ADR-0019): личная переписка — только <b>−1</b>, кнопка серая; личная группа — <b>−1</b> и <b>0</b>; публичная группа и канал — <b>0, 1, 2, 3</b> (шифра там нет).</li>
-        <li><b>Быстрая отправка не спрашивает</b> (г): зашифрованное — <b>−1</b>, нешифрованное — <b>2</b>. Другой уровень — только через редактор.</li>
-        <li>Уровень назначается один раз: после отправки сузить можно, расширить нельзя (ADR-0019 п. 6).</li>
-      </ul>
-      <b>Вопросы:</b> нужна ли в списке подсказка к цифре или цифры голые; сужение уже отправленного сообщения в переписке сейчас — чипы со словами («Всем», «Своим») — тоже переводить на цифры?
-    </div>
-  </div>
-</div>
-
-<!-- ── 10 ───────────────────────────────────────────────────────────────── -->
-<div class="проба" id="р10">
-  <div class="шапка-пробы"><span class="номер">10</span><span class="опис">Кнопки и виджеты — списком</span></div>
+<!-- ── 16 ───────────────────────────────────────────────────────────────── -->
+<div class="проба" id="р16">
+  <div class="шапка-пробы"><span class="номер">16</span><span class="опис">Кнопки и виджеты — списком</span></div>
   <div class="срезы">
     <div class="разбор-пробы" style="max-width:560px">
-      <b>Шапка редактора</b>
+      <b>Шапка</b> — без подписей
       <ul>
-        <li><b>‹ Назад</b> — выйти, черновик и вставленное сохраняются; кнопка редактора в строке ввода зелёная.</li>
-        <li><b>Цифра</b> — уровень сообщения (<a href="#р09">09</a>).</li>
-        <li><b>➤ Отправить</b> — не выходя.</li>
+        <li><b>‹</b> назад — черновик сохраняется, редактор в строке ввода зелёный.</li>
+        <li><b>Название</b> — нажатие показывает сообщение (<a href="#р07">07</a>).</li>
+        <li><b>↶ ↷</b> — отменить, повторить.</li>
+        <li><b>Цифра</b> — уровень; в списке описание перед цифрой (<a href="#р08">08</a>).</li>
+        <li><b>➤</b> — отправить, не выходя.</li>
       </ul>
-      <b>Первая строка — быстрое оформление</b> (знаки §6.2)
+      <b>Текст</b>
       <ul>
-        <li><b>Ж</b> <code>**…**</code> · <b>К</b> <code>*…*</code> · <b>Ч</b> <code>++…++</code> · <b>З</b> <code>~~…~~</code> · <b>М</b> <code>==…==</code> · <b>&lt;/&gt;</b> код — к выделенной части.</li>
-        <li><b>❝</b> цитата <code>--&gt;</code> · <b>•≡</b> список <code>- </code> · <b>H</b> заголовок <code>#</code> — к абзацу.</li>
+        <li><b>Абзац ▾</b> — абзац, заголовок 1–3, цитата, список, список 2-го уровня, блок кода (<a href="#р03">03</a>).</li>
+        <li><b>Жирный</b> <code>**</code> · <b>Курсив</b> <code>*</code> · <b>Подчёрк.</b> <code>++</code> · <b>Зачёрк.</b> <code>~~</code> · <b>Маркер</b> <code>==</code> · <b>Код</b> — к выделенному (<a href="#р14">14</a>).</li>
+        <li><b>Символ</b> — спецсимволы (<a href="#р06">06</a>).</li>
+        <li><b>С оформл.</b> — вставка из системного буфера с простым оформлением и картинками (<a href="#р05">05</a>).</li>
+        <li><b>Знаки md</b> — переключатель, один на все сообщения (<a href="#р04">04</a>).</li>
       </ul>
-      <b>Вторая строка — разметка и виджеты</b>
+      <b>Вставка</b>
       <ul>
-        <li><b>▥ Ряд</b> — вставить ряд: 1–4 ячейки, ширины в процентах.</li>
-        <li><b>▦ Таблица</b> — сетка строк и столбцов с текстом.</li>
-        <li><b>🖼 Картинка · 🔗 Ссылка</b> — частые виджеты сразу.</li>
-        <li><b>＋ Виджеты</b> — все виджеты.</li>
-        <li><b>📋 Буфер</b> — вставить сообщение из буфера; число — сколько в нём.</li>
-        <li><b>{ } Свойства</b> — ряд, ячейка, виджет, JSON.</li>
+        <li>Картинка · Ссылка · Эмоджи · Подборка · Облако · Карта · Контакт · Ответ (<a href="#р12">12</a>).</li>
       </ul>
     </div>
     <div class="разбор-пробы" style="max-width:560px">
       <b>Разметка</b>
       <ul>
-        <li><b>Ряд</b> — контейнер: ячейки в строку, стиль ряда.</li>
-        <li><b>Ячейка</b> — место в ряду или таблице со своим стилем.</li>
-        <li><b>Таблица</b> — строки и столбцы, объединение <code>^^</code> <code>&lt;&lt;</code>.</li>
+        <li><b>Ряд</b> — 1–4 ячейки, ширины в процентах (<a href="#р09">09</a>); <b>Таблица</b> — строки и столбцы (<a href="#р13">13</a>).</li>
+        <li><b>+Ячейка · −Ячейка</b> — в ряду или таблице; <b>Объедин. · Разъедин.</b> — ячейки таблицы.</li>
+        <li><b>Выше · Ниже</b> — сдвинуть выбранный ряд или виджет; <b>Удалить</b>.</li>
+      </ul>
+      <b>Стиль</b> — для выбранного (<a href="#р15">15</a>)
+      <ul>
+        <li>Виджет · Фон · Цвет · Размер · Выровн. · Отступ · Раздел. · Сброс · JSON.</li>
       </ul>
       <b>Виджеты</b> — всё, что кладётся в ячейку
       <ul>
         <li><b>Текст</b> — быстрое оформление внутри.</li>
-        <li><b>Картинка</b> — из галереи или камеры; ширина от ячейки, из исходного файла (§3.2).</li>
-        <li><b>Ссылка</b> — три режима: как есть, кнопка, карточка (§3.1).</li>
-        <li><b>Файл в облаке</b> — кнопка-ссылка; в группе и канале файл, документ, аудио, видео — только так (§11.2а).</li>
-        <li><b>Карта</b> — координаты и кнопки «Яндекс Карты», «Google Карты».</li>
+        <li><b>Картинка</b> — ширина от ячейки, из исходного файла (§3.2).</li>
+        <li><b>Ссылка</b> — как есть, кнопка, карточка (§3.1).</li>
+        <li><b>Файл в облаке</b> — кнопка-ссылка; в группе и канале файл, документ, аудио, видео — только так.</li>
+        <li><b>Карта</b> — координаты, кнопки «Яндекс Карты» и «Google Карты».</li>
         <li><b>Контакт</b> — карточка человека.</li>
-        <li><b>Ответ</b> <code>@Ник</code> — имя на цветном фоне, строка из сообщения, переход к нему.</li>
-        <li><b>Из буфера</b> — вставленное сообщение со своим видом показа (<a href="буфер.html">буфер</a>).</li>
+        <li><b>Ответ</b> <code>@Ник</code> — имя на цветном фоне, строка из сообщения, переход.</li>
+        <li><b>Из подборки</b> — вставленное сообщение со своим видом показа (<a href="буфер.html">буфер.html</a>).</li>
         <li><b>Эмоджи</b> — крупный, в том числе анимированный.</li>
       </ul>
-      <b>Не виджеты:</b> разделитель — свойство ряда (и <code>---</code> в тексте); файлы, альбомы, голосовое, аудио и видео в личной переписке — <b>вне пузыря</b>, отдельным сообщением, в редактор не входят.
+      <b>Не виджеты:</b> разделитель — стиль ряда (и <code>---</code> в тексте); файлы, альбомы, голос, аудио и видео — вне пузыря, отдельным сообщением.
     </div>
   </div>
 </div>
