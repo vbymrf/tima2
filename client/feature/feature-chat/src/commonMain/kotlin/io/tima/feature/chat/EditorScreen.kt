@@ -24,8 +24,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,7 +39,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -45,15 +54,14 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.gestures.animateScrollBy
 import io.tima.core.media.fileDrop
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.tima.core.ui.Bubble
@@ -82,9 +90,10 @@ object EditorTags {
     const val LEVEL = "editor:level"
     const val SEND = "editor:send"
     const val PREVIEW = "editor:preview"
-    const val SELECTION = "editor:selection"
     const val PROBLEMS = "editor:problems"
     const val SYMBOL_AREA = "editor:symbol.area"
+    /** Место сообщения; нажатие на пустое под ним — писать после всего. */
+    const val BODY = "editor:body"
     fun tab(key: String) = "editor:tab.$key"
     fun button(key: String) = "editor:$key"
     fun level(level: Int) = "editor:level.$level"
@@ -160,6 +169,8 @@ private val SYMBOLS: Map<String, List<String>> = mapOf(
  * @param problems нарушения правил разметки словами; есть — отправить нельзя.
  * @param onBack назад: документ остаётся черновиком.
  * @param onSend отправить; `true` — ушло, окно закрывается.
+ * @param onDraft документ поменялся — черновик пишется сразу, а не только по «‹»: уход из
+ *   приложения, системная «Назад», закрытый процесс его не теряют (заказчик 2026-10-18).
  */
 @Composable
 fun EditorScreen(
@@ -179,6 +190,7 @@ fun EditorScreen(
     desktop: Boolean = false,
     /** Файлы, перетащенные в редактор (ПК); `null` — не принимаем. */
     onFiles: ((List<io.tima.core.media.PickedFile>) -> Unit)? = null,
+    onDraft: ((ComposedDoc) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val w = Tima.words.editor
@@ -205,6 +217,24 @@ fun EditorScreen(
         problems(doc) + if (wide.isNotEmpty()) listOf(w.tableTooWide(io.tima.domain.chat.TableFit.maxColumns())) else emptyList()
     }
     val level = doc.level ?: defaultLevel
+    // Знаки md включены — знаки в поле спрятаны, набор «как в Word» (EditorMarks).
+    val typing = typingMarks.takeIf { doc.marks }
+    SideEffect { model.typing = typing }
+    val active = model.activeInline().map { it.name.lowercase() }.toSet()
+
+    // Черновик — через полсекунды после последней правки и при закрытии окна.
+    if (onDraft != null) {
+        val draft by rememberUpdatedState(onDraft)
+        LaunchedEffect(model) {
+            var first = true
+            snapshotFlow { model.doc }.collectLatest { d ->
+                if (first) { first = false; return@collectLatest }
+                kotlinx.coroutines.delay(DRAFT_PAUSE_MS)
+                draft(d)
+            }
+        }
+        DisposableEffect(model) { onDispose { draft(model.doc) } }
+    }
 
     fun press(key: String) {
         hint = null
@@ -258,6 +288,10 @@ fun EditorScreen(
 
     Column(
         Modifier.fillMaxSize().background(colors.surface).imePadding().testTag(EditorTags.WINDOW)
+            // Редактор — подокно поверх переписки. Нажатие мимо кнопок не уходит в переписку под
+            // ним: раньше палец между кнопками шапки попадал в шапку переписки — и открывалась
+            // страница собеседника (заказчик 2026-10-18).
+            .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
             .onPreviewKeyEvent { e -> editorKeys(e, model, trouble.isEmpty(), onSend = { onSend(model.doc) }, onBack = { onBack(model.doc) }) },
     ) {
         // ── Шапка: ‹ · название · ↶ ↷ · цифра уровня · ➤ (§10.1) ──
@@ -267,7 +301,10 @@ fun EditorScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(glyph = "‹", onClick = { onBack(model.doc) }, live = true, modifier = Modifier.testTag(EditorTags.BACK))
-            Column(Modifier.weight(1f).clickable { showPreview = !showPreview }.testTag(EditorTags.TITLE)) {
+            Column(
+                Modifier.weight(1f).heightIn(min = 48.dp).clickable { showPreview = !showPreview }.testTag(EditorTags.TITLE),
+                verticalArrangement = Arrangement.Center,
+            ) {
                 Caption(w.title, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
                 if (showPreview) Tertiary(w.previewOn, lineOne = true)
             }
@@ -289,7 +326,7 @@ fun EditorScreen(
                 )
             }
         }
-        Ribbon(tab, marksOn = doc.marks, scroll = ribbonScroll, onPress = ::press)
+        Ribbon(tab, marksOn = doc.marks, active = active, scroll = ribbonScroll, onPress = ::press)
         if (paragraphMenu) ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); paragraphMenu = false }
         stylePanel?.let { StylePanel(it, model, problems) }
 
@@ -309,7 +346,8 @@ fun EditorScreen(
                 }
             }
         }
-        if (model.hasSelection) SelectionStrip { kind -> model.inline(kind) }
+        // Над выделенным полоски Ж К Ч нет (заказчик 2026-10-18): она ложилась на системное «Вырезать ·
+        // Копировать · Выделить всё». Оформляют кнопки ленты — нажата, если выделенное уже такое.
 
         // ── Сообщение ──
         val drag = rememberEditorDrag()
@@ -319,7 +357,12 @@ fun EditorScreen(
                 .onGloballyPositioned { drag.origin = it.boundsInRoot().topLeft }
                 .then(if (onFiles != null) Modifier.fileDrop(onHover = { dropping = it }, onFiles = onFiles) else Modifier)
                 .then(if (dropping) Modifier.border(3.dp, colors.navigation) else Modifier)
-                .testTag("editor:body"),
+                // Пустое место под сообщением — писать после всего, как Enter в конце (заказчик
+                // 2026-10-18): после виджета и ряда иначе некуда было поставить курсор.
+                .pointerInput(showPreview) {
+                    detectTapGestures { at -> if (!showPreview && drag.origin.y + at.y > drag.bottom()) model.writeAtEnd() }
+                }
+                .testTag(EditorTags.BODY),
         ) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), enabled = drag.from == null).padding(TimaSpacing.about3)) {
                 if (showPreview) {
@@ -329,7 +372,7 @@ fun EditorScreen(
                 } else {
                     doc.items.forEachIndexed { i, item ->
                         Box(Modifier.fillMaxWidth().onGloballyPositioned { drag.item(i, it.boundsInRoot()) }) {
-                            EditorItemView(model, i, item, typingMarks.takeIf { doc.marks }, preview, drag, tooWide = i in wide, levels = levels)
+                            EditorItemView(model, i, item, typing, preview, drag, tooWide = i in wide, levels = levels)
                         }
                     }
                 }
@@ -368,6 +411,9 @@ private fun selectedKind(model: EditorModel): String {
         else -> "text"
     }
 }
+
+/** Пауза набора, после которой документ пишется черновиком. */
+private const val DRAFT_PAUSE_MS = 500L
 
 /** На сколько сдвигается лента стрелкой на ПК — три кнопки. */
 private const val RIBBON_STEP = 180f
@@ -458,14 +504,15 @@ private fun LevelList(levels: List<MessageCircle>, current: Int, onPick: (Int) -
 
 /** Лента: шесть кнопок и половина седьмой — видно, что дальше есть ещё (§10.2). */
 @Composable
-private fun Ribbon(tab: EditorTab, marksOn: Boolean, scroll: androidx.compose.foundation.ScrollState, onPress: (String) -> Unit) {
+private fun Ribbon(tab: EditorTab, marksOn: Boolean, active: Set<String>, scroll: androidx.compose.foundation.ScrollState, onPress: (String) -> Unit) {
     val colors = Tima.colors
     val w = Tima.words.editor
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val width = maxWidth / 6.5f
         Row(Modifier.fillMaxWidth().horizontalScroll(scroll).padding(vertical = 4.dp)) {
             for (key in tab.buttons) {
-                val on = key == "marks" && marksOn
+                // Нажата: «Знаки md» включены; Ж, К… — оформление под курсором или ждёт буквы (Word).
+                val on = (key == "marks" && marksOn) || key in active
                 Column(
                     Modifier.width(width).clickable { onPress(key) }.padding(vertical = 4.dp).testTag(EditorTags.button(key)),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -510,31 +557,6 @@ private fun ParagraphList(current: ParagraphKind, onPick: (ParagraphKind) -> Uni
     }
 }
 
-/** Чёрная полоска над выделенным: Ж, К, Ч, З, М, код (§10.2). */
-@Composable
-private fun SelectionStrip(onMark: (InlineKind) -> Unit) {
-    val colors = Tima.colors
-    Row(
-        Modifier.fillMaxWidth().background(colors.text).padding(horizontal = TimaSpacing.about3, vertical = 2.dp).testTag(EditorTags.SELECTION),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-    ) {
-        val marks = listOf(
-            InlineKind.BOLD to TextStyle(fontWeight = FontWeight.Black),
-            InlineKind.ITALIC to TextStyle(fontStyle = FontStyle.Italic),
-            InlineKind.UNDERLINE to TextStyle(textDecoration = TextDecoration.Underline),
-            InlineKind.STRIKE to TextStyle(textDecoration = TextDecoration.LineThrough),
-            InlineKind.HIGHLIGHT to TextStyle(),
-            InlineKind.CODE to TextStyle(),
-        )
-        for ((kind, look) in marks) {
-            val glyph = Tima.words.editor.letter(kind.name.lowercase()) ?: "</>"
-            Box(Modifier.size(36.dp).clickable { onMark(kind) }.testTag("editor:selection.${kind.name.lowercase()}"), contentAlignment = Alignment.Center) {
-                androidx.compose.foundation.text.BasicText(glyph, style = look.merge(TextStyle(color = colors.surface, fontSize = 16.sp)))
-            }
-        }
-    }
-}
-
 /** Кусок документа: текст набирается здесь же, остальное — как увидит получатель, нажатием выбирается. */
 @Composable
 private fun EditorItemView(
@@ -549,22 +571,43 @@ private fun EditorItemView(
 ) {
     val colors = Tima.colors
     val chosen = model.spot == io.tima.domain.chat.Spot(index)
+    // Стиль куска виден сразу, как у обычного оформления (заказчик 2026-10-18): фон, поля, цвет,
+    // размер, выравнивание и разделитель — те же, что в сообщении.
+    val look = blockStyleOf(item.style)
     when (item) {
         is ComposedItem.Text -> {
             val value = if (chosen) model.field else androidx.compose.ui.text.input.TextFieldValue(item.source)
+            val focus = remember { FocusRequester() }
+            val keyboard = LocalSoftwareKeyboardController.current
+            LaunchedEffect(model.focusAsk) {
+                if (model.focusAsk > 0 && model.spot == io.tima.domain.chat.Spot(index)) {
+                    runCatching { focus.requestFocus() }
+                    keyboard?.show()
+                }
+            }
             BasicTextField(
                 value = value,
                 onValueChange = { v -> if (chosen) model.changed(index, v) else { model.focused(index); model.changed(index, v) } },
-                textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
+                textStyle = TextStyle(
+                    fontSize = sizeOf(look.size, TimaType.sz4),
+                    color = io.tima.core.ui.paletteColor(look.color) ?: colors.text,
+                    textAlign = alignOf(look.align),
+                ),
                 cursorBrush = SolidColor(colors.navigation),
-                visualTransformation = rememberTypingView(marks),
+                visualTransformation = rememberEditorView(marks),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(vertical = 4.dp)
+                    .styled(look)
                     .then(if (tooWide) Modifier.border(2.dp, colors.alarm, RoundedCornerShape(6.dp)).padding(4.dp) else Modifier)
+                    .focusRequester(focus)
                     .onFocusChanged { if (it.isFocused) model.focused(index) }
                     .testTag(EditorTags.text(index)),
             )
+            DividerAfter(look)
         }
-        is ComposedItem.Widget -> EditorWidget(item.widget, io.tima.domain.chat.Spot(index), model.spot == io.tima.domain.chat.Spot(index), model, drag, preview)
+        is ComposedItem.Widget -> Column(Modifier.fillMaxWidth().styled(look)) {
+            EditorWidget(item.widget, io.tima.domain.chat.Spot(index), model.spot == io.tima.domain.chat.Spot(index), model, drag, preview)
+            DividerAfter(look)
+        }
         is ComposedItem.Row -> EditorRow(item, index, model, drag, marks, preview)
         is ComposedItem.Continuation -> ContinuationMarker(item, index, model, levels)
     }

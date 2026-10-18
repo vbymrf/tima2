@@ -45,6 +45,23 @@ import io.tima.domain.chat.Spot
 /** Порядок цветов в образцах: яркий, затем мягкий того же цвета. */
 private val PALETTE_ORDER = listOf("text", "surface", "accent", "accent-soft", "amber", "amber-soft", "green", "green-soft", "blue", "blue-soft", "red", "red-soft", "grey", "grey-soft")
 
+/** Стиль куска из редактора (имена — как в разметке) — для показа в самом редакторе. */
+internal fun blockStyleOf(style: Map<String, String>): io.tima.domain.chat.BlockStyle =
+    if (style.isEmpty()) {
+        io.tima.domain.chat.BlockStyle.NONE
+    } else {
+        io.tima.domain.chat.BlockStyle(
+            background = style["background"],
+            color = style["color"],
+            size = style["size"],
+            align = style["align"],
+            valign = style["valign"],
+            padding = style["padding"],
+            divider = style["divider"],
+            dividerColor = style["divider_color"],
+        )
+    }
+
 /** Виджет на выбранном месте: во всю ширину или в ячейке ряда. */
 private fun widgetAt(doc: ComposedDoc, at: Spot): ComposedWidget? = when (val item = doc.items.getOrNull(at.item)) {
     is ComposedItem.Widget -> item.widget.takeIf { at.cell == -1 }

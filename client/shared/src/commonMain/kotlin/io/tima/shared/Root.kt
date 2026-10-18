@@ -4923,6 +4923,7 @@ private fun Chat(
                 store.editorBack(doc)
                 Journal.note(LogCode.EDITOR, "закрыт", "рядов" to doc.rows)
             },
+            onDraft = store::editorDraft,
             onSend = { doc ->
                 scope.launch {
                     // Картинка в ячейке уже ряда — под её ширину (720 × доля), из исходного файла.

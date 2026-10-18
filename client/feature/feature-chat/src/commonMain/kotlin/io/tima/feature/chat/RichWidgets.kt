@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -18,6 +17,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -126,22 +127,51 @@ private val MIN_TEXT_CELL = 72.dp
 
 private const val CELL_GAP = 6
 
+/**
+ * Ряд — своей раскладкой, а не `BoxWithConstraints`: тот строится подсоставом и не отвечает на
+ * вопрос «какой высоты ты по содержимому». Ряд сам задаёт его ячейкам (равная высота), и ряд с
+ * виджетом в ячейке редактора тоже спрашивают — приложение падало (Samsung 2026-10-18, вставка из
+ * подборки в ячейку: `IllegalStateException: Asking for intrinsic measurements of SubcomposeLayout`).
+ */
 @Composable
 internal fun RichRow(row: RichBlock.Row) {
-    BoxWithConstraints(Modifier.fillMaxWidth().styled(row.style)) {
-        val need = row.cells.sumOf { minWidthOf(it).value.toDouble() } + CELL_GAP * (row.cells.size - 1)
-        if (need > maxWidth.value) {
+    val need = row.cells.sumOf { minWidthOf(it).value.toDouble() } + CELL_GAP * (row.cells.size - 1)
+    val total = row.cells.sumOf { it.width ?: 0 }
+    // Ширины в процентах; не названы (или сумма не 100) — поровну.
+    val weights = row.cells.map { cell -> if (total == 100 && cell.width != null) cell.width!!.toFloat() else 1f }
+    Layout(
+        content = { for (cell in row.cells) RowCellView(cell, Modifier) },
+        modifier = Modifier.fillMaxWidth().styled(row.style),
+    ) { cells, constraints ->
+        val gap = CELL_GAP.dp.roundToPx()
+        val needPx = need.dp.roundToPx()
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else maxOf(needPx, constraints.minWidth)
+        if (cells.isEmpty()) return@Layout layout(width, constraints.minHeight) {}
+        if (needPx > width) {
             // Не вмещается — столбиком, каждая ячейка во всю ширину.
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(CELL_GAP.dp)) {
-                for (cell in row.cells) RowCellView(cell, Modifier.fillMaxWidth())
+            val placed = cells.map { it.measure(Constraints(minWidth = width, maxWidth = width)) }
+            val height = placed.sumOf { it.height } + gap * (placed.size - 1)
+            layout(width, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
+                var y = 0
+                for (p in placed) {
+                    p.place(0, y)
+                    y += p.height + gap
+                }
             }
         } else {
-            val total = row.cells.sumOf { it.width ?: 0 }
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(CELL_GAP.dp)) {
-                for (cell in row.cells) {
-                    // Ширины в процентах; не названы (или сумма не 100) — поровну.
-                    val weight = if (total == 100 && cell.width != null) cell.width!!.toFloat() else 1f
-                    RowCellView(cell, Modifier.weight(weight).fillMaxHeight())
+            // В строку: ячейки одной высоты — по самой высокой.
+            val free = (width - gap * (cells.size - 1)).coerceAtLeast(0)
+            val sum = weights.sum()
+            val widths = weights.map { (free * it / sum).toInt() }.toMutableList()
+            widths[widths.lastIndex] += free - widths.sum()
+            val height = cells.mapIndexed { i, cell -> cell.minIntrinsicHeight(widths[i]) }.max()
+                .coerceIn(constraints.minHeight, constraints.maxHeight)
+            val placed = cells.mapIndexed { i, cell -> cell.measure(Constraints.fixed(widths[i], height)) }
+            layout(width, height) {
+                var x = 0
+                for (p in placed) {
+                    p.place(x, 0)
+                    x += p.width + gap
                 }
             }
         }

@@ -752,6 +752,18 @@ class ChatStore(
         keepComposed(kept)
     }
 
+    /**
+     * Редактор открыт, документ поменялся — черновик пишется сразу, а не только по «‹» (заказчик
+     * 2026-10-18: «Любой уход из приложения — всё теряется»). Окно уже закрыто (отправлено, «‹») —
+     * ничего: иначе отправленное вернулось бы черновиком.
+     */
+    fun editorDraft(doc: ComposedDoc) {
+        if (!_state.value.editorOpen) return
+        val kept = doc.takeUnless { it.isEmpty }
+        _state.value = _state.value.copy(composed = kept)
+        keepComposed(kept)
+    }
+
     /** Отправить собранное — из редактора или стрелкой строки ввода. */
     fun sendComposed(doc: ComposedDoc): ComposedResult? {
         val c = composer ?: return null

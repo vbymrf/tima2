@@ -15,6 +15,7 @@ import io.tima.domain.chat.InlineKind
 import io.tima.domain.chat.ParagraphKind
 import io.tima.domain.chat.Spot
 import io.tima.domain.chat.TextEdit
+import io.tima.domain.chat.TypingMarks
 
 /**
  * Состояние редактора между нажатиями (Решения §10): документ, где курсор, отменить и повторить.
@@ -64,6 +65,21 @@ class EditorModel(initial: ComposedDoc) {
     /** Последний шаг — набор букв на этом месте: следующая буква склеивается с ним. */
     private var typingIn: Spot? = null
 
+    /**
+     * Разбор знаков быстрого оформления — когда они включены («Знаки md»). Есть — знаки в поле
+     * спрятаны, и набор идёт «как в Word» ([pending], [inline], [changed]); нет — знаки ставятся как
+     * есть.
+     */
+    var typing: TypingMarks? = null
+
+    /** Оформление, которое наденется на следующие набранные буквы: Ж без выделения (Word). */
+    var pending by mutableStateOf<InlineKind?>(null)
+        private set
+
+    /** Просьба к окну поставить курсор в текст под курсором — после «писать после всего». */
+    var focusAsk by mutableStateOf(0)
+        private set
+
     val doc: ComposedDoc get() = snapshot.doc
     val focus: Int get() = snapshot.focus
     val spot: Spot get() = snapshot.spot
@@ -109,13 +125,15 @@ class EditorModel(initial: ComposedDoc) {
     /** То же — в тексте ячейки ряда. */
     fun changedCell(index: Int, cell: Int, value: TextFieldValue) = changedAt(Spot(index, cell, Spot.TEXT), value)
 
-    private fun changedAt(at: Spot, value: TextFieldValue) {
+    private fun changedAt(at: Spot, typed: TextFieldValue) {
         val before = textAt(doc, at) ?: return
+        val value = typing?.let { marks -> wordLike(at, before, typed, marks) } ?: typed
         if (at != spot) typingIn = null
         field = value
         val next = Snapshot(withText(doc, at, value.text), at.item, value.selection.start, value.selection.end, at.cell, at.widget)
         if (value.text == before) {
-            // Только курсор — не шаг истории.
+            // Только курсор — не шаг истории; курсор ушёл — ожидавшее оформление снято.
+            if (at != spot || value.selection.start != snapshot.start || value.selection.end != snapshot.end) pending = null
             publish(push = false, next)
             return
         }
@@ -127,6 +145,80 @@ class EditorModel(initial: ComposedDoc) {
         typingIn = if (word) at else null
     }
 
+    /**
+     * Набор поверх спрятанных знаков (Word): ожидающее оформление надевается на первую набранную
+     * букву; перевод строки в конце жирного уходит за его знаки, и жирный продолжается на новой
+     * строке; стёртый спрятанный знак стирает видимую букву; пустая пара после стирания убирается.
+     */
+    private fun wordLike(at: Spot, before: String, value: TextFieldValue, marks: TypingMarks): TextFieldValue {
+        if (at != spot || snapshot.start != snapshot.end) return value
+        val c = snapshot.start.coerceIn(0, before.length)
+        val added = value.text.length - before.length
+        if (added > 0 && value.text.regionMatches(0, before, 0, c) && value.text.regionMatches(c + added, before, c, before.length - c)) {
+            val inserted = value.text.substring(c, c + added)
+            val wanted = pending
+            if (wanted != null && inserted.isNotBlank() && !inserted.first().isWhitespace() && '\n' !in inserted) {
+                pending = null
+                val sign = wanted.sign
+                return TextFieldValue(
+                    before.substring(0, c) + sign + inserted + sign + before.substring(c),
+                    TextRange(value.selection.start + sign.length, value.selection.end + sign.length),
+                    value.composition?.let { TextRange(it.start + sign.length, it.end + sign.length) },
+                )
+            }
+            if (inserted == "\n") {
+                val (closed, to) = MarkEdits.closingAt(marks.of(before), c) ?: return value
+                if (to == c) return value
+                pending = closed.singleOrNull()?.let(MarkEdits::kindOf)
+                return TextFieldValue(before.substring(0, to) + "\n" + before.substring(to), TextRange(to + 1))
+            }
+            return value
+        }
+        if (added == -1) {
+            val p = before.indices.firstOrNull { it >= value.text.length || before[it] != value.text[it] } ?: return value
+            val view = HiddenMarks.of(before, marks.of(before))
+            val fixed = if (view.hidden(p)) {
+                MarkEdits.deleteVisible(before, view, p, c, back = c == p + 1)
+                    ?: return TextFieldValue(before, TextRange(c))
+            } else {
+                TextEdit(value.text, value.selection.start, value.selection.end)
+            }
+            MarkEdits.emptyPair(fixed.source, fixed.start)?.let { (edit, kind) ->
+                pending = kind
+                return TextFieldValue(edit.source, TextRange(edit.start))
+            }
+            return TextFieldValue(fixed.source, TextRange(fixed.start, fixed.end))
+        }
+        return value
+    }
+
+    /**
+     * Какие кнопки ленты нажаты: оформление там, где курсор, и ожидающее; при выделении — то, что
+     * охватывает выделенное целиком (повторное нажатие его снимет).
+     */
+    fun activeInline(): Set<InlineKind> {
+        val marks = typing ?: return emptySet()
+        val text = focusedText ?: return emptySet()
+        val spans = marks.of(text)
+        val here = if (snapshot.start == snapshot.end) {
+            MarkEdits.activeAt(spans, snapshot.start)
+        } else {
+            val (s, e) = visibleSelection(text, marks)
+            MarkEdits.covering(spans, s, e)
+        }
+        return here + listOfNotNull(pending)
+    }
+
+    /** Выделение без спрятанных знаков по краям. */
+    private fun visibleSelection(text: String, marks: TypingMarks): Pair<Int, Int> {
+        val view = HiddenMarks.of(text, marks.of(text))
+        var s = minOf(snapshot.start, snapshot.end).coerceIn(0, text.length)
+        var e = maxOf(snapshot.start, snapshot.end).coerceIn(0, text.length)
+        while (s < e && view.hidden(s)) s++
+        while (e > s && view.hidden(e - 1)) e--
+        return s to e
+    }
+
     /** Курсор пришёл в кусок [index] (нажали на него). */
     fun focused(index: Int) = focusedAt(Spot(index))
 
@@ -136,6 +228,7 @@ class EditorModel(initial: ComposedDoc) {
     private fun focusedAt(at: Spot) {
         if (at == spot) return
         typingIn = null
+        pending = null
         val len = textAt(doc, at)?.length ?: 0
         val next = Snapshot(doc, at.item, len, len, at.cell, at.widget)
         publish(push = false, next)
@@ -146,6 +239,7 @@ class EditorModel(initial: ComposedDoc) {
     fun select(at: Spot) {
         if (at.item !in doc.items.indices) return
         typingIn = null
+        pending = null
         publish(push = false, Snapshot(doc, at.item, 0, 0, at.cell, at.widget))
         field = fieldOf(snapshot)
     }
@@ -154,6 +248,7 @@ class EditorModel(initial: ComposedDoc) {
 
     private fun applyText(edit: TextEdit) {
         typingIn = null
+        pending = null
         val next = Snapshot(withText(doc, spot, edit.source), focus, edit.start, edit.end, snapshot.cell, snapshot.widget)
         publish(push = true, next)
         field = fieldOf(next)
@@ -170,10 +265,36 @@ class EditorModel(initial: ComposedDoc) {
     val paragraphHere: ParagraphKind
         get() = focusedText?.takeIf { snapshot.cell == -1 }?.let { ComposedText.paragraphAt(it, snapshot.start) } ?: ParagraphKind.PARAGRAPH
 
-    /** Ж, К, Ч, З, М, код. */
+    /**
+     * Ж, К, Ч, З, М, код. Выделено — знаки вокруг выделенного (или сняты). Не выделено и знаки
+     * спрятаны — как в Word (заказчик 2026-10-18): курсор в конце оформленного — оно закрывается,
+     * курсор встаёт за знаки, другой вид начнётся со следующей буквы; иначе вид ждёт буквы — пары
+     * знаков у курсора нет.
+     */
     fun inline(kind: InlineKind) {
         val text = focusedText ?: return
-        applyText(ComposedText.inline(text, snapshot.start, snapshot.end, kind))
+        val marks = typing
+        if (marks == null) {
+            applyText(ComposedText.inline(text, snapshot.start, snapshot.end, kind))
+            return
+        }
+        if (snapshot.start != snapshot.end) {
+            // Выделение на экране захватывает спрятанные знаки по краям — без них: тогда знаки
+            // вокруг выделенного находятся и снимаются, а не оборачиваются второй парой.
+            val (s, e) = visibleSelection(text, marks)
+            applyText(ComposedText.inline(text, s, e, kind))
+            return
+        }
+        val closing = MarkEdits.closingAt(marks.of(text), snapshot.start)
+        if (closing != null) {
+            val (closed, to) = closing
+            typingIn = null
+            publish(push = false, snapshot.copy(start = to, end = to))
+            field = fieldOf(snapshot)
+            pending = if (MarkEdits.styleOf(kind) in closed) null else kind
+            return
+        }
+        pending = if (pending == kind) null else kind
     }
 
     /** «Символ». */
@@ -251,6 +372,27 @@ class EditorModel(initial: ComposedDoc) {
         val next = Snapshot(doc.copy(items = items), at, 0, 0)
         publish(push = true, next)
         field = fieldOf(next)
+    }
+
+    /**
+     * Нажали на пустое место под сообщением — как Enter после всего (заказчик 2026-10-18): в конце
+     * текст — курсор в его конец с новой строки; в конце виджет, ряд или метка — новый пустой текст.
+     */
+    fun writeAtEnd() {
+        typingIn = null
+        pending = null
+        val last = doc.items.lastOrNull()
+        if (last is ComposedItem.Text) {
+            val source = last.source
+            val text = if (source.isEmpty() || source.endsWith("\n")) source else source + "\n"
+            val i = doc.items.lastIndex
+            publish(push = text != source, Snapshot(withText(doc, Spot(i), text), i, text.length, text.length))
+        } else {
+            val items = doc.items + ComposedItem.Text("")
+            publish(push = true, Snapshot(doc.copy(items = items), items.lastIndex, 0, 0))
+        }
+        field = fieldOf(snapshot)
+        focusAsk++
     }
 
     /** Где кончается основное сообщение: перед меткой продолжения или в самом конце. */

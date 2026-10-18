@@ -102,6 +102,25 @@ class EditorInChatStoreTest {
         assertEquals(2, s.state.value.composed!!.rows)
     }
 
+    /** Заказчик 2026-10-18: «Любой уход из приложения — всё теряется». Черновик пишется по ходу правки. */
+    @Test
+    fun черновик_пишется_по_ходу_правки_а_отправленное_не_возвращается() = runTest {
+        val s = store(backgroundScope)
+        runCurrent()
+        s.openEditor()
+        s.editorDraft(ComposedDoc(listOf(ComposedItem.Text("набрано"))))
+        runCurrent()
+        assertEquals("набрано", saved["chat-1|editor"], "без «‹» — уже на диске")
+        assertEquals(1, s.state.value.composed!!.rows)
+
+        s.sendComposed(ComposedDoc(listOf(ComposedItem.Text("набрано"))))
+        runCurrent()
+        s.editorDraft(ComposedDoc(listOf(ComposedItem.Text("набрано"))))
+        runCurrent()
+        assertNull(saved["chat-1|editor"], "окно закрыто отправкой — черновик не воскресает")
+        assertNull(s.state.value.composed)
+    }
+
     @Test
     fun корзина_и_вернуть_5_секунд() = runTest {
         val s = store(backgroundScope)

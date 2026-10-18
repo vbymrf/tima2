@@ -53,6 +53,52 @@ class EditorScreenTest {
         assertTrue(a.difference(b) > 0.0)
     }
 
+    /**
+     * Samsung 2026-10-18: вставили из подборки в ячейку ряда — приложение закрылось. Виджет в
+     * редакторе рисуется пузырём (ряд во всю ширину), а ряд редактора меряет высоту ячеек по
+     * содержимому — прежний ряд пузыря на такой вопрос падал.
+     */
+    @Test
+    fun виджет_в_ячейке_ряда_не_роняет_редактор() {
+        val doc = ComposedDoc(
+            listOf(
+                ComposedItem.Row(
+                    listOf(
+                        io.tima.domain.chat.ComposedCell(50, "слева", widgets = listOf(io.tima.domain.chat.ComposedWidget.Emoji("🎉"))),
+                        io.tima.domain.chat.ComposedCell(50, "справа"),
+                    ),
+                ),
+            ),
+        )
+        val asBubble: (ComposedDoc) -> RichContent? = {
+            RichContent(listOf(RichBlock.Row(listOf(io.tima.domain.chat.RowCell(100, null, listOf(RichBlock.Emoji("🎉")))))))
+        }
+        val shot = capture("редактор-виджет-в-ячейке", 360, 400, dark = false) {
+            EditorScreen(
+                model = EditorModel(doc),
+                levels = MessageCircle.forGroup(personal = false),
+                defaultLevel = 2,
+                typingMarks = null,
+                preview = asBubble,
+                problems = { emptyList() },
+                onBack = {},
+                onSend = {},
+            )
+        }
+        val empty = capture("редактор", 360, 400, dark = false) { screen(EditorModel(ComposedDoc.of("до ряда")))() }
+        assertTrue(shot.difference(empty) > 0.0)
+    }
+
+    /** Стиль куска виден в самом редакторе, как обычное оформление (заказчик 2026-10-18). */
+    @Test
+    fun стиль_куска_виден_в_редакторе() {
+        val plain = capture("редактор-без-стиля", 360, 200, dark = false) { screen(EditorModel(ComposedDoc(listOf(ComposedItem.Text("сбор")))))() }
+        val styled = capture("редактор-стиль-фон", 360, 200, dark = false) {
+            screen(EditorModel(ComposedDoc(listOf(ComposedItem.Text("сбор", mapOf("background" to "amber-soft", "align" to "center"))))))()
+        }
+        assertTrue(plain.difference(styled) > 0.001, "фон и выравнивание куска не видны в редакторе")
+    }
+
     @Test
     fun панель_стиля_палитра_ступени_json() {
         val model = EditorModel(ComposedDoc(listOf(ComposedItem.Text("x", mapOf("background" to "amber-soft")))))

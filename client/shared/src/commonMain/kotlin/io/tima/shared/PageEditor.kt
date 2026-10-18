@@ -41,6 +41,7 @@ internal fun PageEditor(page: PageStore, state: PageState, scope: CoroutineScope
         preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
         problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
         onBack = page::editorBack,
+        onDraft = page::editorDraft,
         onSend = page::publish,
         notice = state.editorNotice,
         onButton = { key ->

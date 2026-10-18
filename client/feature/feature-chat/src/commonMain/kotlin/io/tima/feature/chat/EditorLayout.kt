@@ -73,6 +73,9 @@ class EditorDrag {
     fun cell(item: Int, cell: Int, r: Rect) { cells[item to cell] = r }
     fun item(item: Int, r: Rect) { items[item] = r }
 
+    /** Низ последнего куска в координатах окна — ниже него пустое место. */
+    fun bottom(): Float = items.values.maxOfOrNull { it.bottom } ?: 0f
+
     /** Документ сменился — прежние границы уже не про него. */
     fun forget(count: Int) {
         items.keys.filter { it >= count }.forEach(items::remove)
@@ -164,9 +167,11 @@ internal fun EditorRow(
 ) {
     val colors = Tima.colors
     val spot = model.spot
+    val look = blockStyleOf(row.style)
     Row(
         Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(vertical = 4.dp)
             .then(if (spot == Spot(index)) Modifier.border(2.dp, colors.navigation, RoundedCornerShape(8.dp)) else Modifier)
+            .styled(look)
             .testTag(EditorTags.item(index)),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -174,6 +179,7 @@ internal fun EditorRow(
             EditorCell(cell, index, c, model, drag, marks, preview, Modifier.weight(cell.width.coerceAtLeast(1).toFloat()).fillMaxHeight())
         }
     }
+    DividerAfter(look)
 }
 
 @Composable
@@ -191,6 +197,7 @@ private fun EditorCell(
     val spot = model.spot
     val cellChosen = spot.item == index && spot.cell == c
     val textSpot = Spot(index, c, Spot.TEXT)
+    val look = blockStyleOf(cell.style)
     val border = when {
         drag.over(index, c) -> colors.confirmed
         cellChosen && spot.widget == -1 -> colors.navigation
@@ -202,16 +209,26 @@ private fun EditorCell(
             .onGloballyPositioned { drag.cell(index, c, it.boundsInRoot()) }
             .clickable { model.select(Spot(index, c)) }
             .padding(4.dp)
+            .styled(look)
             .testTag(EditorTags.cell(index, c)),
+        verticalArrangement = when (look.valign) {
+            "center" -> Arrangement.Center
+            "bottom" -> Arrangement.Bottom
+            else -> Arrangement.Top
+        },
     ) {
         Caption("${cell.width}%", fontSize = 9.sp, color = colors.text3)
         val value = if (spot == textSpot) model.field else TextFieldValue(cell.text)
         BasicTextField(
             value = value,
             onValueChange = { v -> model.changedCell(index, c, v) },
-            textStyle = TextStyle(fontSize = TimaType.sz5, color = colors.text),
+            textStyle = TextStyle(
+                fontSize = sizeOf(look.size, TimaType.sz5),
+                color = io.tima.core.ui.paletteColor(look.color) ?: colors.text,
+                textAlign = alignOf(look.align),
+            ),
             cursorBrush = SolidColor(colors.navigation),
-            visualTransformation = rememberTypingView(marks),
+            visualTransformation = rememberEditorView(marks),
             modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp)
                 .onFocusChanged { if (it.isFocused) model.focusedCell(index, c) }
                 .testTag(EditorTags.cellText(index, c)),

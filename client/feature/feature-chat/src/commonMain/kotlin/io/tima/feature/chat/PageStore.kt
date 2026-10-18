@@ -92,6 +92,13 @@ class PageStore(
         keepDraft(doc)
     }
 
+    /** Редактор открыт, документ поменялся — черновик пишется сразу: уход из приложения его не теряет. */
+    fun editorDraft(doc: io.tima.domain.chat.ComposedDoc) {
+        if (!_state.value.editorOpen) return
+        _state.value = _state.value.copy(draft = doc.takeUnless { it.isEmpty })
+        keepDraft(doc)
+    }
+
     /** Опубликовать собранное: удалось — окно закрывается и страница перечитывается. */
     fun publish(doc: io.tima.domain.chat.ComposedDoc) {
         val w = writer ?: return
