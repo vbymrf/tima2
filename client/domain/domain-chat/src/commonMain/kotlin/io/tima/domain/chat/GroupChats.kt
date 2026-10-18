@@ -277,6 +277,8 @@ class GroupInfo(
      * `null` — группа обычная.
      */
     val callTtlUntilMs: Long? = null,
+    /** Сообщество группы — по нему подборка сообщений общая на всё сообщество (Решения §11.2). */
+    val communityId: String? = null,
 )
 
 /** Участник группы. */

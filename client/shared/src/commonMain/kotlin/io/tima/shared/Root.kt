@@ -3828,6 +3828,8 @@ private fun App(
                         ownerId = socialState.mine.firstOrNull { it.groupId == current.chatId }?.ownerId?.ifBlank { null },
                         hues = peopleHues[current.chatId].orEmpty(),
                         kind = socialState.mine.firstOrNull { it.groupId == current.chatId }?.kind,
+                        // Подборка — сообщества, если группа в нём (Решения §11.2).
+                        community = socialState.mine.firstOrNull { it.groupId == current.chatId }?.communityId,
                         myUserId = session.userId,
                         reopenUnreadable = { assembled.receiver.reopenUnreadable() },
                         // Вид группы — один на сообщества (2026-10-07); нажатие на аватар — страница.
@@ -4189,6 +4191,8 @@ private fun Chat(
     hues: Map<String, Int> = emptyMap(),
     /** Вид группы — от него круги сообщений; `null` — все, как было. */
     kind: GroupKind? = null,
+    /** Сообщество группы: подборка сообщений — его (Решения §11.2); `null` — своя у группы. */
+    community: String? = null,
     myUserId: String = "",
     /**
      * Разобрать недоступное заново — когда сервер сказал, что ключ сообщения у устройства уже
@@ -4390,7 +4394,7 @@ private fun Chat(
             edit = environment.edit,
             deleter = io.tima.domain.chat.DeleteMessage(environment.removal, network.removal),
             picks = environment.picks,
-            pickLevel = io.tima.domain.chat.MessagePicks.levelOf(chatId, group),
+            pickLevel = io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community),
             drafts = environment.drafts,
             // Вложения (Решения §2, §3, §6): файл закрыт своим ключом до выхода с устройства.
             attach = io.tima.domain.chat.SendAttachments(
@@ -4720,7 +4724,7 @@ private fun Chat(
         val linkCards = remember { io.tima.core.network.LinkCardsOverHttp() }
         val replyLines = remember(state.lines) { state.lines.filter { !it.outgoing && it.serverId > 0 }.take(30) }
         val pickList = remember(editorChoice) {
-            if (editorChoice == "picks" || editorChoice == "underlay") environment.picks.list(io.tima.domain.chat.MessagePicks.levelOf(chatId, group)) else emptyList()
+            if (editorChoice == "picks" || editorChoice == "underlay") environment.picks.list(io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community)) else emptyList()
         }
         io.tima.feature.chat.EditorScreen(
             model = editorModel,

@@ -74,7 +74,7 @@ class GroupsApiTest {
             json(
                 """{"groups":[""" +
                     """{"group_id":"g-1","title":"Поход","kind":"private","owner_id":"u-1","my_role":"owner"},""" +
-                    """{"group_id":"g-2","title":"Работа","kind":"public","owner_id":"u-9","my_role":"member"}""" +
+                    """{"group_id":"g-2","title":"Работа","kind":"public","owner_id":"u-9","my_role":"member","community_id":"c-7"}""" +
                     """]}""",
             ),
         )
@@ -86,6 +86,9 @@ class GroupsApiTest {
         assertEquals("Поход", outcome.groups[0].title)
         assertEquals("owner", outcome.groups[0].myRole)
         assertEquals("member", outcome.groups[1].myRole)
+        // Сообщество группы — по нему подборка общая на сообщество (Решения §11.2).
+        assertEquals("", outcome.groups[0].communityId)
+        assertEquals("c-7", outcome.groups[1].communityId)
     }
 
     @Test

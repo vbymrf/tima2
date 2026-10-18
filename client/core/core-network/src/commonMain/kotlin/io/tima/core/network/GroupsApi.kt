@@ -92,6 +92,7 @@ class GroupsApi(
                 ownerId = objectValue.str("owner_id").orEmpty(),
                 myRole = objectValue.str("my_role").orEmpty(),
                 callTtlUntil = objectValue.str("call_ttl_until").orEmpty(),
+                communityId = objectValue.str("community_id").orEmpty(),
             )
         }
         return groups?.let { GroupsResult.Groups(it) }
@@ -299,6 +300,8 @@ class RemoteGroup(
     val myRole: String,
     /** Временная группа звонка — когда удалится (RFC 3339); пусто — группа обычная. */
     val callTtlUntil: String = "",
+    /** Сообщество, в которое группа внесена; пусто — отдельная. */
+    val communityId: String = "",
 )
 
 /** Участник группы. */
