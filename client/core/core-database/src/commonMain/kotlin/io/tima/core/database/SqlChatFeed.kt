@@ -58,12 +58,20 @@ class SqlChatFeed(
             // таблица. Опрос по таймеру давал бы в v1 и задержку, и лишние пробуждения.
             .asFlow()
             .mapToList(Dispatchers.Default)
-            .map { lines ->
-                // Правки — тем же проходом: строка правки в ленте не идёт, она ложится на
-                // исходное (ADR-0045). Таблица одна, и новая правка будит этот же поток.
-                val edits = editsOf(chatId)
-                lines.map { it.toLine(edits) }
-            }
+            .map(object : suspend (List<Messages>) -> List<ChatLine> {
+                // Кеш разбора (ADR-0011 §10, Решения §14) — на поток этой страницы: лента
+                // пересобирается на каждое изменение таблицы, и без кеша пришедшее одно сообщение
+                // заставляло бы заново расшифровывать и разбирать все строки на экране. Поток
+                // собирается последовательно — делить кеш не с кем.
+                private val cache = DecodedCache()
+
+                override suspend fun invoke(lines: List<Messages>): List<ChatLine> {
+                    // Правки — тем же проходом: строка правки в ленте не идёт, она ложится на
+                    // исходное (ADR-0045). Таблица одна, и новая правка будит этот же поток.
+                    val edits = editsOf(chatId)
+                    return lines.map { it.toLine(edits, cache) }
+                }
+            })
             // Расшифровка ленты — не на главном потоке (см. SqlChatsFeed.list).
             .flowOn(Dispatchers.Default)
 
@@ -102,16 +110,19 @@ class SqlChatFeed(
             .map { it.body }
     }
 
-    private fun Messages.toLine(all: Map<Long, List<EditRow>>): ChatLine {
+    private fun Messages.toLine(all: Map<Long, List<EditRow>>, cache: DecodedCache? = null): ChatLine {
         // Два шага, и порядок обязателен: сначала открыть поле ключом покоя, потом
         // разобрать тело кодеком. Любой из шагов может не удаться, и тогда текста нет —
         // строка остаётся в переписке нечитаемой. Одна испорченная запись не должна
         // лишать человека всей истории. Разбор один — и текст, и оформление (ПЛАН-(РС) РС4).
         // Удалённое у всех: читать нечего, правок нет — только строка «Сообщение удалено».
         if (deleted != 0L) return toLine(null).copy(deleted = true)
-        val open = openBody(direction, state, body_enc, system)
-        val edits = if (open == null) emptyList() else editsFrom(all)
-        val decoded = open?.let { if (edits.isEmpty()) codec.decodeLine(it) else codec.decodeEdited(it, edits) }
+        val edits = editsFrom(all)
+        val key = "$dedup_key|$state|$system|${body_enc.contentHashCode()}|" + edits.joinToString(",") { it.contentHashCode().toString() }
+        val decoded = (cache ?: DecodedCache()).get(key) {
+            val open = openBody(direction, state, body_enc, system) ?: return@get null
+            if (edits.isEmpty()) codec.decodeLine(open) else codec.decodeEdited(open, edits)
+        }
         return toLine(decoded).copy(edits = if (decoded == null) 0 else edits.size)
     }
 
@@ -164,5 +175,25 @@ class SqlChatFeed(
         // само устройство, получив событие сервера.
         if (system == 0L && direction != OUTGOING && !incomingParsed(state)) return null
         return cipher.open(field)
+    }
+}
+
+/**
+ * Разобранные строки ленты по ключу «строка, тело, правки»; старое вытесняется. Ключ меняется
+ * вместе с тем, от чего зависит разбор, — устаревшего результата не бывает.
+ */
+internal class DecodedCache(private val limit: Int = 400) {
+    private val map = LinkedHashMap<String, io.tima.domain.chat.DecodedLine?>()
+
+    fun get(key: String, make: () -> io.tima.domain.chat.DecodedLine?): io.tima.domain.chat.DecodedLine? {
+        if (map.containsKey(key)) {
+            val hit = map.remove(key)
+            map[key] = hit
+            return hit
+        }
+        val made = make()
+        map[key] = made
+        if (map.size > limit) map.remove(map.keys.first())
+        return made
     }
 }
