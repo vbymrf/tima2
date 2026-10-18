@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -103,7 +104,10 @@ internal fun RichBlockViewOf(block: RichBlock) {
             DividerAfter(block.style)
         }
         is RichBlock.Fallback -> Caption(block.text, fontSize = TimaType.sz4)
-        is RichBlock.Reply -> ReplyBlock(LocalReplyLook.current(block))
+        is RichBlock.Reply -> {
+            val open = LocalOpenMessage.current
+            ReplyBlock(LocalReplyLook.current(block)) { open("reply", block.chatId, block.messageId) }
+        }
     }
 }
 
@@ -117,12 +121,13 @@ data class ReplyLook(val name: String?, val preview: String?, val deleted: Boole
 /** Переписка называет, на что ответ; по умолчанию — ничего не знаем, видно только знак ответа. */
 val LocalReplyLook = staticCompositionLocalOf<(RichBlock.Reply) -> ReplyLook> { { ReplyLook(null, null) } }
 
-/** Блок ответа: полоса, имя, строка из сообщения. */
+/** Блок ответа: полоса, имя, строка из сообщения; нажатие — переход к нему (§11.4). */
 @Composable
-fun ReplyBlock(look: ReplyLook) {
+fun ReplyBlock(look: ReplyLook, onClick: (() -> Unit)? = null) {
     val colors = Tima.colors
     Row(
-        Modifier.fillMaxWidth().height(IntrinsicSize.Min).background(colors.functional, RoundedCornerShape(6.dp)),
+        Modifier.fillMaxWidth().height(IntrinsicSize.Min).background(colors.functional, RoundedCornerShape(6.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(colors.activity))
         Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {

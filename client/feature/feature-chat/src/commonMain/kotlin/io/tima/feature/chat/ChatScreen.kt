@@ -3,6 +3,9 @@ package io.tima.feature.chat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -215,6 +218,8 @@ fun ChatScreen(
     onFailed: ((ChatLine) -> Unit)? = null,
     /** Нажатие на отправленное — меню сообщения (Решения §11.1). `null` — меню нет. */
     onMenu: ((ChatLine) -> Unit)? = null,
+    /** Долгое нажатие — выделить часть и скопировать (Решения §11.1). `null` — нет. */
+    onSelect: ((ChatLine) -> Unit)? = null,
     /** Как называть авторов в группе — «Вид» набора сообществ. */
     authorLook: PersonLook = PersonLook.DEFAULT,
     /** Владелец группы — его полоса салатовая, темы. `null` — неизвестен: все по порядку. */
@@ -313,12 +318,19 @@ fun ChatScreen(
                 deleted = found.deleted,
             )
         }
+        // Переходы по ответу, вставленному и «Продолжить чтение» — внутри переписки (§11.4).
+        val jumps = remember { FeedJumps() }
+        val openMessage: (String, String, Long) -> Unit = { _, _, number ->
+            if (state.lines.any { it.serverId == number }) jumps.go(number)
+        }
         androidx.compose.runtime.CompositionLocalProvider(
             LocalReplyLook provides replyLook,
             LocalQuoteLook provides quoteLook,
             LocalAttachmentActions provides attachments,
+            LocalOpenMessage provides openMessage,
         ) {
         Feed(
+            jumps = jumps,
             lines = state.lines,
             // **В личной переписке подписи нет вовсе.** Так в макете: у чужой реплики
             // остаётся полоса автора, но ни аватара, ни имени внутри пузыря нет
@@ -350,6 +362,7 @@ fun ChatScreen(
             onThread = onThread,
             onFailed = onFailed,
             onMenu = onMenu,
+            onSelect = onSelect,
             invite = invite,
             onInvite = onInvite,
         )
@@ -430,6 +443,8 @@ fun ChatScreen(
  */
 @Composable
 private fun Feed(
+    /** Переходы внутри переписки (§11.4); `null` — их нет (ветка). */
+    jumps: FeedJumps? = null,
     lines: List<ChatLine>,
     authorName: (ChatLine) -> String?,
     authorLetter: (ChatLine) -> String = { "+" },
@@ -453,6 +468,8 @@ private fun Feed(
     onFailed: ((ChatLine) -> Unit)? = null,
     /** Нажатие на отправленное — меню сообщения (Решения §11.1). `null` — меню нет. */
     onMenu: ((ChatLine) -> Unit)? = null,
+    /** Долгое нажатие — выделить часть и скопировать (Решения §11.1). `null` — нет. */
+    onSelect: ((ChatLine) -> Unit)? = null,
     invite: (ChatLine) -> CallInvite? = { null },
     onInvite: (ChatLine) -> Unit = {},
 ) =
@@ -475,8 +492,18 @@ private fun Feed(
             listState.animateScrollToItem(0)
         }
     }
+    // Просьба перейти — от блока ответа и вставленного; ведёт лента: прокрутка у неё.
+    if (jumps != null) {
+        LaunchedEffect(jumps.request) {
+            val target = jumps.request ?: return@LaunchedEffect
+            jumps.taken()
+            jumps.perform(target, lines, listState)
+        }
+    }
+    val flashColor = Tima.colors.activity.copy(alpha = 0.22f)
+    Box(modifier.fillMaxWidth()) {
     LazyColumn(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxSize(),
         state = listState,
         reverseLayout = true,
         contentPadding = PaddingValues(
@@ -515,6 +542,8 @@ private fun Feed(
                 ) { CallInviteCard(called, onJoin = { onInvite(line) }) }
                 return@items
             }
+            // Переход сюда — коротко подсвечено (В34).
+            Box(if (jumps != null && line.serverId > 0 && jumps.highlight == line.serverId) Modifier.background(flashColor, androidx.compose.foundation.shape.RoundedCornerShape(10.dp)) else Modifier) {
             Reply(
                 line = line,
                 author = authorName(line),
@@ -536,8 +565,12 @@ private fun Feed(
                 onAuthor = onAuthor,
                 onFailed = onFailed,
                 onMenu = onMenu,
+                onSelect = onSelect,
             )
+            }
         }
+    }
+    if (jumps != null) JumpButtons(jumps, lines, listState, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3))
     }
     }
 
@@ -602,6 +635,8 @@ private fun Reply(
     onFailed: ((ChatLine) -> Unit)? = null,
     /** Нажатие на отправленное — меню сообщения (Решения §11.1). `null` — меню нет. */
     onMenu: ((ChatLine) -> Unit)? = null,
+    /** Долгое нажатие — выделить часть и скопировать (Решения §11.1). `null` — нет. */
+    onSelect: ((ChatLine) -> Unit)? = null,
 ) {
     // Служебная строка — не реплика: у неё нет автора, стороны и времени отправки. Пузырь
     // приписал бы ей всё это разом, поэтому она идёт полосой по центру.
@@ -634,7 +669,17 @@ private fun Reply(
     val menu = !failed && onMenu != null && line.serverId > 0 && !line.deleted &&
         line.display != MessageDisplay.UNREADABLE && line.text != null
     Column(
-        (if (failed) Modifier.clickable { onFailed!!(line) } else if (menu) Modifier.clickable { onMenu!!(line) } else Modifier)
+        (
+            if (failed) {
+                Modifier.clickable { onFailed!!(line) }
+            } else if (menu) {
+                // Нажатие — меню; долгое — выделить часть; правая кнопка мыши (ПК) — тоже меню (§11.1).
+                Modifier.secondaryClick { onMenu!!(line) }
+                    .combinedClickable(onClick = { onMenu!!(line) }, onLongClick = onSelect?.let { { it(line) } })
+            } else {
+                Modifier
+            }
+        )
             .then(if (withAvatar) Modifier.padding(top = TimaSpacing.about3 / 2) else Modifier),
     ) {
         // Только эмоджи — крупно и без пузыря (Решения §2): это не текст, а знак.
@@ -1124,3 +1169,16 @@ private fun peerLetters(name: String): String =
     name.trim().split(" ").filter { it.isNotBlank() }.take(2)
         .joinToString("") { it.first().uppercase() }
         .ifEmpty { "?" }
+
+/** Правая кнопка мыши (ПК): нажатие её не доходит до `clickable`, ловится отдельно. */
+private fun Modifier.secondaryClick(onClick: () -> Unit): Modifier = pointerInput(onClick) {
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent()
+            if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                event.changes.forEach { it.consume() }
+                onClick()
+            }
+        }
+    }
+}

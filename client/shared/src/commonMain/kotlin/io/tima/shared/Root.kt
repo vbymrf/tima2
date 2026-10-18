@@ -4437,6 +4437,8 @@ private fun Chat(
     var failed by remember { mutableStateOf<ChatLine?>(null) }
     // Меню отправленного сообщения (Решения §11.1): на какое сообщение нажали.
     var menuFor by remember { mutableStateOf<ChatLine?>(null) }
+    // Долгое нажатие — выделить часть и скопировать (Решения §11.1).
+    var selectFor by remember { mutableStateOf<ChatLine?>(null) }
     // ── Вложения (Решения §2, §3, §6; ВЫБОР-РЕАЛИЗАЦИИ §11.2а) ─────────────────────
     var photoOpen by remember { mutableStateOf<io.tima.domain.chat.RichMedia?>(null) }
     var asking by remember { mutableStateOf<AttachAsk?>(null) }
@@ -4604,6 +4606,7 @@ private fun Chat(
             saveFile = { file -> saveFromChat(file) },
         ),
         onMenu = { line -> menuFor = line },
+        onSelect = { line -> selectFor = line },
         // Показ доступности — только в группе: в личной переписке круга нет.
         onCircles = if (group) store::circlesShown else null,
         // «Добавить себе» ведёт на свою страницу — то есть в другое окно. Оттого перенос
@@ -4667,6 +4670,18 @@ private fun Chat(
     }
     // Меню сообщения — после экрана, как и лист неотправленного: что позже, то сверху.
     photoOpen?.let { photo -> io.tima.feature.chat.FullPhoto(photo) { photoOpen = null } }
+    selectFor?.let { line ->
+        val text = line.text.orEmpty()
+        io.tima.feature.chat.SelectSheet(
+            text = text,
+            onCopyAll = {
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
+                store.said(copiedWord)
+                selectFor = null
+            },
+            onClose = { selectFor = null },
+        )
+    }
     // Редактор поверх переписки (Решения §10). Модель живёт, пока окно открыто: закрыли — документ
     // ушёл черновиком в store, следующее открытие начнёт историю заново.
     if (state.editorOpen) {

@@ -1208,6 +1208,7 @@ object SpanishWords : Words {
         override val menuDeleteForAll = "Eliminar para todos"
         override val menuShare = "Compartir"
         override val menuCopy = "Copiar texto"
+        override val selectHint = "Selecciona lo que necesites y cópialo, o copia todo con el botón"
         override val menuPick = "Añadir a la Selección"
         override val menuCarry = "Traer a mi página"
         override val edited = "editado"

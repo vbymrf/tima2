@@ -1208,6 +1208,7 @@ object EnglishWords : Words {
         override val menuDeleteForAll = "Delete for everyone"
         override val menuShare = "Share"
         override val menuCopy = "Copy text"
+        override val selectHint = "Select the part you need and copy it, or copy all with the button"
         override val menuPick = "Add to Picks"
         override val menuCarry = "Bring to my page"
         override val edited = "edited"

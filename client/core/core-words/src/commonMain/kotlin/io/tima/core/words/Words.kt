@@ -1393,6 +1393,8 @@ interface ChatWords {
     val menuDeleteForAll: String
     val menuShare: String
     val menuCopy: String
+    /** Лист выделения части (долгое нажатие, Решения §11.1). */
+    val selectHint: String
     val menuPick: String
     val menuCarry: String
     /** Пометка у исправленного (ADR-0045). */
@@ -3471,6 +3473,7 @@ object RussianWords : Words {
         override val menuDeleteForAll = "Удалить у всех"
         override val menuShare = "Поделиться"
         override val menuCopy = "Скопировать текст"
+        override val selectHint = "Выделите нужное и скопируйте — или весь текст кнопкой"
         override val menuPick = "Добавить в Подборку"
         override val menuCarry = "Перенести себе"
         override val edited = "изменено"

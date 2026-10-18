@@ -170,7 +170,10 @@ internal fun WidgetView(block: RichBlock) {
         is RichBlock.Emoji -> Caption(block.text, fontSize = 40.sp)
         is RichBlock.Quoted -> QuotedWidget(block)
         is RichBlock.Underlay -> UnderlayWidget(block)
-        is RichBlock.Reply -> ReplyBlock(LocalReplyLook.current(block))
+        is RichBlock.Reply -> {
+            val open = LocalOpenMessage.current
+            ReplyBlock(LocalReplyLook.current(block)) { open("reply", block.chatId, block.messageId) }
+        }
         else -> RichBlockViewOf(block)
     }
 }

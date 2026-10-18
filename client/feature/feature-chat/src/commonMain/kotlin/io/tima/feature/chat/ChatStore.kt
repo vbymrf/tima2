@@ -19,6 +19,7 @@ import io.tima.domain.chat.EditMessage
 import io.tima.domain.chat.EditResult
 import io.tima.domain.chat.MessagePicks
 import io.tima.domain.chat.PickResult
+import io.tima.domain.chat.NickReply
 import io.tima.domain.chat.ReplyTarget
 import io.tima.domain.chat.HealGroupKey
 import io.tima.domain.chat.HealStep
@@ -758,6 +759,10 @@ class ChatStore(
         val reply = _state.value.replyTo?.let {
             ReplyTarget(kind = if (_state.value.group) "group" else "personal", chatId = chatId, messageId = it.serverId, userId = it.userId)
         }
+            // `@Ник` набранным — ответ на последнее сообщение этого человека (Решения §7).
+            ?: NickReply.target(text, _state.value.names, known)
+                ?.takeIf { _state.value.group }
+                ?.let { (who, number) -> ReplyTarget(kind = "group", chatId = chatId, messageId = number, userId = who) }
         val outcome = send.send(chatId, text, _state.value.level, reply = reply)
 
         _state.value = when (outcome) {
