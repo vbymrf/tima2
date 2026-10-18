@@ -198,6 +198,26 @@ class EditorModel(initial: ComposedDoc) {
         applyText(TextEdit(current.substring(0, s) + text + current.substring(e), s + text.length, s + text.length))
     }
 
+    /**
+     * Объединить ячейку таблицы, где курсор, с левой (`<<`) или с верхней (`^^`) — Решения §10.3.
+     * Знак встаёт вместо содержимого ячейки: таблица разбирается по ячейке, равной знаку. Курсор не в
+     * строке таблицы — ничего не делается.
+     */
+    fun tableJoin(sign: String): Boolean {
+        val current = focusedText ?: return false
+        val at = minOf(snapshot.start, snapshot.end).coerceIn(0, current.length)
+        val lineStart = current.lastIndexOf('\n', (at - 1).coerceAtLeast(0)).let { if (it < 0 || at == 0) 0 else it + 1 }
+        val lineEnd = current.indexOf('\n', at).let { if (it < 0) current.length else it }
+        val line = current.substring(lineStart, lineEnd)
+        if (!line.trimStart().startsWith("|")) return false
+        val left = current.lastIndexOf('|', (at - 1).coerceAtLeast(lineStart)).takeIf { it >= lineStart } ?: return false
+        val right = current.indexOf('|', at).takeIf { it in left + 1..lineEnd } ?: return false
+        val replaced = current.substring(0, left + 1) + " $sign " + current.substring(right)
+        val cursor = left + 2 + sign.length
+        applyText(TextEdit(replaced, cursor, cursor))
+        return true
+    }
+
     /** «Знаки md» — шаг истории: отменяется, как и всё остальное. */
     fun toggleMarks() {
         typingIn = null

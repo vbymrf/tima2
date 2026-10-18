@@ -19,3 +19,21 @@ actual fun rememberClipboardHtml(): () -> String? {
         }
     }
 }
+
+/** Android: первый элемент буфера с адресом картинки (`content://…`, вид — картинка) — байты через ContentResolver. */
+@Composable
+actual fun rememberClipboardImage(): () -> PickedFile? {
+    val context = LocalContext.current
+    return remember(context) {
+        {
+            runCatching {
+                val clip = (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip
+                val uri = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri ?: return@runCatching null
+                val mime = context.contentResolver.getType(uri) ?: clip.description.getMimeType(0)
+                if (mime == null || !mime.startsWith("image/")) return@runCatching null
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching null
+                PickedFile(bytes, mime, "clipboard." + mime.substringAfter('/'))
+            }.getOrNull()
+        }
+    }
+}

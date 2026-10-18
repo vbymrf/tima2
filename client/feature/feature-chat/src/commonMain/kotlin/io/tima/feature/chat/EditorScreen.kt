@@ -101,7 +101,7 @@ object EditorTags {
 internal enum class EditorTab(val key: String, val buttons: List<String>) {
     TEXT("text", listOf("paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol", "paste", "marks")),
     INSERT("insert", listOf("picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply")),
-    LAYOUT("layout", listOf("row", "table", "cellAdd", "cellRemove", "merge", "split", "up", "down", "delete")),
+    LAYOUT("layout", listOf("row", "table", "joinLeft", "joinUp", "cellAdd", "cellRemove", "merge", "split", "up", "down", "delete")),
     STYLE("style", listOf("widget", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
 }
 
@@ -123,6 +123,8 @@ internal fun editorGlyph(key: String): String = when (key) {
     "reply" -> "@"
     "row" -> "▥"
     "table" -> "▦"
+    "joinLeft" -> "<<"
+    "joinUp" -> "^^"
     "cellAdd" -> "+▯"
     "cellRemove" -> "−▯"
     "merge" -> "⬚"
@@ -189,6 +191,7 @@ fun EditorScreen(
     var emojiArea by remember { mutableStateOf(false) }
     var stylePanel by remember { mutableStateOf<String?>(null) }
     val clipboardHtml = io.tima.core.media.rememberClipboardHtml()
+    val clipboardImage = io.tima.core.media.rememberClipboardImage()
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     var hint by remember { mutableStateOf<String?>(null) }
     val recent = remember { mutableStateListOf<String>() }
@@ -217,6 +220,12 @@ fun EditorScreen(
             "emoji" -> { keyboard?.hide(); symbolArea = false; emojiArea = !emojiArea }
             // Из HTML — только текст и простое оформление (Решения §5); HTML нет — текст как есть.
             "paste" -> {
+                // Картинка в буфере — вставляется картинкой, тем же путём, что перетащенный файл.
+                val picture = onFiles?.let { clipboardImage() }
+                if (picture != null) {
+                    onFiles?.invoke(listOf(picture))
+                    return
+                }
                 val html = clipboardHtml()
                 val text = html?.let(io.tima.domain.chat.HtmlToMarks::convert)?.takeIf { it.isNotBlank() }
                     ?: clipboard.getText()?.text.orEmpty()
@@ -226,6 +235,10 @@ fun EditorScreen(
             // Раздел «Разметка» (§10.2–§10.3).
             "row" -> model.layout(io.tima.domain.chat.ComposedLayout::addRow)
             "table" -> model.insert(ComposedItem.Text(TABLE_TEMPLATE))
+            // Объединение ячеек таблицы (Решения §10.3): знак в ячейке, где курсор, — кнопкой, а не
+            // только набором. `<<` — с левой, `^^` — с верхней.
+            "joinLeft" -> if (!model.tableJoin("<<")) hint = w.button("table")
+            "joinUp" -> if (!model.tableJoin("^^")) hint = w.button("table")
             "cellAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addCell)
             "cellRemove" -> model.layout(io.tima.domain.chat.ComposedLayout::removeCell)
             "merge" -> model.layout(io.tima.domain.chat.ComposedLayout::merge)

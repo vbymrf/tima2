@@ -16,3 +16,20 @@ actual fun rememberClipboardHtml(): () -> String? = remember {
         }.getOrNull()
     }
 }
+
+/** ПК: картинка буфера Java (`imageFlavor`) — в PNG. */
+@Composable
+actual fun rememberClipboardImage(): () -> PickedFile? = remember {
+    {
+        runCatching {
+            val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+            if (!clipboard.isDataFlavorAvailable(DataFlavor.imageFlavor)) return@runCatching null
+            val image = clipboard.getData(DataFlavor.imageFlavor) as? java.awt.Image ?: return@runCatching null
+            val buffered = java.awt.image.BufferedImage(image.getWidth(null), image.getHeight(null), java.awt.image.BufferedImage.TYPE_INT_ARGB)
+            buffered.createGraphics().apply { drawImage(image, 0, 0, null); dispose() }
+            val out = java.io.ByteArrayOutputStream()
+            javax.imageio.ImageIO.write(buffered, "png", out)
+            PickedFile(out.toByteArray(), "image/png", "clipboard.png")
+        }.getOrNull()
+    }
+}

@@ -233,4 +233,59 @@ class EditorInChatStoreTest {
         assertTrue(s.state.value.lines.isEmpty(), "продолжение в ленте не показывается")
         assertEquals(77L, s.state.value.continuations.single().serverId, "но подкладке есть что показать")
     }
+
+    @Test
+    fun основное_ждущее_номера_переживает_перезапуск() = runTest {
+        val marks = mutableSetOf<String>()
+        fun make(scope: kotlinx.coroutines.CoroutineScope) = ChatStore(
+            io = kotlinx.coroutines.Dispatchers.Unconfined,
+            chatId = "chat-1",
+            observe = ObserveChat(ChatFeed { _, _ -> stream }),
+            send = SendMessage(queue, codec, DedupKeys { "d-${sent.size}" }),
+            scope = scope,
+            drafts = drafts,
+            composer = SendComposed(
+                queue,
+                object : ComposedBodies by bodies {
+                    override fun encode(doc: ComposedDoc, reply: ReplyTarget?) = doc.split().first.items.joinToString("|") { item ->
+                        ((item as? ComposedItem.Widget)?.widget as? ComposedWidget.Underlay)?.let { "u:${it.message}" }
+                            ?: (item as? ComposedItem.Text)?.source.orEmpty()
+                    }.encodeToByteArray()
+                },
+                DedupKeys { "c-${sent.size}" },
+                continuations = object : io.tima.domain.chat.ContinuationMarks {
+                    override fun mark(dedupKey: String) { marks += dedupKey }
+                    override fun marked(dedupKey: String) = dedupKey in marks
+                },
+            ),
+        )
+        val first = kotlinx.coroutines.CoroutineScope(backgroundScope.coroutineContext + kotlinx.coroutines.Job())
+        make(first).sendComposed(ComposedDoc(listOf(ComposedItem.Text("открытое"), ComposedItem.Continuation(3), ComposedItem.Text("закрытое"))))
+        runCurrent()
+        assertTrue(saved["chat-1|pending"].orEmpty().startsWith("c-0"), "ожидание записано: ключ продолжения и документ")
+        first.coroutineContext[kotlinx.coroutines.Job]?.cancel() // «перезапуск»: прежнего store нет
+        make(backgroundScope)
+        runCurrent()
+        stream.value = listOf(
+            ChatLine(dedupKey = "c-0", chatId = "chat-1", display = io.tima.domain.chat.MessageDisplay.SENT, text = "закрытое",
+                outgoing = true, atMs = 1, localId = 1, serverId = 77, onlyContinuation = true),
+        )
+        runCurrent()
+        assertEquals(listOf("закрытое", "открытое|u:77"), sent, "основное ушло после перезапуска с подкладкой")
+        assertNull(saved["chat-1|pending"], "ожидание снято")
+    }
+
+    @Test
+    fun объединение_ячейки_таблицы_кнопкой() {
+        val table = "| a | b |\n|---|---|\n| c | d |"
+        val m = EditorModel(ComposedDoc.of(table))
+        // Курсор в ячейке «d» — с левой.
+        m.changed(0, TextFieldValue(table, TextRange(table.indexOf("d"))))
+        assertTrue(m.tableJoin("<<"))
+        assertEquals("| a | b |\n|---|---|\n| c | << |", m.focusedText)
+        // Курсор вне таблицы — ничего.
+        val plain = EditorModel(ComposedDoc.of("просто текст"))
+        plain.changed(0, TextFieldValue("просто текст", TextRange(3)))
+        assertFalse(plain.tableJoin("^^"))
+    }
 }

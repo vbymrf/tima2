@@ -241,6 +241,17 @@ class ChatStore(
                 // Собранное в редакторе — тоже черновик (Решения §10.1: «назад» сохраняет).
                 val doc = composer?.let { c -> withContext(io) { port.load(editorKey) }?.let(c::load) }
                 if (doc != null && !doc.isEmpty && _state.value.composed == null) _state.value = _state.value.copy(composed = doc)
+                // Основное, ждавшее номера продолжения, — пережило перезапуск (Решения §11.3): уйдёт
+                // само, как только продолжение получит номер, а не останется черновиком без подкладки.
+                composer?.let { c ->
+                    val pending = withContext(io) { port.load(pendingKey) }?.takeIf { it.isNotEmpty() }
+                    val key = pending?.substringBefore('\n')
+                    val main = pending?.substringAfter('\n', "")?.takeIf { it.isNotEmpty() }?.let(c::load)
+                    if (key != null && main != null && pendingMain == null) {
+                        pendingMain = PendingMain(main, key, null)
+                        sendPendingMain(known)
+                    }
+                }
             }
         }
         // Потерянное помечается сразу, а не после первой просьбы: «запросить» у него быть не должно.
@@ -712,6 +723,9 @@ class ChatStore(
     /** Черновик редактора — под своим ключом рядом с черновиком строки. */
     private val editorKey: String get() = "$chatId|editor"
 
+    /** Основное, ждущее номера продолжения: `ключ продолжения \n документ` (Решения §11.3). */
+    private val pendingKey: String get() = "$chatId|pending"
+
     private fun keepComposed(doc: ComposedDoc?) {
         val port = drafts ?: return
         val c = composer ?: return
@@ -760,6 +774,7 @@ class ChatStore(
             // Продолжение ушло первым; основное ждёт его номера и пока лежит черновиком (Решения §11.3).
             is ComposedResult.ContinuationFirst -> {
                 pendingMain = PendingMain(result.main, result.dedupKey, reply)
+                keepPending(pendingMain)
                 keepComposed(result.main)
                 _state.value.copy(editorOpen = false, composed = null, replyTo = null, notice = ChatNotice.Said(words().editor.continuationSent))
             }
@@ -889,6 +904,12 @@ class ChatStore(
         }
     }
 
+    private fun keepPending(p: PendingMain?) {
+        val port = drafts ?: return
+        val c = composer ?: return
+        scope.launch { withContext(io) { port.save(pendingKey, p?.let { it.continuationKey + "\n" + c.save(it.doc) }.orEmpty()) } }
+    }
+
     /** Основное, которое ждёт номера своего продолжения от сервера. */
     private class PendingMain(val doc: ComposedDoc, val continuationKey: String, val reply: ReplyTarget?)
 
@@ -901,6 +922,7 @@ class ChatStore(
         val number = lines.firstOrNull { it.dedupKey == p.continuationKey }?.serverId?.takeIf { it > 0 } ?: return
         pendingMain = null
         val result = c.sendMain(chatId, p.doc, if (_state.value.group) "group" else "personal", number, _state.value.level, p.reply)
+        if (result is ComposedResult.Queued) keepPending(null)
         if (result is ComposedResult.Queued && superPending) {
             superPending = false
             superKey = result.dedupKey

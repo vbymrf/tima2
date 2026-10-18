@@ -334,7 +334,7 @@ fun ChatScreen(
             if (found == null) {
                 // Сервер ответил «нет такого» — так и сказать, а не «из другой переписки».
                 val stub = state.found["$chat/$number"] as? io.tima.domain.chat.FoundMessage.Unavailable
-                QuoteLook(null, null, deleted = stub?.reason == "missing")
+                QuoteLook(null, null, deleted = stub?.reason == "missing", why = stub?.reason?.takeIf { it != "missing" }, whyLevel = stub?.level)
             } else QuoteLook(
                 name = when {
                     found.outgoing -> null

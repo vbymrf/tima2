@@ -8,3 +8,10 @@ import androidx.compose.runtime.Composable
  */
 @Composable
 expect fun rememberClipboardHtml(): () -> String?
+
+/**
+ * Картинка из системного буфера (Решения §10.4, «картинка из буфера сама по себе»): скопированная
+ * в браузере или снимок экрана. Нет картинки или платформа не отдаёт — `null`: вставится текст.
+ */
+@Composable
+expect fun rememberClipboardImage(): () -> PickedFile?

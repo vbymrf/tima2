@@ -48,7 +48,14 @@ internal val LocalRichMedia = staticCompositionLocalOf<List<RichMedia>> { emptyL
  * текст по себе. Нет сообщения на устройстве — только знак ссылки и «Продолжить чтение»;
  * получение по номеру — ПЛАН-(РС) РС7.
  */
-data class QuoteLook(val name: String?, val text: String?, val deleted: Boolean = false)
+data class QuoteLook(
+    val name: String?,
+    val text: String?,
+    val deleted: Boolean = false,
+    /** Сервер не отдал: причина (`level`, `closed`) и уровень — «что сделать» по положению читателя. */
+    val why: String? = null,
+    val whyLevel: Int? = null,
+)
 
 val LocalQuoteLook = staticCompositionLocalOf<(kind: String, chatId: String, messageId: Long) -> QuoteLook> {
     { _, _, _ -> QuoteLook(null, null) }
@@ -315,7 +322,9 @@ private fun UnderlayWidget(underlay: RichBlock.Underlay) {
         when {
             look.deleted -> Tertiary(Tima.words.chat.deleted, lineOne = true)
             look.text != null -> Caption(look.text, fontSize = TimaType.sz4, maxLines = underlay.lines.coerceAtLeast(1))
-            // Сервер не отдал — уровень не открыт читающему (Решения §11.3): «Недоступно» и что делать.
+            // Сервер не отдал — уровень не открыт читающему (Решения §11.3): «Недоступно» и что делать —
+            // по причине, которую назвал сервер; не спрашивали ещё — общей строкой.
+            look.why != null -> Tertiary(Tima.words.showcase.peekUnavailable(look.why, look.whyLevel))
             else -> Tertiary(Tima.words.chat.underlayUnavailable)
         }
         Chip(Tima.words.chat.continueReading, kind = ChipKind.Quiet, onClick = { open(underlay.kind, underlay.chatId, underlay.messageId) })
