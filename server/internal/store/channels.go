@@ -52,6 +52,9 @@ type ChannelPost struct {
 	// CommentsClosed — обсуждение этой записи выключено владельцем (ADR-0024 §6).
 	// Старые комментарии при этом остаются видны: выключено значит «новых не принимаем».
 	CommentsClosed bool
+	// OnlyContinuation — «только продолжение» (Решения §11.3): в ленту канала и страницы не
+	// попадает; по номеру отдаётся как обычно.
+	OnlyContinuation bool
 }
 
 // CreateChannel создаёт канал и подписывает владельца одной транзакцией.
@@ -227,13 +230,13 @@ func (s *Store) CreatePost(ctx context.Context, p ChannelPost) (uint64, error) {
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO channel_posts
 		    (channel_id, author_id, text, nodes, markup, markup_version, created_at_unix_ms, level,
-		     lang, country, search_key)
+		     lang, country, search_key, only_continuation)
 		SELECT $1,$2,$3,$4,$5,$6,$7,$8,
-		       COALESCE(NULLIF($9, ''), u.lang), u.country, $10
+		       COALESCE(NULLIF($9, ''), u.lang), u.country, $10, $11
 		  FROM users u WHERE u.user_id = $2
 		RETURNING post_id`,
 		p.ChannelID, p.AuthorID, p.Text, p.Nodes, markupParam, p.MarkupVersion, p.CreatedAtUnixMs,
-		p.Level, p.Lang, SearchKey(postSearchText(p))).Scan(&id)
+		p.Level, p.Lang, SearchKey(postSearchText(p)), p.OnlyContinuation).Scan(&id)
 	return id, err
 }
 
@@ -263,6 +266,7 @@ func (s *Store) ListPosts(ctx context.Context, channelID string, before uint64, 
 		      AND fg.user_id = $5 AND (fg.until IS NULL OR fg.until > now())
 		WHERE p.channel_id = $1 AND p.post_id < $2 AND NOT p.deleted
 		  AND p.parent_post_id IS NULL
+		  AND NOT p.only_continuation
 		  AND (p.level <= $4 OR fg.user_id IS NOT NULL)
 		ORDER BY p.post_id DESC LIMIT $3`, channelID, before, limit, maxLevel, viewerID)
 	if err != nil {

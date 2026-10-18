@@ -1239,6 +1239,7 @@ object SpanishWords : Words {
         override val contact = "Contacto"
         override val quotedElsewhere = "Un mensaje de otro chat"
         override val continueReading = "Seguir leyendo"
+        override val underlayUnavailable = "No disponible — únete al grupo o pide acceso a un administrador"
         override val emojiArea = "Emoji"
         override val attachArea = "Adjuntar"
         override fun attachItem(tag: String) = when (tag) {

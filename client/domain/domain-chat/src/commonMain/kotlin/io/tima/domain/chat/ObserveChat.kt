@@ -148,6 +148,8 @@ data class ChatLine(
     val edits: Int = 0,
     /** Удалено у всех (Решения §8): на экране «Сообщение удалено», меню нет. */
     val deleted: Boolean = false,
+    /** «Только продолжение» (Решения §11.3): в ленте само не показывается — через подкладку и переход. */
+    val onlyContinuation: Boolean = false,
 )
 
 /**

@@ -150,6 +150,7 @@ class SqlChatFeed(
         senderId = sender_id.ifBlank { null },
         threadRoot = thread_root,
         kind = kind.toInt(),
+        onlyContinuation = only_continuation != 0L,
     )
 
     /**

@@ -233,6 +233,32 @@ class EditorModel(initial: ComposedDoc) {
         field = fieldOf(next)
     }
 
+    /** Где кончается основное сообщение: перед меткой продолжения или в самом конце. */
+    private val mainEnd: Int get() = doc.items.indexOfFirst { it is ComposedItem.Continuation }.let { if (it < 0) doc.items.size else it }
+
+    /** Подкладка — только в конец сообщения, несколько — списком (Решения §11.3). */
+    fun appendToMain(item: ComposedItem) {
+        typingIn = null
+        val at = mainEnd
+        val next = Snapshot(doc.copy(items = doc.items.toMutableList().apply { add(at, item) }), at, 0, 0)
+        publish(push = true, next)
+        field = fieldOf(next)
+    }
+
+    /** Метка «Продолжение» уровня [level] в конце и пустой текст под ней; уже есть — встать в неё. */
+    fun addContinuation(level: Int) {
+        typingIn = null
+        val existing = doc.items.indexOfFirst { it is ComposedItem.Continuation }
+        if (existing >= 0) {
+            select(existing)
+            return
+        }
+        val items = doc.items + ComposedItem.Continuation(level) + ComposedItem.Text("")
+        val next = Snapshot(doc.copy(items = items), items.lastIndex, 0, 0)
+        publish(push = true, next)
+        field = fieldOf(next)
+    }
+
     /** Заменить кусок [index] целиком (стиль, виджет). */
     fun replace(index: Int, item: ComposedItem) {
         if (index !in doc.items.indices) return

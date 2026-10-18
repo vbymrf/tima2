@@ -884,7 +884,9 @@ class Receiver(
             editOf = frame.editOf,
         ).fold(
             // Номер исправляемого — из кадра: подпись версии 3 сошлась, значит он тот, что подписал автор.
-            onSuccess = { OpenOutcome.Opened(it.body, it.meta.senderId, frame.level, frame.threadRoot, editOf = frame.editOf) },
+            onSuccess = {
+                OpenOutcome.Opened(it.body, it.meta.senderId, frame.level, frame.threadRoot, editOf = frame.editOf, onlyContinuation = frame.onlyContinuation)
+            },
             onFailure = { OpenOutcome.Rejected("сообщение группы не открылось: ${it.message}") },
         )
     }

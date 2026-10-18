@@ -59,4 +59,25 @@ class ComposedInsertTest {
         val withImage = ComposedDoc(listOf(ComposedItem.Widget(ComposedWidget.Image(OutMedia("m", ByteArray(32), "image/jpeg", 10, 10)))))
         assertEquals(null, bodies.open(withImage), "у записи канала нет файлов")
     }
+
+    @Test
+    fun подкладка_в_конце_а_продолжение_в_тело_не_идёт() {
+        val doc = ComposedDoc(
+            listOf(
+                ComposedItem.Text("основное"),
+                ComposedItem.Widget(ComposedWidget.Underlay("group", "g-1", 9, lines = 5, author = true)),
+                ComposedItem.Continuation(3),
+                ComposedItem.Text("закрытое"),
+            ),
+        )
+        val content = bodies.content(doc)
+        assertEquals(listOf("основное"), content.nodes, "что ниже метки — отдельное сообщение")
+        val last = content.markup!!.blocks.last()
+        assertEquals(BlockType.UNDERLAY, last.type)
+        assertEquals(5, last.widget!!.lines)
+        assertTrue(bodies.problems(doc).isEmpty())
+        val rich = TextBodyCodec.decodeLine(assertNotNull(bodies.encode(doc)))!!.rich!!
+        assertIs<RichBlock.Underlay>(rich.blocks.last())
+        assertEquals(doc, bodies.load(bodies.save(doc)), "черновик с меткой и подкладкой переживает сохранение")
+    }
 }

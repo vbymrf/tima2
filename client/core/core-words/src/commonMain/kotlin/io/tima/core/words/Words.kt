@@ -1424,6 +1424,8 @@ interface ChatWords {
     /** Вставленное из другой переписки, которого нет на устройстве. */
     val quotedElsewhere: String
     val continueReading: String
+    /** Подкладка, которую сервер не отдал читающему (Решения §11.3). */
+    val underlayUnavailable: String
     // ── Строка ввода (Решения §9) ──
     val emojiArea: String
     val attachArea: String
@@ -3504,6 +3506,7 @@ object RussianWords : Words {
         override val contact = "Контакт"
         override val quotedElsewhere = "Сообщение из другой переписки"
         override val continueReading = "Продолжить чтение"
+        override val underlayUnavailable = "Недоступно — вступите в группу или попросите доступ у админа"
         override val emojiArea = "Эмоджи"
         override val attachArea = "Прикрепить"
         override fun attachItem(tag: String) = when (tag) {

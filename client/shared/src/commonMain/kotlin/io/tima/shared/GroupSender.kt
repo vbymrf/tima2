@@ -60,7 +60,8 @@ class GroupSender(
 ) {
 
     private val sealer = GroupMessageSealerOverKodium(session.userId, session.deviceId, identity)
-    private val transport = GroupTransportOverHttp(network.groupMessages)
+    // Пометка «только продолжение» — из строки очереди по ключу идемпотентности (Решения §11.3).
+    private val transport = GroupTransportOverHttp(network.groupMessages) { key -> environment.continuations.marked(key) }
 
     /** Что помешало проходу. Показывается человеку одной строкой, а не глотается. */
     var lastTrouble: String? = null

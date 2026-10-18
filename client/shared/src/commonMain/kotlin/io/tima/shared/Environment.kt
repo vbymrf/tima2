@@ -803,6 +803,9 @@ class Environment private constructor(
     /** Черновики переписок — зашифрованные, переживают перезапуск (Решения §9). */
     val drafts: io.tima.domain.chat.Drafts = io.tima.core.database.SqlDrafts(db, cipher, nowMs = { msNow() })
 
+    /** «Только продолжение» у своего исходящего (Решения §11.3). */
+    val continuations: io.tima.domain.chat.ContinuationMarks = io.tima.core.database.SqlContinuationMarks(db)
+
     /** Подборка сообщений на устройстве (Решения §11.2). */
     val picks: io.tima.domain.chat.MessagePicks =
         io.tima.domain.chat.MessagePicks(io.tima.core.database.SqlPicks(db), nowMs = { msNow() })

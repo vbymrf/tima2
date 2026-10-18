@@ -310,7 +310,9 @@ fun ChatScreen(
         // Вставленное и подкладка — по этой же переписке; из другой — «Сообщение из другой переписки»
         // до получения по номеру (ПЛАН-(РС) РС7).
         val quoteLook: (String, String, Long) -> QuoteLook = { _, chat, number ->
-            val found = state.lines.firstOrNull { it.serverId == number && it.chatId == chat }
+            // Продолжения в ленте нет, но подкладка показывает именно его (Решения §11.3).
+            val found = (state.lines.firstOrNull { it.serverId == number && it.chatId == chat }
+                ?: state.continuations.firstOrNull { it.serverId == number && it.chatId == chat })
             if (found == null) QuoteLook(null, null)
             else QuoteLook(
                 name = if (found.outgoing) null else if (!state.group) peer else state.names[found.senderId]?.line(authorLook) ?: words.someone,

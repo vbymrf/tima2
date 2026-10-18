@@ -315,6 +315,8 @@ private fun UnderlayWidget(underlay: RichBlock.Underlay) {
         when {
             look.deleted -> Tertiary(Tima.words.chat.deleted, lineOne = true)
             look.text != null -> Caption(look.text, fontSize = TimaType.sz4, maxLines = underlay.lines.coerceAtLeast(1))
+            // Сервер не отдал — уровень не открыт читающему (Решения §11.3): «Недоступно» и что делать.
+            else -> Tertiary(Tima.words.chat.underlayUnavailable)
         }
         Chip(Tima.words.chat.continueReading, kind = ChipKind.Quiet, onClick = { open(underlay.kind, underlay.chatId, underlay.messageId) })
     }

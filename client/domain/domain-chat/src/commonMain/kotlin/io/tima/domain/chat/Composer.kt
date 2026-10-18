@@ -18,7 +18,21 @@ data class ComposedDoc(
     val level: Int? = null,
 ) {
     /** Пусто — отправлять нечего: ни текста, ни виджета. */
-    val isEmpty: Boolean get() = items.all { it.isEmpty }
+    val isEmpty: Boolean get() = items.all { it.isEmpty || it is ComposedItem.Continuation }
+
+    /**
+     * Основное и продолжение (Решения §11.3): всё до метки «Продолжение» — основное сообщение,
+     * после неё — отдельное сообщение уровня метки. Метки нет — продолжения нет.
+     */
+    fun split(): Pair<ComposedDoc, ComposedDoc?> {
+        val at = items.indexOfFirst { it is ComposedItem.Continuation }
+        if (at < 0) return this to null
+        val marker = items[at] as ComposedItem.Continuation
+        val main = copy(items = items.subList(0, at).ifEmpty { listOf(ComposedItem.Text("")) })
+        val rest = items.subList(at + 1, items.size).filterNot { it is ComposedItem.Continuation }
+        val cont = ComposedDoc(rest.ifEmpty { listOf(ComposedItem.Text("")) }, marks, marker.level)
+        return main to cont.takeUnless { it.isEmpty }
+    }
 
     /** Первая строка текста — для чипа «Оформлено в редакторе» (Решения §9). */
     val firstLine: String
@@ -26,12 +40,12 @@ data class ComposedDoc(
             when (item) {
                 is ComposedItem.Text -> item.source
                 is ComposedItem.Row -> item.cells.firstOrNull { it.text.isNotBlank() }?.text
-                is ComposedItem.Widget -> null
+                is ComposedItem.Widget, is ComposedItem.Continuation -> null
             }?.lineSequence()?.map { it.trim() }?.firstOrNull { it.isNotEmpty() }
         }.orEmpty()
 
     /** Сколько рядов сверху вниз — «Оформлено в редакторе · N рядов». */
-    val rows: Int get() = items.count { !it.isEmpty }
+    val rows: Int get() = items.count { !it.isEmpty && it !is ComposedItem.Continuation }
 
     companion object {
         /** Документ из набранного в строке ввода: человек открыл редактор, не потеряв текста. */
@@ -57,6 +71,15 @@ sealed interface ComposedItem {
     /** Ряд из 1–4 ячеек (Решения §10.3). */
     data class Row(val cells: List<ComposedCell>, override val style: Map<String, String> = emptyMap()) : ComposedItem {
         override val isEmpty: Boolean get() = cells.all { it.isEmpty }
+    }
+
+    /**
+     * Метка «Продолжение» (Решения §11.3): что ниже — отдельное сообщение уровня [level] с пометкой
+     * «только продолжение», подложенное в конец основного. Уходит первым.
+     */
+    data class Continuation(val level: Int) : ComposedItem {
+        override val style: Map<String, String> get() = emptyMap()
+        override val isEmpty: Boolean get() = false
     }
 }
 
@@ -104,6 +127,12 @@ sealed interface ComposedWidget {
      * «имя владельца»; [cut] — `full` или `cut` (по высоте соседа в ряду, нет соседа — три строки).
      */
     data class Quoted(val kind: String, val container: String, val message: Long, val author: Boolean = true, val cut: String = "") : ComposedWidget
+
+    /**
+     * Подкладка (Решения §11.3): часть сообщения-источника ниже, без пузыря, [lines] строк и
+     * «Продолжить чтение»; [author] — автор первым. Только в конце сообщения, несколько — списком.
+     */
+    data class Underlay(val kind: String, val container: String, val message: Long, val lines: Int = 3, val author: Boolean = false) : ComposedWidget
 }
 
 /** Вид абзаца — «Абзац ▾» (Решения §10.2). */
@@ -320,6 +349,12 @@ sealed interface ComposedResult {
     data class Invalid(val problems: List<String>) : ComposedResult
     /** Таблица шире пузыря: «99» не помещается в ячейку (Решения §10.3). */
     data class TableTooWide(val maxColumns: Int) : ComposedResult
+
+    /**
+     * Ушло продолжение (Решения §11.3: сначала оно, потом основное со ссылкой на него). Основное
+     * [main] ждёт номера продолжения от сервера — его отправит `sendMain`.
+     */
+    data class ContinuationFirst(val dedupKey: String, val main: ComposedDoc) : ComposedResult
 }
 
 /** Отправка собранного в редакторе: тело — порт, очередь — та же, что у набранного. */
@@ -327,15 +362,32 @@ class SendComposed(
     private val queue: OutgoingQueue,
     private val bodies: ComposedBodies,
     private val keys: DedupKeys,
+    /** Пометка «только продолжение» у своего исходящего; `null` — продолжений нет (личная). */
+    private val continuations: ContinuationMarks? = null,
 ) {
     fun send(chatId: String, doc: ComposedDoc, level: Int, reply: ReplyTarget? = null): ComposedResult {
         if (doc.isEmpty) return ComposedResult.Empty
         if (TableFit.tooWide(doc).isNotEmpty()) return ComposedResult.TableTooWide(TableFit.maxColumns())
-        val body = bodies.encode(doc, reply) ?: return ComposedResult.Invalid(bodies.problems(doc))
+        val (main, cont) = doc.split()
+        if (cont != null && continuations != null) {
+            // Сначала продолжение — иначе ссылка основного вела бы в пустоту (Решения §11.3).
+            val contBody = bodies.encode(cont) ?: return ComposedResult.Invalid(bodies.problems(cont))
+            if (main.isEmpty) return ComposedResult.Empty
+            bodies.problems(main.withUnderlay("group", chatId, 1)).takeIf { it.isNotEmpty() }?.let { return ComposedResult.Invalid(it) }
+            val key = keys.newKey()
+            queue.enqueue(key, chatId, contBody, cont.level ?: level, 0, KIND_TEXT)
+            continuations.mark(key)
+            return ComposedResult.ContinuationFirst(key, main)
+        }
+        val body = bodies.encode(main, reply) ?: return ComposedResult.Invalid(bodies.problems(main))
         val key = keys.newKey()
-        queue.enqueue(key, chatId, body, doc.level ?: level, 0, KIND_TEXT)
+        queue.enqueue(key, chatId, body, main.level ?: level, 0, KIND_TEXT)
         return ComposedResult.Queued(key)
     }
+
+    /** Основное после продолжения: подкладка со ссылкой на номер продолжения — в конец. */
+    fun sendMain(chatId: String, main: ComposedDoc, kind: String, continuation: Long, level: Int, reply: ReplyTarget? = null): ComposedResult =
+        send(chatId, main.withUnderlay(kind, chatId, continuation), level, reply)
 
     fun problems(doc: ComposedDoc): List<String> = bodies.problems(doc)
 
@@ -345,3 +397,17 @@ class SendComposed(
 
     fun load(saved: String): ComposedDoc? = bodies.load(saved)
 }
+
+/**
+ * «Только продолжение» у своего исходящего (Решения §11.3): закрытая часть — отдельное сообщение
+ * своего уровня, в ленте само не показывается. Пометку ставит отправка собранного, читает отправка
+ * группы — поле `only_continuation` в запросе.
+ */
+interface ContinuationMarks {
+    fun mark(dedupKey: String)
+    fun marked(dedupKey: String): Boolean
+}
+
+/** Подкладка в конец документа — к основному после ушедшего продолжения (Решения §11.3). */
+fun ComposedDoc.withUnderlay(kind: String, container: String, message: Long, lines: Int = 3): ComposedDoc =
+    copy(items = items + ComposedItem.Widget(ComposedWidget.Underlay(kind, container, message, lines)))

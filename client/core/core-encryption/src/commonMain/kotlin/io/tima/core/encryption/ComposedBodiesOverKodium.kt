@@ -34,8 +34,11 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  */
 object ComposedBodiesOverKodium : ComposedBodies {
 
-    override fun problems(doc: ComposedDoc): List<String> =
-        MarkupRules.check(content(doc), strict = true).map { it.detail }
+    override fun problems(doc: ComposedDoc): List<String> {
+        val (main, cont) = doc.split()
+        return MarkupRules.check(content(main), strict = true).map { it.detail } +
+            (cont?.let { MarkupRules.check(content(it), strict = true).map { p -> p.detail } } ?: emptyList())
+    }
 
     override fun encode(doc: ComposedDoc, reply: ReplyTarget?): ByteArray? {
         var content = content(doc)
@@ -62,7 +65,8 @@ object ComposedBodiesOverKodium : ComposedBodies {
     /** Содержимое сообщения из документа — для тела, проверки и показа. */
     fun content(doc: ComposedDoc): MessageContent {
         val a = Assembly(doc.marks)
-        val blocks = doc.items.filterNot { it.isEmpty }.flatMap { a.item(it) }
+        // Метка продолжения в тело не идёт: что ниже неё — отдельное сообщение (Решения §11.3).
+        val blocks = doc.split().first.items.filterNot { it.isEmpty || it is ComposedItem.Continuation }.flatMap { a.item(it) }
         // Один абзац без оформления — обычное сообщение: разметка ему ни к чему.
         val single = blocks.singleOrNull()
         if (single != null && single.type == BlockType.PARAGRAPH && single.style.isEmpty() && a.entities.isEmpty() && a.media.isEmpty()) {
@@ -107,8 +111,9 @@ object ComposedBodiesOverKodium : ComposedBodies {
             is ComposedItem.Text -> graft(parsed(item.source.trim('\n'))).map { block ->
                 if (item.style.isEmpty()) block else block.copy(style = block.style + item.style)
             }
-            // Ответ — блок верхнего уровня, остальные виджеты живут в ячейках (ADR-0044).
-            is ComposedItem.Widget -> if (item.widget is ComposedWidget.Reply) {
+            is ComposedItem.Continuation -> emptyList()
+            // Ответ и подкладка — блоки верхнего уровня, остальные виджеты живут в ячейках (ADR-0044).
+            is ComposedItem.Widget -> if (item.widget is ComposedWidget.Reply || item.widget is ComposedWidget.Underlay) {
                 listOf(widget(item.widget).copy(style = item.style))
             } else {
                 listOf(
@@ -174,6 +179,10 @@ object ComposedBodiesOverKodium : ComposedBodies {
                 type = BlockType.QUOTED,
                 widget = MarkupWidget(ref = MarkupRef(kind = w.kind, container = w.container, message = w.message), author = w.author, cut = w.cut),
             )
+            is ComposedWidget.Underlay -> MarkupBlock(
+                type = BlockType.UNDERLAY,
+                widget = MarkupWidget(ref = MarkupRef(kind = w.kind, container = w.container, message = w.message), author = w.author, lines = w.lines),
+            )
         }
 
         private fun ref(m: OutMedia) = MediaRef(
@@ -213,8 +222,10 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val widget: SavedWidget? = null,
         val cells: List<SavedCell>? = null,
         val style: Map<String, String> = emptyMap(),
+        val continuation: Int? = null,
     ) {
         fun toItem(): ComposedItem? = when {
+            continuation != null -> ComposedItem.Continuation(continuation)
             text != null -> ComposedItem.Text(text, style)
             widget != null -> widget.toWidget()?.let { ComposedItem.Widget(it, style) }
             cells != null -> ComposedItem.Row(cells.map { it.toCell() }, style)
@@ -226,6 +237,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
                 is ComposedItem.Text -> SavedItem(text = item.source, style = item.style)
                 is ComposedItem.Widget -> SavedItem(widget = SavedWidget.of(item.widget), style = item.style)
                 is ComposedItem.Row -> SavedItem(cells = item.cells.map(SavedCell::of), style = item.style)
+                is ComposedItem.Continuation -> SavedItem(continuation = item.level)
             }
         }
     }
@@ -266,6 +278,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val author: Boolean = false,
         val cut: String = "",
         val description: String = "",
+        val lines: Int = 0,
     ) {
         private fun media(): OutMedia? = if (mediaId.isEmpty()) null else
             OutMedia(mediaId, Base64.decode(key), mime, width, height, size, Base64.decode(preview), name)
@@ -279,6 +292,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
             "emoji" -> ComposedWidget.Emoji(text)
             "reply" -> ComposedWidget.Reply(ReplyTarget(kind, chatId, messageId, userId))
             "quoted" -> ComposedWidget.Quoted(kind, chatId, messageId, author, cut)
+            "underlay" -> ComposedWidget.Underlay(kind, chatId, messageId, lines.coerceAtLeast(1), author)
             else -> null
         }
 
@@ -303,6 +317,9 @@ object ComposedBodiesOverKodium : ComposedBodies {
                 )
                 is ComposedWidget.Quoted -> SavedWidget(
                     "quoted", kind = w.kind, chatId = w.container, messageId = w.message, author = w.author, cut = w.cut,
+                )
+                is ComposedWidget.Underlay -> SavedWidget(
+                    "underlay", kind = w.kind, chatId = w.container, messageId = w.message, author = w.author, lines = w.lines,
                 )
             }
         }

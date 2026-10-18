@@ -4406,6 +4406,8 @@ private fun Chat(
                 queue = environment.queue,
                 bodies = io.tima.core.encryption.ComposedBodiesOverKodium,
                 keys = io.tima.core.outbox.UuidDedupKeys,
+                // Продолжение своего уровня — в группе: в личной один уровень (Решения §11.3).
+                continuations = if (group) environment.continuations else null,
             ),
         )
     }
@@ -4718,7 +4720,7 @@ private fun Chat(
         val linkCards = remember { io.tima.core.network.LinkCardsOverHttp() }
         val replyLines = remember(state.lines) { state.lines.filter { !it.outgoing && it.serverId > 0 }.take(30) }
         val pickList = remember(editorChoice) {
-            if (editorChoice == "picks") environment.picks.list(io.tima.domain.chat.MessagePicks.levelOf(chatId, group)) else emptyList()
+            if (editorChoice == "picks" || editorChoice == "underlay") environment.picks.list(io.tima.domain.chat.MessagePicks.levelOf(chatId, group)) else emptyList()
         }
         io.tima.feature.chat.EditorScreen(
             model = editorModel,
@@ -4774,7 +4776,7 @@ private fun Chat(
                     "link", "cloud" -> { editorAsk = key; true }
                     "place" -> { editorPlace?.invoke() ?: run { editorAsk = "place" }; true }
                     "contact" -> { editorContact?.invoke() ?: run { editorAsk = "contact" }; true }
-                    "reply", "picks" -> { editorChoice = key; true }
+                    "reply", "picks", "underlay" -> { editorChoice = key; true }
                     else -> false
                 }
             },
@@ -4815,6 +4817,31 @@ private fun Chat(
                             io.tima.domain.chat.ReplyTarget(if (group) "group" else "personal", chatId, line.serverId, line.senderId ?: peerUser.orEmpty()),
                         ),
                     )
+                },
+            )
+            // Подкладка (Решения §11.3): из подборки — ссылкой; в группе — ещё и новое продолжение своего уровня.
+            "underlay" -> io.tima.feature.chat.ChoiceSheet(
+                title = ew.button("underlay"),
+                items = (if (group) listOf(io.tima.feature.chat.Choice(ew.underlayNew, ew.underlayNewAbout)) else emptyList()) +
+                    pickList.map { pick ->
+                        val here = if (pick.chatId == chatId) state.lines.firstOrNull { it.serverId == pick.serverId } else null
+                        io.tima.feature.chat.Choice(title = here?.text ?: ew.pickElsewhere(pick.serverId))
+                    },
+                empty = ew.picksEmpty,
+                onCancel = { editorChoice = null },
+                onPick = { i ->
+                    editorChoice = null
+                    if (group && i == 0) {
+                        // Закрытая часть — уровнем выше открытого: по умолчанию «по разрешению» (3).
+                        val levels = kind?.circles?.map { it.level }.orEmpty()
+                        editorModel.addContinuation(if (3 in levels) 3 else levels.maxOrNull() ?: 2)
+                    } else {
+                        val pick = pickList[if (group) i - 1 else i]
+                        val refKind = if (pick.chatId == chatId && !group) "personal" else "group"
+                        editorModel.appendToMain(
+                            io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Underlay(refKind, pick.chatId, pick.serverId)),
+                        )
+                    }
                 },
             )
             "picks" -> io.tima.feature.chat.ChoiceSheet(

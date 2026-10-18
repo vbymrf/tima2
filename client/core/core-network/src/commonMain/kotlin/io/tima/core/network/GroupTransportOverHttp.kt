@@ -9,7 +9,11 @@ import io.tima.domain.chat.GroupTransport
  * Тонкий намеренно: собирает сообщение `core-encryption`, решает, что делать с исходом,
  * домен, а здесь только перевод ответов сервера в исходы, которые домен различает.
  */
-class GroupTransportOverHttp(private val api: GroupMessagesApi) : GroupTransport {
+class GroupTransportOverHttp(
+    private val api: GroupMessagesApi,
+    /** Своё исходящее помечено «только продолжение» (Решения §11.3) — по ключу идемпотентности. */
+    private val continuation: (clientMsgId: String) -> Boolean = { false },
+) : GroupTransport {
 
     override suspend fun send(
         groupId: String,
@@ -36,6 +40,7 @@ class GroupTransportOverHttp(private val api: GroupMessagesApi) : GroupTransport
             level = level,
             keyCommitment = keyCommitment,
             editOf = editOf,
+            onlyContinuation = continuation(clientMsgId),
         )
         return when (answer) {
             is SendGroupResult.Sent -> GroupSendStep.Sent(answer.messageId)

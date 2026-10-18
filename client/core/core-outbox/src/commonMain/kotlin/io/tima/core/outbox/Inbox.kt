@@ -132,6 +132,8 @@ sealed interface OpenOutcome {
          * Правка в ленте отдельной строкой не идёт — она накладывается на исходное.
          */
         val editOf: Long = 0,
+        /** «Только продолжение» (Решения §11.3) — открытое поле кадра; в ленте само не показывается. */
+        val onlyContinuation: Boolean = false,
     ) : OpenOutcome
 
     /**
@@ -194,6 +196,7 @@ interface InboxStore {
         threadRoot: Long,
         kind: Int = KIND_TEXT,
         editOf: Long = 0,
+        onlyContinuation: Boolean = false,
     )
 
     /**
@@ -272,6 +275,7 @@ class Inbox(
                     outcome.threadRoot,
                     outcome.kind,
                     outcome.editOf,
+                    outcome.onlyContinuation,
                 )
                 entry.copy(state = IncomingState.STORED, kind = outcome.kind, undecryptableReason = null)
             }

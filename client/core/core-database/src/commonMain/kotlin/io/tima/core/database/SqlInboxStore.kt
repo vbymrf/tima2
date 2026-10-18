@@ -89,6 +89,7 @@ class SqlInboxStore(
         threadRoot: Long,
         kind: Int,
         editOf: Long,
+        onlyContinuation: Boolean,
     ) {
         q.updateParsed(
             body_enc = cipher.seal(body),
@@ -104,6 +105,8 @@ class SqlInboxStore(
             kind = kind.toLong(),
             // Номер исправляемого — из подписанных метаданных, как и вид (ADR-0045).
             edit_of = editOf,
+            // «Только продолжение» — открытым полем кадра (Решения §11.3).
+            only_continuation = if (onlyContinuation) 1L else 0L,
             dedup_key = keyOf(chatId, messageId),
         )
     }

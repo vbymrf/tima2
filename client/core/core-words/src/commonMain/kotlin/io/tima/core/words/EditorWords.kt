@@ -68,6 +68,13 @@ interface EditorWords {
     val pageHasFiles: String
     val pagePublished: String
     val pageNoPictures: String
+
+    // ── Подкладка и продолжение (§11.3) ──
+    val underlayNew: String
+    val underlayNewAbout: String
+    fun continuationMarker(level: Int): String
+    val continuationSent: String
+    fun underlayLines(n: Int): String
 }
 
 object RussianEditorWords : EditorWords {
@@ -210,6 +217,15 @@ object RussianEditorWords : EditorWords {
     override val pageHasFiles = "На странице записи без картинок: уберите картинку или карточку с картинкой"
     override val pagePublished = "Запись на странице"
     override val pageNoPictures = "Картинок в записи страницы пока нет"
+    override val underlayNew = "Новое продолжение своего уровня"
+    override val underlayNewAbout = "Закрытая часть уйдёт отдельным сообщением и подложится в конец; в ленте сама не видна"
+    override fun continuationMarker(level: Int) = "Продолжение · уровень $level — ниже пишется закрытая часть"
+    override val continuationSent = "Продолжение ушло; основное уйдёт, как только сервер его примет"
+    override fun underlayLines(n: Int) = when {
+        n % 10 == 1 && n % 100 != 11 -> "$n строка"
+        n % 10 in 2..4 && n % 100 !in 12..14 -> "$n строки"
+        else -> "$n строк"
+    }
 }
 
 object EnglishEditorWords : EditorWords {
@@ -352,6 +368,11 @@ object EnglishEditorWords : EditorWords {
     override val pageHasFiles = "Page posts have no pictures: remove the picture or the card with a picture"
     override val pagePublished = "Posted on the page"
     override val pageNoPictures = "Page posts cannot have pictures yet"
+    override val underlayNew = "New continuation at its own level"
+    override val underlayNewAbout = "The closed part goes as a separate message attached at the end; it does not show in the feed by itself"
+    override fun continuationMarker(level: Int) = "Continuation · level $level — write the closed part below"
+    override val continuationSent = "The continuation is sent; the main part follows once the server accepts it"
+    override fun underlayLines(n: Int) = if (n == 1) "1 line" else "$n lines"
 }
 
 object SpanishEditorWords : EditorWords {
@@ -494,4 +515,9 @@ object SpanishEditorWords : EditorWords {
     override val pageHasFiles = "Las publicaciones de la página no llevan imágenes: quita la imagen o la tarjeta con imagen"
     override val pagePublished = "Publicado en la página"
     override val pageNoPictures = "Las publicaciones de la página aún no admiten imágenes"
+    override val underlayNew = "Nueva continuación con su propio nivel"
+    override val underlayNewAbout = "La parte cerrada se envía como mensaje aparte y se adjunta al final; sola no aparece en el feed"
+    override fun continuationMarker(level: Int) = "Continuación · nivel $level — escribe abajo la parte cerrada"
+    override val continuationSent = "La continuación se envió; la parte principal irá en cuanto el servidor la acepte"
+    override fun underlayLines(n: Int) = if (n == 1) "1 línea" else "$n líneas"
 }

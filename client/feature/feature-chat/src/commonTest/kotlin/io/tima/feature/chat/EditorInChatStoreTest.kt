@@ -196,4 +196,41 @@ class EditorInChatStoreTest {
         m.undo()
         assertEquals(1, (m.doc.items[1] as ComposedItem.Row).cells[0].widgets.size, "перенос отменяется")
     }
+
+    @Test
+    fun основное_уходит_когда_продолжение_получило_номер() = runTest {
+        val marks = mutableSetOf<String>()
+        val s = ChatStore(
+            io = kotlinx.coroutines.Dispatchers.Unconfined,
+            chatId = "chat-1",
+            observe = ObserveChat(ChatFeed { _, _ -> stream }),
+            send = SendMessage(queue, codec, DedupKeys { "d-${sent.size}" }),
+            scope = backgroundScope,
+            composer = SendComposed(
+                queue,
+                object : ComposedBodies by bodies {
+                    override fun encode(doc: ComposedDoc, reply: ReplyTarget?) = doc.split().first.items.joinToString("|") { item ->
+                        ((item as? ComposedItem.Widget)?.widget as? ComposedWidget.Underlay)?.let { "u:${it.message}" }
+                            ?: (item as? ComposedItem.Text)?.source.orEmpty()
+                    }.encodeToByteArray()
+                },
+                DedupKeys { "c-${sent.size}" },
+                continuations = object : io.tima.domain.chat.ContinuationMarks {
+                    override fun mark(dedupKey: String) { marks += dedupKey }
+                    override fun marked(dedupKey: String) = dedupKey in marks
+                },
+            ),
+        )
+        runCurrent()
+        s.sendComposed(ComposedDoc(listOf(ComposedItem.Text("открытое"), ComposedItem.Continuation(3), ComposedItem.Text("закрытое"))))
+        assertEquals(listOf("закрытое"), sent, "сначала продолжение")
+        stream.value = listOf(
+            ChatLine(dedupKey = "c-0", chatId = "chat-1", display = io.tima.domain.chat.MessageDisplay.SENT, text = "закрытое",
+                outgoing = true, atMs = 1, localId = 1, serverId = 77, onlyContinuation = true),
+        )
+        runCurrent()
+        assertEquals(listOf("закрытое", "открытое|u:77"), sent, "основное — с подкладкой на номер продолжения")
+        assertTrue(s.state.value.lines.isEmpty(), "продолжение в ленте не показывается")
+        assertEquals(77L, s.state.value.continuations.single().serverId, "но подкладке есть что показать")
+    }
 }

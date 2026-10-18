@@ -264,6 +264,8 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 			// берётся из профиля автора. Страну клиент не присылает вовсе: её ставит
 			// сервер, иначе «своя страна» перестала бы что-либо значить.
 			Lang string `json:"lang,omitempty"`
+			// OnlyContinuation — «только продолжение» (Решения §11.3): необязательное; в ленту не идёт.
+			OnlyContinuation bool `json:"only_continuation,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&req); err != nil || req.Text == "" {
 			writeErr(w, http.StatusBadRequest, "bad_text", "нужен непустой text")
@@ -294,7 +296,7 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 		postID, err := st.CreatePost(r.Context(), store.ChannelPost{
 			ChannelID: channelID, AuthorID: id.UserID, Text: req.Text,
 			Nodes: nodes, Markup: markup, MarkupVersion: 1, CreatedAtUnixMs: now, Level: level,
-			Lang: req.Lang,
+			Lang: req.Lang, OnlyContinuation: req.OnlyContinuation,
 		})
 		if err != nil {
 			log.Printf("postToChannel: %v", err)

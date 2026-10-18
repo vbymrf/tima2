@@ -253,11 +253,15 @@ class ChatStore(
                     heal?.let { launchHeal(it) }
                 }
                 known = lines
+                sendPendingMain(lines)
                 val replies = lines.filter { it.threadRoot != 0L }.groupingBy { it.threadRoot }.eachCount()
-                val shown = lines.filter { it.threadRoot == 0L }
+                // «Только продолжение» в ленте не показывается (Решения §11.3): его видно через
+                // подкладку и прямой переход; в `known` оно остаётся — подкладке есть что показать.
+                val shown = lines.filter { it.threadRoot == 0L && !it.onlyContinuation }
                     .map { line -> line.copy(replies = replies[line.serverId] ?: 0) }
                 _state.value = _state.value.copy(
                     lines = shown,
+                    continuations = lines.filter { it.onlyContinuation && it.threadRoot == 0L },
                     thread = _state.value.thread?.let { open ->
                         // Тот же список, из которого собран экран переписки.
                         // Открытая ветка обновляется тем же потоком: пришедший ответ
@@ -713,8 +717,32 @@ class ChatStore(
                 notice = ChatNotice.Said(words().editor.cannotSend + ": " + result.problems.firstOrNull().orEmpty()),
             )
             is ComposedResult.TableTooWide -> _state.value.copy(notice = ChatNotice.Said(words().editor.tableTooWide(result.maxColumns)))
+            // Продолжение ушло первым; основное ждёт его номера и пока лежит черновиком (Решения §11.3).
+            is ComposedResult.ContinuationFirst -> {
+                pendingMain = PendingMain(result.main, result.dedupKey, reply)
+                keepComposed(result.main)
+                _state.value.copy(editorOpen = false, composed = null, replyTo = null, notice = ChatNotice.Said(words().editor.continuationSent))
+            }
         }
         return result
+    }
+
+    /** Основное, которое ждёт номера своего продолжения от сервера. */
+    private class PendingMain(val doc: ComposedDoc, val continuationKey: String, val reply: ReplyTarget?)
+
+    private var pendingMain: PendingMain? = null
+
+    /** Продолжение получило номер — уходит основное с подкладкой на него (Решения §11.3). */
+    private fun sendPendingMain(lines: List<ChatLine>) {
+        val p = pendingMain ?: return
+        val c = composer ?: return
+        val number = lines.firstOrNull { it.dedupKey == p.continuationKey }?.serverId?.takeIf { it > 0 } ?: return
+        pendingMain = null
+        val result = c.sendMain(chatId, p.doc, if (_state.value.group) "group" else "personal", number, _state.value.level, p.reply)
+        if (result is ComposedResult.Queued) {
+            keepComposed(null)
+            _state.value = _state.value.copy(notice = null)
+        }
     }
 
     /** Таймер «Вернуть» после корзины. */
@@ -861,6 +889,8 @@ class ChatStore(
 data class ChatState(
     /** Новое сверху — так же, как отдаёт запрос к базе. */
     val lines: List<ChatLine> = emptyList(),
+    /** «Только продолжение» (Решения §11.3): в ленте нет, но подкладке есть что показать. */
+    val continuations: List<ChatLine> = emptyList(),
     /** Набранное, но не отправленное. Живёт до подтверждения постановки в очередь. */
     val draft: String = "",
     /** Собранное в редакторе (Решения §9): в строке — чип, стрелка шлёт его. */

@@ -79,6 +79,9 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			KeyCommitment string `json:"key_commitment,omitempty"`
 			// EditOf — номер исправляемого сообщения (ADR-0045): есть — подпись версии 3.
 			EditOf int64 `json:"edit_of,omitempty"`
+			// OnlyContinuation — «только продолжение» (Решения §11.3): необязательное, открытое,
+			// в подпись не входит. Клиент прячет такое сообщение из ленты переписки.
+			OnlyContinuation bool `json:"only_continuation,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, maxEnvelopeBytes+64<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -255,6 +258,8 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			KeyCommitment:   commitment,
 			EditOf:          req.EditOf,
 			Level:           level,
+			// Правка наследует пометку исходного у клиента; сервер её не выводит.
+			OnlyContinuation: req.OnlyContinuation,
 		}
 		// Открытое — первым узлом в поиск (Решения §12). Правка открытого строку поиска не меняет:
 		// её тело — изменённые узлы, а не сообщение целиком.
@@ -366,6 +371,9 @@ func groupMessageJSON(m store.GroupMessage) map[string]any {
 	}
 	if m.EditOf != 0 {
 		out["edit_of"] = m.EditOf
+	}
+	if m.OnlyContinuation {
+		out["only_continuation"] = true
 	}
 	return out
 }

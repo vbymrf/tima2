@@ -267,6 +267,7 @@ func (s *Store) ListFeed(
 		        AND fg.user_id = $5 AND (fg.until IS NULL OR fg.until > now())
 		 WHERE p.channel_id = $1 AND p.post_id < $2 AND NOT p.deleted
 		   AND p.parent_post_id IS NULL
+		   AND NOT p.only_continuation
 		   AND (p.level <= $4 OR fg.user_id IS NOT NULL)
 		   AND ($6::boolean OR (p.ref_container_id IS NULL
 		        OR (p.ref_kind = 'group'   AND o.message_id IS NOT NULL AND o.level   BETWEEN 0 AND 2)

@@ -53,6 +53,8 @@ class GroupFrame(
      * — подменить его по пути нельзя, но до проверки подписи это лишь подсказка.
      */
     val editOf: Long = 0,
+    /** «Только продолжение» (Решения §11.3): открытое поле сервера, в подпись не входит. */
+    val onlyContinuation: Boolean = false,
 ) {
 
     companion object {
@@ -107,6 +109,7 @@ class GroupFrame(
                 level = json.int("level") ?: -1,
                 keyCommitment = json.str("key_commitment")?.let { decodeBase64Url(it) },
                 editOf = json.long("edit_of") ?: 0,
+                onlyContinuation = json.bool("only_continuation") ?: false,
             )
         }
     }

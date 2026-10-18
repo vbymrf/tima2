@@ -316,7 +316,7 @@ fun EditorScreen(
                 } else {
                     doc.items.forEachIndexed { i, item ->
                         Box(Modifier.fillMaxWidth().onGloballyPositioned { drag.item(i, it.boundsInRoot()) }) {
-                            EditorItemView(model, i, item, typingMarks.takeIf { doc.marks }, preview, drag, tooWide = i in wide)
+                            EditorItemView(model, i, item, typingMarks.takeIf { doc.marks }, preview, drag, tooWide = i in wide, levels = levels)
                         }
                     }
                 }
@@ -532,6 +532,7 @@ private fun EditorItemView(
     preview: (ComposedDoc) -> RichContent?,
     drag: EditorDrag,
     tooWide: Boolean = false,
+    levels: List<MessageCircle> = emptyList(),
 ) {
     val colors = Tima.colors
     val chosen = model.spot == io.tima.domain.chat.Spot(index)
@@ -552,6 +553,33 @@ private fun EditorItemView(
         }
         is ComposedItem.Widget -> EditorWidget(item.widget, io.tima.domain.chat.Spot(index), model.spot == io.tima.domain.chat.Spot(index), model, drag, preview)
         is ComposedItem.Row -> EditorRow(item, index, model, drag, marks, preview)
+        is ComposedItem.Continuation -> ContinuationMarker(item, index, model, levels)
+    }
+}
+
+/** Метка «Продолжение» (Решения §11.3): ниже — закрытая часть своего уровня; цифрой — сменить уровень. */
+@Composable
+private fun ContinuationMarker(item: ComposedItem.Continuation, index: Int, model: EditorModel, levels: List<MessageCircle>) {
+    val colors = Tima.colors
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            .background(colors.functional, RoundedCornerShape(8.dp))
+            .clickable { model.select(index) }
+            .padding(8.dp)
+            .testTag("editor:continuation"),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Caption(Tima.words.editor.continuationMarker(item.level), fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.text2)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (c in levels.filter { it.level >= 0 }) {
+                io.tima.core.ui.Chip(
+                    c.level.toString(),
+                    kind = if (c.level == item.level) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Quiet,
+                    onClick = { model.replace(index, ComposedItem.Continuation(c.level)) },
+                    modifier = Modifier.testTag("editor:continuation.${c.level}"),
+                )
+            }
+        }
     }
 }
 

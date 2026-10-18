@@ -168,6 +168,14 @@ private fun WidgetOptions(model: EditorModel, spot: Spot) {
                     onClick = { put(widget.copy(kind = kind)) }, modifier = Modifier.testTag("editor:style.cloud.$kind"))
             }
         }
+        is ComposedWidget.Underlay -> androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (n in listOf(1, 2, 3, 5, 10)) {
+                Chip(w.underlayLines(n), kind = if (widget.lines == n) ChipKind.Selected else ChipKind.Quiet,
+                    onClick = { put(widget.copy(lines = n)) }, modifier = Modifier.testTag("editor:style.underlay.$n"))
+            }
+            Chip(w.authorShown, kind = if (widget.author) ChipKind.Selected else ChipKind.Quiet,
+                onClick = { put(widget.copy(author = !widget.author)) }, modifier = Modifier.testTag("editor:style.underlay.author"))
+        }
         else -> Tertiary(w.selected("widget"))
     }
 }

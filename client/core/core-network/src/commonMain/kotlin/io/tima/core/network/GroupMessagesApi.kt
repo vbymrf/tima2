@@ -49,6 +49,8 @@ class GroupMessagesApi(
         keyCommitment: ByteArray? = null,
         /** Правка (ADR-0045): номер исправляемого; 0 — поле не уходит. */
         editOf: Long = 0,
+        /** «Только продолжение» (Решения §11.3): открытое поле, в подпись не входит. */
+        onlyContinuation: Boolean = false,
     ): SendGroupResult {
         val requestBody = "{\"client_msg_id\":\"" + clientMsgId + "\"" +
             ",\"kind\":" + kind +
@@ -60,7 +62,8 @@ class GroupMessagesApi(
             ",\"created_at_unix_ms\":" + createdAtUnixMs +
             ",\"signature\":\"" + encodeBase64Url(signature) + "\"" +
             (keyCommitment?.let { ",\"key_commitment\":\"" + encodeBase64Url(it) + "\"" } ?: "") +
-            (if (editOf > 0) ",\"edit_of\":$editOf" else "") + "}"
+            (if (editOf > 0) ",\"edit_of\":$editOf" else "") +
+            (if (onlyContinuation) ",\"only_continuation\":true" else "") + "}"
 
         val response = try {
             client.post(route.api("/api/v1/groups/$groupId/messages")) {
