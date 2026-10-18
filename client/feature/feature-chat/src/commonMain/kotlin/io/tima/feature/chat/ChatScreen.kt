@@ -171,6 +171,8 @@ fun ChatScreen(
     composed: ComposedLook? = null,
     onComposedDrop: (() -> Unit)? = null,
     onComposedRestore: (() -> Unit)? = null,
+    /** Переход внутри переписки — `(что, длина цепочки)`: для журнала (ПЛАН-(ЖС) §5). */
+    onJump: ((String, Int) -> Unit)? = null,
     /** Галерея и Скрепка; `null` — кнопок нет. */
     onAttach: ((AttachItem) -> Unit)? = null,
     /** Эмоджи при пустой строке — отдельным сообщением. */
@@ -322,6 +324,7 @@ fun ChatScreen(
         }
         // Переходы по ответу, вставленному и «Продолжить чтение» — внутри переписки (§11.4).
         val jumps = remember { FeedJumps() }
+        jumps.onJump = onJump
         val openMessage: (String, String, Long) -> Unit = { _, _, number ->
             if (state.lines.any { it.serverId == number }) jumps.go(number)
         }

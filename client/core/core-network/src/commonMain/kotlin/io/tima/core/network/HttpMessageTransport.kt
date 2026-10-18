@@ -80,6 +80,10 @@ class HttpMessageTransport(
             .getOrNull()
         val messageId = body?.longField("message_id")
         val code = body?.stringField("code")
+        // Правка не принята (ADR-0045): причину — в журнал, крестик у правки сам её не скажет.
+        if (code?.startsWith("edit_") == true) {
+            io.tima.core.diag.Journal.note(io.tima.core.diag.LogCode.MSG_EDIT, "правка не принята сервером", "причина" to code)
+        }
 
         return when (response.status) {
             HttpStatusCode.Created -> messageId

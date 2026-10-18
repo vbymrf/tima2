@@ -191,6 +191,9 @@ class GroupSender(
                 // Причина — в журнал: крестик у сообщения сам ничего не объясняет, а
                 // `NET-ERROR 400` рядом не говорит, что именно не так.
                 Journal.trouble(LogCode.QUEUE_REFUSED, "сервер отказал сообщению навсегда", "причина" to outcome.reason, "переписка" to entry.chatId)
+                if (outcome.reason.startsWith("edit_")) {
+                    Journal.note(LogCode.MSG_EDIT, "правка не принята сервером", "причина" to outcome.reason, "переписка" to entry.chatId)
+                }
                 environment.queue.onOutcome(entry.dedupKey, SendOutcome.Permanent(outcome.reason))
                 true
             }

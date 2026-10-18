@@ -1090,9 +1090,10 @@ private fun App(
                 keepDays = saved["media.$kind.days"]?.toIntOrNull() ?: d.keepDays,
                 maxMegabytes = saved["media.$kind.mb"]?.toIntOrNull() ?: d.maxMegabytes,
             )
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val removed = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                 io.tima.core.media.MediaSweep.sweep(environment.media, kind, limits, msNow())
             }
+            if (removed > 0) Journal.note(LogCode.FILE_STORE, "уборка", "раздел" to kind, "убрано" to removed)
         }
     }
     SideEffect {
@@ -4417,7 +4418,7 @@ private fun Chat(
             deleter = io.tima.domain.chat.DeleteMessage(environment.removal, network.removal),
             picks = environment.picks,
             pickLevel = io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community),
-            drafts = environment.drafts,
+            drafts = LoggedDrafts(environment.drafts),
             // Вложения (Решения §2, §3, §6): файл закрыт своим ключом до выхода с устройства.
             attach = io.tima.domain.chat.SendAttachments(
                 queue = environment.queue,
@@ -4507,7 +4508,10 @@ private fun Chat(
     }
     // «Сохранить как» (Решения §6): скачать у почтальона, открыть ключом из тела, отдать системе.
     val saved = Tima.words.chat
-    val saver = io.tima.core.media.rememberFileSaver { ok -> if (!ok) store.said(saved.fileRefused("")) }
+    val saver = io.tima.core.media.rememberFileSaver { ok ->
+        Journal.note(LogCode.FILE_STORE, "сохранено как", "вышло" to ok)
+        if (!ok) store.said(saved.fileRefused(""))
+    }
     val saveFromChat: (io.tima.domain.chat.RichMedia) -> Unit = { file ->
         scope.launch {
             // Из своей папки, иначе у почтальона; срок прошёл — попросили прислать снова (Решения §6).
@@ -4636,10 +4640,20 @@ private fun Chat(
         onEditCancel = store::editCancelled,
         onReplyCancel = store::replyCancelled,
         onEmojiSend = store::sendEmoji,
-        onEditor = if (store.canCompose) ({ store.openEditor() }) else null,
+        onEditor = if (store.canCompose) ({
+            store.openEditor()
+            Journal.note(LogCode.EDITOR, "открыт")
+        }) else null,
         composed = state.composed?.let { io.tima.feature.chat.ComposedLook(it.firstLine, it.rows) },
-        onComposedDrop = store::dropComposed,
-        onComposedRestore = if (state.droppedComposed != null) store::restoreComposed else null,
+        onComposedDrop = {
+            store.dropComposed()
+            Journal.note(LogCode.EDITOR, "корзина")
+        },
+        onComposedRestore = if (state.droppedComposed != null) ({
+            store.restoreComposed()
+            Journal.note(LogCode.EDITOR, "вернуть")
+        }) else null,
+        onJump = { what, chain -> Journal.note(LogCode.JUMP, if (what == "to") "к сообщению" else "назад или вперёд", "цепочка" to chain) },
         onAttach = if (store.canAttach) attachHandler else null,
         attachItems = attachItems,
         attachments = io.tima.feature.chat.AttachmentActions(
@@ -4769,7 +4783,10 @@ private fun Chat(
             typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
             preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
             problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
-            onBack = store::editorBack,
+            onBack = { doc ->
+                store.editorBack(doc)
+                Journal.note(LogCode.EDITOR, "закрыт", "рядов" to doc.rows)
+            },
             onSend = { doc ->
                 scope.launch {
                     // Картинка в ячейке уже ряда — под её ширину (720 × доля), из исходного файла.
@@ -4793,7 +4810,15 @@ private fun Chat(
                             )
                         },
                     )
-                    store.sendComposed(fitted)
+                    when (val result = store.sendComposed(fitted)) {
+                        is io.tima.domain.chat.ComposedResult.Queued, is io.tima.domain.chat.ComposedResult.ContinuationFirst ->
+                            Journal.note(LogCode.EDITOR, "отправлено", *composedFacts(fitted), "продолжение" to (result is io.tima.domain.chat.ComposedResult.ContinuationFirst))
+                        is io.tima.domain.chat.ComposedResult.Invalid ->
+                            Journal.trouble(LogCode.EDITOR_REFUSED, "не отправлено", "правила" to result.problems.size, *composedFacts(fitted))
+                        is io.tima.domain.chat.ComposedResult.TableTooWide ->
+                            Journal.trouble(LogCode.EDITOR_REFUSED, "не отправлено", "таблица" to "больше ${result.maxColumns} столбцов")
+                        else -> Unit
+                    }
                 }
             },
             notice = editorNotice,
@@ -4959,7 +4984,11 @@ private fun Chat(
             onCopy = text?.let { t ->
                 { clipboard.setText(androidx.compose.ui.text.AnnotatedString(t)); store.said(copiedWord); close() }
             },
-            onPick = { store.picked(line); close() },
+            onPick = {
+                store.picked(line)
+                Journal.note(LogCode.PICKS, "добавить", "уровень" to io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community).substringBefore(':'))
+                close()
+            },
             // Перенести себе — из группы и только выносимые круги (К2): личная переписка шифр.
             onCarry = if (group && CarryToPage.canCarry(line.level)) {
                 { onCarry(line.serverId, line.level); close() }
@@ -5688,12 +5717,14 @@ private fun Storage(
                 settings?.put("media.$kind.days", chosen.keepDays.toString())
                 settings?.put("media.$kind.mb", chosen.maxMegabytes.toString())
                 // Новый срок действует сразу, а не при следующем запуске — как у журнала.
-                io.tima.core.media.MediaSweep.sweep(media, kind, chosen, msNow())
+                val removed = io.tima.core.media.MediaSweep.sweep(media, kind, chosen, msNow())
+                Journal.note(LogCode.FILE_STORE, "уборка по новым пределам", "раздел" to kind, "убрано" to removed)
                 mediaTick++
             }
         },
         onMediaClear = { kind ->
             media.clear(kind)
+            Journal.note(LogCode.FILE_STORE, "очищено", "раздел" to kind)
             mediaTick++
         },
     )
@@ -6905,4 +6936,12 @@ private sealed interface AttachAsk {
     data class Cloud(val kind: String) : AttachAsk
     data object Place : AttachAsk
     data object Contact : AttachAsk
+}
+
+/** Что собрано в редакторе — числами, без текста (ПЛАН-(ЖС) §4): рядов, ячеек, виджетов по видам. */
+private fun composedFacts(doc: io.tima.domain.chat.ComposedDoc): Array<Pair<String, Any?>> {
+    val rows = doc.items.filterIsInstance<io.tima.domain.chat.ComposedItem.Row>()
+    val widgets = doc.items.filterIsInstance<io.tima.domain.chat.ComposedItem.Widget>().map { it.widget } + rows.flatMap { r -> r.cells.flatMap { it.widgets } }
+    val kinds = widgets.groupingBy { it::class.simpleName.orEmpty().lowercase() }.eachCount().entries.joinToString(",") { "${it.key}:${it.value}" }
+    return arrayOf("рядов" to doc.rows, "ячеек" to rows.sumOf { it.cells.size }, "виджеты" to kinds.ifEmpty { "нет" })
 }

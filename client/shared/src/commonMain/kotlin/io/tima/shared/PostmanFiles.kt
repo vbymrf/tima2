@@ -57,11 +57,12 @@ class PostmanFiles(
         return when (val got = media().fetch(m.mediaId)) {
             is Media.MediaFetch.Got -> {
                 runCatching { folder.put(kindOf(m), m.mediaId, got.bytes) }
+                Journal.note(LogCode.FILE_GET, "забран", "файл" to m.mediaId.take(8), "размер" to got.bytes.size)
                 Obtained.Got(got.bytes)
             }
             Media.MediaFetch.Gone -> {
                 val asked = media().requestAgain(m.mediaId)
-                Journal.note(LogCode.MEDIA_LOAD, "файла у почтальона уже нет — попросили снова", "файл" to m.mediaId.take(8), "ушло" to asked.toString())
+                Journal.note(LogCode.FILE_GET, "у почтальона нет — попросили снова", "файл" to m.mediaId.take(8), "ушло" to asked.toString())
                 if (asked) Obtained.Asked else Obtained.Failed
             }
             Media.MediaFetch.Failed -> Obtained.Failed
@@ -78,13 +79,14 @@ class PostmanFiles(
     /** Событие канала: просьба загрузить снова или «получатель забрал». */
     suspend fun event(wanted: Boolean, mediaId: String) {
         if (!wanted) {
+            Journal.note(LogCode.FILE_GET, "получатель забрал", "файл" to mediaId.take(8))
             runCatching { folder.put(FETCHED, mediaId, ByteArray(0)) }
             _fetched.value = _fetched.value + mediaId
             return
         }
         val sealed = local(mediaId) ?: return
         val done = media().reupload(mediaId, sealed)
-        Journal.note(LogCode.MEDIA_LOAD, "файл почтальона загружен снова по просьбе", "файл" to mediaId.take(8), "вышло" to done.toString())
+        Journal.note(LogCode.FILE_GET, "загружен снова по просьбе", "файл" to mediaId.take(8), "вышло" to done.toString())
     }
 
     companion object {

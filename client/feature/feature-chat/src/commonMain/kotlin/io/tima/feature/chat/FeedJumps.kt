@@ -45,6 +45,9 @@ class FeedJumps {
     val back = mutableStateListOf<Long>()
     val forward = mutableStateListOf<Long>()
 
+    /** Кому сказать о переходе — `(to — к сообщению, step — назад или вперёд; длина цепочки)`; журнал ведёт общий слой. */
+    var onJump: ((String, Int) -> Unit)? = null
+
     fun go(serverId: Long) {
         request = serverId
     }
@@ -86,6 +89,7 @@ internal suspend fun FeedJumps.perform(target: Long, lines: List<ChatLine>, stat
     if (record) {
         anchorOf(lines, state)?.takeIf { it != target }?.let { back.add(it); forward.clear() }
     }
+    onJump?.invoke(if (record) "to" else "step", back.size + forward.size)
     state.animateScrollToItem(index)
     flash(target)
 }

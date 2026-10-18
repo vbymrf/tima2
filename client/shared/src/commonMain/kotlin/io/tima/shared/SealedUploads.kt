@@ -19,7 +19,18 @@ class SealedUploads(
     override suspend fun upload(bytes: ByteArray, mime: String, postmanChat: String?, postmanPeer: String?): Pair<String, ByteArray>? {
         val key = MediaFiles.newKey()
         val sealed = MediaFiles.seal(key, bytes)
-        val id = media().uploadSealed(sealed, mime, postmanChat, postmanPeer) ?: return null
+        val started = msNow()
+        val id = media().uploadSealed(sealed, mime, postmanChat, postmanPeer)
+        // Загрузка — строкой журнала (ПЛАН-(ЖС) §6): «не отправляется файл» — предел, сеть или сервер.
+        io.tima.core.diag.Journal.note(
+            io.tima.core.diag.LogCode.FILE_SEND,
+            if (id != null) "загружено" else "не вышло",
+            "вид" to mime.substringBefore('/'),
+            "размер" to sealed.size,
+            "мс" to (msNow() - started),
+            "почтальон" to (postmanChat != null),
+        )
+        if (id == null) return null
         if (postmanChat != null) keepSent?.invoke(id, sealed, mime)
         return id to key
     }
