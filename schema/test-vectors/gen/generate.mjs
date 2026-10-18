@@ -112,6 +112,18 @@ const V = { schema: 'tima.crypto.v1', format_version: 1, generated_by: 'tweetnac
   };
 }
 
+// ── 5c. Разметка редактора (ADR-0044): замороженный JSON. ИСТОЧНИК — Kotlin-реализация
+//        (kotlinx.serialization), первый зелёный прогон MarkupVectorTest 2026-10-18; генератор
+//        лишь переносит константу, чтобы регенерация не теряла вектор.
+{
+  V.vectors.markup_json = {
+    desc: "Разметка образцового сообщения редактора (ADR-0044) в JSON — байты MessageBody.markup. Источник — Kotlin-реализация (kotlinx.serialization, encodeDefaults=false): поля по умолчанию не пишутся.",
+    frozen_by: "messenger-crypto MarkupVectorTest, первый зелёный прогон 2026-10-18",
+    inputs: {"sample": "MarkupSample.content(): заголовок; ряд 33 · 67 (картинка media 0 | узел 2), фон amber-soft, разделитель 2; таблица 2×2, ячейка «Анна» merge=up; абзац; подкладка group/g-1/42, автор, 3 строки; маркер в узле 2"},
+    json: "{\"n\":[1,2,3,4,5,6,7],\"entities\":[{\"type\":\"highlight\",\"node\":2,\"length\":4}],\"blocks\":[{\"type\":\"heading\",\"nodes\":[1],\"level\":1},{\"type\":\"flex\",\"children\":[{\"type\":\"cell\",\"children\":[{\"type\":\"image\",\"widget\":{\"media\":0}}],\"style\":{\"width\":\"33\"}},{\"type\":\"cell\",\"nodes\":[2],\"style\":{\"width\":\"67\"}}],\"style\":{\"background\":\"amber-soft\",\"divider\":\"2\"}},{\"type\":\"table\",\"children\":[{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"nodes\":[3]},{\"type\":\"cell\",\"nodes\":[4]}]},{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"nodes\":[5]},{\"type\":\"cell\",\"nodes\":[6],\"style\":{\"merge\":\"up\"}}]}]},{\"type\":\"paragraph\",\"nodes\":[7]},{\"type\":\"underlay\",\"widget\":{\"ref\":{\"kind\":\"group\",\"container\":\"g-1\",\"message\":42},\"author\":true,\"lines\":3}}]}"
+  };
+}
+
 // ── 5b. MessageBody: замороженные protobuf-байты. ИСТОЧНИК — Kotlin-реализация (Wire),
 //        зафиксировано на первом зелёном прогоне SerializerTest (2026-07-12); генератор
 //        лишь переносит константу, чтобы регенерация не теряла вектор. Wire — референс для Go.

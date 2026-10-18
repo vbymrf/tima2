@@ -169,6 +169,14 @@
       },
       "bytes_hex": "74696d612e6465766963652d65706f63682e76317c33333333333333332d333333332d333333332d333333332d3333333333333333333333337c323032362d31307c576c7061576c7061576c7061576c7061576c7061576c7061576c7061576c7061576c7061576c7061576c6f",
       "sha256_hex": "9a978d0d332e82fdddd222df6c082a6e87235031528260046b73518b3ffa720c"
+    },
+    "markup_json": {
+      "desc": "Разметка образцового сообщения редактора (ADR-0044) в JSON — байты MessageBody.markup. Источник — Kotlin-реализация (kotlinx.serialization, encodeDefaults=false): поля по умолчанию не пишутся.",
+      "frozen_by": "messenger-crypto MarkupVectorTest, первый зелёный прогон 2026-10-18",
+      "inputs": {
+        "sample": "MarkupSample.content(): заголовок; ряд 33 · 67 (картинка media 0 | узел 2), фон amber-soft, разделитель 2; таблица 2×2, ячейка «Анна» merge=up; абзац; подкладка group/g-1/42, автор, 3 строки; маркер в узле 2"
+      },
+      "json": "{\"n\":[1,2,3,4,5,6,7],\"entities\":[{\"type\":\"highlight\",\"node\":2,\"length\":4}],\"blocks\":[{\"type\":\"heading\",\"nodes\":[1],\"level\":1},{\"type\":\"flex\",\"children\":[{\"type\":\"cell\",\"children\":[{\"type\":\"image\",\"widget\":{\"media\":0}}],\"style\":{\"width\":\"33\"}},{\"type\":\"cell\",\"nodes\":[2],\"style\":{\"width\":\"67\"}}],\"style\":{\"background\":\"amber-soft\",\"divider\":\"2\"}},{\"type\":\"table\",\"children\":[{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"nodes\":[3]},{\"type\":\"cell\",\"nodes\":[4]}]},{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"nodes\":[5]},{\"type\":\"cell\",\"nodes\":[6],\"style\":{\"merge\":\"up\"}}]}]},{\"type\":\"paragraph\",\"nodes\":[7]},{\"type\":\"underlay\",\"widget\":{\"ref\":{\"kind\":\"group\",\"container\":\"g-1\",\"message\":42},\"author\":true,\"lines\":3}}]}"
     }
   }
 }

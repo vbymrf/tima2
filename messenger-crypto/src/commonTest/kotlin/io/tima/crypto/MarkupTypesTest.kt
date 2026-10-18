@@ -15,7 +15,7 @@ class MarkupTypesTest {
     @Test
     fun `wire-значения EntityType зафиксированы`() {
         assertEquals(
-            setOf("bold", "italic", "underline", "strikethrough", "code", "link", "mention", "hashtag", ""),
+            setOf("bold", "italic", "underline", "strikethrough", "code", "link", "mention", "hashtag", "highlight", ""),
             EntityType.entries.map { it.wire }.toSet(),
         )
     }
@@ -23,7 +23,12 @@ class MarkupTypesTest {
     @Test
     fun `wire-значения BlockType зафиксированы`() {
         assertEquals(
-            setOf("paragraph", "heading", "quote", "list", "list_item", "container", "table", "row", "cell", ""),
+            setOf(
+                "paragraph", "heading", "quote", "list", "list_item", "container", "table", "row", "cell",
+                // ADR-0044: ряд, разделитель, блок кода, виджеты, подкладка
+                "flex", "divider", "code_block", "image", "link", "cloud", "map", "contact", "reply",
+                "quoted", "emoji", "underlay", "",
+            ),
             BlockType.entries.map { it.wire }.toSet(),
         )
     }

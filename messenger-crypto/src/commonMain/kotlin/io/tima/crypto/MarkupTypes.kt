@@ -34,6 +34,9 @@ enum class EntityType(val wire: String) {
     LINK("link"),
     MENTION("mention"),
     HASHTAG("hashtag"),
+
+    /** Маркер — `==текст==` (ADR-0044 §3). */
+    HIGHLIGHT("highlight"),
     UNKNOWN("");
 
     companion object {
@@ -41,7 +44,11 @@ enum class EntityType(val wire: String) {
     }
 }
 
-/** Блоки: заголовки, абзацы, списки, контейнеры, таблицы (ADR-0011 §8). */
+/**
+ * Блоки: заголовки, абзацы, списки, контейнеры, таблицы (ADR-0011 §8); ряд, разделитель, блок
+ * кода и виджеты редактора — ADR-0044 §3. Новое добавляется в конец: прежний читатель видит
+ * незнакомое как [UNKNOWN] и показывает текстом.
+ */
 @Serializable(with = BlockTypeSerializer::class)
 enum class BlockType(val wire: String) {
     PARAGRAPH("paragraph"),
@@ -53,6 +60,24 @@ enum class BlockType(val wire: String) {
     TABLE("table"),
     ROW("row"),
     CELL("cell"),
+
+    /** Ряд редактора: 1–4 ячейки в строку, ширины в процентах (ADR-0044). */
+    FLEX("flex"),
+    DIVIDER("divider"),
+    CODE_BLOCK("code_block"),
+
+    // ── Виджеты (ADR-0044 §3). Данные — в `MarkupBlock.widget`. ──
+    IMAGE("image"),
+    LINK("link"),
+    CLOUD("cloud"),
+    MAP("map"),
+    CONTACT("contact"),
+    REPLY("reply"),
+    QUOTED("quoted"),
+    EMOJI("emoji"),
+
+    /** Подкладка — только в конце сообщения (ADR-0044 §3). */
+    UNDERLAY("underlay"),
     UNKNOWN("");
 
     companion object {

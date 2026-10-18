@@ -28,8 +28,13 @@
 | `mlkem768_escrow` | ML-KEM-768: keygen(seed) детерминирован (зафиксирован sha256 pk); ct=1088; инвариант `decap(ct,sk)=shared` | Инвариант, не ct |
 | `message_body` | Protobuf-байты `MessageBody` (Wire, заморожены 2026-07-12 на первом зелёном прогоне Kotlin) — референс для Go | Точные байты |
 | `media_chunk_keys` | `chunk_key[i] = HKDF-SHA256(media_key, salt пустой, "chunk:"+i, 32)` — чанкование медиа | Точные байты |
+| `markup_json` | JSON разметки образцового сообщения редактора (ADR-0044): ряд, ячейки, картинка, таблица с объединением, подкладка, маркер — байты `MessageBody.markup` (заморожены 2026-10-18 на первом зелёном прогоне Kotlin, `MarkupVectorTest`) | Точные байты |
 
-## Открыто: `markup_json` (ADR-0011, Р5б)
+## ~~Открыто~~: `markup_json` (ADR-0011, Р5б) — **заморожен 2026-10-18** (ADR-0044)
+
+Вектор заведён по процедуре ниже: образец — `messenger-crypto/…/MarkupSample.kt`, проверка —
+`MarkupVectorTest` (в обе стороны: `encode(образец) == вектор`, `decode(вектор) == образец`),
+генератор переносит константу. Ниже — как было до заморозки.
 
 Раскладка узлов и разметки (`messenger-crypto/Markup.kt`, `MarkupTypes.kt`) пока
 проверена только round-trip-тестами внутри Kotlin (`MessageContentTest.kt`,

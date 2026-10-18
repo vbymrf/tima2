@@ -105,8 +105,60 @@ data class MarkupBlock(
     val children: List<MarkupBlock> = emptyList(),
     /** Уровень заголовка, номер колонки и подобное — по типу блока. */
     val level: Int = 0,
-    /** Переопределение стиля именно для этого блока. */
+    /**
+     * Стиль именно этого блока — только изменённое, именами палитры и ступенями
+     * ([MarkupRules], ADR-0044 §4).
+     */
     val style: Map<String, String> = emptyMap(),
+    /** Данные виджета — у блоков-виджетов ([BlockType.IMAGE] … [BlockType.UNDERLAY]). */
+    val widget: MarkupWidget? = null,
+)
+
+/**
+ * Данные виджета (ADR-0044 §3). Все поля необязательные: что нужно какому виджету — проверяет
+ * [MarkupRules]. Пустое значение не пишется (`encodeDefaults = false`).
+ */
+@Serializable
+data class MarkupWidget(
+    /** Номер в `MessageBody.media`: картинка; картинка карточки ссылки. -1 — нет. */
+    val media: Int = -1,
+    val url: String = "",
+    /** Ссылка: `plain`, `button`, `card`. */
+    val mode: String = "",
+    val title: String = "",
+    val description: String = "",
+    /** Облако: `file`, `document`, `audio`, `video`. */
+    val kind: String = "",
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val label: String = "",
+    @SerialName("user_id") val userId: String = "",
+    val name: String = "",
+    val phone: String = "",
+    /** Эмоджи — сам знак. */
+    val text: String = "",
+    /** Ссылка на сообщение — у ответа, вставленного из подборки, подкладки. */
+    val ref: MarkupRef? = null,
+    /** Показывать автора первым — у вставленного и подкладки. */
+    val author: Boolean = false,
+    /** Вставленное из подборки: `full` или `cut`. */
+    val cut: String = "",
+    /** Подкладка: сколько строк до «Продолжить чтение». */
+    val lines: Int = 0,
+)
+
+/**
+ * Ссылка на сообщение — не копия (ADR-0019 §7, ADR-0044 §3): содержимое клиент берёт выдачей по
+ * номеру, сервер отвечает сообщением или «уровень N — недоступно».
+ */
+@Serializable
+data class MarkupRef(
+    /** `personal`, `group`, `channel`. */
+    val kind: String = "",
+    /** Номер переписки, группы или канала. */
+    val container: String = "",
+    /** Номер сообщения в нём. */
+    val message: Long = 0,
 )
 
 /**

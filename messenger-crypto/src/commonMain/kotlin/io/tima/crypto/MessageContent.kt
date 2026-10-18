@@ -21,6 +21,12 @@ data class MessageContent(
 
     val hasMarkup: Boolean get() = markup != null && markup != Markup.EMPTY
 
+    /**
+     * Текст для строки в списке чатов и для поиска — первый непустой узел (Решения §12). В
+     * уведомление он не идёт никогда (ADR-0029 §5). `null` — текста нет: одни виджеты.
+     */
+    fun firstText(): String? = nodes.firstOrNull { it.isNotBlank() }?.trim()
+
     companion object {
         /** Обычное сообщение: один узел, никакой разметки. */
         fun text(text: String, media: List<MediaRef> = emptyList()) =

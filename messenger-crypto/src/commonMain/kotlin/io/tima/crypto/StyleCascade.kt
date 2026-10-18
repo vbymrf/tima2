@@ -64,9 +64,13 @@ object StyleCascade {
         // каком режиме: угроза («текст 4pt белым по белому») исходит от автора и
         // настроек чата/сообщества, а не от приложения самого читателя. Поэтому
         // background вырезается из этих слоёв ДО каскада, а не проверяется постфактум.
+        //
+        // Исключение — фон самого блока (ряд, ячейка, таблица) **именем палитры**
+        // (ADR-0044 §4): он внутри пузыря и экран не заливает. Код цвета у блока по-прежнему
+        // вырезается — цвета в разметке только именами.
         val layers = when (mode) {
             ReaderMode.AS_AUTHOR -> listOf(
-                stripBackground(inline), stripBackground(byType),
+                keepPaletteBackground(inline), stripBackground(byType),
                 stripBackground(chat), stripBackground(community), app,
             )
             ReaderMode.READER -> listOf(app)
@@ -88,6 +92,12 @@ object StyleCascade {
 
     private fun stripBackground(layer: StyleLayer): StyleLayer =
         if (KEY_BACKGROUND in layer) layer - KEY_BACKGROUND else layer
+
+    /** Фон блока остаётся, только если это имя палитры (ADR-0044 §4). */
+    private fun keepPaletteBackground(layer: StyleLayer): StyleLayer {
+        val bg = layer[KEY_BACKGROUND] ?: return layer
+        return if (bg in MarkupRules.PALETTE) layer else layer - KEY_BACKGROUND
+    }
 
     /** Защитный пол: минимальный кегль и обязательный контраст, поверх результата каскада. */
     private fun applyFloor(resolved: Map<String, String>, backgroundHex: String): Map<String, String> {

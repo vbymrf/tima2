@@ -237,6 +237,7 @@ class VectorsTest {
             "secretbox", "box_wrap", "ed25519", "hkdf_sha256", "media_chunk_keys",
             "canonical_bytes", "canonical_bytes_v2", "message_body", "mlkem768_escrow",
             "group_message_canonical", "group_message_canonical_v2", "device_epoch_key",
+            "markup_json",
         )
         assertEquals(expected, vectors.keys, "Состав vectors.json изменился — обнови KAT")
     }

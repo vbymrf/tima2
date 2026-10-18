@@ -67,6 +67,21 @@ class StyleCascadeTest {
     }
 
     @Test
+    fun `фон блока именем палитры остаётся, кодом цвета — нет`() {
+        // ADR-0044 §4: фон ряда, ячейки, таблицы — внутри пузыря, экран не заливает.
+        val named = StyleCascade.resolve(
+            mode = ReaderMode.AS_AUTHOR,
+            inline = mapOf(StyleCascade.KEY_BACKGROUND to "amber-soft"),
+            chat = mapOf(StyleCascade.KEY_BACKGROUND to "amber-soft"),
+        )
+        assertEquals("amber-soft", named[StyleCascade.KEY_BACKGROUND])
+        val coded = StyleCascade.resolve(mode = ReaderMode.AS_AUTHOR, inline = mapOf(StyleCascade.KEY_BACKGROUND to "#000000"))
+        assertNull(coded[StyleCascade.KEY_BACKGROUND], "код цвета у блока — не имя палитры")
+        val chatOnly = StyleCascade.resolve(mode = ReaderMode.AS_AUTHOR, chat = mapOf(StyleCascade.KEY_BACKGROUND to "amber-soft"))
+        assertNull(chatOnly[StyleCascade.KEY_BACKGROUND], "фон чата по-прежнему вырезается")
+    }
+
+    @Test
     fun `защитный пол - приложение фон задавать может`() {
         val resolved = StyleCascade.resolve(mode = ReaderMode.AS_AUTHOR, app = mapOf(StyleCascade.KEY_BACKGROUND to "#101010"))
         assertEquals("#101010", resolved[StyleCascade.KEY_BACKGROUND], "тема приложения — не угроза, которую описывает ADR")
