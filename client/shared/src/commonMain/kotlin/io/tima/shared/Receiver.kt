@@ -545,7 +545,12 @@ class Receiver(
                 onGroupKeys = { decision -> aboutKeys(decision) },
                 onLevelNarrowed = { decision -> aboutLevel(decision) },
                 // Удалили у всех (Решения §8): «Сообщение удалено», содержимое и правки стёрты.
-                onMessageDeleted = { decision -> environment.removal.markDeleted(decision.chatId, decision.messageId) },
+                onMessageDeleted = { decision ->
+                    environment.removal.markDeleted(decision.chatId, decision.messageId)
+                    // Удалённое закреплённое открепляется само: сервер снял его в самом удалении.
+                    pins.deleted(decision.chatId, decision.messageId)
+                },
+                onMessagePinned = { decision -> aboutPin(decision) },
                 // Файл почтальона: просьба загрузить снова, «получатель забрал» (Решения §6).
                 onMedia = { decision -> postman.event(decision.wanted, decision.mediaId) },
                 onComment = { decision -> aboutComment(decision) },
@@ -866,6 +871,11 @@ class Receiver(
     private fun openGroup(entry: IncomingEntry): OpenOutcome {
         val frame = GroupFrame.parse(entry.envelope)
             ?: return OpenOutcome.Rejected("кадр группы не разбирается")
+        return openGroupFrame(frame)
+    }
+
+    /** Кадр группы — подпись по метаданным, ключ по версии. Общий для ленты и окна «Описание». */
+    private fun openGroupFrame(frame: GroupFrame): OpenOutcome {
         // Открытому сообщению (уровни 0…3) ключ не нужен: его читает тот, кому ключа не
         // дадут, — описание личной группы, лента публичной. Подпись при этом проверяется
         // так же строго.
@@ -906,6 +916,68 @@ class Receiver(
     /** Кадр про групповые ключи: исход остаётся в диагностике, канал не роняется. */
     private suspend fun aboutKeys(decision: EventStreamProtocol.Decision) {
         keyOrchestrator.handle(decision)?.let { lastOutcome = it }
+    }
+
+    /** Закреплённое (ПЛАН-(ЗО) ЗО3): снимок на устройстве — открытым перепискам и событиям. */
+    val pins = io.tima.domain.chat.ChatPins(network.pins)
+
+    /**
+     * Закрепили или сняли (ПЛАН-(ЗО) ЗО3): полоса под шапкой обновляется сама, в ленте — служебная
+     * строка словами читающего, **без уведомления** (заказчик 2026-10-18). Ключ строки — номер события:
+     * кадр приезжает и живым каналом, и догоном, а строка должна остаться одна.
+     */
+    private suspend fun aboutPin(d: EventStreamProtocol.Decision.MessagePinned) {
+        pins.applied(d.chatId, d.messageId)
+        val mine = d.by == session.userId
+        val who = if (mine) null else (d.by.takeIf { it.isNotEmpty() }?.let { notices?.nameOf(it) } ?: words().chat.someone)
+        runCatching {
+            environment.journal.note(
+                chatId = d.chatId,
+                key = "pin/${d.chatId}/${d.eventId ?: d.messageId}",
+                text = words().showcase.pinLine(who, d.messageId > 0),
+                atMs = msNow(),
+            )
+        }
+        Journal.note(LogCode.PIN_MSG, "событие", "закреплено" to (d.messageId > 0), "моё" to mine, "переписка" to d.chatId.take(8))
+    }
+
+    /**
+     * Описание (ПЛАН-(ЗО) ЗО4): у группы — кадрами с той же проверкой подписи, что и в ленте; у канала
+     * и сообщества — открытым текстом. Нигде не хранится: окно забирает его при каждом открытии.
+     */
+    val showcase: io.tima.domain.chat.ShowcaseSource = object : io.tima.domain.chat.ShowcaseSource {
+        override suspend fun page(of: io.tima.domain.chat.ShowcaseOf) = showcasePage(of)
+        override suspend fun setSuper(of: io.tima.domain.chat.ShowcaseOf, serverId: Long) = network.showcase.setSuper(of, serverId)
+    }
+
+    private suspend fun showcasePage(of: io.tima.domain.chat.ShowcaseOf): io.tima.domain.chat.ShowcasePage? {
+        val raw = network.showcase.page(of) ?: return null
+        val codec = io.tima.core.encryption.TextBodyCodec
+        if (of.kind != "group") {
+            return io.tima.domain.chat.ShowcasePage(
+                raw.superId,
+                raw.open.mapNotNull { item ->
+                    io.tima.core.encryption.ComposedBodiesOverKodium.readOpen(item.nodes, item.markup)
+                        ?.let { io.tima.domain.chat.ShowcaseLine(item.id, item.authorId, it) }
+                },
+            )
+        }
+        class Opened(val frame: GroupFrame, val body: ByteArray)
+        val opened = raw.frames.mapNotNull { stored ->
+            val frame = GroupFrame.parse(stored) ?: return@mapNotNull null
+            // Описание открыто по замыслу (уровень 0): ключ группы ему не нужен.
+            if (frame.gkVersion != 0) return@mapNotNull null
+            captionKey(frame.senderId, frame.senderDevice) ?: return@mapNotNull null
+            (openGroupFrame(frame) as? OpenOutcome.Opened)?.let { Opened(frame, it.body) }
+        }
+        // Правки ложатся на исходное, как в переписке (ADR-0045): в выдаче они рядом с ним.
+        val edits = opened.filter { it.frame.editOf > 0 }.groupBy { it.frame.editOf }
+        val lines = opened.filter { it.frame.editOf == 0L }.mapNotNull { o ->
+            val mine = edits[o.frame.messageId].orEmpty().map { it.body }
+            val line = (if (mine.isEmpty()) codec.decodeLine(o.body) else codec.decodeEdited(o.body, mine)) ?: return@mapNotNull null
+            io.tima.domain.chat.ShowcaseLine(o.frame.messageId, o.frame.senderId, line, onlyContinuation = o.frame.onlyContinuation)
+        }
+        return io.tima.domain.chat.ShowcasePage(raw.superId, lines)
     }
 
     /**

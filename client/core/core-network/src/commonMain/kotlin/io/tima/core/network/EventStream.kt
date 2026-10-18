@@ -67,6 +67,8 @@ class EventStream(
         onLevelNarrowed: suspend (EventStreamProtocol.Decision.LevelNarrowed) -> Unit = {},
         /** Сообщение удалили у всех (Решения §8). По умолчанию ничего — как сужение круга. */
         onMessageDeleted: suspend (EventStreamProtocol.Decision.MessageDeleted) -> Unit = {},
+        /** Закрепили или сняли (ПЛАН-(ЗО) ЗО3). По умолчанию ничего. */
+        onMessagePinned: suspend (EventStreamProtocol.Decision.MessagePinned) -> Unit = {},
         /** Файл почтальона: просьба загрузить снова, «получатель забрал» (Решения §6). */
         onMedia: suspend (EventStreamProtocol.Decision.MediaEvent) -> Unit = {},
         /**
@@ -201,6 +203,14 @@ class EventStream(
 
                         is EventStreamProtocol.Decision.MessageDeleted -> {
                             onMessageDeleted(decision)
+                            decision.eventId?.let {
+                                last = it
+                                send(Frame.Text(protocol.ackFrame(it)))
+                            }
+                        }
+
+                        is EventStreamProtocol.Decision.MessagePinned -> {
+                            onMessagePinned(decision)
                             decision.eventId?.let {
                                 last = it
                                 send(Frame.Text(protocol.ackFrame(it)))

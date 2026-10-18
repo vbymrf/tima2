@@ -1431,6 +1431,7 @@ object EnglishWords : Words {
 
     override val pin: PinWords = EnglishPinWords
     override val editor: EditorWords = EnglishEditorWords
+    override val showcase: ShowcaseWords = EnglishShowcaseWords
     override val groupLook: GroupLookWords = EnglishGroupLookWords
     override val suggest: SuggestWords = EnglishSuggestWords
     override val accountList: AccountListWords = EnglishAccountListWords

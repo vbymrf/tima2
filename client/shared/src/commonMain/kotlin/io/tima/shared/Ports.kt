@@ -57,6 +57,12 @@ interface ChatPorts {
     /** Удаление сообщения у всех (Решения §8). */
     val removal: io.tima.domain.chat.RemoteDelete
 
+    /** Закреплённое сообщение (ПЛАН-(ЗО) ЗО3). */
+    val pins: io.tima.domain.chat.RemotePins
+
+    /** Описание — сообщения уровня 0 и суперсообщение (ПЛАН-(ЗО) ЗО4–ЗО5). */
+    val showcase: io.tima.core.network.ShowcaseOverHttp
+
     /**
      * Сверка книги: кто из этих номеров в TIMa (Д4).
      *

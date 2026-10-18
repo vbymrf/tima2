@@ -1,5 +1,6 @@
 package io.tima.feature.group
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import io.tima.core.words.SocialWords
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.Button
@@ -52,6 +54,11 @@ fun CatalogTab(
      * «Странице», а в каталоге — нет (заказчик, Г).
      */
     countOf: (String) -> Int = { 0 },
+    /**
+     * Нажатие на аватар — окно «Описание» (ПЛАН-(ЗО) ЗО4): `(вид, номер, название)`, вид — `group`
+     * или `community`. `null` — аватар не нажимается, строка ведёт туда же, что и прежде.
+     */
+    onShowcase: ((kind: String, id: String, title: String) -> Unit)? = null,
 ) {
     val words = Tima.words.social
     Column(modifier.fillMaxSize()) {
@@ -64,7 +71,12 @@ fun CatalogTab(
             for (community in state.communities) {
                 ListLine(
                     onClick = { onOpenCommunity(community.communityId) },
-                    left = { Avatar(letters = community.title.take(2).uppercase()) },
+                    left = {
+                        Avatar(
+                            letters = community.title.take(2).uppercase(),
+                            modifier = showcaseClick(onShowcase) { it("community", community.communityId, community.title) },
+                        )
+                    },
                     middle = {
                         Column {
                             Name(community.title)
@@ -93,10 +105,10 @@ fun CatalogTab(
                 },
             )
         } else if (layout != null) {
-            Box(Modifier.weight(1f)) { layout(state.mine) { group -> GroupLine(group, onOpen, countOf(group.groupId)) } }
+            Box(Modifier.weight(1f)) { layout(state.mine) { group -> GroupLine(group, onOpen, countOf(group.groupId), onShowcase) } }
         } else {
             LazyColumn(Modifier.weight(1f)) {
-                items(state.mine, key = { it.groupId }) { group -> GroupLine(group, onOpen, countOf(group.groupId)) }
+                items(state.mine, key = { it.groupId }) { group -> GroupLine(group, onOpen, countOf(group.groupId), onShowcase) }
             }
         }
 
@@ -110,11 +122,21 @@ fun CatalogTab(
 
 /** Строка группы каталога: имя и моя роль в ней. */
 @Composable
-fun GroupLine(group: GroupInfo, onOpen: (GroupInfo) -> Unit, howMany: Int = 0) {
+fun GroupLine(
+    group: GroupInfo,
+    onOpen: (GroupInfo) -> Unit,
+    howMany: Int = 0,
+    onShowcase: ((kind: String, id: String, title: String) -> Unit)? = null,
+) {
     val words = Tima.words.social
     ListLine(
         onClick = { onOpen(group) },
-        left = { Avatar(letters = group.title.take(2).uppercase()) },
+        left = {
+            Avatar(
+                letters = group.title.take(2).uppercase(),
+                modifier = showcaseClick(onShowcase) { it("group", group.groupId, group.title) },
+            )
+        },
         right = if (howMany > 0) ({ io.tima.core.ui.Counter(howMany) }) else null,
         middle = {
             Column {
@@ -136,6 +158,8 @@ fun FriendsTab(
     state: SocialState,
     onAsk: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Нажатие на аватар карточки — «Описание» группы, ещё не вступив (ПЛАН-(ЗО) ЗО4). */
+    onShowcase: ((kind: String, id: String, title: String) -> Unit)? = null,
 ) {
     val words = Tima.words.social
     Column(modifier.fillMaxSize()) {
@@ -156,6 +180,7 @@ fun FriendsTab(
                     asked = card.groupId in state.asked,
                     asking = card.groupId in state.asking,
                     onAsk = { onAsk(card.groupId) },
+                    onShowcase = onShowcase?.let { show -> { show("group", card.groupId, card.title) } },
                 )
             }
         }
@@ -163,10 +188,16 @@ fun FriendsTab(
 }
 
 @Composable
-private fun CardLine(card: GroupCard, asked: Boolean, asking: Boolean, onAsk: () -> Unit) {
+private fun CardLine(card: GroupCard, asked: Boolean, asking: Boolean, onAsk: () -> Unit, onShowcase: (() -> Unit)? = null) {
     val words = Tima.words.social
     ListLine(
-        left = { Avatar(letters = card.title.take(2).uppercase()) },
+        onClick = onShowcase,
+        left = {
+            Avatar(
+                letters = card.title.take(2).uppercase(),
+                modifier = if (onShowcase != null) Modifier.clickable(onClick = onShowcase).testTag(SHOWCASE_AVATAR_TAG) else Modifier,
+            )
+        },
         right = {
             when {
                 // Сказано словами, а не отсутствием кнопки: человек должен понимать, что
@@ -208,3 +239,12 @@ private fun roleWord(group: GroupInfo, words: SocialWords): String =
         "moderator" -> words.youModerator
         else -> words.youMember
     }
+
+/** Метка аватара, открывающего «Описание» (СЦЕНАРИИ-ПО-ОКНАМ.md). */
+const val SHOWCASE_AVATAR_TAG = "social:showcase"
+
+/** Аватар открывает «Описание»; нет обработчика — обычный аватар. */
+private fun showcaseClick(
+    onShowcase: ((kind: String, id: String, title: String) -> Unit)?,
+    open: ((String, String, String) -> Unit) -> Unit,
+): Modifier = if (onShowcase == null) Modifier else Modifier.clickable { open(onShowcase) }.testTag(SHOWCASE_AVATAR_TAG)

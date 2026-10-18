@@ -854,6 +854,12 @@ private sealed interface Where {
     data class Community(val communityId: String) : Where
 
     /**
+     * Окно «Описание» — сообщения уровня 0 группы, канала, сообщества (ПЛАН-(ЗО) ЗО4). Открывается
+     * аватаром в разделах и текстом шапки; забирается при каждом открытии и нигде не хранится.
+     */
+    data class Showcase(val kind: String, val id: String, val title: String) : Where
+
+    /**
      * Разговор под записью (ADR-0024).
      *
      * Адрес — канал и запись в нём: страница человека тоже канал, поэтому одного вида
@@ -1000,6 +1006,9 @@ private fun App(
     // а не разовым списком: разблокировали — переписка возвращается сама.
     val list = remember { ChatsStore(environment.chats, scope, blocked = environment.book.blocked()) }
     var where by remember { mutableStateOf<Where>(Where.Nothing) }
+    // Суперсообщение группы из «Описания» (ПЛАН-(ЗО) ЗО5): переписка откроется с редактором, в
+    // котором уже стоят подкладки всех сообщений уровня 0.
+    var superDraft by remember { mutableStateOf<Pair<String, io.tima.domain.chat.ComposedDoc>?>(null) }
     // Куда человек ходил — второй вопрос правила журнала («что он делал»). Пишется смена,
     // а не каждая перерисовка: журнал должен читаться, а не разбухать.
     // Кодом, а не названием (заказчик 2026-09-27): код один на любом языке и находится
@@ -3342,6 +3351,7 @@ private fun App(
                                 onOpen = { where = Where.Chat(it.groupId, it.title) },
                                 onNew = { where = Where.NewGroup },
                                 onOpenCommunity = { where = Where.Community(it) },
+                                onShowcase = { k, id, t -> where = Where.Showcase(k, id, t) },
                                 // Разделы каталога — набор сообществ по «Виду» каталога.
                                 layout = { groups, line ->
                                     CatalogSectioned(
@@ -3363,7 +3373,13 @@ private fun App(
                                 },
                             )
                         },
-                        friends = { FriendsTab(state = socialState, onAsk = social::ask) },
+                        friends = {
+                            FriendsTab(
+                                state = socialState,
+                                onAsk = social::ask,
+                                onShowcase = { k, id, t -> where = Where.Showcase(k, id, t) },
+                            )
+                        },
                     )
                 }
 
@@ -3554,13 +3570,53 @@ private fun App(
                         // просто открыть группу.
                         onOpenItem = { item ->
                             if (item.kind == CommunityKinds.GROUP) {
-                                where = Where.Chat(item.id, item.title)
+                                // Не вступившему — «Описание», а не пустая переписка (ПЛАН-(ЗО) ЗО4).
+                                where = if (socialState.mine.any { it.groupId == item.id }) {
+                                    Where.Chat(item.id, item.title)
+                                } else {
+                                    Where.Showcase("group", item.id, item.title)
+                                }
                             }
                         },
                         // Вносить и вынимать может владелец: у остальных кнопок нет
                         // вовсе, а не «есть, но отвергается».
                         onLink = if (communityState.owner) store::link else null,
                         onUnlink = if (communityState.owner) store::unlink else null,
+                    )
+                }
+            }
+
+            is Where.Showcase -> {
+                {
+                    ShowcaseWindow(
+                        of = io.tima.domain.chat.ShowcaseOf(current.kind, current.id),
+                        title = current.title,
+                        source = assembled.receiver.showcase,
+                        showcaseApi = network.showcase,
+                        scope = scope,
+                        // Своё положение: группа — в составе ли, сообщество — подписан ли; владелец.
+                        member = when (current.kind) {
+                            "group" -> socialState.mine.any { it.groupId == current.id }
+                            "community" -> socialState.communities.any { it.communityId == current.id }
+                            else -> true
+                        },
+                        owner = when (current.kind) {
+                            "group" -> socialState.mine.firstOrNull { it.groupId == current.id }?.myRole == io.tima.domain.chat.GroupRole.Owner
+                            "community" -> socialState.communities.firstOrNull { it.communityId == current.id }?.owner == true
+                            else -> false
+                        },
+                        onJoin = {
+                            when (current.kind) {
+                                "group" -> social.ask(current.id)
+                                "community" -> scope.launch { network.communities.subscribe(current.id, true); social.refresh() }
+                            }
+                        },
+                        // Группа — переписка с редактором; сообщество — редактор здесь же.
+                        onGroupSuper = { doc ->
+                            superDraft = current.id to doc
+                            where = Where.Chat(current.id, current.title)
+                        },
+                        onBack = { where = Where.Nothing },
                     )
                 }
             }
@@ -3987,6 +4043,27 @@ private fun App(
                         scope = scope,
                         onBack = { where = Where.Nothing },
                         onMembers = { where = Where.Members(current.chatId, current.name) },
+                        // Закреплённое (ПЛАН-(ЗО) ЗО3): личная — любой из двух, группа — модератор и выше.
+                        pins = assembled.receiver.pins,
+                        pinMay = socialState.mine.firstOrNull { it.groupId == current.chatId }?.myRole?.let {
+                            it == io.tima.domain.chat.GroupRole.Owner || it == io.tima.domain.chat.GroupRole.Admin ||
+                                it == io.tima.domain.chat.GroupRole.Moderator
+                        } ?: (listState.chats.firstOrNull { it.chatId == current.chatId }?.kind == ChatKind.Personal),
+                        // Текст шапки группы — «Описание» (ЗО4).
+                        onShowcase = if (listState.chats.firstOrNull { it.chatId == current.chatId }?.kind == ChatKind.Group ||
+                            socialState.mine.any { it.groupId == current.chatId }
+                        ) {
+                            { where = Where.Showcase("group", current.chatId, groupTitleOf(current.chatId)) }
+                        } else {
+                            null
+                        },
+                        setSuper = if (socialState.mine.firstOrNull { it.groupId == current.chatId }?.myRole == io.tima.domain.chat.GroupRole.Owner) {
+                            { n -> assembled.receiver.showcase.setSuper(io.tima.domain.chat.ShowcaseOf("group", current.chatId), n) }
+                        } else {
+                            null
+                        },
+                        superDraft = superDraft?.takeIf { it.first == current.chatId }?.second,
+                        onSuperTaken = { superDraft = null },
                         // «Сообщить о проблеме» из подокна неотправленного: отчёт с кодом
                         // причины уже в тексте — человеку не надо ничего пересказывать.
                         onReportFailed = { reason, waiting ->
@@ -4264,6 +4341,17 @@ private fun Chat(
     callCreatorFace: String? = null,
     inviteOf: (ChatLine) -> io.tima.feature.chat.CallInvite? = { null },
     onInvite: (ChatLine) -> Unit = {},
+    /** Закреплённое (ПЛАН-(ЗО) ЗО3): общий снимок устройства; `null` — закреплять нечем. */
+    pins: io.tima.domain.chat.ChatPins? = null,
+    /** Могу ли закреплять: личная — да, группа — модератор и выше. */
+    pinMay: Boolean = false,
+    /** Текст шапки группы — окно «Описание» (ЗО4); `null` — у личной. */
+    onShowcase: (() -> Unit)? = null,
+    /** Владельцу группы — поставить суперсообщение по номеру (ЗО5). */
+    setSuper: (suspend (Long) -> Boolean)? = null,
+    /** Черновик суперсообщения из «Описания»: открыть редактор с ним; `onSuperTaken` — взят. */
+    superDraft: io.tima.domain.chat.ComposedDoc? = null,
+    onSuperTaken: () -> Unit = {},
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
     var chatMenu by remember { mutableStateOf(false) }
@@ -4438,9 +4526,32 @@ private fun Chat(
                 // Продолжение своего уровня — в группе: в личной один уровень (Решения §11.3).
                 continuations = if (group) environment.continuations else null,
             ),
-        )
+            pins = pins,
+            pinMay = pinMay,
+            setSuper = setSuper,
+        ).also { s ->
+            s.pinLog = { on, step ->
+                val outcome = when (step) {
+                    io.tima.domain.chat.PinStep.Done -> "сделано"
+                    is io.tima.domain.chat.PinStep.Refused -> step.code
+                    io.tima.domain.chat.PinStep.Offline -> "нет сети"
+                }
+                if (step == io.tima.domain.chat.PinStep.Done) {
+                    Journal.note(LogCode.PIN_MSG, if (on) "закреплено" else "снято", "группа" to group)
+                } else {
+                    Journal.trouble(LogCode.PIN_MSG, if (on) "не закреплено" else "не снято", "группа" to group, "итог" to outcome)
+                }
+            }
+        }
     }
     val state by store.state.collectAsState()
+    LaunchedEffect(pinMay) { store.pinAllowed(pinMay) }
+    LaunchedEffect(superDraft) {
+        superDraft?.let { doc ->
+            store.composeSuper(doc)
+            onSuperTaken()
+        }
+    }
     // Ветка открыта — показываем её вместо переписки, тем же подокном, что и комментарии
     // канала (ADR-0024: механизм один, на экране разные слова). «Назад» из ветки
     // возвращает в переписку, а не закрывает её: человек не уходил из группы.
@@ -4593,6 +4704,8 @@ private fun Chat(
         }
     }
     ChatScreen(
+        onUnpin = if (pins != null) store::unpin else null,
+        onShowcase = onShowcase,
         cancelledSenders = cancelledSenders,
         // Знаки быстрого оформления в строке ввода — серым, текст оформлен (ПЛАН-(РС) РС5).
         typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
@@ -4995,6 +5108,13 @@ private fun Chat(
             } else {
                 null
             },
+            // Закрепить и открепить (ПЛАН-(ЗО) ЗО3): у кого право и у отправленного.
+            onPin = if (pins != null && state.pinMay && line.serverId > 0) {
+                { if (state.pinned == line.serverId) store.unpin() else store.pin(line); close() }
+            } else {
+                null
+            },
+            pinned = state.pinned == line.serverId,
         )
     }
     if (chatMenu && group && onMoveToShelf != null) {
@@ -5994,6 +6114,7 @@ private fun whereCode(where: Where): String = when (where) {
     is Where.Access -> "group.access"
     is Where.Comments -> "comments"
     is Where.Community -> "community"
+    is Where.Showcase -> "showcase"
     is Where.Link -> "link.confirm"
     is Where.Certify -> "device.certify"
     is Where.Transfer -> if (where.virtualUserId == null) "account.take" else "account.give"

@@ -240,6 +240,17 @@ class EventStreamProtocol {
         ) : Decision
 
         /**
+         * Закрепили или сняли закрепление (ПЛАН-(ЗО) ЗО1): [messageId] 0 — сняли. [chatId] —
+         * `chat_id` личной или `group_id` группы, как у [MessageDeleted].
+         */
+        data class MessagePinned(
+            val chatId: String,
+            val messageId: Long,
+            val by: String,
+            val eventId: Long?,
+        ) : Decision
+
+        /**
          * Файл почтальона (Решения §6): `media.wanted` — опоздавшее устройство просит его снова,
          * загрузит то, у которого он есть; `media.fetched` — получатель забрал (галочка).
          */
@@ -660,6 +671,15 @@ class EventStreamProtocol {
                     Decision.Skip("$event без media_id", eventId)
                 } else {
                     Decision.MediaEvent(event == "media.wanted", mediaId, json.string("chat_id").orEmpty(), eventId)
+                }
+            }
+            "message.pinned" -> {
+                val chatId = json.string("chat_id") ?: json.string("group_id")
+                val messageId = json["message_id"]?.jsonPrimitive?.longOrNull
+                if (chatId == null || messageId == null) {
+                    Decision.Skip("message.pinned без обязательных полей", eventId)
+                } else {
+                    Decision.MessagePinned(chatId, messageId, json.string("by") ?: "", eventId)
                 }
             }
             "message.deleted" -> {

@@ -1,5 +1,7 @@
 package io.tima.feature.chat
 
+import io.tima.domain.chat.ChatPins
+import io.tima.domain.chat.PinStep
 import io.tima.core.words.CurrentWords
 import io.tima.domain.account.PhraseWords
 import io.tima.core.words.Words
@@ -178,6 +180,12 @@ class ChatStore(
     private val selfChat: Boolean = false,
     /** Собранное в редакторе (Решения §10). `null` — редактора нет: кнопка не показывается. */
     private val composer: SendComposed? = null,
+    /** Закреплённое (ПЛАН-(ЗО) ЗО3). `null` — закреплять нечем: полосы и пунктов меню нет. */
+    private val pins: ChatPins? = null,
+    /** Могу ли закреплять: личная — любой из двух, группа — модератор и выше (решает вызывающий по роли). */
+    private val pinMay: Boolean = false,
+    /** Поставить суперсообщение описания по номеру (ПЛАН-(ЗО) ЗО5); `null` — не владелец. */
+    private val setSuper: (suspend (Long) -> Boolean)? = null,
 ) {
 
     /** Отложенная запись черновика: не на каждое нажатие клавиши. */
@@ -211,6 +219,12 @@ class ChatStore(
     private var known: List<ChatLine> = emptyList()
 
     init {
+        // Закреплённое — с сервера при открытии и событием потом; полоса читает общий снимок.
+        pins?.let { board ->
+            _state.value = _state.value.copy(pinMay = pinMay)
+            scope.launch { runCatching { withContext(io) { board.refresh(chatId, _state.value.group) } } }
+            scope.launch { board.pinned.collect { _state.value = _state.value.copy(pinned = it[chatId] ?: 0L) } }
+        }
         // Черновик этой переписки — в строку ввода, если человек ещё ничего не набрал.
         drafts?.let { port ->
             scope.launch {
@@ -254,14 +268,18 @@ class ChatStore(
                 }
                 known = lines
                 sendPendingMain(lines)
+                superSent(lines)
                 val replies = lines.filter { it.threadRoot != 0L }.groupingBy { it.threadRoot }.eachCount()
                 // «Только продолжение» в ленте не показывается (Решения §11.3): его видно через
                 // подкладку и прямой переход; в `known` оно остаётся — подкладке есть что показать.
-                val shown = lines.filter { it.threadRoot == 0L && !it.onlyContinuation }
+                // Описание группы (уровень 0) в ленту не идёт — оно в окне «Описание» (ПЛАН-(ЗО) ЗО4);
+                // подкладке и переходу оно остаётся видно, как продолжение.
+                val showcase: (ChatLine) -> Boolean = { _state.value.group && it.level == 0 }
+                val shown = lines.filter { it.threadRoot == 0L && !it.onlyContinuation && !showcase(it) }
                     .map { line -> line.copy(replies = replies[line.serverId] ?: 0) }
                 _state.value = _state.value.copy(
                     lines = shown,
-                    continuations = lines.filter { it.onlyContinuation && it.threadRoot == 0L },
+                    continuations = lines.filter { (it.onlyContinuation || showcase(it)) && it.threadRoot == 0L },
                     thread = _state.value.thread?.let { open ->
                         // Тот же список, из которого собран экран переписки.
                         // Открытая ветка обновляется тем же потоком: пришедший ответ
@@ -709,8 +727,12 @@ class ChatStore(
             ReplyTarget(kind = if (_state.value.group) "group" else "personal", chatId = chatId, messageId = it.serverId, userId = it.userId)
         }
         val result = c.send(chatId, doc, _state.value.level, reply)
+        if (superWanted && (result is ComposedResult.Queued || result is ComposedResult.ContinuationFirst)) {
+            superWanted = false
+            if (result is ComposedResult.Queued) superKey = result.dedupKey else superPending = true
+        }
         _state.value = when (result) {
-            is ComposedResult.Queued -> _state.value.copy(editorOpen = false, composed = null, replyTo = null, notice = null)
+            is ComposedResult.Queued -> _state.value.copy(editorOpen = false, composed = null, replyTo = null, notice = showcaseNotice())
                 .also { keepComposed(null) }
             ComposedResult.Empty -> _state.value
             is ComposedResult.Invalid -> _state.value.copy(
@@ -727,6 +749,72 @@ class ChatStore(
         return result
     }
 
+    /** Право закреплять стало известно позже открытия: роль приезжает со списком групп. */
+    fun pinAllowed(may: Boolean) {
+        if (pins != null) _state.value = _state.value.copy(pinMay = may)
+    }
+
+    /** Закрепить сообщение (ПЛАН-(ЗО) ЗО3): одно на переписку, прежнее заменяется. */
+    fun pin(line: ChatLine) = pinChange(line.serverId)
+
+    /** Снять закрепление. */
+    fun unpin() = pinChange(0)
+
+    private fun pinChange(serverId: Long) {
+        val board = pins ?: return
+        if (serverId < 0 || (serverId == 0L && _state.value.pinned == 0L)) return
+        val group = _state.value.group
+        scope.launch {
+            val step = withContext(io) { if (serverId > 0) board.pin(chatId, group, serverId) else board.unpin(chatId, group) }
+            val w = words().showcase
+            when (step) {
+                PinStep.Done -> Unit
+                is PinStep.Refused -> _state.value = _state.value.copy(notice = ChatNotice.Said(w.pinRefused(step.code)))
+                PinStep.Offline -> _state.value = _state.value.copy(notice = ChatNotice.Said(w.pinRefused("offline")))
+            }
+            pinLog?.invoke(serverId > 0, step)
+        }
+    }
+
+    /** Журнал закрепления — у вызывающего: модуль окна журнала не знает (core-diag). */
+    var pinLog: ((on: Boolean, step: PinStep) -> Unit)? = null
+
+    /**
+     * Суперсообщение описания (ПЛАН-(ЗО) ЗО5): редактор с подкладками всех сообщений уровня 0;
+     * отправленное уходит уровнем 0 и, получив номер, ставится суперсообщением.
+     */
+    fun composeSuper(doc: ComposedDoc) {
+        if (composer == null || setSuper == null) return
+        superWanted = true
+        _state.value = _state.value.copy(editorOpen = true, composed = doc, level = 0, draft = "", notice = null)
+    }
+
+    /** Суперсообщение ждёт отправки (`true`) или номера своего сообщения (ключ). */
+    private var superWanted = false
+    private var superKey: String? = null
+
+    /** Суперсообщение ушло продолжением вперёд — ключ основного будет у `sendMain`. */
+    private var superPending = false
+
+    /**
+     * Ушло уровнем 0 в группе — в ленте его не будет, оно в окне «Описание» (ПЛАН-(ЗО) ЗО4); человек
+     * должен узнать, куда делось, а не искать.
+     */
+    private fun showcaseNotice(): ChatNotice? =
+        if (_state.value.group && _state.value.level == 0) ChatNotice.Said(words().showcase.sentToShowcase) else null
+
+    private fun superSent(lines: List<ChatLine>) {
+        val key = superKey ?: return
+        val set = setSuper ?: return
+        val number = lines.firstOrNull { it.dedupKey == key }?.serverId?.takeIf { it > 0 } ?: return
+        superKey = null
+        scope.launch {
+            val ok = withContext(io) { set(number) }
+            val w = words().showcase
+            _state.value = _state.value.copy(notice = ChatNotice.Said(if (ok) w.superSet else w.superFailed))
+        }
+    }
+
     /** Основное, которое ждёт номера своего продолжения от сервера. */
     private class PendingMain(val doc: ComposedDoc, val continuationKey: String, val reply: ReplyTarget?)
 
@@ -739,6 +827,10 @@ class ChatStore(
         val number = lines.firstOrNull { it.dedupKey == p.continuationKey }?.serverId?.takeIf { it > 0 } ?: return
         pendingMain = null
         val result = c.sendMain(chatId, p.doc, if (_state.value.group) "group" else "personal", number, _state.value.level, p.reply)
+        if (result is ComposedResult.Queued && superPending) {
+            superPending = false
+            superKey = result.dedupKey
+        }
         if (result is ComposedResult.Queued) {
             keepComposed(null)
             _state.value = _state.value.copy(notice = null)
@@ -797,7 +889,7 @@ class ChatStore(
             // Принято: поле чистим — сообщение уже в списке.
             is SendMessageResult.Queued,
             is SendMessageResult.AlreadyQueued,
-            -> _state.value.copy(draft = "", notice = null, replyTo = null).also { keepDraft("") }
+            -> _state.value.copy(draft = "", notice = showcaseNotice(), replyTo = null).also { keepDraft("") }
 
             // Нажатие мимо. Ни сообщения, ни жалобы: человек и сам видит, что поле пусто.
             SendMessageResult.Empty -> _state.value.copy(notice = null)
@@ -933,6 +1025,10 @@ data class ChatState(
     val level: Int = -1,
     /** Открытая ветка (ADR-0024, К6). `null` — ветка закрыта. */
     val thread: ThreadState? = null,
+    /** Номер закреплённого (ПЛАН-(ЗО) ЗО3); 0 — ничего не закреплено или не знаем. */
+    val pinned: Long = 0,
+    /** Могу ли закреплять и снимать здесь: личная — да, группа — модератор и выше. */
+    val pinMay: Boolean = false,
     /** Набранное в ветке. Отдельно от общего черновика: это два разных текста. */
     val threadDraft: String = "",
     /**

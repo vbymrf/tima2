@@ -97,7 +97,11 @@ class ReceiveHarness(private val inbox: Inbox) {
                 decision.eventId?.let { sent += protocol.ackFrame(it) }
             }
 
-            // Удаление у всех — так же: правка местной записи, предмет проверки другой.
+            // Закрепление и удаление у всех — так же: правка местной записи, предмет проверки другой.
+            is EventStreamProtocol.Decision.MessagePinned -> {
+                aboutKeys += "pinned:${decision.chatId}:${decision.messageId}"
+                decision.eventId?.let { sent += protocol.ackFrame(it) }
+            }
             is EventStreamProtocol.Decision.MessageDeleted -> {
                 aboutKeys += "deleted:${decision.chatId}:${decision.messageId}"
                 decision.eventId?.let { sent += protocol.ackFrame(it) }

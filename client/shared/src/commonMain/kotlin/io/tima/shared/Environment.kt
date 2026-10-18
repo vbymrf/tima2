@@ -576,6 +576,14 @@ class Network(
     override val removal: io.tima.domain.chat.RemoteDelete =
         io.tima.core.network.MessageRemovalOverHttp(link.route, link.client, token = { token() })
 
+    /** Закреплённое (ПЛАН-(ЗО) ЗО3). */
+    override val pins: io.tima.domain.chat.RemotePins =
+        io.tima.core.network.PinsOverHttp(link.route, link.client, token = { token() })
+
+    /** Описание и суперсообщение (ПЛАН-(ЗО) ЗО4–ЗО5). */
+    override val showcase: io.tima.core.network.ShowcaseOverHttp =
+        io.tima.core.network.ShowcaseOverHttp(link.route, link.client, token = { token() })
+
     /**
      * То же самое под именем порта групп.
      *

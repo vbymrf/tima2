@@ -51,6 +51,8 @@ interface Words {
     val pin: PinWords
     /** Редактор сообщений (РЕДАКТОР-СООБЩЕНИЙ §10). */
     val editor: EditorWords
+    /** Закреплённое и окно «Описание» (ПЛАН-(ЗО)). */
+    val showcase: ShowcaseWords
     /** Вид группы — где аватар автора (2026-10-07). */
     val groupLook: GroupLookWords
     val suggest: SuggestWords
@@ -3717,6 +3719,7 @@ object RussianWords : Words {
 
     override val pin: PinWords = RussianPinWords
     override val editor: EditorWords = RussianEditorWords
+    override val showcase: ShowcaseWords = RussianShowcaseWords
     override val groupLook: GroupLookWords = RussianGroupLookWords
     override val suggest: SuggestWords = RussianSuggestWords
     override val accountList: AccountListWords = RussianAccountListWords

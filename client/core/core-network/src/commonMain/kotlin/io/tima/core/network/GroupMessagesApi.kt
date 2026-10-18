@@ -111,7 +111,8 @@ class GroupMessagesApi(
      * @return `null` — сеть или отказ: страница не получена, а не «истории нет».
      */
     suspend fun page(groupId: String, before: Long, limit: Int = PAGE): List<Page>? {
-        val path = "/api/v1/groups/$groupId/messages?limit=$limit" + if (before > 0) "&before=$before" else ""
+        // Описание (уровень 0) в ленту не идёт — его забирает окно «Описание» (ПЛАН-(ЗО) ЗО4).
+        val path = "/api/v1/groups/$groupId/messages?limit=$limit&no_showcase=1" + if (before > 0) "&before=$before" else ""
         val response = try {
             client.get(route.api(path)) { header("Authorization", "Bearer ${token()}") }
         } catch (e: Throwable) {

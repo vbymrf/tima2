@@ -62,6 +62,15 @@ object ComposedBodiesOverKodium : ComposedBodies {
         return io.tima.domain.chat.OpenBody(c.displayText(), c.nodes, c.markup?.let(Markup::encode).orEmpty())
     }
 
+    /**
+     * Открытое сообщение канала и сообщества — узлы и разметка открытым текстом (ADR-0011 §4) — для
+     * показа в окне «Описание» (ПЛАН-(ЗО) ЗО4). Разметка не разобралась — текст без оформления.
+     */
+    fun readOpen(nodes: List<String>, markup: String): io.tima.domain.chat.DecodedLine? = runCatching {
+        val content = MessageContent(nodes, markup.takeIf { it.isNotBlank() }?.let(Markup::decode))
+        io.tima.domain.chat.DecodedLine(content.displayText(), RichMapper.from(content))
+    }.getOrNull()
+
     /** Содержимое сообщения из документа — для тела, проверки и показа. */
     fun content(doc: ComposedDoc): MessageContent {
         val a = Assembly(doc.marks)

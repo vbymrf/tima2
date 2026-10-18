@@ -66,6 +66,10 @@ fun MessageMenuSheet(
     onCopy: (() -> Unit)? = null,
     onPick: (() -> Unit)? = null,
     onCarry: (() -> Unit)? = null,
+    /** «Закрепить» (ПЛАН-(ЗО) ЗО3); `null` — права нет. */
+    onPin: (() -> Unit)? = null,
+    /** Это сообщение и есть закреплённое — пункт «Открепить». */
+    pinned: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
@@ -111,6 +115,13 @@ fun MessageMenuSheet(
                 }
             } else {
                 onReply?.let { Item(words.menuReply, MessageMenuTags.REPLY, onClick = it) }
+            }
+            onPin?.let {
+                Item(
+                    if (pinned) Tima.words.showcase.menuUnpin else Tima.words.showcase.menuPin,
+                    if (pinned) PinTags.MENU_UNPIN else PinTags.MENU_PIN,
+                    onClick = it,
+                )
             }
             onShare?.let { Item(words.menuShare, MessageMenuTags.SHARE, onClick = it) }
             onCopy?.let { Item(words.menuCopy, MessageMenuTags.COPY, onClick = it) }

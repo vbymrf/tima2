@@ -259,6 +259,10 @@ fun ChatScreen(
      */
     invite: (ChatLine) -> CallInvite? = { null },
     onInvite: (ChatLine) -> Unit = {},
+    /** Снять закрепление ✕ в полосе (ПЛАН-(ЗО) ЗО3); `null` — права нет, крестика нет. */
+    onUnpin: (() -> Unit)? = null,
+    /** Нажатие на текст шапки группы — окно «Описание» (ПЛАН-(ЗО) ЗО4); `null` — у личной. */
+    onShowcase: (() -> Unit)? = null,
 ) {
     val cancelledMark = Tima.words.auth.identityCancelledMark
     val colors = Tima.colors
@@ -278,7 +282,7 @@ fun ChatScreen(
             // Чипы «Доступность» и «Участники» из шапки убраны (решение заказчика
             // 2026-09-17: это про группу, а не про переписку). Они живут в меню «•••».
             onMore = onMore,
-            onPerson = onPerson,
+            onPerson = onPerson ?: onShowcase,
             right = onCall?.let { call ->
                 {
                     IconButton(
@@ -327,6 +331,16 @@ fun ChatScreen(
         jumps.onJump = onJump
         val openMessage: (String, String, Long) -> Unit = { _, _, number ->
             if (state.lines.any { it.serverId == number }) jumps.go(number)
+        }
+        // Закреплённое — полоса под шапкой: строка сообщения, нажатие — переход к нему (§11.4),
+        // ✕ — снять, у кого право (ПЛАН-(ЗО) ЗО3). Не загружено — заглушка.
+        if (state.pinned > 0) {
+            val found = state.lines.firstOrNull { it.serverId == state.pinned }
+            PinnedBar(
+                text = found?.takeUnless { it.deleted }?.text,
+                onOpen = { if (found != null) jumps.go(state.pinned) },
+                onUnpin = onUnpin?.takeIf { state.pinMay },
+            )
         }
         androidx.compose.runtime.CompositionLocalProvider(
             LocalReplyLook provides replyLook,
