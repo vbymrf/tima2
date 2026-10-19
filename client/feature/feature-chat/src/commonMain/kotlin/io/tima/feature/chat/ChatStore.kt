@@ -15,6 +15,8 @@ import io.tima.core.media.PhotoPrep
 import io.tima.domain.chat.AttachResult
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.ComposedDoc
+import io.tima.domain.chat.ComposedItem
+import io.tima.domain.chat.ComposedWidget
 import io.tima.domain.chat.ComposedResult
 import io.tima.domain.chat.SendComposed
 import io.tima.domain.chat.SendAttachments
@@ -624,18 +626,79 @@ class ChatStore(
         val ask = _state.value.notice as? ChatNotice.DeleteAsk ?: return
         val port = deleter ?: return
         _state.value = _state.value.copy(notice = null)
-        if (_state.value.editing == ask.serverId) editCancelled()
+        val ids = listOf(ask.serverId) + ask.more
+        if (_state.value.editing in ids) editCancelled()
         scope.launch {
-            val result = withContext(io) { port.forAll(chatId, ask.serverId, _state.value.group) }
             val w = words().chat
-            val said = when (result) {
-                DeleteResult.Deleted -> null
-                DeleteResult.NotSent -> w.deleteRefused("not_sent")
-                DeleteResult.Offline -> w.deleteOffline
-                is DeleteResult.Refused -> w.deleteRefused(result.code)
+            var said: String? = null
+            for (id in ids) {
+                val result = withContext(io) { port.forAll(chatId, id, _state.value.group) }
+                said = said ?: when (result) {
+                    DeleteResult.Deleted -> null
+                    DeleteResult.NotSent -> w.deleteRefused("not_sent")
+                    DeleteResult.Offline -> w.deleteOffline
+                    is DeleteResult.Refused -> w.deleteRefused(result.code)
+                }
             }
             if (said != null) _state.value = _state.value.copy(notice = ChatNotice.Said(said))
         }
+    }
+
+    // ── Выбор нескольких сообщений (заказчик 2026-10-19) ───────────────────────
+
+    /** «Удалить у себя» для выбранных. */
+    fun deleteForMeMany(lines: List<ChatLine>) = lines.forEach(::deleteForMe)
+
+    /** «Удалить у всех» для выбранных — сначала вопрос: вернуть нельзя. Только своё отправленное. */
+    fun deleteForAllManyAsked(lines: List<ChatLine>) {
+        if (deleter == null) return
+        val ids = lines.filter { it.outgoing && it.serverId > 0 }.map { it.serverId }
+        if (ids.isEmpty()) return
+        _state.value = _state.value.copy(notice = ChatNotice.DeleteAsk(ids.first(), ids.drop(1)))
+    }
+
+    /** «В Подборку» для выбранных: сказать один раз — сколько добавлено. */
+    fun pickedMany(lines: List<ChatLine>) {
+        val port = picks ?: return
+        scope.launch {
+            var added = 0
+            var full = false
+            for (line in lines.filter { it.serverId > 0 }) {
+                when (withContext(io) { port.add(pickLevel, chatId, line.serverId) }) {
+                    PickResult.Added -> added++
+                    PickResult.Full -> full = true
+                    else -> Unit
+                }
+            }
+            val w = words().chat
+            _state.value = _state.value.copy(notice = ChatNotice.Said(if (full) w.picksFull else w.pickedMany(added)))
+        }
+    }
+
+    /**
+     * Что переслать из сообщения: знаками, документом редактора, иначе видимым текстом. Фото
+     * забирает окно — у него доступ к файлам. `null` — пересылать нечего.
+     */
+    fun forwardOf(line: ChatLine): Forwarded? {
+        if (line.deleted) return null
+        val port = edit
+        if (port != null && line.serverId > 0) {
+            port.copySource(chatId, line.serverId)?.let { return Forwarded.Text(it) }
+            port.copyDocument(chatId, line.serverId)?.let { return Forwarded.Doc(it) }
+        }
+        return line.text?.takeIf { it.isNotBlank() }?.let { Forwarded.Text(it, marks = false) }
+    }
+
+    /** Пересланное сюда — каждое отдельным сообщением, в том же порядке. Черновик не трогается. */
+    fun sendForwarded(items: List<Forwarded>) {
+        for (item in items) {
+            when (item) {
+                is Forwarded.Text -> send.send(chatId, item.text, _state.value.level, marks = item.marks)
+                is Forwarded.Doc -> composer?.send(chatId, item.doc, _state.value.level, null)
+                is Forwarded.Photo -> sendPhotos(listOf(item.bytes to item.mime))
+            }
+        }
+        _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.forwarded(items.size)))
     }
 
     /** «Добавить в Подборку» — ссылка на сообщение на этом устройстве. */
@@ -823,6 +886,21 @@ class ChatStore(
                 _state.value.copy(editorOpen = false, composed = null, replyTo = null, notice = ChatNotice.Said(words().editor.continuationSent))
             }
         }
+        return result
+    }
+
+    /**
+     * Отдельное сообщение из одного виджета — ссылка из скрепки (заказчик 2026-10-19). Черновик
+     * редактора и ответ не трогает: это не собранное в редакторе.
+     */
+    fun sendWidget(widget: ComposedWidget): ComposedResult? {
+        val c = composer ?: return null
+        val result = c.send(chatId, ComposedDoc(listOf(ComposedItem.Widget(widget))), _state.value.level, null)
+        val said = when (result) {
+            is ComposedResult.Invalid -> words().editor.cannotSend + ": " + result.problems.firstOrNull().orEmpty()
+            else -> null
+        }
+        if (said != null) _state.value = _state.value.copy(notice = ChatNotice.Said(said))
         return result
     }
 
@@ -1276,7 +1354,8 @@ sealed interface ChatNotice {
     data class Said(val text: String) : ChatNotice
 
     /** Подтвердить «Удалить у всех»: вернуть нельзя (Решения §8). */
-    data class DeleteAsk(val serverId: Long) : ChatNotice
+    /** «Удалить у всех?» — [serverId] и, при выборе нескольких, [more] (2026-10-19). */
+    data class DeleteAsk(val serverId: Long, val more: List<Long> = emptyList()) : ChatNotice
 }
 
 /**
@@ -1290,3 +1369,11 @@ data class ThreadState(
     val root: ChatLine,
     val replies: List<ChatLine> = emptyList(),
 )
+
+/** Пересылаемое в другую переписку (заказчик 2026-10-19): каждое уходит там отдельным сообщением. */
+sealed interface Forwarded {
+    /** Текст; [marks] — со знаками быстрого оформления (как набран), иначе как есть. */
+    data class Text(val text: String, val marks: Boolean = true) : Forwarded
+    data class Doc(val doc: ComposedDoc) : Forwarded
+    class Photo(val bytes: ByteArray, val mime: String) : Forwarded
+}

@@ -33,6 +33,20 @@ class EditMessage(
         return codec.editDoc(original.body, original.edits)
     }
 
+    /**
+     * Чужое или своё сообщение для пересылки (заказчик 2026-10-19): текст со знаками — `null`, если
+     * знаками не выразить; тогда — документ редактора ([copyDocument]).
+     */
+    fun copySource(chatId: String, serverId: Long): String? {
+        val original = bodies.original(chatId, serverId) ?: return null
+        return codec.editSource(original.body, original.edits)
+    }
+
+    fun copyDocument(chatId: String, serverId: Long): ComposedDoc? {
+        val original = bodies.original(chatId, serverId) ?: return null
+        return codec.editDoc(original.body, original.edits)
+    }
+
     fun edit(chatId: String, serverId: Long, typed: String, marks: Boolean = true): EditResult {
         if (typed.isBlank()) return checked(chatId, serverId) ?: EditResult.Empty
         return queued(chatId, serverId) { original -> codec.encodeEdit(original.body, original.edits, typed, marks) }

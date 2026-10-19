@@ -179,7 +179,12 @@ object ComposedBodiesOverKodium : ComposedBodies {
             }
             is ComposedWidget.Link -> {
                 val image = w.image?.let { media += ref(it); media.size - 1 } ?: -1
-                MarkupBlock(type = BlockType.LINK, widget = MarkupWidget(url = w.url, mode = w.mode, title = w.title, description = w.description, media = image))
+                MarkupBlock(
+                    type = BlockType.LINK,
+                    widget = MarkupWidget(url = w.url, mode = w.mode, title = w.title, description = w.description, media = image),
+                    // Цвет ссылки — стилем её блока, как цвет любого узла (заказчик 2026-10-19).
+                    style = if (w.color.isNotEmpty()) mapOf("color" to w.color) else emptyMap(),
+                )
             }
             is ComposedWidget.Cloud -> MarkupBlock(type = BlockType.CLOUD, widget = MarkupWidget(url = w.url, kind = w.kind, title = w.title))
             is ComposedWidget.Place -> MarkupBlock(type = BlockType.MAP, widget = MarkupWidget(lat = w.lat, lon = w.lon, label = w.label))
@@ -301,13 +306,14 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val cut: String = "",
         val description: String = "",
         val lines: Int = 0,
+        val color: String = "",
     ) {
         private fun media(): OutMedia? = if (mediaId.isEmpty()) null else
             OutMedia(mediaId, Base64.decode(key), mime, width, height, size, Base64.decode(preview), name)
 
         fun toWidget(): ComposedWidget? = when (type) {
             "image" -> media()?.let { ComposedWidget.Image(it) }
-            "link" -> ComposedWidget.Link(url, title, mode, description, media())
+            "link" -> ComposedWidget.Link(url, title, mode, description, media(), color)
             "cloud" -> ComposedWidget.Cloud(url, kind, title)
             "place" -> ComposedWidget.Place(lat, lon, label)
             "contact" -> ComposedWidget.Contact(name, phone, userId)
@@ -326,7 +332,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
                     preview = Base64.encode(w.media.preview), name = w.media.name,
                 )
                 is ComposedWidget.Link -> SavedWidget(
-                    "link", url = w.url, title = w.title, mode = w.mode, description = w.description,
+                    "link", url = w.url, title = w.title, mode = w.mode, description = w.description, color = w.color,
                     mediaId = w.image?.mediaId.orEmpty(), key = w.image?.let { Base64.encode(it.key) }.orEmpty(),
                     mime = w.image?.mime.orEmpty(), width = w.image?.width ?: 0, height = w.image?.height ?: 0, size = w.image?.size ?: 0,
                 )

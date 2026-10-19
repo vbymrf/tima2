@@ -157,6 +157,10 @@ object EnglishWords : Words {
             name = "Red",
             about = "“End”, “Close”, declined call, blocked people, errors",
         )
+        override val slotLink = ColorSlotWords(
+            name = "Links",
+            about = "links in messages and the “Open” bubble, unless the message sets a colour",
+        )
 
         override val colorEmpty = "Empty. Type a colour: six characters or eight"
         override fun colorNotHex(listed: String) =
@@ -1230,6 +1234,18 @@ object EnglishWords : Words {
         override val editStructure = "An edit changes text only: lines, headings and lists stay"
         override val editInEditor = "This message is edited in the editor"
         override val editImpossible = "This message can't be edited"
+        override val linkGo = "Open"
+        override val linkAskOpen = "Open the link? Check the site:"
+        override fun selected(count: Int) = "Selected: $count"
+        override val selectPick = "To picks"
+        override val selectCopy = "Copy"
+        override val selectForward = "Forward"
+        override val selectDelete = "Delete"
+        override fun deleteManyTitle(count: Int) = "Delete selected ($count)"
+        override fun deleteManyAsk(count: Int) = "Delete for everyone: $count? This can't be undone"
+        override fun pickedMany(count: Int) = "Added to picks: $count"
+        override fun forwarded(count: Int) = "Forwarded: $count"
+        override val forwardNothing = "Nothing to forward: files go via “Save as”"
         override val editLimit = "The message has been edited three times already"
         override val deleteForAllAsk = "Delete for everyone? This cannot be undone"
         override val deleteOffline = "No connection — the message was not deleted"

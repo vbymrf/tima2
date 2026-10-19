@@ -372,7 +372,7 @@ fun EditorScreen(
                 )
             }
         }
-        Ribbon(tab, marksOn = doc.marks, active = active, scroll = ribbonScroll, onPress = ::press)
+        Ribbon(tab, marksOn = doc.marks, active = active, scroll = ribbonScroll, desktop = desktop, onPress = ::press)
         if (paragraphMenu) ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); paragraphMenu = false }
         stylePanel?.let { StylePanel(it, model, problems) }
         if (gridAsk) {
@@ -389,7 +389,9 @@ fun EditorScreen(
         ) {
             Box(Modifier.weight(1f)) { Tertiary(notice ?: hint ?: w.selected(selectedKind(model)), lineOne = true) }
             // ПК: стрелки ленты в разделителе между кнопками и сообщением (§10.2).
-            if (desktop) {
+            // Стрелки — только если кнопки раздела не помещаются (заказчик 2026-10-19).
+            // Длина ленты известна после разметки (до неё — «бесконечность»): прокрутки нет — стрелок нет.
+            if (desktop && ribbonScroll.maxValue in 1 until Int.MAX_VALUE) {
                 HeaderGlyph("‹", ribbonScroll.canScrollBackward, "editor:ribbon.back") {
                     ribbonScope.launch { ribbonScroll.animateScrollBy(-RIBBON_STEP) }
                 }
@@ -474,6 +476,9 @@ private val EDITOR_TAIL_MIN = 160.dp
 
 /** Пауза набора, после которой документ пишется черновиком. */
 private const val DRAFT_PAUSE_MS = 500L
+
+/** Ширина кнопки ленты на ПК. */
+private val RIBBON_BUTTON_DESKTOP = 72.dp
 
 /** На сколько сдвигается лента стрелкой на ПК — три кнопки. */
 private const val RIBBON_STEP = 180f
@@ -562,11 +567,13 @@ private fun LevelList(levels: List<MessageCircle>, current: Int, onPick: (Int) -
 
 /** Лента: шесть кнопок и половина седьмой — видно, что дальше есть ещё (§10.2). */
 @Composable
-private fun Ribbon(tab: EditorTab, marksOn: Boolean, active: Set<String>, scroll: androidx.compose.foundation.ScrollState, onPress: (String) -> Unit) {
+private fun Ribbon(tab: EditorTab, marksOn: Boolean, active: Set<String>, scroll: androidx.compose.foundation.ScrollState, desktop: Boolean, onPress: (String) -> Unit) {
     val colors = Tima.colors
     val w = Tima.words.editor
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val width = maxWidth / 6.5f
+        // Телефон — шесть кнопок и половина седьмой; ПК — кнопка постоянной ширины (заказчик 2026-10-19:
+        // на широком окне кнопки расползались): помещаются все — без стрелок.
+        val width = if (desktop) RIBBON_BUTTON_DESKTOP else maxWidth / 6.5f
         Row(Modifier.fillMaxWidth().horizontalScroll(scroll).padding(vertical = 4.dp)) {
             for (key in tab.buttons) {
                 // Нажата: «Знаки md» включены; Ж, К… — оформление под курсором или ждёт буквы (Word).

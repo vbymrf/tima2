@@ -112,7 +112,9 @@ internal object RichMapper {
         val w = block.widget ?: return null
         return when (block.type) {
             BlockType.IMAGE -> w.media.takeIf { it >= 0 }?.let { RichBlock.Image(it) }
-            BlockType.LINK -> w.takeIf { it.url.isNotBlank() }?.let { RichBlock.Link(it.url, it.mode.ifEmpty { "plain" }, it.title, it.description, it.media) }
+            BlockType.LINK -> w.takeIf { it.url.isNotBlank() }?.let {
+                RichBlock.Link(it.url, it.mode.ifEmpty { "plain" }, it.title, it.description, it.media, block.style["color"].orEmpty())
+            }
             BlockType.CLOUD -> w.takeIf { it.url.isNotBlank() }?.let { RichBlock.Cloud(it.url, it.kind.ifEmpty { "file" }, it.title) }
             BlockType.MAP -> {
                 val lat = w.lat

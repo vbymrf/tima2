@@ -707,18 +707,34 @@ private fun Reply(
     // делать нечего. Номер обязателен: все пункты меню ссылаются на сообщение по нему.
     val menu = !failed && onMenu != null && line.serverId > 0 && !line.deleted &&
         line.display != MessageDisplay.UNREADABLE && line.text != null
+    // Выбор нескольких (заказчик 2026-10-19): долгое нажатие ставит галочку; пока выбрано хоть одно,
+    // обычное нажатие ставит и снимает её вместо меню.
+    val selection = LocalChatSelection.current
+    val canSelect = selection != null && selectable(line)
+    val choosing = selection?.active == true
+    val chosen = selection?.keys?.contains(line.dedupKey) == true
+    Row(verticalAlignment = Alignment.CenterVertically) {
+    if (choosing && canSelect && line.outgoing) SelectMark(chosen)
     Column(
         (
-            if (failed) {
+            if (choosing && canSelect) {
+                Modifier.clickable { selection!!.toggle(line) }
+            } else if (failed) {
                 Modifier.clickable { onFailed!!(line) }
             } else if (menu) {
-                // Нажатие — меню; долгое — выделить часть; правая кнопка мыши (ПК) — тоже меню (§11.1).
+                // Нажатие — меню; долгое — выбор нескольких (2026-10-19); правая кнопка мыши (ПК) — меню (§11.1).
                 Modifier.secondaryClick { onMenu!!(line) }
-                    .combinedClickable(onClick = { onMenu!!(line) }, onLongClick = onSelect?.let { { it(line) } })
+                    .combinedClickable(
+                        onClick = { onMenu!!(line) },
+                        onLongClick = if (canSelect) ({ selection!!.toggle(line) }) else onSelect?.let { { it(line) } },
+                    )
+            } else if (canSelect) {
+                Modifier.combinedClickable(onClick = {}, onLongClick = { selection!!.toggle(line) })
             } else {
                 Modifier
             }
         )
+            .weight(1f)
             .then(if (withAvatar) Modifier.padding(top = TimaSpacing.about3 / 2) else Modifier),
     ) {
         // Только эмоджи — крупно и без пузыря (Решения §2): это не текст, а знак.
@@ -753,6 +769,8 @@ private fun Reply(
                 )
             }
         }
+    }
+    if (choosing && canSelect && !line.outgoing) SelectMark(chosen)
     }
 }
 
@@ -884,7 +902,8 @@ private fun Bubbled(
         line.deleted -> Chip(Tima.words.chat.deleted, kind = ChipKind.Quiet)
         // Оформленное (ПЛАН-(РС) РС4) — блоками; обычное — текстом, как было.
         text != null && rich != null -> RichBody(rich)
-        text != null -> Caption(text, fontSize = TimaType.sz4)
+        // Простое — ссылки в нём синие и нажимаются, под текстом «Перейти» (заказчик 2026-10-19).
+        text != null -> PlainWithLinks(text)
 
         // **«Не читается» и «ещё не разобрано» — разные вещи, и путать их нельзя.**
         // Первое окончательно: ключа нет, подпись не сошлась. Второе — секунда между
@@ -1089,7 +1108,7 @@ private fun Trouble(trouble: ChatNotice, onClose: () -> Unit, onConfirm: (() -> 
             is ChatNotice.Narrowed -> words.narrowed(trouble.circle)
             is ChatNotice.NarrowRefused -> trouble.text
             is ChatNotice.Said -> trouble.text
-            is ChatNotice.DeleteAsk -> words.deleteForAllAsk
+            is ChatNotice.DeleteAsk -> if (trouble.more.isEmpty()) words.deleteForAllAsk else words.deleteManyAsk(1 + trouble.more.size)
         }
         Caption(
             text,

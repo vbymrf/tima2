@@ -60,4 +60,5 @@ private fun AppearanceWords.slotWords(slot: ColorSlot) = when (slot) {
     ColorSlot.SOFT_ACCENT -> slotSoftAccent
     ColorSlot.QUIET -> slotQuiet
     ColorSlot.ALARM -> slotAlarm
+    ColorSlot.LINK -> slotLink
 }

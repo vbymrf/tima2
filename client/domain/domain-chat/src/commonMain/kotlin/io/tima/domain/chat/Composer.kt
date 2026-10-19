@@ -119,6 +119,8 @@ sealed interface ComposedWidget {
         val mode: String = "plain",
         val description: String = "",
         val image: OutMedia? = null,
+        /** Цвет — имя палитры, стилем блока ссылки; пусто — цвет ссылок у читающего (2026-10-19). */
+        val color: String = "",
     ) : ComposedWidget
 
     /** Файл вне телефона: `file`, `document`, `audio`, `video`. */

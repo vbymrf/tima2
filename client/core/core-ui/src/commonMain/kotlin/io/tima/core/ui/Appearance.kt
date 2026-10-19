@@ -82,6 +82,9 @@ enum class ColorSlot {
 
     /** Единый красный (заказчик 2026-10-08): «Завершить», «Закрыть», заблокированные, ошибки. */
     ALARM,
+
+    /** Ссылки в сообщениях и «Перейти» (заказчик 2026-10-19): если цвет не задан в самом сообщении. */
+    LINK,
 }
 
 /** Значение цвета из набора. */
@@ -104,6 +107,7 @@ fun TimaColors.slot(slot: ColorSlot): Color = when (slot) {
     ColorSlot.SOFT_ACCENT -> softAccent
     ColorSlot.QUIET -> quiet
     ColorSlot.ALARM -> alarm
+    ColorSlot.LINK -> link
 }
 
 /**
@@ -132,6 +136,7 @@ fun TimaColors.with(slot: ColorSlot, color: Color): TimaColors = when (slot) {
     ColorSlot.SOFT_ACCENT -> copy(softAccent = color)
     ColorSlot.QUIET -> copy(quiet = color)
     ColorSlot.ALARM -> copy(alarm = color)
+    ColorSlot.LINK -> copy(link = color)
 }
 
 /**

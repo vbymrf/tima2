@@ -70,6 +70,7 @@ internal fun RichBlockViewOf(block: RichBlock) {
         is RichBlock.Paragraph -> {
             if (block.style == io.tima.domain.chat.BlockStyle.NONE) Caption(annotated(block.text), fontSize = TimaType.sz4)
             else StyledText(block.text, block.style, TimaType.sz4)
+            LinksUnder(linksOf(block.text))
             DividerAfter(block.style)
         }
         is RichBlock.Heading -> {
@@ -79,6 +80,7 @@ internal fun RichBlockViewOf(block: RichBlock) {
                 when (block.level) { 1 -> TimaType.sz2; 2 -> TimaType.sz3; else -> TimaType.sz4 },
                 FontWeight.ExtraBold,
             )
+            LinksUnder(linksOf(block.text))
             DividerAfter(block.style)
         }
         is RichBlock.Row -> RichRow(block)
@@ -90,9 +92,13 @@ internal fun RichBlockViewOf(block: RichBlock) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(colors.line))
             Column(Modifier.padding(start = 8.dp)) {
                 for (line in block.lines) Caption(annotated(line), fontSize = TimaType.sz4, color = colors.text2)
+                LinksUnder(block.lines.flatMap(::linksOf))
             }
         }
-        is RichBlock.Bullets -> BulletList(block.items, depth = 0)
+        is RichBlock.Bullets -> {
+            BulletList(block.items, depth = 0)
+            LinksUnder(allLinks(block.items))
+        }
         is RichBlock.CodeBlock -> Box(
             Modifier.fillMaxWidth().background(colors.functional, RoundedCornerShape(6.dp)).padding(8.dp),
         ) {
@@ -186,15 +192,35 @@ private fun RichTable(table: RichBlock.Table) {
     }
 }
 
-/** Отрезки оформления → `AnnotatedString`. Цвета — из темы; маркер — янтарь темы. */
+/** Адреса ссылок в тексте — для «Перейти» под абзацем. */
+internal fun linksOf(text: RichText): List<String> = text.spans.filter { it.kind == SpanKind.LINK }.mapNotNull { span ->
+    val start = span.start.coerceIn(0, text.text.length)
+    val end = span.end.coerceIn(start, text.text.length)
+    span.attribute.ifBlank { text.text.substring(start, end) }.takeIf { it.isNotBlank() }?.let(::openable)
+}
+
+private fun allLinks(items: List<Bullet>): List<String> = items.flatMap { linksOf(it.text) + allLinks(it.children) }
+
+/**
+ * Отрезки оформления → `AnnotatedString`. Цвета — из темы; маркер — янтарь темы. Ссылка — цветом
+ * ссылок из «Цветов» и нажимается: открывается через окно с доменом (заказчик 2026-10-19).
+ */
 @Composable
-private fun annotated(text: RichText): AnnotatedString {
+internal fun annotated(text: RichText): AnnotatedString {
     val colors = Tima.colors
     val highlight = colors.activity.copy(alpha = 0.35f)
     val code = colors.functional
+    val open = rememberLinkOpen()
     return buildAnnotatedString {
         append(text.text)
         for (span in text.spans) {
+            val start = span.start.coerceIn(0, text.text.length)
+            val end = span.end.coerceIn(start, text.text.length)
+            if (end <= start) continue
+            if (span.kind == SpanKind.LINK) {
+                linkAt(start, end, openable(span.attribute.ifBlank { text.text.substring(start, end) }), colors.link, open)
+                continue
+            }
             val style = when (span.kind) {
                 SpanKind.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
                 SpanKind.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
@@ -204,9 +230,7 @@ private fun annotated(text: RichText): AnnotatedString {
                 SpanKind.CODE -> SpanStyle(fontFamily = FontFamily.Monospace, background = code)
                 SpanKind.LINK, SpanKind.MENTION, SpanKind.HASHTAG -> SpanStyle(color = colors.confirmed, fontWeight = FontWeight.SemiBold)
             }
-            val start = span.start.coerceIn(0, text.text.length)
-            val end = span.end.coerceIn(start, text.text.length)
-            if (end > start) addStyle(style, start, end)
+            addStyle(style, start, end)
         }
     }
 }

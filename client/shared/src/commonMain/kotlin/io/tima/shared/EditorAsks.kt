@@ -1,6 +1,8 @@
 package io.tima.shared
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 import io.tima.domain.chat.ComposedWidget
@@ -28,7 +30,12 @@ internal fun EditorAskSheet(
     onClose: () -> Unit,
     /** Карточки ссылок включены в «Память и трафик» (Решения §4); выключены — вида «карточка» нет. */
     cardsOn: Boolean = true,
+    /** Цвет ссылки, выбранный в прошлый раз (имя палитры; пусто — цвет ссылок у читающего). */
+    linkColor: String = "",
+    /** Выбран цвет ссылки — запомнить до следующего раза (заказчик 2026-10-19). */
+    onLinkColor: (String) -> Unit = {},
 ) {
+    var color by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(linkColor) }
     val cw = Tima.words.chat
     val ew = Tima.words.editor
     val modes = if (cardsOn) listOf("plain", "button", "card") else listOf("plain", "button")
@@ -46,26 +53,28 @@ internal fun EditorAskSheet(
         ok = cw.ok,
         cancel = cw.cancel,
         options = options,
+        extra = if (ask == "link") ({ io.tima.feature.chat.PaletteRow(color, "chat:ask.color") { color = it.orEmpty() } }) else null,
         onCancel = onClose,
         onDone = { v ->
             val url = v[0].trim().let { if (it.isEmpty() || "://" in it) it else "https://$it" }
             when (ask) {
                 "link" -> if (url.isNotEmpty()) {
                     onClose()
+                    onLinkColor(color)
                     val mode = v.getOrNull(2) ?: "plain"
                     if (mode != "card") {
-                        put(ComposedWidget.Link(url, v[1], mode))
+                        put(ComposedWidget.Link(url, v[1], mode, color = color))
                     } else {
                         // Карточку собирает отправитель (Решения §4): страница — сюда, картинка перекодируется и уходит в тело.
                         scope.launch {
                             val card = cards.card(url)
                             if (card == null) {
                                 onNotice(cardFailed)
-                                put(ComposedWidget.Link(url, v[1], "button"))
+                                put(ComposedWidget.Link(url, v[1], "button", color = color))
                                 return@launch
                             }
                             val image = card.image?.let { bytes -> cardImage?.invoke(bytes) }
-                            put(ComposedWidget.Link(url, v[1].ifBlank { card.title }, "card", card.description, image))
+                            put(ComposedWidget.Link(url, v[1].ifBlank { card.title }, "card", card.description, image, color))
                         }
                     }
                 }
@@ -85,6 +94,9 @@ internal fun EditorAskSheet(
         },
     )
 }
+
+/** Цвет ссылки, выбранный в «Вставить ссылку» последним: имя палитры, пусто — цвет ссылок у читающего. */
+internal const val LINK_COLOR_KEY = "link.color"
 
 /** Ключ выключателя карточек ссылок в настройках аккаунта: `"0"` — выключены, нет или иное — включены. */
 internal const val LINK_CARDS_KEY = "link.cards"

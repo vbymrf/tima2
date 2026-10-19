@@ -155,6 +155,10 @@ object SpanishWords : Words {
             name = "Rojo",
             about = "«Terminar», «Cerrar», llamada rechazada, bloqueados, errores",
         )
+        override val slotLink = ColorSlotWords(
+            name = "Enlaces",
+            about = "enlaces en los mensajes y la burbuja «Ir», si el mensaje no fija un color",
+        )
 
         override val colorEmpty = "Vacío. Escriba un color: seis caracteres u ocho"
         override fun colorNotHex(listed: String) =
@@ -1230,6 +1234,18 @@ object SpanishWords : Words {
         override val editStructure = "Una edición cambia solo el texto: filas, títulos y listas se mantienen"
         override val editInEditor = "Este mensaje se edita en el editor"
         override val editImpossible = "Este mensaje no se puede editar"
+        override val linkGo = "Ir"
+        override val linkAskOpen = "¿Abrir el enlace? Compruebe el sitio:"
+        override fun selected(count: Int) = "Seleccionados: $count"
+        override val selectPick = "A la selección"
+        override val selectCopy = "Copiar"
+        override val selectForward = "Reenviar"
+        override val selectDelete = "Borrar"
+        override fun deleteManyTitle(count: Int) = "Borrar seleccionados ($count)"
+        override fun deleteManyAsk(count: Int) = "¿Borrar para todos: $count? No se puede deshacer"
+        override fun pickedMany(count: Int) = "Añadidos a la selección: $count"
+        override fun forwarded(count: Int) = "Reenviados: $count"
+        override val forwardNothing = "Nada que reenviar: los archivos, con «Guardar como»"
         override val editLimit = "El mensaje ya se ha editado tres veces"
         override val deleteForAllAsk = "¿Eliminar para todos? No se podrá deshacer"
         override val deleteOffline = "Sin conexión: el mensaje no se eliminó"

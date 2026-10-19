@@ -3,6 +3,7 @@ package io.tima.feature.chat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +59,8 @@ class AttachmentActions(
     val saveFile: (RichMedia) -> Unit = {},
     /** Получатель забрал файл у почтальона (Решения §6) — галочки у своего. */
     val fetched: (mediaId: String) -> Boolean = { false },
+    /** Долгое нажатие на фото — выбор сообщения, в котором оно (заказчик 2026-10-19). */
+    val selectPhoto: (RichMedia) -> Unit = {},
 )
 
 /** Галочки «получатель забрал» у своего фото или файла вне пузыря (Решения §6). */
@@ -90,24 +93,25 @@ private fun AlbumView(photos: List<RichMedia>) {
     val actions = LocalAttachmentActions.current
     if (photos.size == 1) {
         val p = photos.single()
-        Thumb(p, Modifier.widthIn(max = 260.dp).fillMaxWidth().aspectRatio(aspectOf(p))) { actions.openPhoto(p) }
+        Thumb(p, Modifier.widthIn(max = 260.dp).fillMaxWidth().aspectRatio(aspectOf(p)), { actions.selectPhoto(p) }) { actions.openPhoto(p) }
         return
     }
     FlowRow(Modifier.widthIn(max = 260.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        for (p in photos) Thumb(p, Modifier.size(126.dp)) { actions.openPhoto(p) }
+        for (p in photos) Thumb(p, Modifier.size(126.dp), { actions.selectPhoto(p) }) { actions.openPhoto(p) }
     }
 }
 
 private fun aspectOf(m: RichMedia): Float = if (m.width > 0 && m.height > 0) (m.width.toFloat() / m.height).coerceIn(0.5f, 2f) else 1f
 
 @Composable
-private fun Thumb(m: RichMedia, modifier: Modifier, onClick: () -> Unit) {
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun Thumb(m: RichMedia, modifier: Modifier, onLongClick: () -> Unit, onClick: () -> Unit) {
     val bitmap = remember(m.mediaId) { if (m.preview.isNotEmpty()) decodeImage(m.preview) else null }
     Box(
         modifier
             .clip(RoundedCornerShape(10.dp))
             .background(Tima.colors.functional)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .testTag("msg:photo"),
         contentAlignment = Alignment.Center,
     ) {

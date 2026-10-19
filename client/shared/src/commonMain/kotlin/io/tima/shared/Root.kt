@@ -433,6 +433,8 @@ fun Root(
           io.tima.core.ui.LocalSketch provides sketch,
           LocalPictureSource provides pictureSource,
       ) {
+        // Ссылки из сообщений — через окно «Перейти по ссылке?» с доменом (заказчик 2026-10-19): одно на приложение.
+        io.tima.feature.chat.LinkGate {
         Inside(
             entry = entry,
             callEngine = callEngine,
@@ -466,6 +468,7 @@ fun Root(
                 }
             },
         )
+        }
       }
     }
 }
@@ -1010,7 +1013,7 @@ private fun App(
     // котором уже стоят подкладки всех сообщений уровня 0.
     var superDraft by remember { mutableStateOf<Pair<String, io.tima.domain.chat.ComposedDoc>?>(null) }
     // Фото, пересылаемое из просмотра в другую переписку (2026-10-18): номер переписки, файл, вид.
-    var forwardPhoto by remember { mutableStateOf<Triple<String, ByteArray, String>?>(null) }
+    var forwardItems by remember { mutableStateOf<Pair<String, List<io.tima.feature.chat.Forwarded>>?>(null) }
     // Куда человек ходил — второй вопрос правила журнала («что он делал»). Пишется смена,
     // а не каждая перерисовка: журнал должен читаться, а не разбухать.
     // Кодом, а не названием (заказчик 2026-09-27): код один на любом языке и находится
@@ -3519,7 +3522,12 @@ private fun App(
                         )
                         if (state.editorOpen) {
                             val settingsNow by environment.settings.all().collectAsState(initial = emptyMap())
-                            PageEditor(page, state, scope, cardsOn = settingsNow[LINK_CARDS_KEY] != "0")
+                            PageEditor(
+                                page, state, scope,
+                                cardsOn = settingsNow[LINK_CARDS_KEY] != "0",
+                                linkColor = settingsNow[LINK_COLOR_KEY].orEmpty(),
+                                onLinkColor = { c -> scope.launch { environment.settings.put(LINK_COLOR_KEY, c) } },
+                            )
                         }
                     },
                 )
@@ -4075,12 +4083,12 @@ private fun App(
                         finder = assembled.receiver.finder,
                         onOpenChat = { id -> where = Where.Chat(id, null) },
                         forwardTargets = listState.chats.filter { it.chatId != current.chatId }.map { it.chatId to (it.title ?: wordsNow.chat.nameless) },
-                        onForward = { id, title, bytes, mime ->
-                            forwardPhoto = Triple(id, bytes, mime)
+                        onForward = { id, title, items ->
+                            forwardItems = id to items
                             where = Where.Chat(id, title)
                         },
-                        incoming = forwardPhoto?.takeIf { it.first == current.chatId }?.let { it.second to it.third },
-                        onIncomingTaken = { forwardPhoto = null },
+                        incoming = forwardItems?.takeIf { it.first == current.chatId }?.second,
+                        onIncomingTaken = { forwardItems = null },
                         // «Сообщить о проблеме» из подокна неотправленного: отчёт с кодом
                         // причины уже в тексте — человеку не надо ничего пересказывать.
                         onReportFailed = { reason, waiting ->
@@ -4376,9 +4384,9 @@ private fun Chat(
     /** Куда переслать фото из просмотра: переписки, кроме этой — номер и название. */
     forwardTargets: List<Pair<String, String>> = emptyList(),
     /** Переслать фото: открыть ту переписку, фото уйдёт там. */
-    onForward: ((chatId: String, title: String, bytes: ByteArray, mime: String) -> Unit)? = null,
-    /** Фото, пересланное сюда из другой переписки, — отправить; `onIncomingTaken` — ушло. */
-    incoming: Pair<ByteArray, String>? = null,
+    onForward: ((chatId: String, title: String, items: List<io.tima.feature.chat.Forwarded>) -> Unit)? = null,
+    /** Пересланное сюда из другой переписки — отправить; `onIncomingTaken` — ушло. */
+    incoming: List<io.tima.feature.chat.Forwarded>? = null,
     onIncomingTaken: () -> Unit = {},
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
@@ -4644,6 +4652,7 @@ private fun Chat(
         if (p != null) store.sendPlace(p.first, p.second) else { askTrouble = placeNoAccess; asking = AttachAsk.Place }
     }
     val attachItems = io.tima.feature.chat.AttachItem.entries.filter { it != io.tima.feature.chat.AttachItem.CAMERA || camera != null }
+    var linkAsk by remember { mutableStateOf(false) }
     val attachHandler: (io.tima.feature.chat.AttachItem) -> Unit = { item ->
         // В группе файлы — только ссылкой на облако (Решения §2).
         fun fileOr(kind: String, pick: () -> Unit) = if (store.filesByLink) asking = AttachAsk.Cloud(kind) else pick()
@@ -4656,7 +4665,9 @@ private fun Chat(
             io.tima.feature.chat.AttachItem.VIDEO -> fileOr("video", videoFile)
             io.tima.feature.chat.AttachItem.CONTACT -> contactPicker?.invoke() ?: run { asking = AttachAsk.Contact }
             io.tima.feature.chat.AttachItem.PLACE -> myPlace?.invoke() ?: run { asking = AttachAsk.Place }
-            io.tima.feature.chat.AttachItem.LINK -> asking = AttachAsk.Link
+            // Ссылка — тем же окном, что «Вставить ссылку» в редакторе (заказчик 2026-10-19): вид,
+            // название, цвет; уходит отдельным сообщением в своём пузыре.
+            io.tima.feature.chat.AttachItem.LINK -> linkAsk = true
         }
     }
     // «Сохранить как» (Решения §6): скачать у почтальона, открыть ключом из тела, отдать системе.
@@ -4685,12 +4696,19 @@ private fun Chat(
     // Пересланное сюда фото — уходит, как только переписка готова (у группы — известен её вид:
     // от него круг быстрой отправки).
     LaunchedEffect(incoming, kind) {
-        val photo = incoming ?: return@LaunchedEffect
+        val items = incoming ?: return@LaunchedEffect
         if (group && kind == null) return@LaunchedEffect
-        store.sendPhotos(listOf(photo))
+        store.sendForwarded(items)
         onIncomingTaken()
-        Journal.note(LogCode.FILE_SEND, "переслано сюда", "вид" to "фото")
+        Journal.note(LogCode.FILE_SEND, "переслано сюда", "сколько" to items.size)
     }
+    // Выбор нескольких сообщений (заказчик 2026-10-19): что выбрано — строки переписки.
+    var chosenLines by remember(chatId) { mutableStateOf<List<ChatLine>>(emptyList()) }
+    val chooseToggle: (ChatLine) -> Unit = { line ->
+        chosenLines = if (chosenLines.any { it.dedupKey == line.dedupKey }) chosenLines.filterNot { it.dedupKey == line.dedupKey } else chosenLines + line
+    }
+    var chosenDelete by remember { mutableStateOf(false) }
+    var chosenForward by remember { mutableStateOf(false) }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val shareOut = remember { io.tima.core.contacts.platformInvite() }
     val copiedWord = Tima.words.chat.copied
@@ -4755,119 +4773,201 @@ private fun Chat(
             }
         }
     }
-    ChatScreen(
-        onPeek = if (finder != null) store::peek else null,
-        onPeekClose = store::peekClosed,
-        onUnpin = if (pins != null) store::unpin else null,
-        onShowcase = onShowcase,
-        cancelledSenders = cancelledSenders,
-        // Знаки быстрого оформления в строке ввода — серым, текст оформлен (ПЛАН-(РС) РС5).
-        typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
-        state = state,
-        receipt = receipts[chatId],
-        onPerson = onPerson,
-        onCall = onCall,
-        peerFace = if (ttlUntilMs != null) callCreatorFace else peerFace,
-        callCreator = callCreator,
-        callGroup = ttlUntilMs != null,
-        authorLook = authorLook,
-        ownerId = ownerId,
-        hues = hues,
-        peer = name ?: "Без имени",
-        onSet = { text ->
-            store.draftChanged(text)
-            // «Печатаю» собеседнику — пока набирают; стёрли — «перестал» (ПЛАН-(ОП)).
-            if (live != null && peerUser != null) {
-                if (text.isBlank()) live.stopTyping() else live.typed(chatId, peerUser)
-            }
-        },
-        onSend = {
-            live?.stopTyping()
-            store.sendPressed()
-        },
-        onBack = onBack,
-        onCloseMessage = store::noticeDismissed,
-        onRequestKey = store::requestKey,
-        onAskChatKeys = store::askChatKeys,
-        avatarLook = avatarLook,
-        onAuthor = onAuthor,
-        onPhrase = store::changedPhrase,
-        onMembers = if (group) onMembers else null,
-        onMore = if ((group && onMoveToShelf != null) || (!group && onMoveToBookSection != null)) { { chatMenu = true } } else null,
-        // Круг предлагается только в группе: в личной переписке всё зашифровано и
-        // адресовано одному человеку — выбирать нечего.
-        circle = if (group) MessageCircle.of(state.level) else null,
-        circles = kind?.circles ?: MessageCircle.entries,
-        onCircle = if (group) { chosen -> store.circleChosen(chosen.level) } else null,
-        // Сужение живёт рядом с меткой круга: показ включён — значит человек занят
-        // доступом, а не чтением. Выключен — реплики выглядят как обычно.
-        onNarrow = if (group) { messageId, was, to -> store.narrowAsked(messageId, was, to) } else null,
-        onNarrowConfirm = store::narrowConfirmed,
-        onDeleteConfirm = store::deleteForAllConfirmed,
-        onEditCancel = store::editCancelled,
-        onReplyCancel = store::replyCancelled,
-        onEmojiSend = store::sendEmoji,
-        onEditor = if (store.canCompose) ({
-            store.openEditor()
-            Journal.note(LogCode.EDITOR, "открыт")
-        }) else null,
-        composed = state.composed?.let { io.tima.feature.chat.ComposedLook(it.firstLine, it.rows) },
-        onComposedDrop = {
-            store.dropComposed()
-            Journal.note(LogCode.EDITOR, "корзина")
-        },
-        onComposedRestore = if (state.droppedComposed != null) ({
-            store.restoreComposed()
-            Journal.note(LogCode.EDITOR, "вернуть")
-        }) else null,
-        onJump = { what, chain -> Journal.note(LogCode.JUMP, if (what == "to") "к сообщению" else "назад или вперёд", "цепочка" to chain) },
-        onAttach = if (store.canAttach) attachHandler else null,
-        attachItems = attachItems,
-        attachments = io.tima.feature.chat.AttachmentActions(
-            openPhoto = { photo -> photoOpen = photo },
-            saveFile = { file -> saveFromChat(file) },
-            fetched = { id -> id in fetchedFiles },
-        ),
-        onMenu = { line -> menuFor = line },
-        onSelect = { line -> selectFor = line },
-        // Показ доступности — только в группе: в личной переписке круга нет.
-        onCircles = if (group) store::circlesShown else null,
-        // «Добавить себе» ведёт на свою страницу — то есть в другое окно. Оттого перенос
-        // делает PageStore, а не ChatStore: страница одна, и знать о принесённом обязана
-        // она, а не окно переписки.
-        onCarry = if (group) { messageId, was -> onCarry(messageId, was) } else null,
-        // Ветка — только в группе: в личной переписке отвечать некому, кроме одного
-        // собеседника, и разговор о реплике совпадает с самой перепиской.
-        onThread = if (group) store::threadOpened else null,
-        onFailed = { line -> failed = line },
-        // Временная группа звонка: «удалится через N ч» под названием (решение 11).
-        caption = ttlUntilMs?.let { Tima.words.groupCall.ttl(((it - msNow()) / 3_600_000L).toInt().coerceAtLeast(0)) } ?: peerLine,
-        // Полоса «Идёт звонок · Присоединиться» над лентой группы (решение 3а). В личной
-        // переписке прежней личности во время перерегистрации — предупреждение (Р54).
-        banner = if (reregWarn && !group) {
-            { io.tima.feature.chat.GroupCallBanner(text = Tima.words.auth.reregSenderWarn, joinLabel = null, onJoin = {}) }
-        } else groupCall?.takeIf { group }?.let { live ->
-            {
-                val inRoom = live.members.count { it.inRoom }
-                val minutes = ((msNow() - live.startedAtMs) / 60_000L).toInt().coerceAtLeast(0)
-                io.tima.feature.chat.GroupCallBanner(
-                    text = if (live.paused) Tima.words.groupCall.livePaused else Tima.words.groupCall.live(inRoom, minutes),
-                    joinLabel = if (inCallHere) null else Tima.words.groupCall.join,
-                    onJoin = { onJoinGroupCall(live.callId) },
-                )
-            }
-        } ?: onRepeatGroupCall?.takeIf { group && !inCallHere }?.let { repeat ->
-            {
-                io.tima.feature.chat.GroupCallBanner(
-                    text = Tima.words.groupCall.inviteEnded,
-                    joinLabel = Tima.words.groupCall.repeat,
-                    onJoin = repeat,
-                )
-            }
-        },
-        invite = inviteOf,
-        onInvite = onInvite,
-    )
+    androidx.compose.runtime.CompositionLocalProvider(
+        io.tima.feature.chat.LocalChatSelection provides io.tima.feature.chat.ChatSelection(chosenLines.map { it.dedupKey }.toSet(), chooseToggle),
+    ) {
+        ChatScreen(
+            onPeek = if (finder != null) store::peek else null,
+            onPeekClose = store::peekClosed,
+            onUnpin = if (pins != null) store::unpin else null,
+            onShowcase = onShowcase,
+            cancelledSenders = cancelledSenders,
+            // Знаки быстрого оформления в строке ввода — серым, текст оформлен (ПЛАН-(РС) РС5).
+            typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
+            state = state,
+            receipt = receipts[chatId],
+            onPerson = onPerson,
+            onCall = onCall,
+            peerFace = if (ttlUntilMs != null) callCreatorFace else peerFace,
+            callCreator = callCreator,
+            callGroup = ttlUntilMs != null,
+            authorLook = authorLook,
+            ownerId = ownerId,
+            hues = hues,
+            peer = name ?: "Без имени",
+            onSet = { text ->
+                store.draftChanged(text)
+                // «Печатаю» собеседнику — пока набирают; стёрли — «перестал» (ПЛАН-(ОП)).
+                if (live != null && peerUser != null) {
+                    if (text.isBlank()) live.stopTyping() else live.typed(chatId, peerUser)
+                }
+            },
+            onSend = {
+                live?.stopTyping()
+                store.sendPressed()
+            },
+            onBack = onBack,
+            onCloseMessage = store::noticeDismissed,
+            onRequestKey = store::requestKey,
+            onAskChatKeys = store::askChatKeys,
+            avatarLook = avatarLook,
+            onAuthor = onAuthor,
+            onPhrase = store::changedPhrase,
+            onMembers = if (group) onMembers else null,
+            onMore = if ((group && onMoveToShelf != null) || (!group && onMoveToBookSection != null)) { { chatMenu = true } } else null,
+            // Круг предлагается только в группе: в личной переписке всё зашифровано и
+            // адресовано одному человеку — выбирать нечего.
+            circle = if (group) MessageCircle.of(state.level) else null,
+            circles = kind?.circles ?: MessageCircle.entries,
+            onCircle = if (group) { chosen -> store.circleChosen(chosen.level) } else null,
+            // Сужение живёт рядом с меткой круга: показ включён — значит человек занят
+            // доступом, а не чтением. Выключен — реплики выглядят как обычно.
+            onNarrow = if (group) { messageId, was, to -> store.narrowAsked(messageId, was, to) } else null,
+            onNarrowConfirm = store::narrowConfirmed,
+            onDeleteConfirm = store::deleteForAllConfirmed,
+            onEditCancel = store::editCancelled,
+            onReplyCancel = store::replyCancelled,
+            onEmojiSend = store::sendEmoji,
+            onEditor = if (store.canCompose) ({
+                store.openEditor()
+                Journal.note(LogCode.EDITOR, "открыт")
+            }) else null,
+            composed = state.composed?.let { io.tima.feature.chat.ComposedLook(it.firstLine, it.rows) },
+            onComposedDrop = {
+                store.dropComposed()
+                Journal.note(LogCode.EDITOR, "корзина")
+            },
+            onComposedRestore = if (state.droppedComposed != null) ({
+                store.restoreComposed()
+                Journal.note(LogCode.EDITOR, "вернуть")
+            }) else null,
+            onJump = { what, chain -> Journal.note(LogCode.JUMP, if (what == "to") "к сообщению" else "назад или вперёд", "цепочка" to chain) },
+            onAttach = if (store.canAttach) attachHandler else null,
+            attachItems = attachItems,
+            attachments = io.tima.feature.chat.AttachmentActions(
+                // Идёт выбор — нажатие на фото отмечает его сообщение, а не открывает (2026-10-19).
+            openPhoto = { photo ->
+                val owner = state.lines.firstOrNull { l -> l.rich?.media?.any { it.mediaId == photo.mediaId } == true }
+                if (chosenLines.isNotEmpty() && owner != null) chooseToggle(owner) else photoOpen = photo
+            },
+            selectPhoto = { photo ->
+                state.lines.firstOrNull { l -> l.rich?.media?.any { it.mediaId == photo.mediaId } == true }?.let(chooseToggle)
+            },
+                saveFile = { file -> saveFromChat(file) },
+                fetched = { id -> id in fetchedFiles },
+            ),
+            onMenu = { line -> menuFor = line },
+            onSelect = { line -> selectFor = line },
+            // Показ доступности — только в группе: в личной переписке круга нет.
+            onCircles = if (group) store::circlesShown else null,
+            // «Добавить себе» ведёт на свою страницу — то есть в другое окно. Оттого перенос
+            // делает PageStore, а не ChatStore: страница одна, и знать о принесённом обязана
+            // она, а не окно переписки.
+            onCarry = if (group) { messageId, was -> onCarry(messageId, was) } else null,
+            // Ветка — только в группе: в личной переписке отвечать некому, кроме одного
+            // собеседника, и разговор о реплике совпадает с самой перепиской.
+            onThread = if (group) store::threadOpened else null,
+            onFailed = { line -> failed = line },
+            // Временная группа звонка: «удалится через N ч» под названием (решение 11).
+            caption = ttlUntilMs?.let { Tima.words.groupCall.ttl(((it - msNow()) / 3_600_000L).toInt().coerceAtLeast(0)) } ?: peerLine,
+            // Полоса «Идёт звонок · Присоединиться» над лентой группы (решение 3а). В личной
+            // переписке прежней личности во время перерегистрации — предупреждение (Р54).
+            banner = if (reregWarn && !group) {
+                { io.tima.feature.chat.GroupCallBanner(text = Tima.words.auth.reregSenderWarn, joinLabel = null, onJoin = {}) }
+            } else groupCall?.takeIf { group }?.let { live ->
+                {
+                    val inRoom = live.members.count { it.inRoom }
+                    val minutes = ((msNow() - live.startedAtMs) / 60_000L).toInt().coerceAtLeast(0)
+                    io.tima.feature.chat.GroupCallBanner(
+                        text = if (live.paused) Tima.words.groupCall.livePaused else Tima.words.groupCall.live(inRoom, minutes),
+                        joinLabel = if (inCallHere) null else Tima.words.groupCall.join,
+                        onJoin = { onJoinGroupCall(live.callId) },
+                    )
+                }
+            } ?: onRepeatGroupCall?.takeIf { group && !inCallHere }?.let { repeat ->
+                {
+                    io.tima.feature.chat.GroupCallBanner(
+                        text = Tima.words.groupCall.inviteEnded,
+                        joinLabel = Tima.words.groupCall.repeat,
+                        onJoin = repeat,
+                    )
+                }
+            },
+            invite = inviteOf,
+            onInvite = onInvite,
+        )
+    }
+    if (chosenLines.isNotEmpty()) {
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            io.tima.feature.chat.SelectionBar(
+                count = chosenLines.size,
+                onPick = if (chosenLines.any { it.serverId > 0 }) ({
+                    store.pickedMany(chosenLines)
+                    Journal.note(LogCode.PICKS, "добавить выбранные", "сколько" to chosenLines.size)
+                    chosenLines = emptyList()
+                }) else null,
+                onCopy = {
+                    val text = chosenLines.sortedBy { it.atMs }.mapNotNull { it.text?.takeIf(String::isNotBlank) }.joinToString("\n\n")
+                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
+                    store.said(copiedWord)
+                    chosenLines = emptyList()
+                },
+                onForward = if (onForward != null && forwardTargets.isNotEmpty()) ({ chosenForward = true }) else null,
+                onDelete = { chosenDelete = true },
+                onClose = { chosenLines = emptyList() },
+            )
+        }
+    }
+    if (chosenDelete) {
+        val cw = Tima.words.chat
+        val own = chosenLines.all { it.outgoing && it.serverId > 0 }
+        io.tima.feature.chat.ChoiceSheet(
+            title = cw.deleteManyTitle(chosenLines.size),
+            items = listOf(io.tima.feature.chat.Choice(cw.menuDeleteForMe)) +
+                if (own) listOf(io.tima.feature.chat.Choice(cw.menuDeleteForAll)) else emptyList(),
+            empty = cw.deleteManyTitle(chosenLines.size),
+            onCancel = { chosenDelete = false },
+            onPick = { i ->
+                chosenDelete = false
+                if (i == 0) store.deleteForMeMany(chosenLines) else store.deleteForAllManyAsked(chosenLines)
+                chosenLines = emptyList()
+            },
+        )
+    }
+    if (chosenForward) {
+        val cw = Tima.words.chat
+        io.tima.feature.chat.ChoiceSheet(
+            title = cw.photoForwardTitle,
+            items = forwardTargets.map { io.tima.feature.chat.Choice(title = it.second) },
+            empty = cw.photoForwardTitle,
+            onCancel = { chosenForward = false },
+            onPick = { i ->
+                val (target, title) = forwardTargets[i]
+                chosenForward = false
+                val lines = chosenLines.sortedBy { it.atMs }
+                chosenLines = emptyList()
+                scope.launch {
+                    // Фото — файлом от почтальона, остальное — знаками или документом редактора.
+                    val items = lines.flatMap { line ->
+                        val rich = line.rich
+                        val photos = rich?.blocks?.filterIsInstance<io.tima.domain.chat.RichBlock.Album>()
+                            ?.flatMap { a -> a.media.mapNotNull { rich.media.getOrNull(it) } }.orEmpty()
+                        if (photos.isNotEmpty()) {
+                            photos.mapNotNull { m -> plainOf(m, store::said)?.let { io.tima.feature.chat.Forwarded.Photo(it, m.mime) } }
+                        } else {
+                            listOfNotNull(store.forwardOf(line))
+                        }
+                    }
+                    if (items.isEmpty()) {
+                        store.said(cw.forwardNothing)
+                    } else {
+                        Journal.note(LogCode.FILE_SEND, "переслать", "сколько" to items.size)
+                        onForward?.invoke(target, title, items)
+                    }
+                }
+            },
+        )
+    }
 
     // Подокно неотправленного — ПОСЛЕ экрана переписки: что позже в композиции, то сверху.
     failed?.let { line ->
@@ -4939,7 +5039,7 @@ private fun Chat(
                     val plain = plainOf(p.media) { photoNotice = it } ?: return@launch
                     photoOpen = null
                     Journal.note(LogCode.FILE_SEND, "переслать", "вид" to "фото")
-                    onForward?.invoke(target, title, plain, p.media.mime)
+                    onForward?.invoke(target, title, listOf(io.tima.feature.chat.Forwarded.Photo(plain, p.media.mime)))
                 }
             },
         )
@@ -5093,6 +5193,8 @@ private fun Chat(
                 scope = scope,
                 cards = linkCards,
                 cardsOn = settingsNow[LINK_CARDS_KEY] != "0",
+                linkColor = settingsNow[LINK_COLOR_KEY].orEmpty(),
+                onLinkColor = { c -> scope.launch { environment.settings.put(LINK_COLOR_KEY, c) } },
                 cardImage = { bytes ->
                     val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(bytes) }
                     val up = prepared?.let { editorUploads.upload(it.full, "image/jpeg", null, null) }
@@ -5170,10 +5272,35 @@ private fun Chat(
             )
         }
     }
+    if (linkAsk) {
+        val settingsNow by environment.settings.all().collectAsState(initial = emptyMap())
+        val linkUploads = remember { SealedUploads({ network.media }) }
+        val linkCardsHere = remember { io.tima.core.network.LinkCardsOverHttp() }
+        EditorAskSheet(
+            ask = "link",
+            scope = scope,
+            cards = linkCardsHere,
+            cardsOn = settingsNow[LINK_CARDS_KEY] != "0",
+            linkColor = settingsNow[LINK_COLOR_KEY].orEmpty(),
+            onLinkColor = { c -> scope.launch { environment.settings.put(LINK_COLOR_KEY, c) } },
+            cardImage = { bytes ->
+                val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(bytes) }
+                val up = prepared?.let { linkUploads.upload(it.full, "image/jpeg", null, null) }
+                if (prepared != null && up != null) {
+                    io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", prepared.width, prepared.height, prepared.full.size.toLong())
+                } else null
+            },
+            put = { widget ->
+                store.sendWidget(widget)
+                Journal.note(LogCode.EDITOR, "ссылка из скрепки", "вид" to ((widget as? io.tima.domain.chat.ComposedWidget.Link)?.mode ?: "?"))
+            },
+            onNotice = { it?.let(store::said) },
+            onClose = { linkAsk = false },
+        )
+    }
     asking?.let { ask ->
         val w = Tima.words.chat
         val (title, fields) = when (ask) {
-            is AttachAsk.Link -> w.linkAsk to listOf(w.linkAsk)
             is AttachAsk.Cloud -> w.linkPlace to listOf(w.linkPlace)
             AttachAsk.Place -> w.attachItem("place") to listOf(w.placeAsk)
             AttachAsk.Contact -> w.attachItem("contact") to listOf(Tima.words.chat.contact, "+7")
@@ -5187,7 +5314,6 @@ private fun Chat(
             onCancel = { asking = null; askTrouble = null },
             onDone = { values ->
                 when (ask) {
-                    is AttachAsk.Link -> { store.sendLink(values[0]); asking = null }
                     is AttachAsk.Cloud -> { store.sendLink(values[0], cloudKind = ask.kind); asking = null }
                     AttachAsk.Place -> {
                         val point = io.tima.core.media.PlaceText.parse(values[0])
@@ -5233,9 +5359,9 @@ private fun Chat(
                     close()
                 }
             },
-            onCopy = text?.let { t ->
-                { clipboard.setText(androidx.compose.ui.text.AnnotatedString(t)); store.said(copiedWord); close() }
-            },
+            // «Скопировать текст» — окно: выделить часть или скопировать всё (заказчик 2026-10-19:
+            // прежнее долгое нажатие переехало сюда).
+            onCopy = text?.let { { selectFor = line; close() } },
             onPick = {
                 store.picked(line)
                 Journal.note(LogCode.PICKS, "добавить", "уровень" to io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community).substringBefore(':'))
@@ -7194,7 +7320,6 @@ const val SEARCH_CLOSE_TAG: String = "search:close"
 
 /** Что спросить у человека, прежде чем отправить вложение (ВЫБОР-РЕАЛИЗАЦИИ §11.2а). */
 private sealed interface AttachAsk {
-    data object Link : AttachAsk
     /** Файл в группе — ссылкой на облако; [kind]: `file`, `document`, `audio`, `video`. */
     data class Cloud(val kind: String) : AttachAsk
     data object Place : AttachAsk

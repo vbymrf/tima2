@@ -1427,6 +1427,20 @@ interface ChatWords {
     val editInEditor: String
     /** Сообщение не выражается ни строкой ввода, ни редактором (фото альбомом и подобное). */
     val editImpossible: String
+    /** Ссылки (заказчик 2026-10-19): «Перейти» под абзацем и окно с доменом перед переходом. */
+    val linkGo: String
+    val linkAskOpen: String
+    /** Выбор нескольких сообщений долгим нажатием (заказчик 2026-10-19). */
+    fun selected(count: Int): String
+    val selectPick: String
+    val selectCopy: String
+    val selectForward: String
+    val selectDelete: String
+    fun deleteManyTitle(count: Int): String
+    fun deleteManyAsk(count: Int): String
+    fun pickedMany(count: Int): String
+    fun forwarded(count: Int): String
+    val forwardNothing: String
     val editLimit: String
     /** Подтверждение «Удалить у всех»: вернуть нельзя. */
     val deleteForAllAsk: String
@@ -2174,6 +2188,8 @@ interface AppearanceWords {
 
     /** Единый красный приложения (заказчик 2026-10-08): «Завершить», «Закрыть», заблокированные. */
     val slotAlarm: ColorSlotWords
+    /** Цвет ссылок в сообщениях (заказчик 2026-10-19). */
+    val slotLink: ColorSlotWords
 
     /**
      * Беда с набранным цветом — фраза собирается здесь, из частей.
@@ -2426,6 +2442,10 @@ object RussianWords : Words {
         override val slotAlarm = ColorSlotWords(
             name = "Красный",
             about = "«Завершить», «Закрыть», отклонённый звонок, заблокированные, ошибки",
+        )
+        override val slotLink = ColorSlotWords(
+            name = "Ссылки",
+            about = "ссылки в сообщениях и пузырь «Перейти», если в сообщении цвет не задан",
         )
 
         override val colorEmpty = "Пусто. Наберите цвет: шесть знаков или восемь"
@@ -3530,6 +3550,18 @@ object RussianWords : Words {
         override val editStructure = "Правка меняет только текст: строки, заголовки и списки остаются"
         override val editInEditor = "Такое сообщение правится в редакторе"
         override val editImpossible = "Это сообщение изменить нельзя"
+        override val linkGo = "Перейти"
+        override val linkAskOpen = "Перейти по ссылке? Проверьте сайт:"
+        override fun selected(count: Int) = "Выбрано: $count"
+        override val selectPick = "В Подборку"
+        override val selectCopy = "Скопировать"
+        override val selectForward = "Переслать"
+        override val selectDelete = "Удалить"
+        override fun deleteManyTitle(count: Int) = "Удалить выбранные ($count)"
+        override fun deleteManyAsk(count: Int) = "Удалить у всех: $count? Вернуть будет нельзя"
+        override fun pickedMany(count: Int) = "Добавлено в Подборку: $count"
+        override fun forwarded(count: Int) = "Переслано: $count"
+        override val forwardNothing = "Пересылать нечего: файлы — через «Сохранить как»"
         override val editLimit = "Сообщение уже исправлено три раза"
         override val deleteForAllAsk = "Удалить у всех? Вернуть будет нельзя"
         override val deleteOffline = "Нет связи — сообщение не удалено"

@@ -89,6 +89,31 @@ class EditorScreenTest {
         assertTrue(shot.difference(empty) > 0.0)
     }
 
+    /**
+     * ПК (заказчик 2026-10-19): кнопки ленты постоянной ширины — на широком окне не расползаются;
+     * помещаются все — стрелок нет, на узком — стрелки есть.
+     */
+    @Test
+    fun лента_на_пк_постоянной_ширины() {
+        fun desk(pc: Boolean) = @androidx.compose.runtime.Composable {
+            EditorScreen(
+                model = EditorModel(ComposedDoc.of("текст")),
+                levels = MessageCircle.forGroup(personal = false),
+                defaultLevel = 2,
+                typingMarks = null,
+                preview = { null },
+                problems = { emptyList() },
+                onBack = {},
+                onSend = {},
+                desktop = pc,
+            )
+        }
+        val pc = capture("редактор-пк-широкий", 1000, 260, dark = false) { desk(true)() }
+        val phone = capture("редактор-телефон-широкий", 1000, 260, dark = false) { desk(false)() }
+        assertTrue(pc.difference(phone) > 0.001, "на ПК кнопки расползаются, как на телефоне")
+        capture("редактор-пк-узкий", 500, 260, dark = false) { desk(true)() }
+    }
+
     /** Стиль куска виден в самом редакторе, как обычное оформление (заказчик 2026-10-18). */
     @Test
     fun стиль_куска_виден_в_редакторе() {

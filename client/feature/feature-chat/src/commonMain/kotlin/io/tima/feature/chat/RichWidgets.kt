@@ -135,7 +135,10 @@ private fun RowCellView(cell: RowCell, modifier: Modifier) {
     Column(modifier.styled(cell.style), verticalArrangement = Arrangement.spacedBy(4.dp, vertical)) {
         // Фон и поля — у ячейки; тексту остаются цвет, размер и выравнивание.
         val textStyle = cell.style.copy(background = null, padding = null, divider = null, dividerColor = null)
-        cell.text?.takeIf { it.text.isNotEmpty() }?.let { StyledText(it, textStyle, TimaType.sz4) }
+        cell.text?.takeIf { it.text.isNotEmpty() }?.let {
+            StyledText(it, textStyle, TimaType.sz4)
+            LinksUnder(linksOf(it))
+        }
         for (w in cell.widgets) WidgetView(w)
     }
 }
@@ -174,12 +177,14 @@ private fun ImageWidget(image: RichBlock.Image) {
 
 @Composable
 private fun LinkWidget(link: RichBlock.Link) {
-    val open = LocalUriHandler.current
-    val go = { runCatching { open.openUri(link.url) } }
+    val open = rememberLinkOpen()
+    val go = { open(link.url) }
+    // Цвет ссылки — заданный в сообщении, иначе цвет ссылок из «Цветов» (заказчик 2026-10-19).
+    val color = paletteColor(link.color) ?: Tima.colors.link
     when (link.mode) {
         // Кнопка (Решения §4): крупно домен — он из самой ссылки и не обрезается, ниже путь без схемы.
         "button" -> Column(
-            Modifier.background(Tima.colors.navigation, RoundedCornerShape(10.dp)).clickable { go() }.padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.background(color, RoundedCornerShape(10.dp)).clickable { go() }.padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Caption(hostOf(link.url), fontSize = TimaType.sz4, weight = FontWeight.Bold, color = Tima.colors.onAccent, lineOne = true)
             val path = pathOf(link.url)
@@ -196,13 +201,13 @@ private fun LinkWidget(link: RichBlock.Link) {
             }
             Caption(link.title.ifBlank { hostOf(link.url) }, fontSize = TimaType.sz4, weight = FontWeight.Bold)
             if (link.description.isNotBlank()) Caption(link.description, fontSize = TimaType.sz5, color = Tima.colors.text2)
-            Tertiary(hostOf(link.url), lineOne = true)
+            Caption(hostOf(link.url), fontSize = TimaType.sz5, weight = FontWeight.SemiBold, color = color, lineOne = true)
         }
         else -> Caption(
             link.title.ifBlank { link.url },
             fontSize = TimaType.sz4,
             weight = FontWeight.SemiBold,
-            color = Tima.colors.confirmed,
+            color = color,
             modifier = Modifier.clickable { go() },
         )
     }
@@ -216,10 +221,10 @@ internal fun pathOf(url: String): String = url.substringAfter("://").substringAf
 
 @Composable
 private fun CloudWidget(cloud: RichBlock.Cloud) {
-    val open = LocalUriHandler.current
+    val open = rememberLinkOpen()
     Row(
         Modifier.fillMaxWidth().background(Tima.colors.functional, RoundedCornerShape(8.dp))
-            .clickable { runCatching { open.openUri(cloud.url) } }.padding(8.dp),
+            .clickable { open(cloud.url) }.padding(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

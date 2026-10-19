@@ -139,6 +139,23 @@ class EditsTest {
         assertNull(TextBodyCodec.editDoc(body, emptyList()))
     }
 
+    /** Цвет ссылки — стилем её блока (заказчик 2026-10-19): доходит до показа и до правки. */
+    @Test
+    fun цвет_ссылки_в_теле_и_в_правке() {
+        val doc = io.tima.domain.chat.ComposedDoc(
+            listOf(
+                // Правка меняет тексты: без текста в сообщении править нечего.
+                io.tima.domain.chat.ComposedItem.Text("смотрите"),
+                io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Link("https://tima.ru", "сайт", "button", color = "red")),
+            ),
+        )
+        val body = ComposedBodiesOverKodium.encode(doc)!!
+        val shown = TextBodyCodec.decodeLine(body)!!.rich!!.blocks.flatMap { b -> (b as? io.tima.domain.chat.RichBlock.Row)?.cells?.flatMap { it.widgets } ?: listOf(b) }
+        assertEquals("red", shown.filterIsInstance<io.tima.domain.chat.RichBlock.Link>().single().color)
+        val opened = assertNotNull(TextBodyCodec.editDoc(body, emptyList()))
+        assertEquals("red", ((opened.items.last() as io.tima.domain.chat.ComposedItem.Widget).widget as io.tima.domain.chat.ComposedWidget.Link).color)
+    }
+
     /** Ряд из строк со слиянием и пустой ячейкой (2026-10-18) — собирается и открывается для правки. */
     @Test
     fun ряд_из_строк_со_слиянием_правится() {

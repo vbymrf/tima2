@@ -113,7 +113,7 @@ internal object ComposedFromContent {
         fun media(i: Int): OutMedia? = content.media.getOrNull(i)?.let(::outOf)
         return when (b.type) {
             BlockType.IMAGE -> media(w.media)?.let { ComposedWidget.Image(it) }
-            BlockType.LINK -> ComposedWidget.Link(w.url, w.title, w.mode, w.description, if (w.media >= 0) media(w.media) ?: return null else null)
+            BlockType.LINK -> ComposedWidget.Link(w.url, w.title, w.mode, w.description, if (w.media >= 0) media(w.media) ?: return null else null, b.style["color"].orEmpty())
             BlockType.CLOUD -> ComposedWidget.Cloud(w.url, w.kind, w.title)
             BlockType.MAP -> ComposedWidget.Place(w.lat ?: return null, w.lon ?: return null, w.label)
             BlockType.CONTACT -> ComposedWidget.Contact(w.name, w.phone, w.userId)

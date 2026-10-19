@@ -151,6 +151,34 @@ class MessageMenuInChatStoreTest {
         assertEquals(emptyList(), edits)
     }
 
+    /** Заказчик 2026-10-19: выбор нескольких — «Удалить у всех» спрашивает один раз и удаляет все. */
+    @Test
+    fun выбранные_удаляются_у_всех_после_одного_вопроса() = runTest {
+        val store = store(backgroundScope)
+        val second = mine.copy(dedupKey = "d-43", serverId = 43)
+        val foreign = mine.copy(dedupKey = "d-44", serverId = 44, outgoing = false)
+        store.deleteForAllManyAsked(listOf(mine, second, foreign))
+        val ask = assertIs<ChatNotice.DeleteAsk>(store.state.value.notice)
+        assertEquals(listOf(42L, 43L), listOf(ask.serverId) + ask.more, "чужое у всех не удаляется")
+        assertEquals(emptyList(), remote, "до подтверждения сервер не зовётся")
+        store.deleteForAllConfirmed()
+        runCurrent()
+        assertEquals(listOf(42L, 43L), remote)
+        store.deleteForMeMany(listOf(foreign))
+        runCurrent()
+        assertEquals(true, "d-44" in removed, "у себя — и чужое")
+    }
+
+    /** Переслать: сообщение — знаками, как набрано; в другой переписке уходит отдельным сообщением. */
+    @Test
+    fun пересланное_уходит_отдельными_сообщениями() = runTest {
+        val store = store(backgroundScope)
+        assertEquals(Forwarded.Text("было"), store.forwardOf(mine))
+        store.sendForwarded(listOf(Forwarded.Text("раз"), Forwarded.Text("два")))
+        assertEquals(listOf("раз", "два"), sent)
+        assertEquals(null, store.forwardOf(mine.copy(deleted = true)), "удалённое не пересылается")
+    }
+
     @Test
     fun отмена_правки_возвращает_обычную_отправку() = runTest {
         val store = store(backgroundScope)

@@ -103,7 +103,15 @@ sealed interface RichBlock {
     data class Image(val media: Int) : RichBlock
 
     /** Ссылка: `plain` — текстом, `button` — кнопкой, `card` — карточкой с заголовком и картинкой. */
-    data class Link(val url: String, val mode: String, val title: String, val description: String, val media: Int = -1) : RichBlock
+    data class Link(
+        val url: String,
+        val mode: String,
+        val title: String,
+        val description: String,
+        val media: Int = -1,
+        /** Имя палитры из стиля блока; пусто — цвет ссылок из «Цветов» (заказчик 2026-10-19). */
+        val color: String = "",
+    ) : RichBlock
 
     /** Облако: файл по ссылке на чужое хранилище. `kind`: `file`, `document`, `audio`, `video`. */
     data class Cloud(val url: String, val kind: String, val title: String) : RichBlock

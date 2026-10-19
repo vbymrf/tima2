@@ -45,6 +45,31 @@ import io.tima.domain.chat.Spot
 /** Порядок цветов в образцах: яркий, затем мягкий того же цвета. */
 private val PALETTE_ORDER = listOf("text", "surface", "accent", "accent-soft", "amber", "amber-soft", "green", "green-soft", "blue", "blue-soft", "red", "red-soft", "grey", "grey-soft")
 
+/**
+ * Выбор цвета из палитры сообщений: «Нет» и образцы. Им же выбирают цвет ссылки в «Вставить
+ * ссылку» (заказчик 2026-10-19).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun PaletteRow(selected: String?, tag: String, onPick: (String?) -> Unit) {
+    val colors = Tima.colors
+    val w = Tima.words.editor
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Chip(w.none, kind = if (selected.isNullOrEmpty()) ChipKind.Selected else ChipKind.Quiet, onClick = { onPick(null) },
+            modifier = Modifier.testTag("$tag.none"))
+        for (name in PALETTE_ORDER.filter { it in MessagePalette.names }) {
+            Box(
+                Modifier.size(30.dp)
+                    .background(paletteColor(name) ?: colors.functional, CircleShape)
+                    .border(if (selected == name) 3.dp else 1.dp, if (selected == name) colors.navigation else colors.line, CircleShape)
+                    .clickable { onPick(name) }
+                    .testTag("$tag.$name"),
+            )
+        }
+    }
+    selected?.takeIf { it.isNotEmpty() }?.let { Tertiary(w.paletteName(it), lineOne = true) }
+}
+
 /** Стиль куска из редактора (имена — как в разметке) — для показа в самом редакторе. */
 internal fun blockStyleOf(style: Map<String, String>): io.tima.domain.chat.BlockStyle =
     if (style.isEmpty()) {
