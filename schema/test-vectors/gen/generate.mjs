@@ -126,14 +126,14 @@ const V = { schema: 'tima.crypto.v1', format_version: 1, generated_by: 'tweetnac
 
 // ── 5d. Разметка v2 (ADR-0048): тот же образец, запись v2 — блоки по порядку забирают узлы,
 //        отрезки внутри блока. ИСТОЧНИК — Kotlin-реализация (MarkupV2), первый зелёный прогон
-//        MarkupV2Test 2026-10-19; генератор лишь переносит константу. Прежний markup_json (v1)
+//        MarkupV2Test 2026-10-19 (с номерами узлов — ADR-0049); генератор лишь переносит константу. Прежний markup_json (v1)
 //        остаётся: им сверяется чтение v1.
 {
   V.vectors.markup_json_v2 = {
-    desc: "Разметка образцового сообщения редактора в виде v2 (ADR-0048) — байты MessageBody.markup, которые пишет клиент с 2026-10-19. Узлы — те же 7, что у markup_json.",
-    frozen_by: "messenger-crypto MarkupV2Test, первый зелёный прогон 2026-10-19",
+    desc: "Разметка образцового сообщения редактора в виде v2 с номерами узлов (ADR-0048, ADR-0049) — байты MessageBody.markup, которые пишет клиент со сборки 180. Узлы — те же 7, что у markup_json.",
+    frozen_by: "messenger-crypto MarkupV2Test, первый зелёный прогон 2026-10-19 после ADR-0049 (прежний вид v2 без номеров снят решением заказчика)",
     inputs: {"sample": "MarkupSample.content(), узлы: Поход в субботу | Сбор в 9:00 у входа | Что | Кто | вода | Анна | Напоминаю маршрут"},
-    json: "{\"v\":2,\"blocks\":[{\"type\":\"heading\",\"level\":1},{\"type\":\"flex\",\"style\":{\"background\":\"amber-soft\",\"divider\":\"2\"},\"children\":[{\"type\":\"cell\",\"style\":{\"width\":\"33\"},\"children\":[{\"type\":\"image\",\"widget\":{\"media\":0}}]},{\"type\":\"cell\",\"nodes\":1,\"style\":{\"width\":\"67\"},\"e\":[[\"h\",0,4]]}]},{\"type\":\"table\",\"children\":[{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"nodes\":1},{\"type\":\"cell\",\"nodes\":1}]},{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"nodes\":1},{\"type\":\"cell\",\"nodes\":1,\"style\":{\"merge\":\"up\"}}]}]},{},{\"type\":\"underlay\",\"widget\":{\"ref\":{\"kind\":\"group\",\"container\":\"g-1\",\"message\":42},\"author\":true,\"lines\":3}}]}"
+    json: "{\"v\":2,\"blocks\":[{\"type\":\"heading\",\"n\":1,\"level\":1},{\"type\":\"flex\",\"style\":{\"background\":\"amber-soft\",\"divider\":\"2\"},\"children\":[{\"type\":\"cell\",\"style\":{\"width\":\"33\"},\"children\":[{\"type\":\"image\",\"widget\":{\"media\":0}}]},{\"type\":\"cell\",\"n\":2,\"style\":{\"width\":\"67\"},\"e\":[[\"h\",0,4]]}]},{\"type\":\"table\",\"children\":[{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"n\":3},{\"type\":\"cell\",\"n\":4}]},{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"n\":5},{\"type\":\"cell\",\"n\":6,\"style\":{\"merge\":\"up\"}}]}]},{\"n\":7},{\"type\":\"underlay\",\"widget\":{\"ref\":{\"kind\":\"group\",\"container\":\"g-1\",\"message\":42},\"author\":true,\"lines\":3}}]}"
   };
 }
 

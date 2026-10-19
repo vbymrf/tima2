@@ -15,26 +15,23 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
- * Разметка v2 (ADR-0048): блоки по порядку документа забирают узлы по порядку — номеров узлов нет;
- * отрезки оформления — внутри своего блока, коротко: `"e":[["b",7,6],…]`. Свойства блока — полными
- * именами, как в v1.
+ * Разметка v2 (ADR-0048, ADR-0049): блоки идут линейно, в порядке документа; блок с текстом называет
+ * свои узлы сам — `"n":3`, у цитаты из нескольких строк `"n":[3,4]` (номер — место узла в теле, с
+ * единицы). Отрезки оформления — внутри своего блока, коротко: `"e":[["b",7,6],…]`. Свойства блока —
+ * полными именами, как в v1.
  *
  * Внутри клиента модель одна — [Markup] (v1): v2 — только её запись. Поэтому разбор, проверка
- * ([MarkupRules]), показ и правка по узлам от версии не зависят.
+ * ([MarkupRules]), показ и правка по узлам от версии не зависят. Ссылку на несуществующий узел
+ * ловит [MarkupRules], а не чтение: ошибка остаётся у своего блока.
  *
- * Не выражается в v2 (номера узлов не по порядку документа, отрезок не по своему блоку) — пишется
- * v1: она по-прежнему принимается.
+ * Не выражается в v2 (отрезок без своего блока, узел не из тела) — пишется v1: она по-прежнему
+ * принимается.
  */
 object MarkupV2 {
 
     const val VERSION = 2
 
     private val json = Json { ignoreUnknownKeys = true }
-
-    /** Блоки, забирающие по умолчанию один узел; остальные — ни одного. */
-    private val ONE_NODE = setOf(BlockType.PARAGRAPH, BlockType.HEADING, BlockType.QUOTE, BlockType.LIST_ITEM, BlockType.CODE_BLOCK)
-
-    private fun defaultNodes(type: BlockType): Int = if (type in ONE_NODE) 1 else 0
 
     /** Вид отрезка — коротко (ADR-0048 §2). */
     private val SHORT = mapOf(
@@ -63,29 +60,31 @@ object MarkupV2 {
 
     /** Запись v2; `null` — не выражается. */
     fun encode(markup: Markup, nodes: List<String>): String? {
-        // Номера — 1, 2, 3… в порядке узлов: только тогда их можно не писать.
-        if (markup.n != (1..nodes.size).toList()) return null
+        // Номер узла в v2 — его место; свои идентификаторы (не 1, 2, 3…) сохраняет только v1.
+        if (markup.n.isNotEmpty() && markup.n != (1..nodes.size).toList()) return null
         val byNode = markup.entities.groupBy { it.nodeId }
-        var next = 1
         var used = 0
 
         fun block(b: MarkupBlock): JsonObject? {
-            val ids = b.nodeIds
-            if (ids != (next until next + ids.size).toList()) return null
-            next += ids.size
+            // Номер узла в v2 — его место в теле.
+            val places = b.nodeIds.map { id -> markup.indexOf(id).takeIf { it in nodes.indices } ?: return null }
             val spans = mutableListOf<JsonElement>()
             var base = 0
-            for (id in ids) {
+            b.nodeIds.forEachIndexed { k, id ->
                 for (e in byNode[id].orEmpty()) {
                     spans.add(span(e, base) ?: return null)
                     used++
                 }
-                base += (nodes.getOrNull(id - 1)?.length ?: return null) + 1
+                base += nodes[places[k]].length + 1
             }
             val children = b.children.map { block(it) ?: return null }
             return buildJsonObject {
                 if (b.type != BlockType.PARAGRAPH) put("type", b.type.wire)
-                if (ids.size != defaultNodes(b.type)) put("nodes", ids.size)
+                when (places.size) {
+                    0 -> Unit
+                    1 -> put("n", places.single() + 1)
+                    else -> put("n", JsonArray(places.map { JsonPrimitive(it + 1) }))
+                }
                 if (b.level != 0) put("level", b.level)
                 if (b.style.isNotEmpty()) put("style", JsonObject(b.style.mapValues { JsonPrimitive(it.value) }))
                 b.widget?.let { put("widget", json.encodeToJsonElement(MarkupWidget.serializer(), it)) }
@@ -95,8 +94,7 @@ object MarkupV2 {
         }
 
         val blocks = markup.blocks.map { block(it) ?: return null }
-        // Каждый узел забран ровно одним блоком, каждый отрезок — при своём узле.
-        if (next != nodes.size + 1) return null
+        // Каждый отрезок — при узле своего блока.
         if (used != markup.entities.size) return null
         return buildJsonObject {
             put("v", VERSION)
@@ -145,34 +143,39 @@ object MarkupV2 {
         return runCatching { decode(root, nodes) }.getOrNull()
     }
 
-    private fun decode(root: JsonObject, nodes: List<String>): Markup? {
-        var next = 1
+    private fun decode(root: JsonObject, nodes: List<String>): Markup {
         val entities = mutableListOf<MarkupEntity>()
+        var referenced = false
 
         fun block(o: JsonObject): MarkupBlock {
             val type = o["type"]?.jsonPrimitive?.contentOrNull?.let(BlockType::fromWire) ?: BlockType.PARAGRAPH
-            val count = o["nodes"]?.jsonPrimitive?.intOrNull ?: defaultNodes(type)
-            val ids = (next until next + count).toList()
-            next += count
-            // Границы отрезка — по узлам блока, сложенным через перевод строки.
+            val ids = when (val n = o["n"]) {
+                null -> emptyList()
+                is JsonArray -> n.map { it.jsonPrimitive.intOrNull ?: error("номер узла не число") }
+                else -> listOf(n.jsonPrimitive.intOrNull ?: error("номер узла не число"))
+            }
+            if (ids.isNotEmpty()) referenced = true
+            // Границы отрезка — по узлам блока, сложенным через перевод строки. Узла нет — его
+            // поймает проверка разметки, отрезки в нём не читаются.
             val starts = mutableListOf<Int>()
             var base = 0
             for (id in ids) {
                 starts += base
-                base += (nodes.getOrNull(id - 1) ?: error("узлов меньше, чем забирают блоки")).length + 1
+                base += (nodes.getOrNull(id - 1)?.length ?: 0) + 1
             }
             for (s in o["e"]?.jsonArray.orEmpty()) {
                 val a = s.jsonArray
                 val kind = LONG[a[0].jsonPrimitive.content] ?: EntityType.UNKNOWN
                 val start = a[1].jsonPrimitive.intOrNull ?: error("нет начала")
                 val length = a[2].jsonPrimitive.intOrNull ?: error("нет длины")
-                val k = starts.indexOfLast { it <= start }.coerceAtLeast(0)
+                val k = starts.indexOfLast { it <= start }
+                if (k < 0) continue
                 val extra1 = a.getOrNull(3)?.jsonPrimitive?.contentOrNull.orEmpty()
                 val extra2 = a.getOrNull(4)?.jsonPrimitive?.contentOrNull.orEmpty()
                 entities += MarkupEntity(
                     type = kind,
-                    nodeId = ids.getOrNull(k) ?: error("отрезок без узла"),
-                    start = start - starts.getOrElse(k) { 0 },
+                    nodeId = ids[k],
+                    start = start - starts[k],
                     length = length,
                     url = if (kind == EntityType.LINK) extra1 else "",
                     attribute = if (kind == EntityType.MENTION || kind == EntityType.HASHTAG) extra1 else "",
@@ -193,12 +196,10 @@ object MarkupV2 {
         val blocks = root["blocks"]?.jsonArray.orEmpty().map { block(it.jsonObject) }
         // Сообщение без текста (один виджет): узлов нет, а тело отдаёт один пустой — так читается
         // тело без узлов с самого начала (MessageContentCodec.fromBody).
-        val none = next == 1 && nodes.size == 1 && nodes[0].isEmpty()
-        // Строго: блоки забрали ровно столько узлов, сколько их в теле.
-        if (!none && next != nodes.size + 1) return null
+        val none = !referenced && nodes.size == 1 && nodes[0].isEmpty()
         return Markup(
             n = if (none) emptyList() else (1..nodes.size).toList(),
-            // Порядок — как записан: по узлам, внутри узла — как у пишущего.
+            // Порядок — как записан: по блокам, внутри блока — как у пишущего.
             entities = entities,
             blocks = blocks,
             styles = root["styles"]?.let { json.decodeFromJsonElement(MarkupStyles.serializer(), it) },

@@ -6,8 +6,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Разметка v2 (ADR-0048): блоки по порядку забирают узлы по порядку, отрезки — внутри блока.
- * Пишется v2, читаются v2 и прежняя v1 — в одну и ту же модель.
+ * Разметка v2 (ADR-0048, ADR-0049): блоки линейно, блок с текстом называет свои узлы номерами,
+ * отрезки — внутри блока. Пишется v2, читаются v2 и прежняя v1 — в одну и ту же модель.
  */
 class MarkupV2Test {
 
@@ -33,7 +33,9 @@ class MarkupV2Test {
                 "- пункт\n  - вложенный\n```\nкод\n```\n---\nконец",
         )
         val raw = roundTrip(typed)
-        assertTrue("\"n\"" !in raw && "\"node\"" !in raw, "номеров узлов в v2 нет: $raw")
+        assertTrue("\"nodes\"" !in raw && "\"node\"" !in raw, "счёта узлов и номеров в отрезках нет: $raw")
+        assertTrue("{\"type\":\"heading\",\"level\":1" !in raw && "{\"type\":\"heading\",\"n\":1,\"level\":1}" in raw, "заголовок называет свой узел: $raw")
+        assertTrue("\"type\":\"quote\",\"n\":[3,4]" in raw, "цитата из двух строк — два номера: $raw")
     }
 
     @Test
@@ -43,12 +45,14 @@ class MarkupV2Test {
         assertEquals(sample.markup, MarkupV2.decodeBody(v1, sample.nodes))
     }
 
+    /** ADR-0049: ссылку на узел, которого нет, ловит проверка разметки, а не сдвиг счёта у всех. */
     @Test
-    fun строго_по_числу_узлов() {
+    fun узла_нет_ловит_проверка() {
         val sample = MarkupSample.content()
         val raw = MarkupV2.encodeBody(sample.markup!!, sample.nodes)
-        assertNull(MarkupV2.decodeBody(raw, sample.nodes + "лишний"), "узлов больше, чем забрали блоки")
-        assertNull(MarkupV2.decodeBody(raw, sample.nodes.dropLast(1)), "узлов меньше")
+        val short = sample.nodes.dropLast(1)
+        val markup = MarkupV2.decodeBody(raw, short)!!
+        assertTrue(MarkupRules.check(MessageContent(short, markup), strict = false).any { it.rule == "node-ref" })
         assertNull(MarkupV2.decodeBody("{\"v\":3,\"blocks\":[]}", emptyList()), "незнакомая версия")
     }
 
@@ -62,16 +66,16 @@ class MarkupV2Test {
         assertEquals(markup, MessageContentCodec.fromBody(body).markup)
     }
 
+    /** С номерами порядок узлов от порядка блоков не зависит. */
     @Test
-    fun не_по_порядку_пишется_v1() {
+    fun номера_в_любом_порядке() {
         val nodes = listOf("a", "b")
         val markup = Markup(n = listOf(1, 2), blocks = listOf(
             MarkupBlock(type = BlockType.PARAGRAPH, nodeIds = listOf(2)),
             MarkupBlock(type = BlockType.PARAGRAPH, nodeIds = listOf(1)),
         ))
-        assertNull(MarkupV2.encode(markup, nodes))
         val raw = MarkupV2.encodeBody(markup, nodes)
-        assertEquals(Markup.encode(markup), raw, "не выражается в v2 — v1")
+        assertEquals("{\"v\":2,\"blocks\":[{\"n\":2},{\"n\":1}]}", raw)
         assertEquals(markup, MarkupV2.decodeBody(raw, nodes))
     }
 }
