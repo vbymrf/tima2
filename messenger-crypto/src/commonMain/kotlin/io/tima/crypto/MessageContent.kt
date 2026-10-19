@@ -67,7 +67,8 @@ object MessageContentCodec {
         entities = emptyList(),
         media = content.media,
         nodes = content.nodes,
-        markup = content.markup?.let { Markup.encode(it) }.orEmpty(),
+        // Разметка — v2 (ADR-0048); не выражается — v1.
+        markup = content.markup?.let { MarkupV2.encodeBody(it, content.nodes) }.orEmpty(),
     )
 
     /**
@@ -80,7 +81,8 @@ object MessageContentCodec {
         val nodes = if (body.nodes.isNotEmpty()) body.nodes else listOf(body.text)
         return MessageContent(
             nodes = nodes,
-            markup = Markup.decode(body.markup),
+            // Любая версия разметки: v2 (ADR-0048) и прежняя v1.
+            markup = MarkupV2.decodeBody(body.markup, nodes),
             media = body.media,
         )
     }

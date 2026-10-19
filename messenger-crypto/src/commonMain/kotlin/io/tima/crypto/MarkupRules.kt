@@ -85,7 +85,7 @@ object MarkupRules {
         val chars = content.nodes.sumOf { it.length }
         if (chars > MAX_NODE_CHARS) out += Problem("node-chars", "текста $chars знаков, больше $MAX_NODE_CHARS")
         val markup = content.markup ?: return out
-        val bytes = Markup.encode(markup).encodeToByteArray().size
+        val bytes = MarkupV2.encodeBody(markup, content.nodes).encodeToByteArray().size
         if (bytes > MAX_MARKUP_BYTES) out += Problem("markup-bytes", "разметка $bytes байт, больше $MAX_MARKUP_BYTES")
         if (markup.n.isNotEmpty() && markup.n.size != content.nodes.size) {
             out += Problem("node-ids", "идентификаторов узлов ${markup.n.size}, узлов ${content.nodes.size}")

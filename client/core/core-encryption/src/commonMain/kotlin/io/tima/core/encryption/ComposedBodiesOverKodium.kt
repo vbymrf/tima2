@@ -59,7 +59,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
     override fun open(doc: ComposedDoc): io.tima.domain.chat.OpenBody? {
         val c = content(doc)
         if (c.media.isNotEmpty()) return null
-        return io.tima.domain.chat.OpenBody(c.displayText(), c.nodes, c.markup?.let(Markup::encode).orEmpty())
+        return io.tima.domain.chat.OpenBody(c.displayText(), c.nodes, c.markup?.let { io.tima.crypto.MarkupV2.encodeBody(it, c.nodes) }.orEmpty())
     }
 
     /**
@@ -67,7 +67,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
      * показа в окне «Описание» (ПЛАН-(ЗО) ЗО4). Разметка не разобралась — текст без оформления.
      */
     fun readOpen(nodes: List<String>, markup: String): io.tima.domain.chat.DecodedLine? = runCatching {
-        val content = MessageContent(nodes, markup.takeIf { it.isNotBlank() }?.let(Markup::decode))
+        val content = MessageContent(nodes, markup.takeIf { it.isNotBlank() }?.let { io.tima.crypto.MarkupV2.decodeBody(it, nodes) })
         io.tima.domain.chat.DecodedLine(content.displayText(), RichMapper.from(content))
     }.getOrNull()
 

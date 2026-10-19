@@ -293,6 +293,8 @@ class VectorsTest {
             "canonical_bytes", "canonical_bytes_v2", "message_body", "mlkem768_escrow",
             "group_message_canonical", "group_message_canonical_v2", "device_epoch_key",
             "markup_json", "canonical_bytes_v3", "group_message_canonical_v3",
+            // Разметка v2 (ADR-0048, 2026-10-19) — сверяется в MarkupVectorTest.
+            "markup_json_v2",
         )
         assertEquals(expected, vectors.keys, "Состав vectors.json изменился — обнови KAT")
     }

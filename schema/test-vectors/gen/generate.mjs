@@ -124,6 +124,19 @@ const V = { schema: 'tima.crypto.v1', format_version: 1, generated_by: 'tweetnac
   };
 }
 
+// ── 5d. Разметка v2 (ADR-0048): тот же образец, запись v2 — блоки по порядку забирают узлы,
+//        отрезки внутри блока. ИСТОЧНИК — Kotlin-реализация (MarkupV2), первый зелёный прогон
+//        MarkupV2Test 2026-10-19; генератор лишь переносит константу. Прежний markup_json (v1)
+//        остаётся: им сверяется чтение v1.
+{
+  V.vectors.markup_json_v2 = {
+    desc: "Разметка образцового сообщения редактора в виде v2 (ADR-0048) — байты MessageBody.markup, которые пишет клиент с 2026-10-19. Узлы — те же 7, что у markup_json.",
+    frozen_by: "messenger-crypto MarkupV2Test, первый зелёный прогон 2026-10-19",
+    inputs: {"sample": "MarkupSample.content(), узлы: Поход в субботу | Сбор в 9:00 у входа | Что | Кто | вода | Анна | Напоминаю маршрут"},
+    json: "{\"v\":2,\"blocks\":[{\"type\":\"heading\",\"level\":1},{\"type\":\"flex\",\"style\":{\"background\":\"amber-soft\",\"divider\":\"2\"},\"children\":[{\"type\":\"cell\",\"style\":{\"width\":\"33\"},\"children\":[{\"type\":\"image\",\"widget\":{\"media\":0}}]},{\"type\":\"cell\",\"nodes\":1,\"style\":{\"width\":\"67\"},\"e\":[[\"h\",0,4]]}]},{\"type\":\"table\",\"children\":[{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"nodes\":1},{\"type\":\"cell\",\"nodes\":1}]},{\"type\":\"row\",\"children\":[{\"type\":\"cell\",\"nodes\":1},{\"type\":\"cell\",\"nodes\":1,\"style\":{\"merge\":\"up\"}}]}]},{},{\"type\":\"underlay\",\"widget\":{\"ref\":{\"kind\":\"group\",\"container\":\"g-1\",\"message\":42},\"author\":true,\"lines\":3}}]}"
+  };
+}
+
 // ── 5b. MessageBody: замороженные protobuf-байты. ИСТОЧНИК — Kotlin-реализация (Wire),
 //        зафиксировано на первом зелёном прогоне SerializerTest (2026-07-12); генератор
 //        лишь переносит константу, чтобы регенерация не теряла вектор. Wire — референс для Go.

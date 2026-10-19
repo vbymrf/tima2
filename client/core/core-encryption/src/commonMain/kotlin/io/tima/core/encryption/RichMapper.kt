@@ -35,7 +35,7 @@ internal object RichMapper {
         val markup = content.markup ?: return null
         MarkupRules.check(content, strict = false).takeIf { it.isNotEmpty() }?.let { problems ->
             // Показано без оформления — журналу: какие правила и сколько весит разметка (MSG-MARKUP).
-            CodecWatch.markupDropped?.invoke(problems.map { it.rule }.distinct(), io.tima.crypto.Markup.encode(markup).encodeToByteArray().size)
+            CodecWatch.markupDropped?.invoke(problems.map { it.rule }.distinct(), io.tima.crypto.MarkupV2.encodeBody(markup, content.nodes).encodeToByteArray().size)
             return null
         }
         val byId = markup.n.mapIndexed { index, id -> id to index }.toMap()

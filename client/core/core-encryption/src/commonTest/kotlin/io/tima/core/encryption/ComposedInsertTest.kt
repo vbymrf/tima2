@@ -55,7 +55,7 @@ class ComposedInsertTest {
         val open = assertNotNull(bodies.open(doc))
         assertEquals(listOf("Сбор", "в 9"), open.nodes)
         assertEquals("Сбор\nв 9", open.text)
-        assertTrue("\"n\"" in open.markup, "разметка — компактным JSON")
+        assertTrue(open.markup.startsWith("{\"v\":2,"), "разметка — v2 (ADR-0048): ${open.markup}")
         val withImage = ComposedDoc(listOf(ComposedItem.Widget(ComposedWidget.Image(OutMedia("m", ByteArray(32), "image/jpeg", 10, 10)))))
         assertEquals(null, bodies.open(withImage), "у записи канала нет файлов")
     }
