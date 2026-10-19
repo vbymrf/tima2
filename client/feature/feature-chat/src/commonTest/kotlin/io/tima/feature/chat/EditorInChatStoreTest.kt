@@ -71,6 +71,34 @@ class EditorInChatStoreTest {
         composer = SendComposed(queue, bodies, DedupKeys { "c-${sent.size}" }),
     )
 
+    /** «Знаки md» выключены (ADR-0048): строка уходит как набрана, редактор открывается с выключенными. */
+    @Test
+    fun знаки_выключены_строка_уходит_как_набрана() = runTest {
+        val md = object : MessageBodyCodec {
+            override fun encodeText(text: String) = ("как есть:" + text).encodeToByteArray()
+            override fun encodeTyped(text: String) = ("знаки:" + text).encodeToByteArray()
+            override fun decodeText(body: ByteArray) = body.decodeToString()
+        }
+        val s = ChatStore(
+            io = kotlinx.coroutines.Dispatchers.Unconfined,
+            chatId = "chat-1",
+            observe = ObserveChat(ChatFeed { _, _ -> stream }),
+            send = SendMessage(queue, md, DedupKeys { "d-${sent.size}" }),
+            scope = backgroundScope,
+            drafts = drafts,
+            composer = SendComposed(queue, bodies, DedupKeys { "c-${sent.size}" }),
+        )
+        runCurrent()
+        s.draftChanged("**жирный**")
+        s.sendPressed()
+        s.marksChanged(false)
+        s.draftChanged("**жирный**")
+        s.sendPressed()
+        assertEquals(listOf("знаки:**жирный**", "как есть:**жирный**"), sent)
+        s.draftChanged("в редактор")
+        assertFalse(s.openEditor()!!.marks, "редактор открыт с той же галочкой")
+    }
+
     @Test
     fun набранное_переезжает_в_редактор_и_возвращается_чипом() = runTest {
         val s = store(backgroundScope)

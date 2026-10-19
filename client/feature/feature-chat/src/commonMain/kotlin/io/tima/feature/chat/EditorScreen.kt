@@ -115,7 +115,7 @@ object EditorTags {
 
 /** Разделы редактора и кнопки ленты (Решения §10.2) — ключи подписей `EditorWords.button`. */
 internal enum class EditorTab(val key: String, val buttons: List<String>) {
-    TEXT("text", listOf("paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol", "paste")),
+    TEXT("text", listOf("paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "marks", "symbol", "paste")),
     INSERT("insert", listOf("picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply")),
     LAYOUT("layout", listOf("row", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "up", "down", "delete")),
     STYLE("style", listOf("widget", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
@@ -236,6 +236,8 @@ fun EditorScreen(
     onDraft: ((ComposedDoc) -> Unit)? = null,
     /** Название в шапке; `null` — «Редактор». Правка своего сообщения — «Изменение». */
     title: String? = null,
+    /** «Знаки md» переключены — одна галочка на редактор и строку ввода (ADR-0048). */
+    onMarks: ((Boolean) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val w = Tima.words.editor
@@ -295,6 +297,12 @@ fun EditorScreen(
             "strike" -> model.inline(InlineKind.STRIKE)
             "highlight" -> model.inline(InlineKind.HIGHLIGHT)
             "code" -> model.inline(InlineKind.CODE)
+            // «Знаки md» (ADR-0048): включены — закрытая пара сразу оформление, выключены — знаки текстом.
+            "marks" -> {
+                model.toggleMarks()
+                hint = if (model.doc.marks) w.marksOn else w.marksOff
+                onMarks?.invoke(model.doc.marks)
+            }
             "symbol" -> { keyboard?.hide(); emojiArea = false; symbolArea = !symbolArea }
             "emoji" -> { keyboard?.hide(); symbolArea = false; emojiArea = !emojiArea }
             // Из HTML — только текст и простое оформление (Решения §5); HTML нет — текст как есть.

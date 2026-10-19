@@ -145,7 +145,10 @@ internal object MarkEdits {
     }
 }
 
-/** Вид поля редактора: знаки спрятаны, текст оформлен; заголовок — крупнее. */
+/**
+ * Вид поля редактора и строки ввода (ADR-0048, «Знаки md» включены): закрытая пара и знак строки спрятаны,
+ * текст оформлен; открывающий знак без пары — серым; заголовок — крупнее.
+ */
 @Composable
 internal fun rememberEditorView(marks: TypingMarks?): VisualTransformation {
     val colors = Tima.colors
@@ -163,7 +166,7 @@ internal fun rememberEditorView(marks: TypingMarks?): VisualTransformation {
                 append(view.shown)
                 for (span in spans) {
                     val style = when (span.style) {
-                        TypingStyle.MARKER -> SpanStyle(color = marker)
+                        TypingStyle.MARKER, TypingStyle.OPEN -> SpanStyle(color = marker)
                         TypingStyle.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
                         TypingStyle.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
                         TypingStyle.UNDERLINE -> SpanStyle(textDecoration = TextDecoration.Underline)

@@ -189,4 +189,5 @@ fun interface TypingMarks {
 /** Отрезок набранного текста. */
 data class TypingSpan(val style: TypingStyle, val start: Int, val end: Int)
 
-enum class TypingStyle { MARKER, BOLD, ITALIC, UNDERLINE, STRIKE, HIGHLIGHT, CODE, MENTION, HASHTAG, HEADING, QUOTE }
+/** [OPEN] — открывающий знак без пары: серым, пока не набран закрывающий (ADR-0048). */
+enum class TypingStyle { MARKER, OPEN, BOLD, ITALIC, UNDERLINE, STRIKE, HIGHLIGHT, CODE, MENTION, HASHTAG, HEADING, QUOTE }

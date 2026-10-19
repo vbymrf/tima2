@@ -37,7 +37,7 @@ class TextBodyCodecTest {
     @Test
     fun строка_ввода_тем_же_разбором() {
         // Каждый вид отрезка разборщика должен найтись в модели экрана — иначе valueOf упадёт.
-        val spans = TypingMarksOverQuickMarkdown.of("# Заг **ж** *к* ++ч++ ==м== ~~з~~ `к` #тег @ник\n--> ц")
+        val spans = TypingMarksOverQuickMarkdown.of("# Заг **ж** *к* ++ч++ ==м== ~~з~~ `к` #тег @ник\n--> ц **н")
         val styles = spans.map { it.style }.toSet()
         assertEquals(io.tima.domain.chat.TypingStyle.entries.toSet(), styles)
     }

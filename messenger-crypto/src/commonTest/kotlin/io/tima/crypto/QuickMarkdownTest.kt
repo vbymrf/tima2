@@ -190,6 +190,14 @@ class QuickMarkdownTest {
         assertTrue(QuickMarkdown.TypingMark(QuickMarkdown.TypingKind.CODE, 14, 18) in marks)
     }
 
+    /** ADR-0048: открывающий знак без пары виден серым — ждёт закрывающего; закрыли — оформление. */
+    @Test
+    fun строка_ввода_незакрытый_знак_серый() {
+        assertEquals(listOf(QuickMarkdown.TypingMark(QuickMarkdown.TypingKind.OPEN, 4, 6)), QuickMarkdown.typing("это **жир"))
+        assertEquals(listOf(QuickMarkdown.TypingMark(QuickMarkdown.TypingKind.OPEN, 4, 5)), QuickMarkdown.typing("это `код"))
+        assertTrue(QuickMarkdown.typing("это **жир**").none { it.kind == QuickMarkdown.TypingKind.OPEN })
+    }
+
     @Test
     fun строка_ввода_знак_без_пары_не_серый() {
         assertEquals(emptyList(), QuickMarkdown.typing("на C++ и a == b"))

@@ -834,7 +834,7 @@ class ChatStore(
     fun openEditor(): ComposedDoc? {
         if (composer == null || _state.value.editing > 0) return null
         val s = _state.value
-        val doc = s.composed ?: ComposedDoc.of(s.draft)
+        val doc = s.composed ?: ComposedDoc.of(s.draft, s.marks)
         _state.value = s.copy(editorOpen = true, composed = doc, draft = "", droppedComposed = null, notice = null)
         if (s.draft.isNotEmpty()) keepDraft("")
         return doc
@@ -1101,7 +1101,7 @@ class ChatStore(
             ?: NickReply.target(text, _state.value.names, known)
                 ?.takeIf { _state.value.group }
                 ?.let { (who, number) -> ReplyTarget(kind = "group", chatId = chatId, messageId = number, userId = who) }
-        val outcome = send.send(chatId, text, _state.value.level, reply = reply)
+        val outcome = send.send(chatId, text, _state.value.level, marks = _state.value.marks, reply = reply)
 
         _state.value = when (outcome) {
             // Принято: поле чистим — сообщение уже в списке.
@@ -1118,6 +1118,11 @@ class ChatStore(
             )
         }
         return outcome
+    }
+
+    /** «Знаки md» переключены — в редакторе или в настройке (ADR-0048). */
+    fun marksChanged(on: Boolean) {
+        if (_state.value.marks != on) _state.value = _state.value.copy(marks = on)
     }
 
     /** Человек набирает секретную фразу — её просят только после отказа по подписи. */
@@ -1213,6 +1218,8 @@ data class ChatState(
     val droppedComposed: ComposedDoc? = null,
     /** Серверный номер исправляемого (ADR-0045); 0 — правки нет, отправка — новое сообщение. */
     val editing: Long = 0,
+    /** «Знаки md» (ADR-0048): выключены — набранное уходит как есть, знаки остаются текстом. */
+    val marks: Boolean = true,
     /** На что отвечаем (Решения §11.1); `null` — не ответ. */
     val replyTo: ReplyDraft? = null,
     val notice: ChatNotice? = null,

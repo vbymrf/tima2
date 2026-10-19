@@ -213,7 +213,8 @@ object QuickMarkdown {
     /** Отрезок строки ввода в координатах набранного текста. */
     data class TypingMark(val kind: TypingKind, val start: Int, val end: Int)
 
-    enum class TypingKind { MARKER, BOLD, ITALIC, UNDERLINE, STRIKE, HIGHLIGHT, CODE, MENTION, HASHTAG, HEADING, QUOTE }
+    /** [OPEN] — открывающий знак без пары: виден серым, оформлением станет, когда наберут закрывающий (ADR-0048). */
+    enum class TypingKind { MARKER, OPEN, BOLD, ITALIC, UNDERLINE, STRIKE, HIGHLIGHT, CODE, MENTION, HASHTAG, HEADING, QUOTE }
 
     private val HEADING = Regex("^(#{1,3}) (.*)$")
     private val LIST_ITEM = Regex("^( *)- (.*)$")
@@ -451,9 +452,12 @@ object QuickMarkdown {
          */
         fun typing(src: String, offset: Int, out: MutableList<TypingMark>) {
             val escapes = mutableListOf<Int>()
-            val toks = tokenize(src, escapes)
+            val ticks = mutableListOf<Int>()
+            val toks = tokenize(src, escapes, ticks)
             pair(toks)
             for (e in escapes) out += TypingMark(TypingKind.MARKER, offset + e, offset + e + 1)
+            // Открывающий апостроф кода без пары — тоже ждёт закрывающего.
+            for (t in ticks) out += TypingMark(TypingKind.OPEN, offset + t, offset + t + 1)
             for (t in toks) when (t) {
                 is Code -> {
                     val end = t.at + 1 + t.text.length
@@ -478,12 +482,14 @@ object QuickMarkdown {
                         }
                         out += TypingMark(kind, offset + t.at + t.raw.length, offset + close.at)
                     }
+                } else if (t.canOpen) {
+                    out += TypingMark(TypingKind.OPEN, offset + t.at, offset + t.at + t.raw.length)
                 }
                 is Chars -> Unit
             }
         }
 
-        private fun tokenize(src: String, escapes: MutableList<Int>? = null): List<Tok> {
+        private fun tokenize(src: String, escapes: MutableList<Int>? = null, ticks: MutableList<Int>? = null): List<Tok> {
             val toks = mutableListOf<Tok>()
             val buf = StringBuilder()
             fun flush() { if (buf.isNotEmpty()) { toks += Chars(buf.toString()); buf.clear() } }
@@ -502,6 +508,7 @@ object QuickMarkdown {
                 if (c == '`') {
                     val close = src.indexOf('`', i + 1)
                     if (close > i + 1) { flush(); toks += Code(src.substring(i + 1, close), i); i = close + 1; continue }
+                    if (close < 0 && src.getOrNull(i + 1)?.isWhitespace() == false) ticks?.add(i)
                 }
                 if (wordStart && c == '#') {
                     val tag = WORD.find(src.substring(i + 1))

@@ -149,7 +149,7 @@ internal fun InputLine(
                         readOnly = composed != null,
                         textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
                         cursorBrush = SolidColor(colors.navigation),
-                        visualTransformation = rememberTypingView(typingMarks),
+                        visualTransformation = rememberEditorView(typingMarks),
                         modifier = Modifier.fillMaxWidth().testTag(CHAT_INPUT_TAG)
                             .onFocusChanged { if (it.isFocused) area = null },
                     )

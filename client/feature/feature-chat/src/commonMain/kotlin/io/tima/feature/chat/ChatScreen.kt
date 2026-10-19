@@ -459,7 +459,8 @@ fun ChatScreen(
             typed = state.draft,
             onSet = onSet,
             onSend = onSend,
-            typingMarks = typingMarks,
+            // «Знаки md» выключены — знаки текстом; правка набранного разбирается знаками всегда (ADR-0045).
+            typingMarks = typingMarks.takeIf { state.marks || state.editing > 0 },
             onEditor = onEditor,
             composed = composed,
             onComposedDrop = onComposedDrop,

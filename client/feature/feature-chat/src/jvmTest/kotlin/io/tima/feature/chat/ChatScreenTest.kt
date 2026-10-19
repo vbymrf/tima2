@@ -62,8 +62,8 @@ class ChatScreenTest {
     }
 
     @Test
-    fun знаки_в_строке_ввода_серым_а_текст_оформлен() {
-        // ПЛАН-(РС) РС5: вид меняется, набранное — нет.
+    fun знаки_в_строке_ввода_спрятаны_а_текст_оформлен() {
+        // ADR-0048: закрытая пара — сразу оформление, знаки спрятаны; набранное не меняется.
         val marks = io.tima.domain.chat.TypingMarks { text ->
             if (text != "**жирный**") emptyList() else listOf(
                 io.tima.domain.chat.TypingSpan(io.tima.domain.chat.TypingStyle.MARKER, 0, 2),

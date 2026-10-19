@@ -4739,6 +4739,10 @@ private fun Chat(
             .distinctUntilChanged()
             .flowOn(Dispatchers.Default)
     }.collectAsState(initial = emptySet())
+    // «Знаки md» — одна галочка на редактор и строку ввода (ADR-0048).
+    LaunchedEffect(store, environment) {
+        environment.settings.all().map { it[MARKS_KEY] != "0" }.distinctUntilChanged().collect(store::marksChanged)
+    }
     // «Прочитано» — то новое, что сейчас на экране (ПЛАН-(ОП)): время написания позднейшего входящего.
     val newestIncoming = state.lines.filter { !it.outgoing }.maxOfOrNull { it.atMs }
     LaunchedEffect(newestIncoming, live) { if (live != null && newestIncoming != null) live.read(chatId, newestIncoming) }
@@ -5116,6 +5120,10 @@ private fun Chat(
                 }
             },
             onDraft = store::editorDraft,
+            onMarks = { on ->
+                store.marksChanged(on)
+                scope.launch { environment.settings.put(MARKS_KEY, if (on) "1" else "0") }
+            },
             onSend = send@{ doc ->
                 if (editingDoc) {
                     when (val r = store.editorEditSend(doc)) {
