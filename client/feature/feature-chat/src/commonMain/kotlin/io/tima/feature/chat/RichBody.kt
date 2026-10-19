@@ -14,8 +14,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -116,7 +120,7 @@ internal fun RichBlockViewOf(block: RichBlock) {
             }
         }
         is RichBlock.Bullets -> {
-            BulletList(block.items, depth = 0)
+            BulletList(block.items, depth = 0, closed = block.closed, flat = block.flat)
             LinksUnder(allLinks(block.items))
         }
         is RichBlock.CodeBlock -> Box(
@@ -164,24 +168,46 @@ fun ReplyBlock(look: ReplyLook, onClick: (() -> Unit)? = null) {
     }
 }
 
-/** Пункты: «•», вложенные — «◦» и «▪» с отступом; глубже третьего уровня разметка не даёт. */
+/**
+ * Пункты: «•», вложенные — «◦» и «▪»; глубже третьего уровня разметка не даёт. Пункт — контейнер
+ * (ADR-0049): под заголовком его блоки, виджеты и вложенные пункты; есть что под ним — стрелка
+ * «▾»/«▸» сворачивает и разворачивает, заголовок виден всегда. [closed] — список пришёл свёрнутым;
+ * [flat] — без отступа: вложенное с начала строки, без маркера ребёнка, у точки — узкий зазор.
+ */
 @Composable
-private fun BulletList(items: List<Bullet>, depth: Int) {
+private fun BulletList(items: List<Bullet>, depth: Int, closed: Boolean, flat: Boolean) {
     val mark = when (depth) { 0 -> "•"; 1 -> "◦"; else -> "▪" }
     // В ячейке — её цвет и размер (ADR-0048 §4).
     val cell = LocalCellText.current
     val size = sizeOf(cell.size, TimaType.sz4)
     val color = io.tima.core.ui.paletteColor(cell.color) ?: Tima.colors.text
-    Column(Modifier.padding(start = (depth * 14).dp)) {
+    // Место под стрелку — у всех пунктов уровня, если она есть хоть у одного: точки стоят ровно.
+    val arrows = items.any { it.blocks.isNotEmpty() || it.children.isNotEmpty() }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         for (item in items) {
+            val inside = item.blocks.isNotEmpty() || item.children.isNotEmpty()
+            var open by androidx.compose.runtime.saveable.rememberSaveable(item.text.text, closed) { mutableStateOf(!closed) }
             Row {
-                Caption(mark, fontSize = size, color = color, modifier = Modifier.padding(end = 6.dp))
+                if (arrows) {
+                    Box(Modifier.width(14.dp).then(if (inside) Modifier.clickable { open = !open }.testTag(BULLET_FOLD_TAG) else Modifier)) {
+                        if (inside) Caption(if (open) "▾" else "▸", fontSize = size, color = Tima.colors.text2)
+                    }
+                }
+                if (!(flat && depth > 0)) Caption(mark, fontSize = size, color = color, modifier = Modifier.padding(end = if (flat) 2.dp else 6.dp))
                 Caption(annotated(withoutLinks(item.text)), fontSize = size, color = color)
             }
-            if (item.children.isNotEmpty()) BulletList(item.children, depth + 1)
+            if (inside && open) {
+                Column(Modifier.padding(start = if (flat) 0.dp else 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for (b in item.blocks) RichBlockViewOf(b)
+                    if (item.children.isNotEmpty()) BulletList(item.children, depth + 1, closed, flat)
+                }
+            }
         }
     }
 }
+
+/** Стрелка пункта списка — свернуть и развернуть (сценарии Maestro). */
+const val BULLET_FOLD_TAG = "bullet:fold"
 
 /**
  * Таблица — ширина пузыря поровну на столбцы, без прокрутки. Слитая ячейка (`^^`, `<<`) рисуется

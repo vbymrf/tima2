@@ -83,7 +83,8 @@ sealed interface RichBlock {
     /** Строки цитаты — каждая своей строкой. */
     data class Quote(val lines: List<RichText>) : RichBlock
 
-    data class Bullets(val items: List<Bullet>) : RichBlock
+    /** Список (ADR-0049 §3): [closed] — показать свёрнутым, [flat] — без отступа вложенного. */
+    data class Bullets(val items: List<Bullet>, val closed: Boolean = false, val flat: Boolean = false) : RichBlock
 
     data class CodeBlock(val text: String) : RichBlock
 
@@ -169,7 +170,8 @@ data class RowCell(
 )
 
 /** Пункт списка и вложенные в него пункты. */
-data class Bullet(val text: RichText, val children: List<Bullet> = emptyList())
+/** Пункт — контейнер (ADR-0049 §2): заголовок, свои блоки и виджеты, вложенные пункты. */
+data class Bullet(val text: RichText, val children: List<Bullet> = emptyList(), val blocks: List<RichBlock> = emptyList())
 
 data class TableCell(
     val text: RichText?,

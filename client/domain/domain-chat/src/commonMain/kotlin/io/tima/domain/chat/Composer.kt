@@ -41,6 +41,7 @@ data class ComposedDoc(
             when (item) {
                 is ComposedItem.Text -> item.source
                 is ComposedItem.Row -> item.cells.firstOrNull { it.text.isNotBlank() }?.text
+                is ComposedItem.ItemList -> item.items.firstOrNull { it.title.isNotBlank() }?.title
                 is ComposedItem.Widget, is ComposedItem.Continuation -> null
             }?.lineSequence()?.map { it.trim() }?.firstOrNull { it.isNotEmpty() }
         }.orEmpty()
@@ -84,6 +85,19 @@ sealed interface ComposedItem {
     }
 
     /**
+     * Список (ADR-0049): пункты по порядку со ступенью 1–3; пункт — как ячейка ряда. [open] —
+     * «Развернуть по умолчанию», [flat] — «Без отступа»: свойства всего списка.
+     */
+    data class ItemList(
+        val items: List<ComposedListItem>,
+        override val style: Map<String, String> = emptyMap(),
+        val open: Boolean = true,
+        val flat: Boolean = false,
+    ) : ComposedItem {
+        override val isEmpty: Boolean get() = items.isEmpty()
+    }
+
+    /**
      * Метка «Продолжение» (Решения §11.3): что ниже — отдельное сообщение уровня [level] с пометкой
      * «только продолжение», подложенное в конец основного. Уходит первым.
      */
@@ -107,6 +121,17 @@ data class ComposedCell(
 ) {
     val isEmpty: Boolean get() = text.isBlank() && widgets.isEmpty()
 }
+
+/**
+ * Пункт списка (ADR-0049 §2): [depth] — ступень 1–3; [title] — заголовок, одна строка набранного со
+ * знаками; [text] — содержимое под ним, как текст ячейки; [widgets] — виджеты под содержимым.
+ */
+data class ComposedListItem(
+    val depth: Int = 1,
+    val title: String = "",
+    val text: String = "",
+    val widgets: List<ComposedWidget> = emptyList(),
+)
 
 /** Виджеты редактора (Решения §10.4). */
 sealed interface ComposedWidget {

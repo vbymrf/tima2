@@ -43,6 +43,7 @@ object ComposedStyle {
                 is ComposedItem.Text -> item.copy(style = clean)
                 is ComposedItem.Widget -> item.copy(style = clean)
                 is ComposedItem.Row -> item.copy(style = clean)
+                is ComposedItem.ItemList -> item.copy(style = clean)
                 // У метки продолжения стиля нет: она не рисуется у получателя.
                 is ComposedItem.Continuation -> item
             }

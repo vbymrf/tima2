@@ -56,6 +56,9 @@ object MarkupRules {
         "padding" to setOf("none", "small", "normal", "large"),
         "divider" to setOf("hidden", "1", "2", "4"),
         "merge" to setOf("up", "left"),
+        // Свойства списка (ADR-0049 §3): показать свёрнутым, без отступа.
+        "fold" to setOf("open", "closed"),
+        "indent" to setOf("normal", "flat"),
     )
     private val PALETTE_KEYS = setOf("background", "color", "divider_color")
     private val STYLE_KEYS = STEPS.keys + PALETTE_KEYS + "width"
@@ -164,7 +167,13 @@ object MarkupRules {
                     when (child.type) {
                         BlockType.LIST_ITEM -> {
                             for (id in child.nodeIds) if (id !in ctx.ids) out += Problem("node-ref", "пункт ссылается на узел $id, его нет")
-                            for (inner in child.children) if (inner.type == BlockType.LIST) checkBlock(inner, ctx, depth + 1)
+                            if (child.nodeIds.size > 1) out += Problem("list-item", "у пункта больше одного узла-заголовка")
+                            // Пункт — контейнер, как ячейка (ADR-0049 §2): блоки текста, виджеты ячейки, вложенный список.
+                            for (inner in child.children) when {
+                                inner.type == BlockType.UNKNOWN -> if (ctx.strict) out += Problem("unknown-type", "незнакомый блок в пункте")
+                                inner.type in TEXT_BLOCKS || inner.type in CELL_WIDGETS -> checkBlock(inner, ctx, depth + 1)
+                                else -> out += Problem("list-item", "«${inner.type.wire}» не кладётся в пункт списка")
+                            }
                         }
                         BlockType.LIST -> checkBlock(child, ctx, depth + 1)
                         else -> out += Problem("list", "в списке «${child.type.wire}»")
@@ -252,6 +261,7 @@ object MarkupRules {
     private fun checkStyle(block: MarkupBlock, ctx: Ctx) {
         for ((key, value) in block.style) {
             when {
+                (key == "fold" || key == "indent") && block.type != BlockType.LIST -> ctx.out += Problem("style", "«$key» — свойство списка, а не «${block.type.wire}»")
                 key in PALETTE_KEYS -> if (value !in PALETTE) ctx.out += Problem("palette", "«$key»: «$value» — не имя палитры")
                 key in STEPS -> if (value !in STEPS.getValue(key)) ctx.out += Problem("step", "«$key»: «$value» — не из ступеней")
                 key == "width" -> if (block.type != BlockType.CELL) ctx.out += Problem("style", "ширина у «${block.type.wire}», а не у ячейки")

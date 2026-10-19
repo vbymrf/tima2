@@ -74,6 +74,40 @@ class ComposedBodiesTest {
         assertEquals("простой", back.cells[1].text)
     }
 
+    /** ADR-0049 §2–3: пункт списка — контейнер; в нём подборка и блок кода; список свёрнут и без отступа. */
+    @Test
+    fun пункт_списка_контейнер() {
+        val list = ComposedItem.ItemList(
+            listOf(
+                io.tima.domain.chat.ComposedListItem(1, "**Заглавие**"),
+                io.tima.domain.chat.ComposedListItem(2, "Подборка", widgets = listOf(ComposedWidget.Quoted("group", "g-1", 42))),
+                io.tima.domain.chat.ComposedListItem(2, "Код", text = "```\nкод без форматирования\n```"),
+            ),
+            open = false,
+            flat = true,
+        )
+        val doc = ComposedDoc(listOf(ComposedItem.Text("до"), list))
+        val content = bodies.content(doc)
+        assertTrue(io.tima.crypto.MarkupRules.check(content, strict = true).isEmpty(), io.tima.crypto.MarkupRules.check(content, strict = true).toString())
+        assertEquals(listOf("до", "Заглавие", "Подборка", "Код", "код без форматирования"), content.nodes)
+        val top = content.markup!!.blocks[1]
+        assertEquals(mapOf("fold" to "closed", "indent" to "flat"), top.style)
+        val first = top.children.single()
+        assertEquals(listOf(2), first.nodeIds)
+        val nested = first.children.single()
+        assertEquals(BlockType.LIST, nested.type)
+        assertEquals(BlockType.QUOTED, nested.children[0].children.single().type)
+        assertEquals(BlockType.CODE_BLOCK, nested.children[1].children.single().type)
+        val raw = io.tima.crypto.MarkupV2.encodeBody(content.markup!!, content.nodes)
+        assertEquals(content.markup, io.tima.crypto.MarkupV2.decodeBody(raw, content.nodes))
+        val shown = assertIs<RichBlock.Bullets>(RichMapper.from(content)!!.blocks[1])
+        assertTrue(shown.closed && shown.flat)
+        assertIs<RichBlock.Quoted>(shown.items[0].children[0].blocks.single())
+        assertIs<RichBlock.CodeBlock>(shown.items[0].children[1].blocks.single())
+        assertEquals(list, ComposedFromContent.doc(content)!!.items[1], "правка открывает тот же список")
+        assertEquals(doc.items, bodies.load(bodies.save(doc))!!.items, "черновик")
+    }
+
     /** ADR-0048: знак, набранный текстом, в документе экранирован — в тело уходит текстом. */
     @Test
     fun знаки_выключены_текст_как_есть() {

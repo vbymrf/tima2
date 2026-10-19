@@ -681,6 +681,13 @@ private fun EditorItemView(
         }
         is ComposedItem.Row -> EditorRow(item, index, model, drag, marks, preview, tooWide)
         is ComposedItem.Continuation -> ContinuationMarker(item, index, model, levels)
+        // Список (ADR-0049) — как увидит получатель; нажатие выбирает его.
+        is ComposedItem.ItemList -> Column(
+            Modifier.fillMaxWidth().clickable { model.select(index) }.testTag(EditorTags.text(index)),
+        ) {
+            preview(ComposedDoc(listOf(item.copy(style = emptyMap()))))?.let { RichBody(it) }
+            DividerAfter(look)
+        }
     }
 }
 

@@ -50,7 +50,12 @@ internal object RichMapper {
                 BlockType.PARAGRAPH -> RichBlock.Paragraph(rich(block.nodeIds.firstOrNull() ?: -1), style(block))
                 BlockType.HEADING -> RichBlock.Heading(block.level.coerceIn(1, 3), rich(block.nodeIds.firstOrNull() ?: -1), style(block))
                 BlockType.QUOTE -> RichBlock.Quote(block.nodeIds.map(::rich))
-                BlockType.LIST -> RichBlock.Bullets(bullets(block, ::rich))
+                // Пункт — контейнер (ADR-0049 §2): его блоки и виджеты — под заголовком.
+                BlockType.LIST -> RichBlock.Bullets(
+                    bullets(block, ::rich) { b -> if (b.type in CELL_TEXT) map(b) else widget(b) },
+                    closed = block.style["fold"] == "closed",
+                    flat = block.style["indent"] == "flat",
+                )
                 BlockType.CODE_BLOCK -> RichBlock.CodeBlock(nodeText(block.nodeIds.firstOrNull() ?: -1))
                 BlockType.DIVIDER -> RichBlock.Divider
                 BlockType.TABLE -> RichBlock.Table(
@@ -152,11 +157,12 @@ internal object RichMapper {
         )
     }
 
-    private fun bullets(list: MarkupBlock, rich: (Int) -> RichText): List<Bullet> =
+    private fun bullets(list: MarkupBlock, rich: (Int) -> RichText, inner: (MarkupBlock) -> RichBlock?): List<Bullet> =
         list.children.filter { it.type == BlockType.LIST_ITEM }.map { item ->
             Bullet(
                 text = rich(item.nodeIds.firstOrNull() ?: -1),
-                children = item.children.filter { it.type == BlockType.LIST }.flatMap { bullets(it, rich) },
+                children = item.children.filter { it.type == BlockType.LIST }.flatMap { bullets(it, rich, inner) },
+                blocks = item.children.filter { it.type != BlockType.LIST }.mapNotNull(inner),
             )
         }
 

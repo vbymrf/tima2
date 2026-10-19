@@ -17,6 +17,7 @@ import io.tima.domain.chat.ComposedBodies
 import io.tima.domain.chat.ComposedCell
 import io.tima.domain.chat.ComposedDoc
 import io.tima.domain.chat.ComposedItem
+import io.tima.domain.chat.ComposedListItem
 import io.tima.domain.chat.ComposedWidget
 import io.tima.domain.chat.OutMedia
 import io.tima.domain.chat.ReplyTarget
@@ -124,6 +125,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
             is ComposedItem.Text -> graft(parsed(item.source.trim('\n'))).map { block ->
                 if (item.style.isEmpty()) block else block.copy(style = block.style + item.style)
             }
+            is ComposedItem.ItemList -> listOf(list(item))
             is ComposedItem.Continuation -> emptyList()
             // Ответ и подкладка — блоки верхнего уровня, остальные виджеты живут в ячейках (ADR-0044).
             is ComposedItem.Widget -> if (item.widget is ComposedWidget.Reply || item.widget is ComposedWidget.Underlay) {
@@ -145,6 +147,50 @@ object ComposedBodiesOverKodium : ComposedBodies {
                 val children = if (single) cells else cells.chunked(item.columns.coerceAtLeast(1)).map { MarkupBlock(type = BlockType.ROW, children = it) }
                 listOf(MarkupBlock(type = BlockType.FLEX, style = item.style, children = children))
             }
+        }
+
+        /** Одна строка набранного — узлом с оформлением внутри строки (заголовок пункта). */
+        private fun lineNode(source: String): Int {
+            val content = parsed(source.trim('\n'))
+            val markup = content.markup?.takeIf { content.hasMarkup }
+            val paragraph = markup?.blocks?.singleOrNull()?.takeIf { it.type == BlockType.PARAGRAPH && it.nodeIds.size == 1 }
+            return when {
+                markup == null -> node(content.plainText())
+                paragraph != null -> node(content.nodes[markup.indexOf(paragraph.nodeIds.single())]).also { id ->
+                    entities += markup.entities.filter { it.nodeId == paragraph.nodeIds.single() }.map { it.copy(nodeId = id) }
+                }
+                else -> node(content.displayText())
+            }
+        }
+
+        /**
+         * Список (ADR-0049): пункт — узел-заголовок, под ним его блоки, виджеты и вложенный список,
+         * узлы — в порядке обхода. Пункт глубже соседа сверху больше чем на ступень встаёт на ступень
+         * ниже соседа. Свойства списка — стилем: `fold`, `indent`.
+         */
+        private fun list(l: ComposedItem.ItemList): MarkupBlock {
+            val items = l.items
+            var i = 0
+            fun level(depth: Int): MarkupBlock {
+                val out = mutableListOf<MarkupBlock>()
+                while (i < items.size) {
+                    val it = items[i]
+                    if (out.isNotEmpty() && it.depth < depth) break
+                    i++
+                    val title = lineNode(it.title)
+                    val content = if (it.text.isBlank()) emptyList() else graft(parsed(it.text.trim('\n')))
+                    val widgets = it.widgets.map(::widget)
+                    val nested = if (i < items.size && items[i].depth > depth && depth < MarkupRules.MAX_LIST_DEPTH) listOf(level(depth + 1)) else emptyList()
+                    out += MarkupBlock(type = BlockType.LIST_ITEM, nodeIds = listOf(title), children = content + widgets + nested)
+                }
+                return MarkupBlock(type = BlockType.LIST, children = out)
+            }
+            val style = buildMap {
+                putAll(l.style)
+                if (!l.open) put("fold", "closed")
+                if (l.flat) put("indent", "flat")
+            }
+            return level(1).copy(style = style)
         }
 
         /**
@@ -271,10 +317,15 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val continuation: Int? = null,
         /** Столбцов ряда; нет — однострочный ряд (черновики до 2026-10-18). */
         val columns: Int? = null,
+        /** Пункты списка (ADR-0049); свойства списка — [open], [flat]. */
+        val items: List<SavedListItem>? = null,
+        val open: Boolean = true,
+        val flat: Boolean = false,
     ) {
         fun toItem(): ComposedItem? = when {
             continuation != null -> ComposedItem.Continuation(continuation)
             text != null -> ComposedItem.Text(text, style)
+            items != null -> ComposedItem.ItemList(items.map { it.toItem() }, style, open, flat)
             widget != null -> widget.toWidget()?.let { ComposedItem.Widget(it, style) }
             cells != null -> ComposedItem.Row(cells.map { it.toCell() }, style, columns ?: cells.size)
             else -> null
@@ -286,7 +337,22 @@ object ComposedBodiesOverKodium : ComposedBodies {
                 is ComposedItem.Widget -> SavedItem(widget = SavedWidget.of(item.widget), style = item.style)
                 is ComposedItem.Row -> SavedItem(cells = item.cells.map(SavedCell::of), style = item.style, columns = item.columns)
                 is ComposedItem.Continuation -> SavedItem(continuation = item.level)
+                is ComposedItem.ItemList -> SavedItem(items = item.items.map(SavedListItem::of), style = item.style, open = item.open, flat = item.flat)
             }
+        }
+    }
+
+    @Serializable
+    private data class SavedListItem(
+        val depth: Int = 1,
+        val title: String = "",
+        val text: String = "",
+        val widgets: List<SavedWidget> = emptyList(),
+    ) {
+        fun toItem() = ComposedListItem(depth, title, text, widgets.mapNotNull { it.toWidget() })
+
+        companion object {
+            fun of(i: ComposedListItem) = SavedListItem(i.depth, i.title, i.text, i.widgets.map(SavedWidget::of))
         }
     }
 

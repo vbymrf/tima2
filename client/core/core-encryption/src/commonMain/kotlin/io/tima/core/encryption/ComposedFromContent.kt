@@ -9,6 +9,7 @@ import io.tima.crypto.proto.MediaRef
 import io.tima.domain.chat.ComposedCell
 import io.tima.domain.chat.ComposedDoc
 import io.tima.domain.chat.ComposedItem
+import io.tima.domain.chat.ComposedListItem
 import io.tima.domain.chat.ComposedWidget
 import io.tima.domain.chat.OutMedia
 import io.tima.domain.chat.ReplyTarget
@@ -49,6 +50,7 @@ internal object ComposedFromContent {
                 // Таблица быстрого оформления — только в старых сообщениях: в редакторе её больше нет
                 // (заказчик 2026-10-18), такое сообщение показывается как раньше и не правится.
                 b.type == BlockType.TABLE -> return null
+                b.type == BlockType.LIST -> itemList(content, markup, b) ?: return null
                 // Каждый текстовый блок — свой кусок: склеенные, два простых абзаца разобрались бы
                 // обратно одним абзацем, и строение разошлось бы.
                 else -> ComposedItem.Text(textOf(content, markup, listOf(b.copy(style = emptyMap()))) ?: return null, b.style)
@@ -81,6 +83,25 @@ internal object ComposedFromContent {
             ComposedCell(width, text, widgets, c.style - "width" - "merge", c.style["merge"].orEmpty())
         }
         return ComposedItem.Row(cells, b.style, columns)
+    }
+
+    /** Список (ADR-0049) → кусок «Список»: пункт — заголовок, содержимое и виджеты; ступень — по вложенности. */
+    private fun itemList(content: MessageContent, markup: Markup, b: MarkupBlock): ComposedItem? {
+        val items = mutableListOf<ComposedListItem>()
+        fun walk(list: MarkupBlock, depth: Int): Boolean {
+            for (item in list.children) {
+                if (item.type != BlockType.LIST_ITEM || item.nodeIds.size > 1) return false
+                val title = if (item.nodeIds.isEmpty()) "" else textOf(content, markup, listOf(MarkupBlock(type = BlockType.PARAGRAPH, nodeIds = item.nodeIds))) ?: return false
+                val texts = item.children.filter { it.type != BlockType.LIST && it.type !in WIDGETS }
+                val text = if (texts.isEmpty()) "" else textOf(content, markup, texts) ?: return false
+                val widgets = item.children.filter { it.type in WIDGETS }.map { w -> widget(content, w) ?: return false }
+                items += ComposedListItem(depth, title, text, widgets)
+                for (nested in item.children.filter { it.type == BlockType.LIST }) if (!walk(nested, depth + 1)) return false
+            }
+            return true
+        }
+        if (!walk(b, 1)) return null
+        return ComposedItem.ItemList(items, b.style - "fold" - "indent", open = b.style["fold"] != "closed", flat = b.style["indent"] == "flat")
     }
 
     /** Блоки текста — знаками быстрого оформления, тем же разбором, что строка ввода (ADR-0045). */
