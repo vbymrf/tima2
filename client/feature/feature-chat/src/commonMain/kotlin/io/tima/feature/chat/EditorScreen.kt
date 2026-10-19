@@ -110,6 +110,8 @@ object EditorTags {
     /** Линейка рамок над выбранным рядом N. */
     fun ruler(item: Int) = "editor:ruler.$item"
     const val GRID = "editor:grid"
+    /** «Список»: окно свойств списка. */
+    const val LIST = "editor:list"
     /** Список N, точка пункта I (выбрать), заголовок и содержимое пункта (ADR-0049). */
     fun list(index: Int) = "editor:list.$index"
     fun listItem(index: Int, item: Int) = "editor:list.$index.$item"
@@ -121,7 +123,7 @@ object EditorTags {
 internal enum class EditorTab(val key: String, val buttons: List<String>) {
     TEXT("text", listOf("paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "marks", "symbol", "paste")),
     INSERT("insert", listOf("picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply")),
-    LAYOUT("layout", listOf("row", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "up", "down", "delete")),
+    LAYOUT("layout", listOf("row", "list", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "up", "down", "delete")),
     STYLE("style", listOf("widget", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
 }
 
@@ -151,6 +153,31 @@ private fun GridAsk(onInsert: (lines: Int, columns: Int) -> Unit) {
     }
 }
 
+/** «Список»: «Развернуть по умолчанию», «Без отступа» — на весь список (ADR-0049 §3); нажата — включено. */
+@Composable
+private fun ListAsk(list: io.tima.domain.chat.ComposedItem.ItemList, onChange: (open: Boolean, flat: Boolean) -> Unit) {
+    val colors = Tima.colors
+    val w = Tima.words.editor
+    Row(
+        Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+            .testTag(EditorTags.LIST),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    ) {
+        io.tima.core.ui.Chip(
+            w.listOpen,
+            kind = if (list.open) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Neutral,
+            onClick = { onChange(!list.open, list.flat) },
+            modifier = Modifier.testTag("editor:list.open"),
+        )
+        io.tima.core.ui.Chip(
+            w.listFlat,
+            kind = if (list.flat) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Neutral,
+            onClick = { onChange(list.open, !list.flat) },
+            modifier = Modifier.testTag("editor:list.flat"),
+        )
+    }
+}
+
 @Composable
 private fun Stepper(label: String, value: Int, range: IntRange, key: String, onChange: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
@@ -164,6 +191,7 @@ private fun Stepper(label: String, value: Int, range: IntRange, key: String, onC
 /** Значок кнопки ленты — постоянный; буквы оформления и подпись под значком — из словаря. */
 internal fun editorGlyph(key: String): String = when (key) {
     "paragraph" -> "¶"
+    "list" -> "≡"
     "code" -> "</>"
     "symbol" -> "Ω"
     "paste" -> "📋"
@@ -254,6 +282,8 @@ fun EditorScreen(
     var stylePanel by remember { mutableStateOf<String?>(null) }
     // «Ряд»: сколько строк и столбцов (заказчик 2026-10-18).
     var gridAsk by remember { mutableStateOf(false) }
+    // «Список»: свойства всего списка (ADR-0049 §3).
+    var listAsk by remember { mutableStateOf(false) }
     val clipboardHtml = io.tima.core.media.rememberClipboardHtml()
     val clipboardImage = io.tima.core.media.rememberClipboardImage()
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -328,6 +358,8 @@ fun EditorScreen(
             // Раздел «Разметка» (§10.2–§10.3; заказчик 2026-10-18): ряд строк × столбцов, слияние в оба
             // направления; таблицы в редакторе больше нет — она стала рядом.
             "row" -> { paragraphMenu = false; stylePanel = null; gridAsk = !gridAsk }
+            // Свойства всего списка (ADR-0049 §3): курсор должен стоять в списке.
+            "list" -> if (model.listHere == null) hint = w.listChoose else listAsk = !listAsk
             "colAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addColumn)
             "colRemove" -> model.layout(io.tima.domain.chat.ComposedLayout::removeColumn)
             "lineAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addLine)
@@ -391,6 +423,7 @@ fun EditorScreen(
         Ribbon(tab, marksOn = doc.marks, active = active, scroll = ribbonScroll, desktop = desktop, onPress = ::press)
         if (paragraphMenu) ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); paragraphMenu = false }
         stylePanel?.let { StylePanel(it, model, problems) }
+        if (listAsk) model.listHere?.let { l -> ListAsk(l) { open, flat -> model.listProps(open, flat) } }
         if (gridAsk) {
             GridAsk { lines, columns ->
                 gridAsk = false

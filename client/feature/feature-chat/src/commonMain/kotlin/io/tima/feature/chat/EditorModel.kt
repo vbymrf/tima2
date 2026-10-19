@@ -376,6 +376,16 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         return true
     }
 
+    /** Список под курсором (ADR-0049 §3): его свойства задаёт «Разметка → Список». */
+    val listHere: ComposedItem.ItemList? get() = doc.items.getOrNull(focus) as? ComposedItem.ItemList
+
+    /** «Развернуть по умолчанию», «Без отступа» — на весь список под курсором; шаг истории. */
+    fun listProps(open: Boolean, flat: Boolean) {
+        val list = listHere ?: return
+        typingIn = null
+        publish(push = true, snapshot.copy(doc = doc.copy(items = doc.items.toMutableList().apply { set(focus, list.copy(open = open, flat = flat)) })))
+    }
+
     /** «Знаки md» — шаг истории: отменяется, как и всё остальное. */
     fun toggleMarks() {
         typingIn = null

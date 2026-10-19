@@ -71,6 +71,8 @@ interface EditorWords {
     /** «Разметка → Список» (ADR-0049 §3): свойства всего списка. */
     val listOpen: String
     val listFlat: String
+    /** «Список» нажат вне списка. */
+    val listChoose: String
     /** Вставленное из подборки: `full`, `cut`. */
     fun cutName(key: String): String
     val authorShown: String
@@ -239,6 +241,7 @@ object RussianEditorWords : EditorWords {
     override val listTooNarrow = "Пункт списка не помещается: виджету узко с отступом — включите «Без отступа» или уберите виджет"
     override val listOpen = "Развернуть по умолчанию"
     override val listFlat = "Без отступа"
+    override val listChoose = "Встаньте в список, чтобы задать его свойства"
     override fun cutName(key: String) = if (key == "cut") "Обрезать" else "Полностью"
     override val authorShown = "Имя владельца"
     override val nothingChosen = "Выберите ряд, ячейку или виджет"
@@ -404,6 +407,7 @@ object EnglishEditorWords : EditorWords {
     override val listTooNarrow = "A list item does not fit: the widget is too narrow with the indent — turn on \"No indent\" or remove the widget"
     override val listOpen = "Expanded by default"
     override val listFlat = "No indent"
+    override val listChoose = "Put the cursor in a list to set its properties"
     override fun cutName(key: String) = if (key == "cut") "Trim" else "Full"
     override val authorShown = "Owner's name"
     override val nothingChosen = "Choose a row, cell or widget"
@@ -565,6 +569,7 @@ object SpanishEditorWords : EditorWords {
     override val listTooNarrow = "Un punto de la lista no cabe: el widget es estrecho con la sangría; activa «Sin sangría» o quita el widget"
     override val listOpen = "Desplegada por defecto"
     override val listFlat = "Sin sangría"
+    override val listChoose = "Sitúate en una lista para ajustar sus propiedades"
     override fun cutName(key: String) = if (key == "cut") "Recortar" else "Completo"
     override val authorShown = "Nombre del dueño"
     override val nothingChosen = "Elige una fila, celda o widget"

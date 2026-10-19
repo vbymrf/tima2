@@ -162,6 +162,20 @@ class EditorTypedTest {
         assertEquals("# два", (m.doc.items[1] as ComposedItem.Text).source, "пункт — строкой заголовка")
     }
 
+    /** ADR-0049 §3: «Развернуть по умолчанию» и «Без отступа» — на весь список, шагом истории. */
+    @Test
+    fun свойства_списка() {
+        val m = model("")
+        m.typeHere("- a")
+        m.listProps(open = false, flat = true)
+        val list = m.doc.items.first() as ComposedItem.ItemList
+        assertTrue(!list.open && list.flat)
+        m.undo()
+        assertTrue((m.doc.items.first() as ComposedItem.ItemList).open, "отменяется")
+        m.writeAtEnd()
+        assertNull(m.listHere, "курсор вне списка — свойств нет")
+    }
+
     /** Ступень 2 без 1 (заказчик 2026-10-19): над ней пункт «Без имени», правится как любой. */
     @Test
     fun ступень_без_родителя_получает_без_имени() {
