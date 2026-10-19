@@ -209,7 +209,8 @@ object MarkupRules {
                 if (ctx.strict) ctx.out += Problem("unknown-type", "незнакомый виджет")
                 continue
             }
-            if (w.type !in CELL_WIDGETS) ctx.out += Problem("cell-widget", "«${w.type.wire}» не кладётся в ячейку")
+            // Ячейка — область со своими блоками (ADR-0048 §4): абзацы, заголовки, списки, цитаты, код.
+            if (w.type !in CELL_WIDGETS && w.type !in TEXT_BLOCKS) ctx.out += Problem("cell-widget", "«${w.type.wire}» не кладётся в ячейку")
             checkBlock(w, ctx, depth = 0)
         }
     }

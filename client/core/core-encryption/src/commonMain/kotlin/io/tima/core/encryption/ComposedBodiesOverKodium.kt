@@ -147,32 +147,34 @@ object ComposedBodiesOverKodium : ComposedBodies {
             }
         }
 
-        /** Ячейка — один узел: из текста берётся только оформление внутри строки. Слитая — без содержимого. */
+        /**
+         * Ячейка — область со своими блоками (ADR-0048 §4): один простой абзац — узлом самой ячейки,
+         * как прежде; заголовки, списки, цитаты, код — её детьми, перед виджетами. Слитая — без содержимого.
+         */
         private fun cell(c: ComposedCell): MarkupBlock {
             if (c.merge.isNotEmpty()) return MarkupBlock(type = BlockType.CELL, style = mapOf("width" to c.width.toString(), "merge" to c.merge))
             val text = c.text.trim('\n')
-            val nodeIds = if (text.isBlank()) {
-                emptyList()
-            } else {
+            var nodeIds = emptyList<Int>()
+            var blocks = emptyList<MarkupBlock>()
+            if (text.isNotBlank()) {
                 val content = parsed(text)
                 val markup = content.markup?.takeIf { content.hasMarkup }
-                val paragraph = markup?.blocks?.singleOrNull()?.takeIf { it.type == BlockType.PARAGRAPH && it.nodeIds.size == 1 }
+                val paragraph = markup?.blocks?.singleOrNull()?.takeIf { it.type == BlockType.PARAGRAPH && it.nodeIds.size == 1 && it.style.isEmpty() }
                 when {
-                    markup == null -> listOf(node(content.plainText()))
+                    markup == null -> nodeIds = listOf(node(content.plainText()))
                     paragraph != null -> {
                         val id = node(content.nodes[markup.indexOf(paragraph.nodeIds.single())])
                         entities += markup.entities.filter { it.nodeId == paragraph.nodeIds.single() }.map { it.copy(nodeId = id) }
-                        listOf(id)
+                        nodeIds = listOf(id)
                     }
-                    // Заголовок и список в ячейке не живут — текст как есть.
-                    else -> listOf(node(content.displayText()))
+                    else -> blocks = graft(content)
                 }
             }
             return MarkupBlock(
                 type = BlockType.CELL,
                 nodeIds = nodeIds,
                 style = c.style - "merge" + ("width" to c.width.toString()),
-                children = c.widgets.map(::widget),
+                children = blocks + c.widgets.map(::widget),
             )
         }
 

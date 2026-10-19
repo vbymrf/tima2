@@ -87,7 +87,7 @@ class TypedEditsTest {
         assertEquals("a\n\n", divider.typed.text)
         assertEquals(listOf(LineKind.PARAGRAPH, LineKind.DIVIDER, LineKind.PARAGRAPH), divider.typed.lines)
         assertEquals(3, divider.cursor, "писать — под разделителем")
-        // В ячейке знаков строки нет.
+        // Где вида строки нет — знак строки остаётся текстом.
         val cell = TypedEdits.change(Typed.plain("#"), "# ", 2, null, convert = true, lineSigns = false)
         assertEquals("# ", cell.typed.text)
     }

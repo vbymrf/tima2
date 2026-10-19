@@ -166,7 +166,7 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
             publish(push = false, Snapshot(doc, at.item, typed.selection.start, typed.selection.end, at.cell, at.widget))
             return
         }
-        val change = TypedEdits.change(before, typed.text, typed.selection.end, pending, convert = doc.marks, lineSigns = at.cell == -1)
+        val change = TypedEdits.change(before, typed.text, typed.selection.end, pending, convert = doc.marks)
         pending = null
         val after = change.typed
         val cursor = change.cursor
@@ -236,9 +236,8 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         field = fieldOf(next)
     }
 
-    /** «Абзац ▾» — только у куска-текста: в ячейке ряда один узел, заголовков там нет. */
+    /** «Абзац ▾» — у куска-текста и в ячейке: ячейка — область со своими блоками (ADR-0048 §4). */
     fun paragraph(kind: ParagraphKind) {
-        if (snapshot.cell != -1) return
         val t = focusedTyped ?: return
         val (s, e) = selection(t)
         applyTyped(TypedEdits.lines(t, s, e, LineKind.of(kind)), snapshot.start, snapshot.end)
@@ -247,7 +246,6 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
     /** Вид строки под курсором — для отметки в «Абзац ▾». */
     val paragraphHere: ParagraphKind
         get() {
-            if (snapshot.cell != -1) return ParagraphKind.PARAGRAPH
             val t = focusedTyped ?: return ParagraphKind.PARAGRAPH
             return t.lines.getOrElse(t.lineAt(selection(t).first)) { LineKind.PARAGRAPH }.paragraph
         }

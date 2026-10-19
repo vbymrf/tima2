@@ -51,6 +51,29 @@ class ComposedBodiesTest {
         assertEquals(RichBlock.Emoji("🎉"), row.cells[1].widgets.single())
     }
 
+    /** ADR-0048 §4: ячейка — область со своими блоками; заголовок в ячейке уходит заголовком и показывается. */
+    @Test
+    fun заголовок_и_список_в_ячейке() {
+        val text = "# Заг\n- пункт\nтекст"
+        val doc = ComposedDoc(listOf(ComposedItem.Row(listOf(ComposedCell(50, text), ComposedCell(50, "простой")))))
+        val content = bodies.content(doc)
+        assertTrue(io.tima.crypto.MarkupRules.check(content, strict = true).isEmpty(), "правила разметки пропускают")
+        val row = content.markup!!.blocks.single()
+        val cell = row.children[0]
+        assertEquals(listOf(BlockType.HEADING, BlockType.LIST, BlockType.PARAGRAPH), cell.children.map { it.type })
+        assertTrue(cell.nodeIds.isEmpty())
+        assertEquals(1, row.children[1].nodeIds.size, "простой абзац — узлом ячейки, как прежде")
+        val raw = io.tima.crypto.MarkupV2.encodeBody(content.markup!!, content.nodes)
+        assertTrue(raw.startsWith("{\"v\":2,"), raw)
+        assertEquals(content.markup, io.tima.crypto.MarkupV2.decodeBody(raw, content.nodes))
+        val shown = assertIs<RichBlock.Row>(RichMapper.from(content)!!.blocks.single())
+        assertIs<RichBlock.Heading>(shown.cells[0].blocks[0])
+        assertIs<RichBlock.Bullets>(shown.cells[0].blocks[1])
+        val back = assertIs<ComposedItem.Row>(ComposedFromContent.doc(content)!!.items.single())
+        assertEquals(text, back.cells[0].text, "правка открывает ячейку теми же блоками")
+        assertEquals("простой", back.cells[1].text)
+    }
+
     /** ADR-0048: знак, набранный текстом, в документе экранирован — в тело уходит текстом. */
     @Test
     fun знаки_выключены_текст_как_есть() {

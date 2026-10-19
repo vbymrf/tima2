@@ -39,6 +39,25 @@ class RichRowScreenTest {
     private fun empty(width: Int, background: String, merge: String = "") =
         RowCell(width, null, style = BlockStyle(background = background), merge = merge)
 
+    /**
+     * Ячейка — область со своими блоками (ADR-0048 §4): заголовок и список в ней рисуются, а цвет
+     * ячейки ложится на всё внутри.
+     */
+    @Test
+    fun заголовок_и_список_в_ячейке_со_стилем_ячейки() {
+        val blocks = listOf(RichBlock.Heading(1, RichText("Заг")), RichBlock.Bullets(listOf(io.tima.domain.chat.Bullet(RichText("пункт")))))
+        fun shot(name: String, cell: RowCell) = capture(name, 240, 160, dark = false) {
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.width(240.dp)) {
+                RichBody(RichContent(listOf(RichBlock.Row(listOf(cell, RowCell(50, RichText("б")))))))
+            }
+        }
+        val plain = shot("ячейка-текст", RowCell(50, RichText("Заг")))
+        val inside = shot("ячейка-блоки", RowCell(50, null, blocks = blocks))
+        val red = shot("ячейка-блоки-цвет", RowCell(50, null, style = BlockStyle(color = "red"), blocks = blocks))
+        assertTrue(plain.difference(inside) > 0.0, "заголовок и список в ячейке не нарисованы")
+        assertTrue(inside.difference(red) > 0.0, "цвет ячейки не лёг на её блоки")
+    }
+
     /** Три пустые ячейки с фоном на узком (200) месте: все три видны, в одну строку. */
     @Test
     fun узкий_ряд_в_одну_строку_и_пустые_ячейки_видны() {

@@ -63,16 +63,25 @@ internal fun StyledText(text: RichText, style: io.tima.domain.chat.BlockStyle, b
     )
 }
 
+/** Стиль ячейки, в которой стоит блок (ADR-0048 §4): тексту внутри — её цвет, размер и выравнивание. */
+internal val LocalCellText = androidx.compose.runtime.staticCompositionLocalOf { io.tima.domain.chat.BlockStyle.NONE }
+
+/** Свой стиль блока поверх стиля ячейки: чего у блока нет — берётся у ячейки. */
+private fun io.tima.domain.chat.BlockStyle.over(base: io.tima.domain.chat.BlockStyle): io.tima.domain.chat.BlockStyle =
+    if (base == io.tima.domain.chat.BlockStyle.NONE) this else copy(color = color ?: base.color, size = size ?: base.size, align = align ?: base.align)
+
 @Composable
 internal fun RichBlockViewOf(block: RichBlock) {
     val colors = Tima.colors
+    val cell = LocalCellText.current
     when (block) {
         is RichBlock.Paragraph -> {
             // Адрес в тексте заменяется пузырём «Перейти · домен» под абзацем (заказчик 2026-10-19).
             val shown = withoutLinks(block.text)
+            val style = block.style.over(cell)
             if (shown.text.isNotEmpty()) {
-                if (block.style == io.tima.domain.chat.BlockStyle.NONE) Caption(annotated(shown), fontSize = TimaType.sz4)
-                else StyledText(shown, block.style, TimaType.sz4)
+                if (style == io.tima.domain.chat.BlockStyle.NONE) Caption(annotated(shown), fontSize = TimaType.sz4)
+                else StyledText(shown, style, TimaType.sz4)
             }
             LinksUnder(linksOf(block.text))
             DividerAfter(block.style)
@@ -80,7 +89,7 @@ internal fun RichBlockViewOf(block: RichBlock) {
         is RichBlock.Heading -> {
             StyledText(
                 withoutLinks(block.text),
-                block.style,
+                block.style.over(cell),
                 when (block.level) { 1 -> TimaType.sz2; 2 -> TimaType.sz3; else -> TimaType.sz4 },
                 FontWeight.ExtraBold,
             )
@@ -95,7 +104,14 @@ internal fun RichBlockViewOf(block: RichBlock) {
         is RichBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(colors.line))
             Column(Modifier.padding(start = 8.dp)) {
-                for (line in block.lines) Caption(annotated(withoutLinks(line)), fontSize = TimaType.sz4, color = colors.text2)
+                for (line in block.lines) {
+                    Caption(
+                        annotated(withoutLinks(line)),
+                        fontSize = sizeOf(cell.size, TimaType.sz4),
+                        color = io.tima.core.ui.paletteColor(cell.color) ?: colors.text2,
+                        textAlign = alignOf(cell.align),
+                    )
+                }
                 LinksUnder(block.lines.flatMap(::linksOf))
             }
         }
@@ -152,11 +168,15 @@ fun ReplyBlock(look: ReplyLook, onClick: (() -> Unit)? = null) {
 @Composable
 private fun BulletList(items: List<Bullet>, depth: Int) {
     val mark = when (depth) { 0 -> "•"; 1 -> "◦"; else -> "▪" }
+    // В ячейке — её цвет и размер (ADR-0048 §4).
+    val cell = LocalCellText.current
+    val size = sizeOf(cell.size, TimaType.sz4)
+    val color = io.tima.core.ui.paletteColor(cell.color) ?: Tima.colors.text
     Column(Modifier.padding(start = (depth * 14).dp)) {
         for (item in items) {
             Row {
-                Caption(mark, fontSize = TimaType.sz4, modifier = Modifier.padding(end = 6.dp))
-                Caption(annotated(withoutLinks(item.text)), fontSize = TimaType.sz4)
+                Caption(mark, fontSize = size, color = color, modifier = Modifier.padding(end = 6.dp))
+                Caption(annotated(withoutLinks(item.text)), fontSize = size, color = color)
             }
             if (item.children.isNotEmpty()) BulletList(item.children, depth + 1)
         }

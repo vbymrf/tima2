@@ -155,8 +155,9 @@ sealed interface RichBlock {
 }
 
 /**
- * Ячейка ряда: ширина в процентах (`null` — поровну), текст ячейки и виджеты под ним; [merge] —
- * слита с левой (`left`) или верхней (`up`) и сама не рисуется.
+ * Ячейка ряда: ширина в процентах (`null` — поровну), текст ячейки, её блоки (заголовки, списки,
+ * цитаты, код — ADR-0048 §4) и виджеты под ними; [merge] — слита с левой (`left`) или верхней
+ * (`up`) и сама не рисуется.
  */
 data class RowCell(
     val width: Int?,
@@ -164,6 +165,7 @@ data class RowCell(
     val widgets: List<RichBlock> = emptyList(),
     val style: BlockStyle = BlockStyle.NONE,
     val merge: String = "",
+    val blocks: List<RichBlock> = emptyList(),
 )
 
 /** Пункт списка и вложенные в него пункты. */

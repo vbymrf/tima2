@@ -28,6 +28,9 @@ import io.tima.domain.chat.TableCell
  */
 internal object RichMapper {
 
+    /** Блоки текста, которые живут и в ячейке ряда (ADR-0048 §4). */
+    private val CELL_TEXT = setOf(BlockType.PARAGRAPH, BlockType.HEADING, BlockType.QUOTE, BlockType.LIST, BlockType.CODE_BLOCK, BlockType.DIVIDER)
+
     fun from(content: MessageContent): RichContent? {
         // Без разметки, но с файлами — сообщение вне пузыря (Решения §2, §3, §6): фото — альбомом,
         // остальное — файлами.
@@ -42,7 +45,7 @@ internal object RichMapper {
         fun nodeText(id: Int): String = byId[id]?.let { content.nodes.getOrNull(it) }.orEmpty()
         fun rich(id: Int): RichText = richText(nodeText(id), id, markup)
 
-        val blocks = markup.blocks.map { block ->
+        fun map(block: MarkupBlock): RichBlock =
             when (block.type) {
                 BlockType.PARAGRAPH -> RichBlock.Paragraph(rich(block.nodeIds.firstOrNull() ?: -1), style(block))
                 BlockType.HEADING -> RichBlock.Heading(block.level.coerceIn(1, 3), rich(block.nodeIds.firstOrNull() ?: -1), style(block))
@@ -74,7 +77,9 @@ internal object RichMapper {
                             RowCell(
                                 width = cell.style["width"]?.toIntOrNull(),
                                 text = cell.nodeIds.firstOrNull()?.let(::rich),
-                                widgets = cell.children.mapNotNull(::widget),
+                                // Ячейка — область со своими блоками (ADR-0048 §4): текст — блоками, затем виджеты.
+                                blocks = cell.children.filter { it.type in CELL_TEXT }.map(::map),
+                                widgets = cell.children.filter { it.type !in CELL_TEXT }.mapNotNull(::widget),
                                 style = style(cell),
                                 merge = cell.style["merge"].orEmpty(),
                             )
@@ -86,7 +91,8 @@ internal object RichMapper {
                 // Виджеты и ответ; незнакомое от более новой версии — текстом своих узлов.
                 else -> widget(block) ?: RichBlock.Fallback(allNodes(block).joinToString("\n") { nodeText(it) }.trim())
             }
-        }.filterNot { it is RichBlock.Fallback && it.text.isEmpty() }
+
+        val blocks = markup.blocks.map(::map).filterNot { it is RichBlock.Fallback && it.text.isEmpty() }
         return RichContent(blocks, media(content))
     }
 

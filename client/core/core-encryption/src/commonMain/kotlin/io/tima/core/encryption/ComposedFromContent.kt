@@ -72,12 +72,13 @@ internal object ComposedFromContent {
         val cells = lines.flatten().map { c ->
             if (c.type != BlockType.CELL) return null
             val width = c.style["width"]?.toIntOrNull() ?: return null
-            val text = when (c.nodeIds.size) {
-                0 -> ""
-                1 -> textOf(content, markup, listOf(MarkupBlock(type = BlockType.PARAGRAPH, nodeIds = c.nodeIds))) ?: return null
-                else -> return null
-            }
-            ComposedCell(width, text, c.children.map { w -> widget(content, w) ?: return null }, c.style - "width" - "merge", c.style["merge"].orEmpty())
+            if (c.nodeIds.size > 1) return null
+            // Текст ячейки — её узел и её блоки (ADR-0048 §4), затем виджеты.
+            val own = c.nodeIds.map { MarkupBlock(type = BlockType.PARAGRAPH, nodeIds = listOf(it)) }
+            val texts = own + c.children.filter { it.type !in WIDGETS }
+            val text = if (texts.isEmpty()) "" else textOf(content, markup, texts) ?: return null
+            val widgets = c.children.filter { it.type in WIDGETS }.map { w -> widget(content, w) ?: return null }
+            ComposedCell(width, text, widgets, c.style - "width" - "merge", c.style["merge"].orEmpty())
         }
         return ComposedItem.Row(cells, b.style, columns)
     }

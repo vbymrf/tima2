@@ -141,6 +141,12 @@ private fun RowCellView(cell: RowCell, modifier: Modifier) {
             if (shown.text.isNotEmpty()) StyledText(shown, textStyle, TimaType.sz4)
             LinksUnder(linksOf(it))
         }
+        // Блоки ячейки — со стилем ячейки поверх (ADR-0048 §4): цвет, размер, выравнивание.
+        if (cell.blocks.isNotEmpty()) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalCellText provides textStyle) {
+                for (b in cell.blocks) RichBlockViewOf(b)
+            }
+        }
         for (w in cell.widgets) WidgetView(w)
     }
 }

@@ -101,7 +101,7 @@ object TypedEdits {
      * Поле сменило текст на [after], курсор — [cursor]. Набранное внутри и в конце оформленного
      * продолжает его, в начале — нет (Word); [pending] — что наденется на набранное вместо этого
      * (Ж без выделения). [convert] — «Знаки md» включены: закрытая пара и знак строки сразу
-     * становятся оформлением; [lineSigns] — знаки строки (в ячейке их нет).
+     * становятся оформлением; [lineSigns] — знаки строки (выключены там, где вида строки нет).
      */
     fun change(before: Typed, after: String, cursor: Int, pending: Set<InlineKind>?, convert: Boolean, lineSigns: Boolean = true): Change {
         val old = before.text
