@@ -275,15 +275,10 @@ fun EditorScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     var tab by rememberSaveable { mutableStateOf(EditorTab.TEXT) }
     var showPreview by remember { mutableStateOf(false) }
-    var levelMenu by remember { mutableStateOf(false) }
-    var paragraphMenu by remember { mutableStateOf(false) }
-    var symbolArea by remember { mutableStateOf(false) }
-    var emojiArea by remember { mutableStateOf(false) }
-    var stylePanel by remember { mutableStateOf<String?>(null) }
-    // «Ряд»: сколько строк и столбцов (заказчик 2026-10-18).
-    var gridAsk by remember { mutableStateOf(false) }
-    // «Список»: свойства всего списка (ADR-0049 §3).
-    var listAsk by remember { mutableStateOf(false) }
+    // Одно окно выбора за раз (заказчик 2026-10-19: «открыли Ряд, затем Абзац — ряд не закрылся»):
+    // `level`, `paragraph`, `symbol`, `emoji`, `grid` (Ряд), `list` (Список), `style.<ключ>`.
+    var panel by remember { mutableStateOf<String?>(null) }
+    fun toggle(key: String) { panel = if (panel == key) null else key }
     val clipboardHtml = io.tima.core.media.rememberClipboardHtml()
     val clipboardImage = io.tima.core.media.rememberClipboardImage()
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -328,7 +323,7 @@ fun EditorScreen(
     fun press(key: String) {
         hint = null
         when (key) {
-            "paragraph" -> paragraphMenu = !paragraphMenu
+            "paragraph" -> toggle("paragraph")
             "bold" -> model.inline(InlineKind.BOLD)
             "italic" -> model.inline(InlineKind.ITALIC)
             "underline" -> model.inline(InlineKind.UNDERLINE)
@@ -341,8 +336,8 @@ fun EditorScreen(
                 hint = if (model.doc.marks) w.marksOn else w.marksOff
                 onMarks?.invoke(model.doc.marks)
             }
-            "symbol" -> { keyboard?.hide(); emojiArea = false; symbolArea = !symbolArea }
-            "emoji" -> { keyboard?.hide(); symbolArea = false; emojiArea = !emojiArea }
+            "symbol" -> { keyboard?.hide(); toggle("symbol") }
+            "emoji" -> { keyboard?.hide(); toggle("emoji") }
             // Из HTML — только текст и простое оформление (Решения §5); HTML нет — текст как есть.
             "paste" -> {
                 // Картинка в буфере — вставляется картинкой, тем же путём, что перетащенный файл.
@@ -357,9 +352,9 @@ fun EditorScreen(
             }
             // Раздел «Разметка» (§10.2–§10.3; заказчик 2026-10-18): ряд строк × столбцов, слияние в оба
             // направления; таблицы в редакторе больше нет — она стала рядом.
-            "row" -> { paragraphMenu = false; stylePanel = null; gridAsk = !gridAsk }
+            "row" -> toggle("grid")
             // Свойства всего списка (ADR-0049 §3): курсор должен стоять в списке.
-            "list" -> if (model.listHere == null) hint = w.listChoose else listAsk = !listAsk
+            "list" -> if (model.listHere == null) hint = w.listChoose else toggle("list")
             "colAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addColumn)
             "colRemove" -> model.layout(io.tima.domain.chat.ComposedLayout::removeColumn)
             "lineAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addLine)
@@ -371,10 +366,7 @@ fun EditorScreen(
             "down" -> model.layout { d, s -> io.tima.domain.chat.ComposedLayout.shift(d, s, 1) }
             "delete" -> model.layout(io.tima.domain.chat.ComposedLayout::removeAt)
             // Раздел «Стиль» (§10.2): на выбранное.
-            "widget", "background", "color", "size", "align", "padding", "divider", "json" -> {
-                paragraphMenu = false
-                stylePanel = if (stylePanel == key) null else key
-            }
+            "widget", "background", "color", "size", "align", "padding", "divider", "json" -> toggle("style.$key")
             "reset" -> model.layout { d, s -> io.tima.domain.chat.ComposedStyle.setStyle(d, s, emptyMap()) to s }
             else -> if (onButton?.invoke(key) != true) hint = w.soon
         }
@@ -404,85 +396,98 @@ fun EditorScreen(
             }
             HeaderGlyph("↶", model.canUndo, EditorTags.UNDO) { model.undo() }
             HeaderGlyph("↷", model.canRedo, EditorTags.REDO) { model.redo() }
-            LevelButton(level, enabled = levels.size > 1) { levelMenu = !levelMenu }
+            LevelButton(level, enabled = levels.size > 1) { toggle("level") }
             HeaderGlyph("➤", !doc.isEmpty && trouble.isEmpty(), EditorTags.SEND) { onSend(model.doc) }
         }
-        if (levelMenu) LevelList(levels, level) { picked -> model.level(picked); levelMenu = false }
+        if (panel == "level") LevelList(levels, level) { picked -> model.level(picked); panel = null }
 
-        // ── Разделы и лента (§10.2) ──
-        Row(Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about2), horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
-            for (t in EditorTab.entries) {
-                io.tima.core.ui.Tab(
-                    label = w.tab(t.key),
-                    current = t == tab,
-                    onClick = { tab = t; paragraphMenu = false; stylePanel = null; hint = null },
-                    modifier = Modifier.testTag(EditorTags.tab(t.key)),
-                )
-            }
-        }
-        Ribbon(tab, marksOn = doc.marks, active = active, scroll = ribbonScroll, desktop = desktop, onPress = ::press)
-        if (paragraphMenu) ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); paragraphMenu = false }
-        stylePanel?.let { StylePanel(it, model, problems) }
-        if (listAsk) model.listHere?.let { l -> ListAsk(l) { open, flat -> model.listProps(open, flat) } }
-        if (gridAsk) {
-            GridAsk { lines, columns ->
-                gridAsk = false
-                model.layout { d, s -> io.tima.domain.chat.ComposedLayout.addRow(d, s, lines, columns) }
-            }
-        }
-
-        // Разделитель: что выбрано (§10.2) и подсказка последнего нажатия.
-        Row(
-            Modifier.fillMaxWidth().background(colors.functional).padding(horizontal = TimaSpacing.about4, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(Modifier.weight(1f)) { Tertiary(notice ?: hint ?: w.selected(selectedKind(model)), lineOne = true) }
-            // ПК: стрелки ленты в разделителе между кнопками и сообщением (§10.2).
-            // Стрелки — только если кнопки раздела не помещаются (заказчик 2026-10-19).
-            // Длина ленты известна после разметки (до неё — «бесконечность»): прокрутки нет — стрелок нет.
-            if (desktop && ribbonScroll.maxValue in 1 until Int.MAX_VALUE) {
-                HeaderGlyph("‹", ribbonScroll.canScrollBackward, "editor:ribbon.back") {
-                    ribbonScope.launch { ribbonScroll.animateScrollBy(-RIBBON_STEP) }
-                }
-                HeaderGlyph("›", ribbonScroll.canScrollForward, "editor:ribbon.forward") {
-                    ribbonScope.launch { ribbonScroll.animateScrollBy(RIBBON_STEP) }
-                }
-            }
-        }
-        // Над выделенным полоски Ж К Ч нет (заказчик 2026-10-18): она ложилась на системное «Вырезать ·
-        // Копировать · Выделить всё». Оформляют кнопки ленты — нажата, если выделенное уже такое.
-
-        // ── Сообщение ──
+        // Общая прокрутка (заказчик 2026-10-19): разделы, лента, окно выбора, разделитель и сообщение —
+        // одним столбцом. Открытое окно не закрывает сообщение на повёрнутом экране: всё ниже него
+        // доезжает прокруткой.
         val drag = rememberEditorDrag()
         drag.forget(doc.items.size)
-        var bodyHeight by remember { mutableStateOf(0) }
-        Box(
-            Modifier.weight(1f).fillMaxWidth()
-                .onGloballyPositioned { drag.origin = it.boundsInRoot().topLeft; bodyHeight = it.size.height }
-                .then(if (onFiles != null) Modifier.fileDrop(onHover = { dropping = it }, onFiles = onFiles) else Modifier)
-                .then(if (dropping) Modifier.border(3.dp, colors.navigation) else Modifier)
-                // Пустое место под сообщением — писать после всего, как Enter в конце (заказчик
-                // 2026-10-18): после виджета и ряда иначе некуда было поставить курсор.
-                .pointerInput(showPreview) {
-                    detectTapGestures { at -> if (!showPreview && drag.origin.y + at.y > drag.bottom()) model.writeAtEnd() }
-                }
-                .testTag(EditorTags.BODY),
-        ) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), enabled = drag.from == null).padding(TimaSpacing.about3)) {
-                if (showPreview) {
-                    Bubble(my = true, modifier = Modifier.testTag(EditorTags.PREVIEW)) {
-                        preview(doc)?.let { RichBody(it) } ?: Caption(doc.firstLine, fontSize = TimaType.sz4)
-                    }
-                } else {
-                    doc.items.forEachIndexed { i, item ->
-                        Box(Modifier.fillMaxWidth().onGloballyPositioned { drag.item(i, it.boundsInRoot()) }) {
-                            EditorItemView(model, i, item, typing, preview, drag, tooWide = i in wide, levels = levels)
+        var top by remember { mutableStateOf(0) }
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val window = maxHeight
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), enabled = drag.from == null)) {
+                Column(Modifier.fillMaxWidth().onGloballyPositioned { top = it.size.height }) {
+                    // ── Разделы и лента (§10.2) ──
+                    Row(Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about2), horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
+                        for (t in EditorTab.entries) {
+                            io.tima.core.ui.Tab(
+                                label = w.tab(t.key),
+                                current = t == tab,
+                                onClick = { tab = t; panel = null; hint = null },
+                                modifier = Modifier.testTag(EditorTags.tab(t.key)),
+                            )
                         }
                     }
-                    // Пустое место под сообщением всегда есть (заказчик 2026-10-18): сообщение заняло окно
-                    // целиком — прокрутка уводит его выше, и под ним можно нажать, чтобы писать дальше.
-                    val tail = with(androidx.compose.ui.platform.LocalDensity.current) { (bodyHeight / 3).toDp() }
-                    Box(Modifier.fillMaxWidth().height(maxOf(tail, EDITOR_TAIL_MIN)).testTag(EditorTags.TAIL))
+                    Ribbon(
+                        tab, marksOn = doc.marks, active = active, paragraph = w.paragraph(model.paragraphHere.name),
+                        scroll = ribbonScroll, onPress = ::press,
+                    )
+                    if (panel == "paragraph") ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); panel = null }
+                    panel?.takeIf { it.startsWith("style.") }?.let { StylePanel(it.removePrefix("style."), model, problems) }
+                    if (panel == "list") model.listHere?.let { l -> ListAsk(l) { open, flat -> model.listProps(open, flat) } }
+                    if (panel == "grid") {
+                        GridAsk { lines, columns ->
+                            panel = null
+                            model.layout { d, s -> io.tima.domain.chat.ComposedLayout.addRow(d, s, lines, columns) }
+                        }
+                    }
+
+                    // Разделитель: что выбрано (§10.2) и подсказка последнего нажатия.
+                    Row(
+                        Modifier.fillMaxWidth().background(colors.functional).padding(horizontal = TimaSpacing.about4, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.weight(1f)) { Tertiary(notice ?: hint ?: w.selected(selectedKind(model)), lineOne = true) }
+                        // Стрелки ленты — только если кнопки раздела не помещаются (заказчик 2026-10-19).
+                        // Длина ленты известна после разметки (до неё — «бесконечность»): прокрутки нет — стрелок нет.
+                        if (desktop && ribbonScroll.maxValue in 1 until Int.MAX_VALUE) {
+                            HeaderGlyph("‹", ribbonScroll.canScrollBackward, "editor:ribbon.back") {
+                                ribbonScope.launch { ribbonScroll.animateScrollBy(-RIBBON_STEP) }
+                            }
+                            HeaderGlyph("›", ribbonScroll.canScrollForward, "editor:ribbon.forward") {
+                                ribbonScope.launch { ribbonScroll.animateScrollBy(RIBBON_STEP) }
+                            }
+                        }
+                    }
+                }
+                // Над выделенным полоски Ж К Ч нет (заказчик 2026-10-18): она ложилась на системное «Вырезать ·
+                // Копировать · Выделить всё». Оформляют кнопки ленты — нажата, если выделенное уже такое.
+
+                // ── Сообщение ── не ниже окна под лентой: под ним всегда есть пустое место.
+                val rest = with(density) { (window - top.toDp()).coerceAtLeast(EDITOR_TAIL_MIN) }
+                Box(
+                    Modifier.fillMaxWidth().heightIn(min = rest)
+                        .onGloballyPositioned { drag.origin = it.boundsInRoot().topLeft }
+                        .then(if (onFiles != null) Modifier.fileDrop(onHover = { dropping = it }, onFiles = onFiles) else Modifier)
+                        .then(if (dropping) Modifier.border(3.dp, colors.navigation) else Modifier)
+                        // Пустое место под сообщением — писать после всего, как Enter в конце (заказчик
+                        // 2026-10-18): после виджета и ряда иначе некуда было поставить курсор.
+                        .pointerInput(showPreview) {
+                            detectTapGestures { at -> if (!showPreview && drag.origin.y + at.y > drag.bottom()) model.writeAtEnd() }
+                        }
+                        .testTag(EditorTags.BODY),
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(TimaSpacing.about3)) {
+                        if (showPreview) {
+                            Bubble(my = true, modifier = Modifier.testTag(EditorTags.PREVIEW)) {
+                                preview(doc)?.let { RichBody(it) } ?: Caption(doc.firstLine, fontSize = TimaType.sz4)
+                            }
+                        } else {
+                            doc.items.forEachIndexed { i, item ->
+                                Box(Modifier.fillMaxWidth().onGloballyPositioned { drag.item(i, it.boundsInRoot()) }) {
+                                    EditorItemView(model, i, item, typing, preview, drag, tooWide = i in wide, levels = levels)
+                                }
+                            }
+                            // Пустое место под сообщением всегда есть (заказчик 2026-10-18): сообщение заняло окно
+                            // целиком — прокрутка уводит его выше, и под ним можно нажать, чтобы писать дальше.
+                            Box(Modifier.fillMaxWidth().height(maxOf(window / 3, EDITOR_TAIL_MIN)).testTag(EditorTags.TAIL))
+                        }
+                    }
                 }
             }
             DragGhost(drag)
@@ -493,11 +498,11 @@ fun EditorScreen(
                 for (p in trouble.take(3)) Caption(p, fontSize = TimaType.sz5, color = colors.alarm)
             }
         }
-        if (emojiArea) EmojiArea(onClose = { emojiArea = false }) { e ->
+        if (panel == "emoji") EmojiArea(onClose = { panel = null }) { e ->
             model.insert(ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Emoji(e)))
-            emojiArea = false
+            panel = null
         }
-        if (symbolArea) SymbolArea(recent, onClose = { symbolArea = false }) { s ->
+        if (panel == "symbol") SymbolArea(recent, onClose = { panel = null }) { s ->
             model.symbol(s)
             recent.remove(s)
             recent.add(0, s)
@@ -527,8 +532,11 @@ private val EDITOR_TAIL_MIN = 160.dp
 /** Пауза набора, после которой документ пишется черновиком. */
 private const val DRAFT_PAUSE_MS = 500L
 
-/** Ширина кнопки ленты на ПК. */
-private val RIBBON_BUTTON_DESKTOP = 72.dp
+/**
+ * Ширина кнопки ленты — одна на телефоне, повёрнутом экране и ПК (заказчик 2026-10-19: при повороте
+ * кнопки разбежались, как прежде на ПК); не помещаются — лента прокручивается.
+ */
+private val RIBBON_BUTTON = 56.dp
 
 /** На сколько сдвигается лента стрелкой на ПК — три кнопки. */
 private const val RIBBON_STEP = 180f
@@ -615,17 +623,33 @@ private fun LevelList(levels: List<MessageCircle>, current: Int, onPick: (Int) -
     }
 }
 
-/** Лента: шесть кнопок и половина седьмой — видно, что дальше есть ещё (§10.2). */
+/**
+ * Лента (§10.2): кнопки одной ширины [RIBBON_BUTTON]; не помещаются — прокрутка. «Абзац» — шире: «▾» и
+ * название того, что включено под курсором, сколько вместится (заказчик 2026-10-19).
+ */
 @Composable
-private fun Ribbon(tab: EditorTab, marksOn: Boolean, active: Set<String>, scroll: androidx.compose.foundation.ScrollState, desktop: Boolean, onPress: (String) -> Unit) {
+private fun Ribbon(tab: EditorTab, marksOn: Boolean, active: Set<String>, paragraph: String, scroll: androidx.compose.foundation.ScrollState, onPress: (String) -> Unit) {
     val colors = Tima.colors
     val w = Tima.words.editor
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        // Телефон — шесть кнопок и половина седьмой; ПК — кнопка постоянной ширины (заказчик 2026-10-19:
-        // на широком окне кнопки расползались): помещаются все — без стрелок.
-        val width = if (desktop) RIBBON_BUTTON_DESKTOP else maxWidth / 6.5f
+    val width = RIBBON_BUTTON
+    Box(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().horizontalScroll(scroll).padding(vertical = 4.dp)) {
             for (key in tab.buttons) {
+                if (key == "paragraph") {
+                    Column(
+                        Modifier.width(width * 2).clickable { onPress(key) }.padding(horizontal = 4.dp, vertical = 4.dp).testTag(EditorTags.button(key)),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(
+                            Modifier.fillMaxWidth().height(30.dp).background(colors.functional, RoundedCornerShape(8.dp)).padding(horizontal = 6.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Caption("▾ $paragraph", fontSize = 14.sp, weight = FontWeight.Bold, color = colors.text, lineOne = true)
+                        }
+                        Caption(w.button(key), fontSize = 10.sp, color = colors.text2, lineOne = true)
+                    }
+                    continue
+                }
                 // Нажата: «Знаки md» включены; Ж, К… — оформление под курсором или ждёт буквы (Word).
                 val on = (key == "marks" && marksOn) || key in active
                 Column(
