@@ -119,6 +119,60 @@ class EditorTypedTest {
         assertEquals("**x**", styled.focusedText)
     }
 
+    /** Набрать [s] по букве там, где курсор: кусок-текст, ячейка или пункт списка. */
+    private fun EditorModel.typeHere(s: String) {
+        for (ch in s) {
+            val t = field.text
+            val c = field.selection.start
+            val v = TextFieldValue(t.substring(0, c) + ch + t.substring(c), TextRange(c + 1))
+            val at = spot
+            when {
+                doc.items[at.item] is ComposedItem.ItemList -> changedItem(at.item, at.cell, at.widget, v)
+                at.cell >= 0 -> changedCell(at.item, at.cell, v)
+                else -> changed(at.item, v)
+            }
+        }
+    }
+
+    /** ADR-0049 §4: «- » — пункт; перевод строки — новый пункт; в пустом — конец списка. */
+    @Test
+    fun список_набором_и_кнопками() {
+        val m = model("")
+        m.untitled = "Без имени"
+        m.typeHere("- раз")
+        var list = m.doc.items.first() as ComposedItem.ItemList
+        assertEquals(listOf("раз"), list.items.map { it.title })
+        assertEquals(Spot(0, 0, Spot.TITLE), m.spot)
+        m.typeHere("\nдва")
+        list = m.doc.items.first() as ComposedItem.ItemList
+        assertEquals(listOf("раз", "два"), list.items.map { it.title })
+        m.typeHere("\n\n")
+        assertEquals(ComposedItem.Text(""), m.doc.items.last(), "пустой пункт — список кончился, ниже текст")
+        assertEquals(Spot(1), m.spot)
+
+        m.select(Spot(0, 0))
+        m.insert(ComposedItem.Widget(ComposedWidget.Emoji("🎒")))
+        assertEquals(listOf<ComposedWidget>(ComposedWidget.Emoji("🎒")), (m.doc.items[0] as ComposedItem.ItemList).items[0].widgets, "виджет — в пункт")
+
+        m.focusedItem(0, 1, Spot.TITLE)
+        m.paragraph(ParagraphKind.LIST2)
+        assertEquals(listOf(1, 2), (m.doc.items[0] as ComposedItem.ItemList).items.map { it.depth })
+        assertEquals(ParagraphKind.LIST2, m.paragraphHere)
+        m.paragraph(ParagraphKind.HEADING1)
+        assertEquals("# два", (m.doc.items[1] as ComposedItem.Text).source, "пункт — строкой заголовка")
+    }
+
+    /** Ступень 2 без 1 (заказчик 2026-10-19): над ней пункт «Без имени», правится как любой. */
+    @Test
+    fun ступень_без_родителя_получает_без_имени() {
+        val m = model("")
+        m.untitled = "Без имени"
+        m.typeHere("  - вложенный")
+        val list = m.doc.items.first() as ComposedItem.ItemList
+        assertEquals(listOf(1 to "Без имени", 2 to "вложенный"), list.items.map { it.depth to it.title })
+        assertEquals(Spot(0, 1, Spot.TITLE), m.spot)
+    }
+
     @Test
     fun нажатие_под_виджетом_даёт_писать_после_всего() {
         val m = EditorModel(ComposedDoc(listOf(ComposedItem.Text("x"), ComposedItem.Widget(ComposedWidget.Emoji("🎉")))), MarkdownTyped)

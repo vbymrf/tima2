@@ -141,11 +141,15 @@ object TableFit {
         return n + 1
     }
 
-    /** Куски, которые не помещаются: таблица знаками шире пузыря, ряд с узкой для содержимого ячейкой. */
+    /**
+     * Куски, которые не помещаются: таблица знаками шире пузыря, ряд с узкой для содержимого
+     * ячейкой, список с виджетом шире места пункта (ADR-0049 §3).
+     */
     fun tooWide(doc: ComposedDoc): List<Int> = doc.items.mapIndexedNotNull { i, item ->
         i.takeIf {
             (item is ComposedItem.Text && widest(item.source) > maxColumns()) ||
-                (item is ComposedItem.Row && RowFit.tooNarrow(item))
+                (item is ComposedItem.Row && RowFit.tooNarrow(item)) ||
+                (item is ComposedItem.ItemList && ListFit.tooNarrow(item))
         }
     }
 

@@ -66,10 +66,37 @@ class EditorTypedBodyTest {
         assertEquals(setOf(EntityType.BOLD, EntityType.ITALIC), content.markup!!.entities.map { it.type }.toSet())
     }
 
+    /** ADR-0049: в пункт кладутся подборка и блок кода — в тело уходит пункт-контейнер. */
+    @Test
+    fun пункт_с_подборкой_и_кодом() {
+        val m = model()
+        m.untitled = "Без имени"
+        fun EditorModel.typeHere(s: String) {
+            for (ch in s) {
+                val t = field.text
+                val c = field.selection.start
+                val v = TextFieldValue(t.substring(0, c) + ch + t.substring(c), TextRange(c + 1))
+                if (doc.items[spot.item] is io.tima.domain.chat.ComposedItem.ItemList) changedItem(spot.item, spot.cell, spot.widget, v) else changed(spot.item, v)
+            }
+        }
+        m.typeHere("- Заглавие\nПодборка")
+        m.paragraph(io.tima.domain.chat.ParagraphKind.LIST2)
+        m.focusedItem(0, 1, io.tima.domain.chat.Spot.TEXT)
+        m.typeHere("```")
+        m.typeHere("код без форматирования")
+        m.select(io.tima.domain.chat.Spot(0, 1))
+        m.insert(io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Quoted("group", "g-1", 42)))
+        val content = ComposedBodiesOverKodium.content(m.doc)
+        assertTrue(io.tima.crypto.MarkupRules.check(content, strict = true).isEmpty(), io.tima.crypto.MarkupRules.check(content, strict = true).toString())
+        assertEquals(listOf("Заглавие", "Подборка", "код без форматирования"), content.nodes)
+        val nested = content.markup!!.blocks.single().children.single().children.single()
+        assertEquals(listOf(BlockType.CODE_BLOCK, BlockType.QUOTED), nested.children.single().children.map { it.type })
+    }
+
     @Test
     fun черновик_туда_и_обратно() {
         val m = model()
-        m.type("- пункт **жирный**\n--> цитата")
+        m.type("# пункт **жирный**\n--> цитата")
         val saved = ComposedBodiesOverKodium.save(m.doc)
         val back = EditorModel(ComposedBodiesOverKodium.load(saved)!!, TypedOverQuickMarkdown)
         assertEquals(m.focusedTyped, back.typedAt(io.tima.domain.chat.Spot(0)))

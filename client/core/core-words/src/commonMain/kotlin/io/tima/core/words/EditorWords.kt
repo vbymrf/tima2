@@ -62,6 +62,15 @@ interface EditorWords {
     val gridInsert: String
     /** Слить нельзя: прямоугольник задел бы другое слитое лишь частью, или сливать не с чем. */
     val joinRefused: String
+    /** Список (ADR-0049): пункт ступени без родителя — над ним этот; правится как любой текст. */
+    val untitled: String
+    /** Подсказка под пунктом: что можно положить в пункт. */
+    val listContent: String
+    /** Пункт списка не помещается: виджету узко с отступом пункта. */
+    val listTooNarrow: String
+    /** «Разметка → Список» (ADR-0049 §3): свойства всего списка. */
+    val listOpen: String
+    val listFlat: String
     /** Вставленное из подборки: `full`, `cut`. */
     fun cutName(key: String): String
     val authorShown: String
@@ -123,6 +132,7 @@ object RussianEditorWords : EditorWords {
         "contact" -> "Контакт"
         "reply" -> "Ответ"
         "row" -> "Ряд"
+        "list" -> "Список"
         "colAdd" -> "+Столбец"
         "colRemove" -> "−Столбец"
         "lineAdd" -> "+Строка"
@@ -167,6 +177,7 @@ object RussianEditorWords : EditorWords {
         "row" -> "ряд"
         "cell" -> "ячейка"
         "widget" -> "виджет"
+        "item" -> "пункт списка"
         else -> "текст"
     }
     override val cannotSend = "Отправить нельзя"
@@ -223,6 +234,11 @@ object RussianEditorWords : EditorWords {
     override val gridColumns = "Столбцов"
     override val gridInsert = "Вставить ряд"
     override val joinRefused = "Слить нельзя: не с чем или слитое вышло бы не прямоугольником"
+    override val untitled = "Без имени"
+    override val listContent = "Под пунктом: текст, код, виджеты"
+    override val listTooNarrow = "Пункт списка не помещается: виджету узко с отступом — включите «Без отступа» или уберите виджет"
+    override val listOpen = "Развернуть по умолчанию"
+    override val listFlat = "Без отступа"
     override fun cutName(key: String) = if (key == "cut") "Обрезать" else "Полностью"
     override val authorShown = "Имя владельца"
     override val nothingChosen = "Выберите ряд, ячейку или виджет"
@@ -281,6 +297,7 @@ object EnglishEditorWords : EditorWords {
         "contact" -> "Contact"
         "reply" -> "Reply"
         "row" -> "Row"
+        "list" -> "List"
         "colAdd" -> "+Column"
         "colRemove" -> "−Column"
         "lineAdd" -> "+Line"
@@ -325,6 +342,7 @@ object EnglishEditorWords : EditorWords {
         "row" -> "row"
         "cell" -> "cell"
         "widget" -> "widget"
+        "item" -> "list item"
         else -> "text"
     }
     override val cannotSend = "Cannot send"
@@ -381,6 +399,11 @@ object EnglishEditorWords : EditorWords {
     override val gridColumns = "Columns"
     override val gridInsert = "Insert row"
     override val joinRefused = "Can't merge: nothing to merge with, or the merged area would not be a rectangle"
+    override val untitled = "Untitled"
+    override val listContent = "Under the item: text, code, widgets"
+    override val listTooNarrow = "A list item does not fit: the widget is too narrow with the indent — turn on \"No indent\" or remove the widget"
+    override val listOpen = "Expanded by default"
+    override val listFlat = "No indent"
     override fun cutName(key: String) = if (key == "cut") "Trim" else "Full"
     override val authorShown = "Owner's name"
     override val nothingChosen = "Choose a row, cell or widget"
@@ -435,6 +458,7 @@ object SpanishEditorWords : EditorWords {
         "contact" -> "Contacto"
         "reply" -> "Respuesta"
         "row" -> "Fila"
+        "list" -> "Lista"
         "colAdd" -> "+Columna"
         "colRemove" -> "−Columna"
         "lineAdd" -> "+Línea"
@@ -479,6 +503,7 @@ object SpanishEditorWords : EditorWords {
         "row" -> "fila"
         "cell" -> "celda"
         "widget" -> "widget"
+        "item" -> "punto de la lista"
         else -> "texto"
     }
     override val cannotSend = "No se puede enviar"
@@ -535,6 +560,11 @@ object SpanishEditorWords : EditorWords {
     override val gridColumns = "Columnas"
     override val gridInsert = "Insertar fila"
     override val joinRefused = "No se puede unir: no hay con qué o lo unido no sería un rectángulo"
+    override val untitled = "Sin nombre"
+    override val listContent = "Bajo el punto: texto, código, widgets"
+    override val listTooNarrow = "Un punto de la lista no cabe: el widget es estrecho con la sangría; activa «Sin sangría» o quita el widget"
+    override val listOpen = "Desplegada por defecto"
+    override val listFlat = "Sin sangría"
     override fun cutName(key: String) = if (key == "cut") "Recortar" else "Completo"
     override val authorShown = "Nombre del dueño"
     override val nothingChosen = "Elige una fila, celda o widget"

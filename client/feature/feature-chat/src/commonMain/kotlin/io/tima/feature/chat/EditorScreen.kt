@@ -110,6 +110,11 @@ object EditorTags {
     /** Линейка рамок над выбранным рядом N. */
     fun ruler(item: Int) = "editor:ruler.$item"
     const val GRID = "editor:grid"
+    /** Список N, точка пункта I (выбрать), заголовок и содержимое пункта (ADR-0049). */
+    fun list(index: Int) = "editor:list.$index"
+    fun listItem(index: Int, item: Int) = "editor:list.$index.$item"
+    fun listTitle(index: Int, item: Int) = "editor:list.$index.$item.title"
+    fun listText(index: Int, item: Int) = "editor:list.$index.$item.text"
 }
 
 /** Разделы редактора и кнопки ленты (Решения §10.2) — ключи подписей `EditorWords.button`. */
@@ -262,12 +267,18 @@ fun EditorScreen(
     val wide = remember(doc) { io.tima.domain.chat.TableFit.tooWide(doc) }
     val trouble = remember(doc, wide) {
         problems(doc) + wide.map { i ->
-            if (doc.items.getOrNull(i) is ComposedItem.Row) w.rowTooNarrow else w.tableTooWide(io.tima.domain.chat.TableFit.maxColumns())
+            when (doc.items.getOrNull(i)) {
+                is ComposedItem.Row -> w.rowTooNarrow
+                is ComposedItem.ItemList -> w.listTooNarrow
+                else -> w.tableTooWide(io.tima.domain.chat.TableFit.maxColumns())
+            }
         }.distinct()
     }
     val level = doc.level ?: defaultLevel
     // Поле без знаков (ADR-0048): упоминания и метки — цветом, открытый знак — серым.
     val typing: TypingMarks = model.source
+    // Пункт ступени без родителя получает заголовок из словаря (ADR-0049 §4).
+    model.untitled = w.untitled
     val active = model.activeInline().map { it.name.lowercase() }.toSet()
 
     // Черновик — через полсекунды после последней правки и при закрытии окна.
@@ -472,6 +483,7 @@ private fun selectedKind(model: EditorModel): String {
             else -> "row"
         }
         is ComposedItem.Widget -> "widget"
+        is ComposedItem.ItemList -> if (s.widget >= 0) "widget" else if (s.widget == -1) "item" else "text"
         else -> "text"
     }
 }
@@ -681,13 +693,7 @@ private fun EditorItemView(
         }
         is ComposedItem.Row -> EditorRow(item, index, model, drag, marks, preview, tooWide)
         is ComposedItem.Continuation -> ContinuationMarker(item, index, model, levels)
-        // Список (ADR-0049) — как увидит получатель; нажатие выбирает его.
-        is ComposedItem.ItemList -> Column(
-            Modifier.fillMaxWidth().clickable { model.select(index) }.testTag(EditorTags.text(index)),
-        ) {
-            preview(ComposedDoc(listOf(item.copy(style = emptyMap()))))?.let { RichBody(it) }
-            DividerAfter(look)
-        }
+        is ComposedItem.ItemList -> EditorList(item, index, model, marks, drag, preview, tooWide)
     }
 }
 

@@ -8,6 +8,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import io.tima.domain.chat.ComposedDoc
 import io.tima.domain.chat.ComposedItem
 import io.tima.domain.chat.ComposedLayout
+import io.tima.domain.chat.ComposedLists
 import io.tima.domain.chat.Drop
 import io.tima.domain.chat.EditHistory
 import io.tima.domain.chat.InlineKind
@@ -46,12 +47,18 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         val spot: Spot get() = Spot(focus, cell, widget)
     }
 
+    /** Пункты строками (из строки ввода, прежний черновик) — сразу куском «Список» (ADR-0049 §4). */
+    private val start: ComposedDoc = ComposedLists.lift(initial, source, "", Spot(0), 0).doc
+
     private val history = EditHistory(
-        initial.items.indexOfLast { it is ComposedItem.Text }.coerceAtLeast(0).let { at ->
-            val len = (initial.items.getOrNull(at) as? ComposedItem.Text)?.source?.let { source.read(it).text.length } ?: 0
-            Snapshot(initial, at, len, len)
+        start.items.indexOfLast { it is ComposedItem.Text }.coerceAtLeast(0).let { at ->
+            val len = (start.items.getOrNull(at) as? ComposedItem.Text)?.source?.let { source.read(it).text.length } ?: 0
+            Snapshot(start, at, len, len)
         },
     )
+
+    /** Заголовок пункта, который встаёт над пунктом ступени без родителя (ADR-0049 §4) — из словаря. */
+    var untitled: String = ""
 
     var snapshot by mutableStateOf(history.current)
         private set
@@ -102,6 +109,13 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
     private fun textAt(d: ComposedDoc, at: Spot): String? = when (val item = d.items.getOrNull(at.item)) {
         is ComposedItem.Text -> item.source.takeIf { at.cell == -1 }
         is ComposedItem.Row -> if (at.widget == Spot.TEXT) item.cells.getOrNull(at.cell)?.text else null
+        is ComposedItem.ItemList -> item.items.getOrNull(at.cell)?.let {
+            when (at.widget) {
+                Spot.TITLE -> it.title
+                Spot.TEXT -> it.text
+                else -> null
+            }
+        }
         else -> null
     }
 
@@ -144,6 +158,10 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
                 it is ComposedItem.Text && at.cell == -1 -> it.copy(source = text)
                 it is ComposedItem.Row && at.widget == Spot.TEXT ->
                     it.copy(cells = it.cells.mapIndexed { c, cell -> if (c == at.cell) cell.copy(text = text) else cell })
+                it is ComposedItem.ItemList && at.widget == Spot.TITLE ->
+                    it.copy(items = it.items.mapIndexed { c, item -> if (c == at.cell) item.copy(title = text) else item })
+                it is ComposedItem.ItemList && at.widget == Spot.TEXT ->
+                    it.copy(items = it.items.mapIndexed { c, item -> if (c == at.cell) item.copy(text = text) else item })
                 else -> it
             }
         },
@@ -155,10 +173,22 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
     /** То же — в тексте ячейки ряда. */
     fun changedCell(index: Int, cell: Int, value: TextFieldValue) = changedAt(Spot(index, cell, Spot.TEXT), value)
 
+    /** То же — в заголовке ([Spot.TITLE]) или содержимом ([Spot.TEXT]) пункта списка. */
+    fun changedItem(index: Int, item: Int, part: Int, value: TextFieldValue) = changedAt(Spot(index, item, part), value)
+
+    private fun inList(at: Spot) = doc.items.getOrNull(at.item) is ComposedItem.ItemList
+
     private fun changedAt(at: Spot, typed: TextFieldValue) {
         textAt(doc, at) ?: return
         val before = typedAt(at)
         if (at != spot) typingIn = null
+        // Заголовок пункта — одна строка: перевод строки — новый пункт или конец списка (Word).
+        if (inList(at) && at.widget == Spot.TITLE && '\n' in typed.text) {
+            val nl = typed.text.indexOf('\n')
+            val moved = ComposedLists.enter(doc, at, before, nl, source) ?: return
+            moved(moved)
+            return
+        }
         if (typed.text == before.text) {
             // Только курсор — не шаг истории; курсор ушёл — ожидавшее оформление снято.
             if (at != spot || typed.selection.start != snapshot.start || typed.selection.end != snapshot.end) pending = null
@@ -166,7 +196,13 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
             publish(push = false, Snapshot(doc, at.item, typed.selection.start, typed.selection.end, at.cell, at.widget))
             return
         }
-        val change = TypedEdits.change(before, typed.text, typed.selection.end, pending, convert = doc.marks)
+        val change = TypedEdits.change(
+            before, typed.text, typed.selection.end, pending, convert = doc.marks,
+            lineSigns = !(inList(at) && at.widget == Spot.TITLE),
+            // В содержимом пункта вложенный пункт — ступенью, а не строкой со знаком.
+            listSigns = !inList(at),
+            untitled = untitled,
+        )
         pending = null
         val after = change.typed
         val cursor = change.cursor
@@ -185,6 +221,21 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         val glue = word && typingIn == at
         publish(push = !glue, next)
         typingIn = if (word) at else null
+        // Набрали «- » в куске-тексте — строка стала пунктом: кусок «Список» (ADR-0049 §4).
+        if (lifts(at, after)) moved(ComposedLists.lift(doc, source, untitled, at, value.selection.end))
+    }
+
+    private fun lifts(at: Spot, t: Typed) = doc.items.getOrNull(at.item) is ComposedItem.Text &&
+        t.lines.any { it == LineKind.LIST1 || it == LineKind.LIST2 || it == LineKind.LIST3 }
+
+    /** Документ переделан списком: курсор — на новое место, окно ставит туда фокус. */
+    private fun moved(m: ComposedLists.Moved) {
+        typingIn = null
+        pending = null
+        live = null
+        publish(push = true, Snapshot(m.doc, m.spot.item, m.cursor, m.cursor, m.spot.cell, m.spot.widget))
+        field = fieldOf(snapshot)
+        focusAsk++
     }
 
     /**
@@ -203,6 +254,9 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
 
     /** Курсор пришёл в текст ячейки. */
     fun focusedCell(index: Int, cell: Int) = focusedAt(Spot(index, cell, Spot.TEXT))
+
+    /** Курсор пришёл в заголовок или содержимое пункта списка. */
+    fun focusedItem(index: Int, item: Int, part: Int) = focusedAt(Spot(index, item, part))
 
     private fun focusedAt(at: Spot) {
         if (at == spot) return
@@ -236,16 +290,36 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         field = fieldOf(next)
     }
 
-    /** «Абзац ▾» — у куска-текста и в ячейке: ячейка — область со своими блоками (ADR-0048 §4). */
+    /**
+     * «Абзац ▾» — у куска-текста, в ячейке и в пункте списка. В заголовке пункта «Список», «Список 2»
+     * — его ступень, остальное делает пункт строкой текста; в содержимом пункта списка нет — вложенный
+     * пункт задаётся ступенью (ADR-0049 §4). В куске-тексте «Список» делает строку пунктом.
+     */
     fun paragraph(kind: ParagraphKind) {
+        val line = LineKind.of(kind)
+        val list = line == LineKind.LIST1 || line == LineKind.LIST2 || line == LineKind.LIST3
+        if (inList(spot) && spot.widget != Spot.TEXT) {
+            val m = if (list) ComposedLists.depth(doc, spot, if (line == LineKind.LIST1) 1 else 2, untitled)
+            else ComposedLists.toText(doc, spot, line, source)
+            m?.let { moved(it.copy(cursor = if (list) snapshot.start else it.cursor)) }
+            return
+        }
+        if (inList(spot) && list) return
         val t = focusedTyped ?: return
         val (s, e) = selection(t)
-        applyTyped(TypedEdits.lines(t, s, e, LineKind.of(kind)), snapshot.start, snapshot.end)
+        val (after, shift) = TypedEdits.parents(TypedEdits.lines(t, s, e, line), untitled)
+        applyTyped(after, shift(snapshot.start), shift(snapshot.end))
+        if (lifts(spot, after)) moved(ComposedLists.lift(doc, source, untitled, spot, shift(snapshot.start)))
     }
 
-    /** Вид строки под курсором — для отметки в «Абзац ▾». */
+    /** Вид строки под курсором — для отметки в «Абзац ▾»; в заголовке пункта — ступень. */
     val paragraphHere: ParagraphKind
         get() {
+            val list = doc.items.getOrNull(spot.item) as? ComposedItem.ItemList
+            if (list != null && spot.widget != Spot.TEXT) {
+                val depth = list.items.getOrNull(spot.cell)?.depth ?: return ParagraphKind.PARAGRAPH
+                return if (depth == 1) ParagraphKind.LIST else ParagraphKind.LIST2
+            }
             val t = focusedTyped ?: return ParagraphKind.PARAGRAPH
             return t.lines.getOrElse(t.lineAt(selection(t).first)) { LineKind.PARAGRAPH }.paragraph
         }
@@ -319,6 +393,16 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
      */
     fun insert(item: ComposedItem) {
         typingIn = null
+        // Виджет в пункт списка — под его содержимое (ADR-0049 §2).
+        val list = doc.items.getOrNull(focus) as? ComposedItem.ItemList
+        if (item is ComposedItem.Widget && list != null && snapshot.cell in list.items.indices) {
+            val point = list.items[snapshot.cell]
+            val items = list.items.toMutableList().apply { set(snapshot.cell, point.copy(widgets = point.widgets + item.widget)) }
+            val next = Snapshot(doc.copy(items = doc.items.toMutableList().apply { set(focus, list.copy(items = items)) }), focus, 0, 0, snapshot.cell, point.widgets.size)
+            publish(push = true, next)
+            field = fieldOf(next)
+            return
+        }
         val row = doc.items.getOrNull(focus) as? ComposedItem.Row
         if (item is ComposedItem.Widget && row != null && snapshot.cell in row.cells.indices) {
             val cell = row.cells[snapshot.cell]

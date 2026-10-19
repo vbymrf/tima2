@@ -57,6 +57,28 @@ class EditorScreenTest {
      * редакторе рисуется пузырём (ряд во всю ширину), а ряд редактора меряет высоту ячеек по
      * содержимому — прежний ряд пузыря на такой вопрос падал.
      */
+    /** Список в редакторе (ADR-0049): точки, заголовки, содержимое и виджет пункта. */
+    @Test
+    fun список_в_редакторе() {
+        val doc = ComposedDoc(
+            listOf(
+                ComposedItem.Text("до списка"),
+                ComposedItem.ItemList(
+                    listOf(
+                        io.tima.domain.chat.ComposedListItem(1, "Заглавие"),
+                        io.tima.domain.chat.ComposedListItem(2, "Подборка", widgets = listOf(io.tima.domain.chat.ComposedWidget.Emoji("🎒"))),
+                        io.tima.domain.chat.ComposedListItem(2, "Код", text = "код без форматирования"),
+                    ),
+                ),
+            ),
+        )
+        val model = EditorModel(doc, MarkdownTyped)
+        model.focusedItem(1, 1, io.tima.domain.chat.Spot.TITLE)
+        val shot = capture("редактор-список", 360, 640, dark = false) { screen(model)() }
+        val empty = capture("редактор", 360, 640, dark = false) { screen(EditorModel(ComposedDoc.of("до списка")))() }
+        assertTrue(shot.difference(empty) > 0.0)
+    }
+
     @Test
     fun виджет_в_ячейке_ряда_не_роняет_редактор() {
         val doc = ComposedDoc(

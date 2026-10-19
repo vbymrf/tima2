@@ -9,6 +9,8 @@ package io.tima.domain.chat
 data class Spot(val item: Int, val cell: Int = -1, val widget: Int = -1) {
     companion object {
         const val TEXT = -2
+        /** Заголовок пункта списка (ADR-0049): `Spot(кусок, пункт, TITLE)`; `TEXT` — его содержимое. */
+        const val TITLE = -3
     }
 }
 
@@ -52,6 +54,8 @@ object ComposedLayout {
     private fun ComposedDoc.row(at: Int): ComposedItem.Row? = items.getOrNull(at) as? ComposedItem.Row
 
     private fun ComposedDoc.setRow(at: Int, row: ComposedItem.Row) = copy(items = items.toMutableList().apply { set(at, row) })
+
+    private fun ComposedDoc.setItem(at: Int, item: ComposedItem) = copy(items = items.toMutableList().apply { set(at, item) })
 
     // ── Сетка «владельцев»: место → номер ячейки, которой оно принадлежит ─────────
 
@@ -293,6 +297,21 @@ object ComposedLayout {
      * кусков. Ячейки ряда местами не меняются: у них строки и столбцы.
      */
     fun shift(doc: ComposedDoc, at: Spot, by: Int): Pair<ComposedDoc, Spot> {
+        // Список (ADR-0049): виджет — внутри пункта, пункт — внутри списка, со своей ступенью.
+        val list = doc.items.getOrNull(at.item) as? ComposedItem.ItemList
+        if (list != null && at.cell in list.items.indices) {
+            val item = list.items[at.cell]
+            if (at.widget >= 0) {
+                val to = at.widget + by
+                if (to !in item.widgets.indices) return doc to at
+                val widgets = item.widgets.toMutableList().apply { add(to, removeAt(at.widget)) }
+                return doc.setItem(at.item, list.copy(items = list.items.toMutableList().apply { set(at.cell, item.copy(widgets = widgets)) })) to at.copy(widget = to)
+            }
+            val to = at.cell + by
+            if (to !in list.items.indices) return doc to at
+            val items = list.items.toMutableList().apply { add(to, removeAt(at.cell)) }
+            return doc.setItem(at.item, list.copy(items = ComposedLists.normalized(items, ""))) to at.copy(cell = to)
+        }
         val row = doc.row(at.item)
         if (row != null && at.cell in row.cells.indices && at.widget >= 0) {
             val cell = row.cells[at.cell]
@@ -310,6 +329,31 @@ object ComposedLayout {
 
     /** «Удалить» выбранное: виджет, текст ячейки, содержимое ячейки или кусок целиком. */
     fun removeAt(doc: ComposedDoc, at: Spot): Pair<ComposedDoc, Spot> {
+        // Список (ADR-0049): виджет пункта, содержимое пункта или пункт; последний пункт — со списком.
+        val list = doc.items.getOrNull(at.item) as? ComposedItem.ItemList
+        if (list != null && at.cell in list.items.indices) {
+            val item = list.items[at.cell]
+            val items = list.items.toMutableList()
+            val spot = when {
+                at.widget >= 0 -> {
+                    items[at.cell] = item.copy(widgets = item.widgets.filterIndexed { i, _ -> i != at.widget })
+                    Spot(at.item, at.cell)
+                }
+                at.widget == Spot.TEXT -> {
+                    items[at.cell] = item.copy(text = "")
+                    Spot(at.item, at.cell)
+                }
+                else -> {
+                    items.removeAt(at.cell)
+                    Spot(at.item, (at.cell - 1).coerceAtLeast(0))
+                }
+            }
+            if (items.isEmpty()) {
+                val next = doc.withItems(doc.items.toMutableList().apply { removeAt(at.item) })
+                return next to Spot((at.item - 1).coerceIn(0, next.items.lastIndex))
+            }
+            return doc.setItem(at.item, list.copy(items = ComposedLists.normalized(items, ""))) to spot
+        }
         val row = doc.row(at.item)
         if (row != null && at.cell in row.cells.indices) {
             val cell = row.cells[at.cell]
@@ -340,6 +384,7 @@ object ComposedLayout {
             item is ComposedItem.Widget && at.cell == -1 -> Carried.W(item.widget)
             item is ComposedItem.Row && at.widget == Spot.TEXT -> item.cells.getOrNull(at.cell)?.text?.takeIf { it.isNotBlank() }?.let { Carried.T(it) }
             item is ComposedItem.Row && at.widget >= 0 -> item.cells.getOrNull(at.cell)?.widgets?.getOrNull(at.widget)?.let { Carried.W(it) }
+            item is ComposedItem.ItemList && at.widget >= 0 -> item.items.getOrNull(at.cell)?.widgets?.getOrNull(at.widget)?.let { Carried.W(it) }
             else -> null
         }
     }

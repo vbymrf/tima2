@@ -116,6 +116,7 @@ internal fun InputLine(
     // Поле — без знаков (ADR-0048); наружу уходит набранное со знаками. Отрезки с пробелом на краю
     // запись обрезала бы — поле держит их, пока набранное то же.
     var live by remember { mutableStateOf<Pair<String, io.tima.domain.chat.Typed>?>(null) }
+    val untitled = Tima.words.editor.untitled
     val now = live?.takeIf { it.first == typed }?.second ?: source.read(typed)
     var field by remember { mutableStateOf(TextFieldValue(now.text, TextRange(now.text.length))) }
     val shown = if (field.text == now.text) field else TextFieldValue(now.text, TextRange(now.text.length))
@@ -124,7 +125,8 @@ internal fun InputLine(
             field = v
             return
         }
-        val change = io.tima.domain.chat.TypedEdits.change(now, v.text, v.selection.end, null, convert = marks)
+        // Пункт ступени без родителя — над ним «Без имени» (ADR-0049 §4).
+        val change = io.tima.domain.chat.TypedEdits.change(now, v.text, v.selection.end, null, convert = marks, untitled = untitled)
         val after = change.typed
         val cursor = change.cursor
         val stored = source.write(after)

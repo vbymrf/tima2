@@ -101,9 +101,20 @@ object TypedEdits {
      * Поле сменило текст на [after], курсор — [cursor]. Набранное внутри и в конце оформленного
      * продолжает его, в начале — нет (Word); [pending] — что наденется на набранное вместо этого
      * (Ж без выделения). [convert] — «Знаки md» включены: закрытая пара и знак строки сразу
-     * становятся оформлением; [lineSigns] — знаки строки (выключены там, где вида строки нет).
+     * становятся оформлением; [lineSigns] — знаки строки (выключены там, где вида строки нет);
+     * [listSigns] — и знак пункта (в содержимом пункта списка его нет: вложенный — ступенью пункта);
+     * [untitled] — заголовок пункта, который встаёт над пунктом ступени без родителя.
      */
-    fun change(before: Typed, after: String, cursor: Int, pending: Set<InlineKind>?, convert: Boolean, lineSigns: Boolean = true): Change {
+    fun change(
+        before: Typed,
+        after: String,
+        cursor: Int,
+        pending: Set<InlineKind>?,
+        convert: Boolean,
+        lineSigns: Boolean = true,
+        listSigns: Boolean = true,
+        untitled: String = "",
+    ): Change {
         val old = before.text
         val (p, oldEnd, newEnd) = diff(old, after, cursor)
         val inserted = after.substring(p, newEnd)
@@ -149,21 +160,22 @@ object TypedEdits {
 
         if (!convert || deleted.isNotEmpty() || inserted.isEmpty() || '\n' in inserted) return Change(typed)
         val c = p + inserted.length
-        if (lineSigns) lineSign(typed, c)?.let { return it }
+        if (lineSigns) lineSign(typed, c, listSigns, untitled)?.let { return it }
         return pairClosed(typed, c) ?: Change(typed)
     }
 
     /** Знак строки набран в её начале — строка получает вид, знак уходит. */
-    private fun lineSign(t: Typed, c: Int): Change? {
+    private fun lineSign(t: Typed, c: Int, listSigns: Boolean, untitled: String): Change? {
         val line = t.lineAt(c)
         if (t.lines[line] != LineKind.PARAGRAPH) return null
         val start = t.lineStart(line)
         val end = t.lineEnd(line)
         val head = t.text.substring(start, c)
         val whole = t.text.substring(start, end)
-        LINE_SIGNS.firstOrNull { it.first == head }?.let { (sign, kind) ->
+        LINE_SIGNS.firstOrNull { it.first == head && (listSigns || it.second !in LISTS) }?.let { (sign, kind) ->
             val cut = remove(t, start, start + sign.length)
-            return Change(cut.copy(lines = cut.lines.toMutableList().apply { set(line, kind) }), start)
+            val (next, shift) = parents(cut.copy(lines = cut.lines.toMutableList().apply { set(line, kind) }), untitled)
+            return Change(next, shift(start))
         }
         if (c == end && whole == "```") {
             val cut = remove(t, start, end)
@@ -280,6 +292,43 @@ object TypedEdits {
         if (e <= s) return t
         val spans = if (kind in covering(t, s, e)) without(t.spans, kind, s, e) else t.spans + TypedSpan(kind, s, e)
         return normalized(t.copy(spans = spans))
+    }
+
+    private val LISTS = listOf(LineKind.LIST1, LineKind.LIST2, LineKind.LIST3)
+
+    /**
+     * Пункта ступени 2 без пункта 1 над ним (3 без 2) не бывает (заказчик 2026-10-19): над ним встаёт
+     * пункт [untitled] — обычный текст, правится как любой. Пусто [untitled] — ничего не вставляется.
+     * Второе — куда сдвинулось место прежнего текста.
+     */
+    fun parents(t: Typed, untitled: String): Pair<Typed, (Int) -> Int> {
+        if (untitled.isEmpty()) return t to { it }
+        val inserts = mutableListOf<Pair<Int, List<LineKind>>>()
+        var prev = 0
+        for (i in t.lines.indices) {
+            val d = LISTS.indexOf(t.lines[i]) + 1
+            if (d == 0) {
+                prev = 0
+                continue
+            }
+            if (d > prev + 1) inserts += i to (prev + 1 until d).map { LISTS[it - 1] }
+            prev = d
+        }
+        if (inserts.isEmpty()) return t to { it }
+        var text = t.text
+        val lines = t.lines.toMutableList()
+        var spans = t.spans
+        val shifts = mutableListOf<Pair<Int, Int>>()
+        // С конца: места выше остаются прежними.
+        for ((line, kinds) in inserts.reversed()) {
+            val at = t.lineStart(line)
+            val piece = kinds.joinToString("") { untitled + "\n" }
+            text = text.substring(0, at) + piece + text.substring(at)
+            lines.addAll(line, kinds)
+            spans = replaced(spans, at, at, piece.length)
+            shifts += at to piece.length
+        }
+        return normalized(Typed(text, lines, spans)) to { pos -> pos + shifts.filter { pos >= it.first }.sumOf { it.second } }
     }
 
     /** «Абзац ▾»: строки с [s] по [e] получают вид [kind]; коду — без оформления внутри. */
