@@ -19,6 +19,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -136,7 +137,8 @@ private fun RowCellView(cell: RowCell, modifier: Modifier) {
         // Фон и поля — у ячейки; тексту остаются цвет, размер и выравнивание.
         val textStyle = cell.style.copy(background = null, padding = null, divider = null, dividerColor = null)
         cell.text?.takeIf { it.text.isNotEmpty() }?.let {
-            StyledText(it, textStyle, TimaType.sz4)
+            val shown = withoutLinks(it)
+            if (shown.text.isNotEmpty()) StyledText(shown, textStyle, TimaType.sz4)
             LinksUnder(linksOf(it))
         }
         for (w in cell.widgets) WidgetView(w)
@@ -181,18 +183,9 @@ private fun LinkWidget(link: RichBlock.Link) {
     val go = { open(link.url) }
     // Цвет ссылки — заданный в сообщении, иначе цвет ссылок из «Цветов» (заказчик 2026-10-19).
     val color = paletteColor(link.color) ?: Tima.colors.link
-    when (link.mode) {
-        // Кнопка (Решения §4): крупно домен — он из самой ссылки и не обрезается, ниже путь без схемы.
-        "button" -> Column(
-            Modifier.background(color, RoundedCornerShape(10.dp)).clickable { go() }.padding(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            Caption(hostOf(link.url), fontSize = TimaType.sz4, weight = FontWeight.Bold, color = Tima.colors.onAccent, lineOne = true)
-            val path = pathOf(link.url)
-            if (link.title.isNotBlank()) Caption(link.title, fontSize = TimaType.sz5, color = Tima.colors.onAccent, lineOne = true)
-            else if (path.isNotEmpty()) Caption(path, fontSize = TimaType.sz5, color = Tima.colors.onAccent, lineOne = true)
-            if (link.url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz6, color = Tima.colors.onAccent)
-        }
-        "card" -> Column(
+    when {
+        // Карточка — заголовок, описание, картинка; домен цветом ссылки.
+        link.mode == "card" -> Column(
             Modifier.fillMaxWidth().background(Tima.colors.functional, RoundedCornerShape(8.dp)).clickable { go() }.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -203,12 +196,24 @@ private fun LinkWidget(link: RichBlock.Link) {
             if (link.description.isNotBlank()) Caption(link.description, fontSize = TimaType.sz5, color = Tima.colors.text2)
             Caption(hostOf(link.url), fontSize = TimaType.sz5, weight = FontWeight.SemiBold, color = color, lineOne = true)
         }
-        else -> Caption(
-            link.title.ifBlank { link.url },
+        // Текстом с названием — название цветом ссылки.
+        link.mode == "plain" && link.title.isNotBlank() -> Caption(
+            link.title,
             fontSize = TimaType.sz4,
             weight = FontWeight.SemiBold,
             color = color,
             modifier = Modifier.clickable { go() },
+        )
+        // Кнопкой, и текстом без названия — пузырь «Перейти · домен» (заказчик 2026-10-19): есть
+        // название — оно вместо «Перейти»; полный адрес — только в окне перехода.
+        else -> Caption(
+            linkLabel(link.title.ifBlank { Tima.words.chat.linkGo }, link.url),
+            fontSize = TimaType.sz5,
+            weight = FontWeight.Bold,
+            color = Tima.colors.onAccent,
+            lineOne = true,
+            modifier = Modifier.background(color, RoundedCornerShape(12.dp)).clickable { go() }
+                .padding(horizontal = 12.dp, vertical = 6.dp).testTag(LinkTags.GO),
         )
     }
 }

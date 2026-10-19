@@ -1430,6 +1430,7 @@ interface ChatWords {
     /** Ссылки (заказчик 2026-10-19): «Перейти» под абзацем и окно с доменом перед переходом. */
     val linkGo: String
     val linkAskOpen: String
+    val linkCopy: String
     /** Выбор нескольких сообщений долгим нажатием (заказчик 2026-10-19). */
     fun selected(count: Int): String
     val selectPick: String
@@ -3552,6 +3553,7 @@ object RussianWords : Words {
         override val editImpossible = "Это сообщение изменить нельзя"
         override val linkGo = "Перейти"
         override val linkAskOpen = "Перейти по ссылке? Проверьте сайт:"
+        override val linkCopy = "Скопировать ссылку"
         override fun selected(count: Int) = "Выбрано: $count"
         override val selectPick = "В Подборку"
         override val selectCopy = "Скопировать"

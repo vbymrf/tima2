@@ -31,6 +31,10 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Caption
+import io.tima.core.ui.IconButton
+import io.tima.core.ui.ListLine
+import io.tima.core.ui.Name
+import io.tima.core.ui.TimaZones
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
@@ -44,6 +48,7 @@ object LinkTags {
     const val ASK = "msg:link.ask"
     const val ASK_OPEN = "msg:link.ask.open"
     const val ASK_CANCEL = "msg:link.ask.cancel"
+    const val ASK_COPY = "msg:link.ask.copy"
 }
 
 /**
@@ -86,30 +91,52 @@ fun LinkGate(content: @Composable () -> Unit) {
     }
 }
 
+/**
+ * Окно ссылки — как меню сообщения (заказчик 2026-10-19): сверху домен крупно и «✕» справа, под ним
+ * адрес целиком — только здесь он и виден; ниже строки «Перейти» и «Скопировать ссылку».
+ */
 @Composable
 private fun LinkAsk(url: String, onOpen: () -> Unit, onCancel: () -> Unit) {
     val colors = Tima.colors
     val w = Tima.words.chat
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Column(
-            Modifier.fillMaxWidth().background(colors.surface).clickable(enabled = false) {}
-                .padding(TimaSpacing.about4).testTag(LinkTags.ASK),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.fillMaxWidth().padding(top = TimaZones.zone1).background(colors.surface).clickable(enabled = false) {}
+                .testTag(LinkTags.ASK),
         ) {
-            Tertiary(w.linkAskOpen, lineOne = true)
-            Caption(hostOf(url), fontSize = TimaType.sz2, weight = FontWeight.ExtraBold, color = colors.link)
-            Caption(url, fontSize = TimaType.sz5, color = colors.text2)
-            if (url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
-            Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                LinkPill(w.linkGo, Modifier.testTag(LinkTags.ASK_OPEN), onOpen)
-                io.tima.core.ui.Chip(w.cancel, kind = io.tima.core.ui.ChipKind.Quiet, onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Tertiary(w.linkAskOpen, lineOne = true)
+                    Caption(hostOf(url), fontSize = TimaType.sz2, weight = FontWeight.ExtraBold, color = colors.link)
+                    Caption(url, fontSize = TimaType.sz5, color = colors.text2)
+                    if (url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
+                }
+                IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
+            }
+            LinkItem(w.linkGo, LinkTags.ASK_OPEN, onOpen)
+            LinkItem(w.linkCopy, LinkTags.ASK_COPY) {
+                clipboard.setText(AnnotatedString(url))
+                onCancel()
             }
         }
     }
 }
+
+@Composable
+private fun LinkItem(title: String, tag: String, onClick: () -> Unit) = ListLine(
+    modifier = Modifier.testTag(tag),
+    onClick = onClick,
+    middle = { Name(title) },
+    right = { Tertiary("›", lineOne = true) },
+)
 
 /** Синий пузырь «Перейти» — цвет ссылок из «Цветов». */
 @Composable
@@ -126,9 +153,17 @@ internal fun LinkPill(label: String, modifier: Modifier = Modifier, onClick: () 
     )
 }
 
+/** Подпись пузыря ссылки: «Перейти» (или название) и домен, длинный домен — с обрезкой. */
+internal fun linkLabel(go: String, url: String): String {
+    val host = hostOf(url)
+    return "$go · " + if (host.length > MAX_HOST) host.take(MAX_HOST - 1) + "…" else host
+}
+
+private const val MAX_HOST = 24
+
 /**
- * «Перейти» под абзацем (заказчик 2026-10-19): по пузырю на каждую ссылку абзаца, с доменом — какой
- * сайт откроется, видно до нажатия.
+ * Ссылки абзаца — пузырями «Перейти · домен» под ним (заказчик 2026-10-19): сам адрес в тексте не
+ * показывается, полный — только в окне перехода.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -138,9 +173,50 @@ internal fun LinksUnder(urls: List<String>) {
     val w = Tima.words.chat
     FlowRow(Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (url in urls.distinct()) {
-            LinkPill("${w.linkGo} · ${hostOf(url)}", Modifier.testTag(LinkTags.GO)) { open(url) }
+            LinkPill(linkLabel(w.linkGo, url), Modifier.testTag(LinkTags.GO)) { open(url) }
         }
     }
+}
+
+/**
+ * Текст без вставленных адресов: адрес заменяется пузырём под абзацем. Лишние пробелы на месте
+ * адреса сжимаются; оформление и метки сдвигаются вслед.
+ */
+internal fun withoutLinks(text: io.tima.domain.chat.RichText): io.tima.domain.chat.RichText {
+    val cuts = text.spans.filter { it.kind == io.tima.domain.chat.SpanKind.LINK }
+        .map { it.start.coerceIn(0, text.text.length) until it.end.coerceIn(0, text.text.length) }
+    return cut(text, cuts)
+}
+
+private fun cut(text: io.tima.domain.chat.RichText, ranges: List<IntRange>): io.tima.domain.chat.RichText {
+    if (ranges.isEmpty()) return text
+    val gone = BooleanArray(text.text.length)
+    for (r in ranges) for (i in r) if (i in gone.indices) gone[i] = true
+    // Пробел перед вырезанным уходит вместе с ним — «сайт https://x.ru» → «сайт».
+    for (r in ranges) {
+        val before = r.first - 1
+        val after = r.last + 1
+        if (before >= 0 && text.text[before] == ' ' && (after >= text.text.length || text.text[after] == ' ' || text.text[after] == '\n')) gone[before] = true
+    }
+    val map = IntArray(text.text.length + 1)
+    val out = StringBuilder()
+    for (i in text.text.indices) {
+        map[i] = out.length
+        if (!gone[i]) out.append(text.text[i])
+    }
+    map[text.text.length] = out.length
+    val spans = text.spans.filter { it.kind != io.tima.domain.chat.SpanKind.LINK }.mapNotNull { sp ->
+        val a = map[sp.start.coerceIn(0, text.text.length)]
+        val b = map[sp.end.coerceIn(0, text.text.length)]
+        if (b > a) sp.copy(start = a, end = b) else null
+    }
+    val lead = out.length - out.trimStart().length
+    val shown = out.toString().trim()
+    return io.tima.domain.chat.RichText(shown, spans.mapNotNull { sp ->
+        val a = (sp.start - lead).coerceIn(0, shown.length)
+        val b = (sp.end - lead).coerceIn(0, shown.length)
+        if (b > a) sp.copy(start = a, end = b) else null
+    })
 }
 
 /** Адреса в простом тексте: `https://…`, `http://…`, `www.…` — те же, что узнаёт быстрое оформление. */
@@ -165,7 +241,7 @@ internal fun AnnotatedString.Builder.linkAt(start: Int, end: Int, url: String, c
     )
 }
 
-/** Простое сообщение без оформления: ссылки в нём синие и нажимаются, под текстом — «Перейти». */
+/** Простое сообщение без оформления: адреса в нём заменены пузырями «Перейти · домен» под текстом. */
 @Composable
 internal fun PlainWithLinks(text: String) {
     val ranges = remember(text) { urlsIn(text) }
@@ -173,14 +249,9 @@ internal fun PlainWithLinks(text: String) {
         Caption(text, fontSize = TimaType.sz4)
         return
     }
-    val open = rememberLinkOpen()
-    val color = Tima.colors.link
-    val annotated = buildAnnotatedString {
-        append(text)
-        for (r in ranges) linkAt(r.first, r.last + 1, openable(text.substring(r)), color, open)
-    }
+    val rest = remember(text) { cut(io.tima.domain.chat.RichText(text), ranges).text }
     Column {
-        Caption(annotated, fontSize = TimaType.sz4)
+        if (rest.isNotBlank()) Caption(rest, fontSize = TimaType.sz4)
         LinksUnder(ranges.map { openable(text.substring(it)) })
     }
 }

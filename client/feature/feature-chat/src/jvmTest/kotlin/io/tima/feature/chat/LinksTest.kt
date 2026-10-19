@@ -24,6 +24,19 @@ class LinksTest {
         assertEquals("https://www.b.com", openable("www.b.com"))
     }
 
+    /** Заказчик 2026-10-19: адрес в тексте не показывается — его место у пузыря «Перейти · домен». */
+    @Test
+    fun адрес_уходит_из_текста_и_домен_обрезается() {
+        val words = "сайт https://tima.ru для **заказов**"
+        val shown = withoutLinks(RichText(words, listOf(RichSpan(SpanKind.LINK, 5, 20, "https://tima.ru"), RichSpan(SpanKind.BOLD, 25, words.length))))
+        assertEquals("сайт для **заказов**", shown.text)
+        assertEquals(listOf(RichSpan(SpanKind.BOLD, 9, shown.text.length)), shown.spans, "оформление сдвинулось вслед")
+        assertEquals("Перейти · tima.ru", linkLabel("Перейти", "https://tima.ru/very/long/path"))
+        assertEquals("Магазин · tima.ru", linkLabel("Магазин", "https://tima.ru"), "название — вместо «Перейти»")
+        val long = linkLabel("Перейти", "https://a-very-long-domain-name-for-tests.example.com/x")
+        assertTrue(long.endsWith("…") && long.length <= "Перейти · ".length + 24, "длинный домен обрезан: $long")
+    }
+
     @Test
     fun ссылка_синяя_и_под_абзацем_перейти() {
         val words = "сайт https://tima.ru"

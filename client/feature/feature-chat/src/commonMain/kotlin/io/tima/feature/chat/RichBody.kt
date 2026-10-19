@@ -68,14 +68,18 @@ internal fun RichBlockViewOf(block: RichBlock) {
     val colors = Tima.colors
     when (block) {
         is RichBlock.Paragraph -> {
-            if (block.style == io.tima.domain.chat.BlockStyle.NONE) Caption(annotated(block.text), fontSize = TimaType.sz4)
-            else StyledText(block.text, block.style, TimaType.sz4)
+            // Адрес в тексте заменяется пузырём «Перейти · домен» под абзацем (заказчик 2026-10-19).
+            val shown = withoutLinks(block.text)
+            if (shown.text.isNotEmpty()) {
+                if (block.style == io.tima.domain.chat.BlockStyle.NONE) Caption(annotated(shown), fontSize = TimaType.sz4)
+                else StyledText(shown, block.style, TimaType.sz4)
+            }
             LinksUnder(linksOf(block.text))
             DividerAfter(block.style)
         }
         is RichBlock.Heading -> {
             StyledText(
-                block.text,
+                withoutLinks(block.text),
                 block.style,
                 when (block.level) { 1 -> TimaType.sz2; 2 -> TimaType.sz3; else -> TimaType.sz4 },
                 FontWeight.ExtraBold,
@@ -91,7 +95,7 @@ internal fun RichBlockViewOf(block: RichBlock) {
         is RichBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(colors.line))
             Column(Modifier.padding(start = 8.dp)) {
-                for (line in block.lines) Caption(annotated(line), fontSize = TimaType.sz4, color = colors.text2)
+                for (line in block.lines) Caption(annotated(withoutLinks(line)), fontSize = TimaType.sz4, color = colors.text2)
                 LinksUnder(block.lines.flatMap(::linksOf))
             }
         }
@@ -152,7 +156,7 @@ private fun BulletList(items: List<Bullet>, depth: Int) {
         for (item in items) {
             Row {
                 Caption(mark, fontSize = TimaType.sz4, modifier = Modifier.padding(end = 6.dp))
-                Caption(annotated(item.text), fontSize = TimaType.sz4)
+                Caption(annotated(withoutLinks(item.text)), fontSize = TimaType.sz4)
             }
             if (item.children.isNotEmpty()) BulletList(item.children, depth + 1)
         }

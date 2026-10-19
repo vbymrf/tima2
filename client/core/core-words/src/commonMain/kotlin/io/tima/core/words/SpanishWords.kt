@@ -1236,6 +1236,7 @@ object SpanishWords : Words {
         override val editImpossible = "Este mensaje no se puede editar"
         override val linkGo = "Ir"
         override val linkAskOpen = "¿Abrir el enlace? Compruebe el sitio:"
+        override val linkCopy = "Copiar enlace"
         override fun selected(count: Int) = "Seleccionados: $count"
         override val selectPick = "A la selección"
         override val selectCopy = "Copiar"
