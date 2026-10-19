@@ -329,7 +329,8 @@ fun EditorScreen(
             "underline" -> model.inline(InlineKind.UNDERLINE)
             "strike" -> model.inline(InlineKind.STRIKE)
             "highlight" -> model.inline(InlineKind.HIGHLIGHT)
-            "code" -> model.inline(InlineKind.CODE)
+            // Одна кнопка «Код» (ADR-0049 §5): в строке — код в строке, целые строки — блок кода.
+            "code" -> model.code()
             // «Знаки md» (ADR-0048): включены — закрытая пара сразу оформление, выключены — знаки текстом.
             "marks" -> {
                 model.toggleMarks()
@@ -561,7 +562,7 @@ internal fun editorCommand(key: Key, ctrl: Boolean, shift: Boolean, model: Edito
         key == Key.U -> mark(InlineKind.UNDERLINE)
         shift && key == Key.X -> mark(InlineKind.STRIKE)
         shift && key == Key.H -> mark(InlineKind.HIGHLIGHT)
-        key == Key.E -> mark(InlineKind.CODE)
+        key == Key.E -> { model.code(); true }
         key == Key.One -> heading(ParagraphKind.HEADING1)
         key == Key.Two -> heading(ParagraphKind.HEADING2)
         key == Key.Three -> heading(ParagraphKind.HEADING3)
@@ -679,7 +680,8 @@ private fun Ribbon(tab: EditorTab, marksOn: Boolean, active: Set<String>, paragr
 private fun ParagraphList(current: ParagraphKind, onPick: (ParagraphKind) -> Unit) {
     val colors = Tima.colors
     Column(Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = TimaSpacing.about4, vertical = 4.dp)) {
-        for (kind in ParagraphKind.entries) {
+        // Блок кода — кнопкой «Код», а не здесь (ADR-0049 §5).
+        for (kind in ParagraphKind.entries.filter { it != ParagraphKind.CODE }) {
             val size = when (kind) {
                 ParagraphKind.HEADING1 -> TimaType.sz3
                 ParagraphKind.HEADING2, ParagraphKind.HEADING3 -> TimaType.sz4

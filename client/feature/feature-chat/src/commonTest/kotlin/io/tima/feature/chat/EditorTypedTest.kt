@@ -162,6 +162,26 @@ class EditorTypedTest {
         assertEquals("# два", (m.doc.items[1] as ComposedItem.Text).source, "пункт — строкой заголовка")
     }
 
+    /** ADR-0049 §5: одна кнопка «Код» — в строке код в строке, целые строки и пустая строка — блок кода. */
+    @Test
+    fun одна_кнопка_код() {
+        val m = model("a bc d\nвторая")
+        m.changed(0, TextFieldValue(m.field.text, TextRange(2, 4)))
+        m.code()
+        assertEquals(listOf(TypedSpan(InlineKind.CODE, 2, 4)), m.focusedTyped!!.spans, "внутри строки — код в строке")
+        m.changed(0, TextFieldValue(m.field.text, TextRange(7, 13)))
+        m.code()
+        assertEquals(LineKind.CODE, m.focusedTyped!!.lines[1], "целая строка — блок кода")
+        assertTrue(InlineKind.CODE in m.activeInline())
+        m.changed(0, TextFieldValue(m.field.text, TextRange(9)))
+        m.code()
+        assertEquals(LineKind.PARAGRAPH, m.focusedTyped!!.lines[1], "в блоке — снят")
+        val empty = model("")
+        empty.code()
+        assertEquals(listOf(LineKind.CODE), empty.focusedTyped!!.lines, "пустая строка — блок кода")
+        assertTrue(ParagraphKind.CODE !in listOf(m.paragraphHere), "отметка «Абзаца» — не код")
+    }
+
     /** ADR-0049 §3: «Развернуть по умолчанию» и «Без отступа» — на весь список, шагом истории. */
     @Test
     fun свойства_списка() {

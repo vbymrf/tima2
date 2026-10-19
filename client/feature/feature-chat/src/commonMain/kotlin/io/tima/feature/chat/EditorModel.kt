@@ -246,7 +246,9 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         val t = focusedTyped ?: return emptySet()
         pending?.let { return it }
         val (s, e) = selection(t)
-        return if (s == e) TypedEdits.active(t, s) else TypedEdits.covering(t, s, e)
+        val here = if (s == e) TypedEdits.active(t, s) else TypedEdits.covering(t, s, e)
+        // Строка — блок кода: кнопка «Код» нажата и для него (ADR-0049 §5).
+        return if (t.lines.getOrNull(t.lineAt(s)) == LineKind.CODE) here + InlineKind.CODE else here
     }
 
     /** Курсор пришёл в кусок [index] (нажали на него). */
@@ -337,6 +339,27 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         }
         val now = pending ?: TypedEdits.active(t, s)
         pending = if (kind in now) now - kind else now + kind
+    }
+
+    /**
+     * Одна кнопка «Код» (ADR-0049 §5): внутри строки — код в строке; выделены целые строки, курсор на
+     * пустой строке или в блоке кода — блок кода ставится или снимается. В заголовке пункта блока нет.
+     */
+    fun code() {
+        val t = focusedTyped ?: return
+        val (s, e) = selection(t)
+        val title = inList(spot) && spot.widget == Spot.TITLE
+        val a = t.lineAt(s)
+        val b = t.lineAt(e)
+        val empty = s == e && t.lineStart(a) == t.lineEnd(a)
+        val whole = s != e && s == t.lineStart(a) && e == t.lineEnd(b)
+        val inBlock = s == e && t.lines.getOrNull(a) == LineKind.CODE
+        if (!title && (empty || whole || inBlock)) {
+            val all = (a..b).all { t.lines.getOrNull(it) == LineKind.CODE }
+            applyTyped(TypedEdits.lines(t, s, e, if (all) LineKind.PARAGRAPH else LineKind.CODE), snapshot.start, snapshot.end)
+            return
+        }
+        inline(InlineKind.CODE)
     }
 
     /** «Символ»: знак встаёт текстом — оформлением он не станет. */
