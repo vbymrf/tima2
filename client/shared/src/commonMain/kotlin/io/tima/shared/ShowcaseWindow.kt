@@ -62,13 +62,12 @@ internal fun ShowcaseWindow(
     var notice by remember(of) { mutableStateOf<String?>(null) }
     val superFailed = w.superFailed
     editing?.let { doc ->
-        val model = remember(doc) { EditorModel(doc) }
+        val model = remember(doc) { EditorModel(doc, io.tima.core.encryption.TypedOverQuickMarkdown) }
         EditorScreen(
             model = model,
             // Описание — только «всем и всегда»: другой уровень у сообщества не бывает вовсе.
             levels = listOf(MessageCircle.Everyone),
             defaultLevel = 0,
-            typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
             preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
             problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
             onBack = { editing = null; notice = null },

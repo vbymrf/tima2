@@ -28,7 +28,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
@@ -220,7 +219,6 @@ fun EditorScreen(
     model: EditorModel,
     levels: List<MessageCircle>,
     defaultLevel: Int,
-    typingMarks: TypingMarks?,
     preview: (ComposedDoc) -> RichContent?,
     problems: (ComposedDoc) -> List<String>,
     onBack: (ComposedDoc) -> Unit,
@@ -268,9 +266,8 @@ fun EditorScreen(
         }.distinct()
     }
     val level = doc.level ?: defaultLevel
-    // Знаки md включены — знаки в поле спрятаны, набор «как в Word» (EditorMarks).
-    val typing = typingMarks.takeIf { doc.marks }
-    SideEffect { model.typing = typing }
+    // Поле без знаков (ADR-0048): упоминания и метки — цветом, открытый знак — серым.
+    val typing: TypingMarks = model.source
     val active = model.activeInline().map { it.name.lowercase() }.toSet()
 
     // Черновик — через полсекунды после последней правки и при закрытии окна.
@@ -649,7 +646,8 @@ private fun EditorItemView(
     val look = blockStyleOf(item.style)
     when (item) {
         is ComposedItem.Text -> {
-            val value = if (chosen) model.field else androidx.compose.ui.text.input.TextFieldValue(item.source)
+            val shown = model.typedAt(io.tima.domain.chat.Spot(index))
+            val value = if (chosen) model.field else androidx.compose.ui.text.input.TextFieldValue(shown.text)
             val focus = remember { FocusRequester() }
             val keyboard = LocalSoftwareKeyboardController.current
             LaunchedEffect(model.focusAsk) {
@@ -667,7 +665,7 @@ private fun EditorItemView(
                     textAlign = alignOf(look.align),
                 ),
                 cursorBrush = SolidColor(colors.navigation),
-                visualTransformation = rememberEditorView(marks),
+                visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(vertical = 4.dp)
                     .styled(look)
                     .then(if (tooWide) Modifier.border(2.dp, colors.alarm, RoundedCornerShape(6.dp)).padding(4.dp) else Modifier)

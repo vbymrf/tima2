@@ -73,7 +73,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
 
     /** Содержимое сообщения из документа — для тела, проверки и показа. */
     fun content(doc: ComposedDoc): MessageContent {
-        val a = Assembly(doc.marks)
+        val a = Assembly()
         // Метка продолжения в тело не идёт: что ниже неё — отдельное сообщение (Решения §11.3).
         val blocks = doc.split().first.items.filterNot { it.isEmpty || it is ComposedItem.Continuation }.flatMap { a.item(it) }
         // Один абзац без оформления — обычное сообщение: разметка ему ни к чему.
@@ -89,7 +89,11 @@ object ComposedBodiesOverKodium : ComposedBodies {
         )
     }
 
-    private class Assembly(val marks: Boolean) {
+    /**
+     * Сборка тела из документа. Текст куска — набранное со знаками, где знак, набранный текстом,
+     * экранирован (ADR-0048): разбирается всегда, «Знаки md» на сборку не влияют.
+     */
+    private class Assembly {
         val nodes = mutableListOf<String>()
         val ids = mutableListOf<Int>()
         val entities = mutableListOf<MarkupEntity>()
@@ -102,7 +106,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
             return id
         }
 
-        private fun parsed(source: String) = if (marks) QuickMarkdown.parse(source) else QuickMarkdown.plain(source)
+        private fun parsed(source: String) = QuickMarkdown.parse(source)
 
         /** Разобранный кусок — в общий документ: узлы с новыми номерами, блоки и оформление следом. */
         private fun graft(content: MessageContent): List<MarkupBlock> {
@@ -227,11 +231,32 @@ object ComposedBodiesOverKodium : ComposedBodies {
 
     /** Черновик на диске — своя запись, а не доменные классы: их форма вправе меняться. */
     @Serializable
-    private data class SavedDoc(val items: List<SavedItem>, val marks: Boolean = true, val level: Int? = null) {
-        fun toDoc() = ComposedDoc(items.mapNotNull { it.toItem() }.ifEmpty { listOf(ComposedItem.Text("")) }, marks, level)
+    private data class SavedDoc(
+        val items: List<SavedItem>,
+        val marks: Boolean = true,
+        val level: Int? = null,
+        /** 2 — набранное с экранированными знаками-текстом (ADR-0048); прежде выключенные знаки хранились как есть. */
+        val typed: Int = 0,
+    ) {
+        fun toDoc(): ComposedDoc {
+            val doc = ComposedDoc(items.mapNotNull { it.toItem() }.ifEmpty { listOf(ComposedItem.Text("")) }, marks, level)
+            if (marks || typed >= TYPED) return doc
+            // Черновик до 179 со снятыми «Знаками md»: текст был как набран — знаки в нём экранируются.
+            fun esc(text: String) = TypedOverQuickMarkdown.write(io.tima.domain.chat.Typed.plain(text))
+            return doc.copy(
+                items = doc.items.map { item ->
+                    when (item) {
+                        is ComposedItem.Text -> item.copy(source = esc(item.source))
+                        is ComposedItem.Row -> item.copy(cells = item.cells.map { it.copy(text = esc(it.text)) })
+                        else -> item
+                    }
+                },
+            )
+        }
 
         companion object {
-            fun of(doc: ComposedDoc) = SavedDoc(doc.items.map(SavedItem::of), doc.marks, doc.level)
+            const val TYPED = 2
+            fun of(doc: ComposedDoc) = SavedDoc(doc.items.map(SavedItem::of), doc.marks, doc.level, TYPED)
         }
     }
 

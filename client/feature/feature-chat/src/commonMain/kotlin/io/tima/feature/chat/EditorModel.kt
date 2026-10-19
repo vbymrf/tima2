@@ -8,14 +8,16 @@ import androidx.compose.ui.text.input.TextFieldValue
 import io.tima.domain.chat.ComposedDoc
 import io.tima.domain.chat.ComposedItem
 import io.tima.domain.chat.ComposedLayout
-import io.tima.domain.chat.ComposedText
 import io.tima.domain.chat.Drop
 import io.tima.domain.chat.EditHistory
 import io.tima.domain.chat.InlineKind
+import io.tima.domain.chat.LineKind
 import io.tima.domain.chat.ParagraphKind
+import io.tima.domain.chat.PlainTyped
 import io.tima.domain.chat.Spot
-import io.tima.domain.chat.TextEdit
-import io.tima.domain.chat.TypingMarks
+import io.tima.domain.chat.Typed
+import io.tima.domain.chat.TypedEdits
+import io.tima.domain.chat.TypedSource
 
 /**
  * Состояние редактора между нажатиями (Решения §10): документ, где курсор, отменить и повторить.
@@ -25,10 +27,14 @@ import io.tima.domain.chat.TypingMarks
  * пятьдесят шагов кончились бы на одном слове.
  *
  * Место — [Spot]: кусок сверху вниз, ячейка ряда, виджет в ней или текст ячейки.
+ *
+ * Текст в документе — набранное со знаками; поле правит его без знаков ([Typed], ADR-0048): курсор
+ * и выделение — по видимым буквам, Ж/К/Ч ставят отрезок, «Знаки md» превращают набранную пару в
+ * оформление. Перевод туда и обратно — [source].
  */
-class EditorModel(initial: ComposedDoc) {
+class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
 
-    /** Шаг истории: документ, место и выделение в тексте этого места. */
+    /** Шаг истории: документ, место и выделение в видимом тексте этого места. */
     data class Snapshot(
         val doc: ComposedDoc,
         val focus: Int,
@@ -42,13 +48,21 @@ class EditorModel(initial: ComposedDoc) {
 
     private val history = EditHistory(
         initial.items.indexOfLast { it is ComposedItem.Text }.coerceAtLeast(0).let { at ->
-            val len = (initial.items.getOrNull(at) as? ComposedItem.Text)?.source?.length ?: 0
+            val len = (initial.items.getOrNull(at) as? ComposedItem.Text)?.source?.let { source.read(it).text.length } ?: 0
             Snapshot(initial, at, len, len)
         },
     )
 
     var snapshot by mutableStateOf(history.current)
         private set
+
+    /**
+     * Набранное под курсором без знаков, как его правят: отрезки с пробелом на краю (жирный
+     * продолжится после пробела) запись в знаках обрезала бы — поле держит их, пока текст тот же.
+     */
+    private class Live(val spot: Spot, val stored: String, val typed: Typed)
+
+    private var live: Live? = null
 
     /**
      * Поле под курсором — с набором клавиатуры (`composition`): собирать его заново из снимка значило
@@ -65,15 +79,8 @@ class EditorModel(initial: ComposedDoc) {
     /** Последний шаг — набор букв на этом месте: следующая буква склеивается с ним. */
     private var typingIn: Spot? = null
 
-    /**
-     * Разбор знаков быстрого оформления — когда они включены («Знаки md»). Есть — знаки в поле
-     * спрятаны, и набор идёт «как в Word» ([pending], [inline], [changed]); нет — знаки ставятся как
-     * есть.
-     */
-    var typing: TypingMarks? = null
-
-    /** Оформление, которое наденется на следующие набранные буквы: Ж без выделения (Word). */
-    var pending by mutableStateOf<InlineKind?>(null)
+    /** Оформление, которое наденется на следующие набранные буквы вместо продолжения (Ж без выделения, Word). */
+    var pending by mutableStateOf<Set<InlineKind>?>(null)
         private set
 
     /** Просьба к окну поставить курсор в текст под курсором — после «писать после всего». */
@@ -84,8 +91,11 @@ class EditorModel(initial: ComposedDoc) {
     val focus: Int get() = snapshot.focus
     val spot: Spot get() = snapshot.spot
 
-    /** Текст места под курсором: кусок-текст или текст ячейки; курсор не в тексте — `null`. */
+    /** Набранное со знаками в месте под курсором: кусок-текст или текст ячейки; курсор не в тексте — `null`. */
     val focusedText: String? get() = textAt(doc, spot)
+
+    /** То же без знаков — что видно в поле. */
+    val focusedTyped: Typed? get() = focusedText?.let { typedAt(spot) }
 
     val hasSelection: Boolean get() = focusedText != null && snapshot.start != snapshot.end
 
@@ -95,9 +105,29 @@ class EditorModel(initial: ComposedDoc) {
         else -> null
     }
 
+    /** Набранное места [at] без знаков — для поля и его вида. */
+    fun typedAt(at: Spot): Typed {
+        val stored = textAt(doc, at).orEmpty()
+        live?.let { if (it.spot == at && it.stored == stored) return it.typed }
+        return source.read(stored)
+    }
+
+    private fun typedIn(d: ComposedDoc, at: Spot): Typed {
+        val stored = textAt(d, at).orEmpty()
+        live?.let { if (it.spot == at && it.stored == stored) return it.typed }
+        return source.read(stored)
+    }
+
     private fun fieldOf(s: Snapshot): TextFieldValue {
-        val text = textAt(s.doc, s.spot).orEmpty()
+        val text = if (textAt(s.doc, s.spot) == null) "" else typedIn(s.doc, s.spot).text
         return TextFieldValue(text, TextRange(s.start.coerceIn(0, text.length), s.end.coerceIn(0, text.length)))
+    }
+
+    /** Выделение по видимому тексту места под курсором: от меньшего к большему. */
+    private fun selection(t: Typed): Pair<Int, Int> {
+        val s = minOf(snapshot.start, snapshot.end).coerceIn(0, t.text.length)
+        val e = maxOf(snapshot.start, snapshot.end).coerceIn(0, t.text.length)
+        return s to e
     }
 
     private fun publish(push: Boolean, next: Snapshot) {
@@ -126,121 +156,46 @@ class EditorModel(initial: ComposedDoc) {
     fun changedCell(index: Int, cell: Int, value: TextFieldValue) = changedAt(Spot(index, cell, Spot.TEXT), value)
 
     private fun changedAt(at: Spot, typed: TextFieldValue) {
-        val before = textAt(doc, at) ?: return
-        val value = typing?.let { marks -> wordLike(at, before, escaped(before, typed), marks) } ?: typed
+        textAt(doc, at) ?: return
+        val before = typedAt(at)
         if (at != spot) typingIn = null
-        field = value
-        val next = Snapshot(withText(doc, at, value.text), at.item, value.selection.start, value.selection.end, at.cell, at.widget)
-        if (value.text == before) {
+        if (typed.text == before.text) {
             // Только курсор — не шаг истории; курсор ушёл — ожидавшее оформление снято.
-            if (at != spot || value.selection.start != snapshot.start || value.selection.end != snapshot.end) pending = null
-            publish(push = false, next)
+            if (at != spot || typed.selection.start != snapshot.start || typed.selection.end != snapshot.end) pending = null
+            field = typed
+            publish(push = false, Snapshot(doc, at.item, typed.selection.start, typed.selection.end, at.cell, at.widget))
             return
         }
-        val added = value.text.length - before.length
-        val lastChar = value.text.getOrNull(value.selection.start - 1)
-        val word = added == 1 && lastChar != null && !lastChar.isWhitespace()
+        val change = TypedEdits.change(before, typed.text, typed.selection.end, pending, convert = doc.marks, lineSigns = at.cell == -1)
+        pending = null
+        val after = change.typed
+        val cursor = change.cursor
+        val value = when {
+            cursor != null -> TextFieldValue(after.text, TextRange(cursor))
+            after.text == typed.text -> typed
+            else -> TextFieldValue(after.text, TextRange(typed.selection.end.coerceIn(0, after.text.length)))
+        }
+        val stored = source.write(after)
+        live = Live(at, stored, after)
+        field = value
+        val next = Snapshot(withText(doc, at, stored), at.item, value.selection.start, value.selection.end, at.cell, at.widget)
+        val added = after.text.length - before.text.length
+        val lastChar = after.text.getOrNull(value.selection.start - 1)
+        val word = change.cursor == null && added == 1 && lastChar != null && !lastChar.isWhitespace()
         val glue = word && typingIn == at
         publish(push = !glue, next)
         typingIn = if (word) at else null
     }
 
     /**
-     * Набор поверх спрятанных знаков (Word): ожидающее оформление надевается на первую набранную
-     * букву; перевод строки в конце жирного уходит за его знаки, и жирный продолжается на новой
-     * строке; стёртый спрятанный знак стирает видимую букву; пустая пара после стирания убирается.
-     */
-    private fun wordLike(at: Spot, before: String, value: TextFieldValue, marks: TypingMarks): TextFieldValue {
-        if (at != spot || snapshot.start != snapshot.end) return value
-        val c = snapshot.start.coerceIn(0, before.length)
-        val added = value.text.length - before.length
-        if (added > 0 && value.text.regionMatches(0, before, 0, c) && value.text.regionMatches(c + added, before, c, before.length - c)) {
-            val inserted = value.text.substring(c, c + added)
-            val wanted = pending
-            if (wanted != null && inserted.isNotBlank() && !inserted.first().isWhitespace() && '\n' !in inserted) {
-                pending = null
-                val sign = wanted.sign
-                return TextFieldValue(
-                    before.substring(0, c) + sign + inserted + sign + before.substring(c),
-                    TextRange(value.selection.start + sign.length, value.selection.end + sign.length),
-                    value.composition?.let { TextRange(it.start + sign.length, it.end + sign.length) },
-                )
-            }
-            if (inserted == "\n") {
-                val (closed, to) = MarkEdits.closingAt(marks.of(before), c) ?: return value
-                if (to == c) return value
-                pending = closed.singleOrNull()?.let(MarkEdits::kindOf)
-                return TextFieldValue(before.substring(0, to) + "\n" + before.substring(to), TextRange(to + 1))
-            }
-            return value
-        }
-        if (added == -1) {
-            val p = before.indices.firstOrNull { it >= value.text.length || before[it] != value.text[it] } ?: return value
-            val view = HiddenMarks.of(before, marks.of(before))
-            val fixed = if (view.hidden(p)) {
-                MarkEdits.deleteVisible(before, view, p, c, back = c == p + 1)
-                    ?: return TextFieldValue(before, TextRange(c))
-            } else {
-                TextEdit(value.text, value.selection.start, value.selection.end)
-            }
-            MarkEdits.emptyPair(fixed.source, fixed.start)?.let { (edit, kind) ->
-                pending = kind
-                return TextFieldValue(edit.source, TextRange(edit.start))
-            }
-            return TextFieldValue(fixed.source, TextRange(fixed.start, fixed.end))
-        }
-        return value
-    }
-
-    /**
-     * Какие кнопки ленты нажаты: оформление там, где курсор, и ожидающее; при выделении — то, что
+     * Какие кнопки ленты нажаты: оформление там, где курсор, или ожидающее; при выделении — то, что
      * охватывает выделенное целиком (повторное нажатие его снимет).
      */
     fun activeInline(): Set<InlineKind> {
-        val marks = typing ?: return emptySet()
-        val text = focusedText ?: return emptySet()
-        val spans = marks.of(text)
-        val here = if (snapshot.start == snapshot.end) {
-            MarkEdits.activeAt(spans, snapshot.start)
-        } else {
-            val (s, e) = visibleSelection(text, marks)
-            MarkEdits.covering(spans, s, e)
-        }
-        return here + listOfNotNull(pending)
-    }
-
-    /**
-     * Набранное (и вставленное клавиатурой) — знаками не оформляется (заказчик 2026-10-18): знаки
-     * разметки в нём экранируются; курсор и набор клавиатуры сдвигаются вслед.
-     */
-    private fun escaped(before: String, value: TextFieldValue): TextFieldValue {
-        val t = value.text
-        var p = 0
-        while (p < before.length && p < t.length && before[p] == t[p]) p++
-        var q = 0
-        while (q < before.length - p && q < t.length - p && before[before.length - 1 - q] == t[t.length - 1 - q]) q++
-        val end = t.length - q
-        val inserted = t.substring(p, end)
-        if (inserted.isEmpty()) return value
-        val safe = ComposedText.escapeTyped(t.substring(0, p), inserted)
-        if (safe == inserted) return value
-        val d = safe.length - inserted.length
-        fun shift(i: Int) = if (i >= end) i + d else i
-        return TextFieldValue(
-            t.substring(0, p) + safe + t.substring(end),
-            TextRange(shift(value.selection.start), shift(value.selection.end)),
-            value.composition?.let { TextRange(shift(it.start), shift(it.end)) },
-        )
-    }
-
-    /** Выделение без спрятанных знаков по краям. */
-    private fun visibleSelection(text: String, marks: TypingMarks): Pair<Int, Int> {
-        val view = HiddenMarks.of(text, marks.of(text))
-        var s = minOf(snapshot.start, snapshot.end).coerceIn(0, text.length)
-        var e = maxOf(snapshot.start, snapshot.end).coerceIn(0, text.length)
-        while (s < e && view.hidden(s)) s++
-        while (e > s && view.hidden(e - 1)) e--
-        return s to e
+        val t = focusedTyped ?: return emptySet()
+        pending?.let { return it }
+        val (s, e) = selection(t)
+        return if (s == e) TypedEdits.active(t, s) else TypedEdits.covering(t, s, e)
     }
 
     /** Курсор пришёл в кусок [index] (нажали на него). */
@@ -253,7 +208,7 @@ class EditorModel(initial: ComposedDoc) {
         if (at == spot) return
         typingIn = null
         pending = null
-        val len = textAt(doc, at)?.length ?: 0
+        val len = if (textAt(doc, at) == null) 0 else typedAt(at).text.length
         val next = Snapshot(doc, at.item, len, len, at.cell, at.widget)
         publish(push = false, next)
         field = fieldOf(next)
@@ -270,10 +225,13 @@ class EditorModel(initial: ComposedDoc) {
 
     fun select(index: Int) = select(Spot(index))
 
-    private fun applyText(edit: TextEdit) {
+    /** Правка кнопкой: набранное без знаков [after], курсор или выделение [start]…[end]. */
+    private fun applyTyped(after: Typed, start: Int, end: Int = start) {
         typingIn = null
         pending = null
-        val next = Snapshot(withText(doc, spot, edit.source), focus, edit.start, edit.end, snapshot.cell, snapshot.widget)
+        val stored = source.write(after)
+        live = Live(spot, stored, after)
+        val next = Snapshot(withText(doc, spot, stored), focus, start, end, snapshot.cell, snapshot.widget)
         publish(push = true, next)
         field = fieldOf(next)
     }
@@ -281,71 +239,58 @@ class EditorModel(initial: ComposedDoc) {
     /** «Абзац ▾» — только у куска-текста: в ячейке ряда один узел, заголовков там нет. */
     fun paragraph(kind: ParagraphKind) {
         if (snapshot.cell != -1) return
-        val text = focusedText ?: return
-        applyText(ComposedText.paragraph(text, snapshot.start, kind))
+        val t = focusedTyped ?: return
+        val (s, e) = selection(t)
+        applyTyped(TypedEdits.lines(t, s, e, LineKind.of(kind)), snapshot.start, snapshot.end)
     }
 
     /** Вид строки под курсором — для отметки в «Абзац ▾». */
     val paragraphHere: ParagraphKind
-        get() = focusedText?.takeIf { snapshot.cell == -1 }?.let { ComposedText.paragraphAt(it, snapshot.start) } ?: ParagraphKind.PARAGRAPH
+        get() {
+            if (snapshot.cell != -1) return ParagraphKind.PARAGRAPH
+            val t = focusedTyped ?: return ParagraphKind.PARAGRAPH
+            return t.lines.getOrElse(t.lineAt(selection(t).first)) { LineKind.PARAGRAPH }.paragraph
+        }
 
     /**
-     * Ж, К, Ч, З, М, код. Выделено — знаки вокруг выделенного (или сняты). Не выделено и знаки
-     * спрятаны — как в Word (заказчик 2026-10-18): курсор в конце оформленного — оно закрывается,
-     * курсор встаёт за знаки, другой вид начнётся со следующей буквы; иначе вид ждёт буквы — пары
-     * знаков у курсора нет.
+     * Ж, К, Ч, З, М, код. Выделено — отрезок на выделенном (или снят, если он там уже весь). Не
+     * выделено — как в Word: вид наденется на следующие буквы или перестанет продолжаться.
      */
     fun inline(kind: InlineKind) {
-        val text = focusedText ?: return
-        val marks = typing
-        if (marks == null) {
-            applyText(ComposedText.inline(text, snapshot.start, snapshot.end, kind))
+        val t = focusedTyped ?: return
+        val (s, e) = selection(t)
+        if (s != e) {
+            applyTyped(TypedEdits.toggle(t, s, e, kind), snapshot.start, snapshot.end)
             return
         }
-        if (snapshot.start != snapshot.end) {
-            // Выделение на экране захватывает спрятанные знаки по краям — без них: тогда знаки
-            // вокруг выделенного находятся и снимаются, а не оборачиваются второй парой.
-            val (s, e) = visibleSelection(text, marks)
-            applyText(ComposedText.inline(text, s, e, kind))
-            return
-        }
-        val closing = MarkEdits.closingAt(marks.of(text), snapshot.start)
-        if (closing != null) {
-            val (closed, to) = closing
-            typingIn = null
-            publish(push = false, snapshot.copy(start = to, end = to))
-            field = fieldOf(snapshot)
-            pending = if (MarkEdits.styleOf(kind) in closed) null else kind
-            return
-        }
-        pending = if (pending == kind) null else kind
+        val now = pending ?: TypedEdits.active(t, s)
+        pending = if (kind in now) now - kind else now + kind
     }
 
-    /** «Символ». */
+    /** «Символ»: знак встаёт текстом — оформлением он не станет. */
     fun symbol(symbol: String) {
-        val text = focusedText ?: return
-        applyText(ComposedText.symbol(text, snapshot.start, snapshot.end, symbol, doc.marks))
+        val t = focusedTyped ?: return
+        val (s, e) = selection(t)
+        val change = TypedEdits.insert(t, s, e, Typed.plain(symbol))
+        applyTyped(change.typed, change.cursor ?: s)
     }
 
     /**
-     * «С оформл.» и обычная вставка: текст со знаками — туда, где курсор, без экранирования (знаки
-     * в нём и есть оформление). Курсор не в тексте — новым куском после выбранного.
+     * Вставка: [text] — набранное со знаками («С оформл.» из HTML: знаки в нём и есть оформление);
+     * [plain] — простой текст из буфера, знаки в нём — текст. Курсор не в тексте — новым куском
+     * после выбранного.
      */
     fun paste(text: String, plain: Boolean = false) {
         if (text.isEmpty()) return
-        val current = focusedText
-        if (plain && typing != null) {
-            // Простой текст из буфера знаками не оформляется — как набранный.
-            val at = minOf(snapshot.start, snapshot.end).coerceIn(0, current?.length ?: 0)
-            return paste(ComposedText.escapeTyped(current?.substring(0, at).orEmpty(), text))
-        }
-        if (current == null) {
-            insert(ComposedItem.Text(text))
+        val piece = if (plain) Typed.plain(text) else source.read(text)
+        val t = focusedTyped
+        if (t == null) {
+            insert(ComposedItem.Text(source.write(piece)))
             return
         }
-        val s = minOf(snapshot.start, snapshot.end).coerceIn(0, current.length)
-        val e = maxOf(snapshot.start, snapshot.end).coerceIn(0, current.length)
-        applyText(TextEdit(current.substring(0, s) + text + current.substring(e), s + text.length, s + text.length))
+        val (s, e) = selection(t)
+        val change = TypedEdits.insert(t, s, e, piece)
+        applyTyped(change.typed, change.cursor ?: s)
     }
 
     /** Ширина рамкой (заказчик 2026-10-18): между столбцами [boundary] − 1 и [boundary] ряда [item]. */
@@ -403,10 +348,13 @@ class EditorModel(initial: ComposedDoc) {
         pending = null
         val last = doc.items.lastOrNull()
         if (last is ComposedItem.Text) {
-            val source = last.source
-            val text = if (source.isEmpty() || source.endsWith("\n")) source else source + "\n"
             val i = doc.items.lastIndex
-            publish(push = text != source, Snapshot(withText(doc, Spot(i), text), i, text.length, text.length))
+            val t = typedIn(doc, Spot(i))
+            val more = t.text.isNotEmpty() && !t.text.endsWith("\n")
+            val after = if (more) Typed(t.text + "\n", t.lines + LineKind.PARAGRAPH, t.spans) else t
+            val stored = if (more) source.write(after) else last.source
+            if (more) live = Live(Spot(i), stored, after)
+            publish(push = more, Snapshot(withText(doc, Spot(i), stored), i, after.text.length, after.text.length))
         } else {
             val items = doc.items + ComposedItem.Text("")
             publish(push = true, Snapshot(doc.copy(items = items), items.lastIndex, 0, 0))
@@ -454,7 +402,7 @@ class EditorModel(initial: ComposedDoc) {
         typingIn = null
         val (next, at) = op(doc, spot)
         if (next == doc && at == spot) return
-        val len = textAt(next, at)?.length ?: 0
+        val len = if (textAt(next, at) == null) 0 else typedIn(next, at).text.length
         publish(push = true, Snapshot(next, at.item, len, len, at.cell, at.widget))
         field = fieldOf(snapshot)
     }

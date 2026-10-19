@@ -5,11 +5,12 @@ package io.tima.domain.chat
  * собирается из него тем же конвейером, что и набранное (`core-encryption`), и получатель видит
  * узлы и разметку, а не документ.
  *
- * **Текст хранится набранным, со знаками быстрого оформления** (Решения §7): «Абзац ▾», «Ж», «К» и
- * прочие кнопки ставят и снимают знаки, а не держат свою модель. Так у редактора и строки ввода
- * одна грамматика, и «Знаки md» видны как есть.
+ * **Текст хранится набранным, со знаками быстрого оформления**; знак, набранный текстом, в нём
+ * экранирован. Правится он без знаков — строками и отрезками ([Typed], ADR-0048): так у редактора и
+ * строки ввода одна грамматика, а курсор идёт по видимым буквам.
  *
- * @param marks «Знаки md»: выключены — текст уходит как набран, знаки остаются знаками.
+ * @param marks «Знаки md» (ADR-0048): включены — набранная пара и знак строки сразу становятся
+ *   оформлением; выключены — остаются текстом. На сборку тела не влияют.
  * @param level уровень сообщения из шапки; `null` — уровень переписки по умолчанию.
  */
 data class ComposedDoc(
@@ -168,142 +169,6 @@ enum class InlineKind(val sign: String) {
     STRIKE("~~"),
     HIGHLIGHT("=="),
     CODE("`"),
-}
-
-/** Текст и выделение после правки кнопкой. [start] == [end] — курсор. */
-data class TextEdit(val source: String, val start: Int, val end: Int)
-
-/**
- * Правки набранного текста кнопками редактора. Чистые функции над строкой: кнопка ставит или снимает
- * знак, и результат тот же, что набрал бы человек руками.
- */
-object ComposedText {
-
-    private val LINE_SIGN = Regex("""^(\s*)(#{1,3} |--> ?|- )""")
-
-    /** Знаки, которые в начале строки или внутри неё что-то значат (Решения §7). */
-    private const val INLINE_SIGNS = "*+=~`\\|"
-    private const val LINE_SIGNS = "#->"
-
-    /** Сменить вид строки, где стоит курсор. Код — строками ```` ``` ```` над и под ней. */
-    fun paragraph(source: String, cursor: Int, kind: ParagraphKind): TextEdit {
-        val at = cursor.coerceIn(0, source.length)
-        val lineStart = source.lastIndexOf('\n', at - 1) + 1
-        val lineEnd = source.indexOf('\n', at).let { if (it < 0) source.length else it }
-        val line = source.substring(lineStart, lineEnd)
-        // Строка уже в блоке кода — снять его: «Абзац» над кодом значит «больше не код».
-        val fenceAbove = lineStart >= 4 && source.substring(0, lineStart - 1).substringAfterLast('\n').trim() == "```"
-        val fenceBelow = lineEnd < source.length && source.substring(lineEnd + 1).substringBefore('\n').trim() == "```"
-        if (fenceAbove && fenceBelow) {
-            val before = source.substring(0, lineStart - 1).let { it.substring(0, it.lastIndexOf('\n') + 1) }
-            val afterFence = source.substring(lineEnd + 1).let { rest -> rest.indexOf('\n').let { if (it < 0) "" else rest.substring(it) } }
-            val unwrapped = before + line + afterFence
-            val shift = before.length - lineStart
-            return if (kind == ParagraphKind.CODE) TextEdit(unwrapped, at + shift, at + shift)
-            else paragraph(unwrapped, at + shift, kind)
-        }
-        val bare = LINE_SIGN.find(line)?.let { m -> line.substring(m.range.last + 1) } ?: line.trimStart()
-        val replaced = when (kind) {
-            ParagraphKind.CODE -> "```\n$bare\n```"
-            else -> kind.sign + bare
-        }
-        val next = source.substring(0, lineStart) + replaced + source.substring(lineEnd)
-        val prefix = if (kind == ParagraphKind.CODE) 4 else kind.sign.length
-        val inLine = (at - lineStart - (line.length - bare.length)).coerceIn(0, bare.length)
-        val caret = lineStart + prefix + inLine
-        return TextEdit(next, caret, caret)
-    }
-
-    /** Вид строки, где стоит курсор, — чтобы «Абзац ▾» показал выбранное. */
-    fun paragraphAt(source: String, cursor: Int): ParagraphKind {
-        val at = cursor.coerceIn(0, source.length)
-        val lineStart = source.lastIndexOf('\n', at - 1) + 1
-        val line = source.substring(lineStart).substringBefore('\n')
-        val trimmed = line.trimStart()
-        return when {
-            trimmed.startsWith("### ") -> ParagraphKind.HEADING3
-            trimmed.startsWith("## ") -> ParagraphKind.HEADING2
-            trimmed.startsWith("# ") -> ParagraphKind.HEADING1
-            trimmed.startsWith("-->") -> ParagraphKind.QUOTE
-            trimmed.startsWith("- ") -> if (line.length - trimmed.length >= 2) ParagraphKind.LIST2 else ParagraphKind.LIST
-            else -> ParagraphKind.PARAGRAPH
-        }
-    }
-
-    /**
-     * Оформить выделенное или снять оформление. Пробелы по краям выделения остаются снаружи: знак
-     * открывается перед непробельным и закрывается после него (Решения §7), иначе он стал бы текстом.
-     */
-    fun inline(source: String, start: Int, end: Int, kind: InlineKind): TextEdit {
-        var s = minOf(start, end).coerceIn(0, source.length)
-        var e = maxOf(start, end).coerceIn(0, source.length)
-        while (s < e && source[s].isWhitespace()) s++
-        while (e > s && source[e - 1].isWhitespace()) e--
-        val sign = kind.sign
-        if (s == e) {
-            // Ничего не выделено — пара знаков, курсор между ними: дальше человек пишет оформленным.
-            val next = source.substring(0, s) + sign + sign + source.substring(s)
-            return TextEdit(next, s + sign.length, s + sign.length)
-        }
-        val inside = source.substring(s, e)
-        // Знаки внутри выделения — снять.
-        if (inside.length >= 2 * sign.length && inside.startsWith(sign) && inside.endsWith(sign) && !wider(inside, sign)) {
-            val bare = inside.substring(sign.length, inside.length - sign.length)
-            return TextEdit(source.substring(0, s) + bare + source.substring(e), s, s + bare.length)
-        }
-        // Знаки вокруг выделения — снять.
-        val before = source.substring(0, s)
-        val after = source.substring(e)
-        if (before.endsWith(sign) && after.startsWith(sign) && !wider(before.takeLast(sign.length + 1), sign, atEnd = true)) {
-            val next = before.dropLast(sign.length) + inside + after.drop(sign.length)
-            return TextEdit(next, s - sign.length, e - sign.length)
-        }
-        val next = before + sign + inside + sign + after
-        return TextEdit(next, s + sign.length, e + sign.length)
-    }
-
-    /** `*` — часть `**`: курсив не снимается с жирного. */
-    private fun wider(around: String, sign: String, atEnd: Boolean = false): Boolean {
-        if (sign != "*") return false
-        return if (atEnd) around.length >= 2 && around[around.length - 2] == '*' else around.startsWith("**")
-    }
-
-    /**
-     * Набранное в редакторе знаками не оформляется (заказчик 2026-10-18: «Упрощённый формат не
-     * используем в редакторе»): знак разметки экранируется, как у «Символа». [before] — текст до
-     * места вставки: от него зависит, начало ли это строки.
-     */
-    fun escapeTyped(before: String, typed: String): String {
-        val out = StringBuilder()
-        var lineStart = before.substring(before.lastIndexOf('\n') + 1).isBlank()
-        for (ch in typed) {
-            if (ch == '\n') {
-                out.append(ch)
-                lineStart = true
-                continue
-            }
-            if (ch in INLINE_SIGNS || (lineStart && ch in LINE_SIGNS)) out.append('\\')
-            out.append(ch)
-            if (!ch.isWhitespace()) lineStart = false
-        }
-        return out.toString()
-    }
-
-    /**
-     * Вставить знак кнопкой «Символ». Знак разметки экранируется сам (Решения §10.2): человек
-     * вставлял знак, а не оформление.
-     */
-    fun symbol(source: String, start: Int, end: Int, symbol: String, marks: Boolean): TextEdit {
-        val s = minOf(start, end).coerceIn(0, source.length)
-        val e = maxOf(start, end).coerceIn(0, source.length)
-        val lineStart = source.lastIndexOf('\n', s - 1) + 1
-        val atLineStart = source.substring(lineStart, s).isBlank()
-        val escape = marks && symbol.length == 1 &&
-            (symbol[0] in INLINE_SIGNS || (atLineStart && symbol[0] in LINE_SIGNS))
-        val put = if (escape) "\\" + symbol else symbol
-        val next = source.substring(0, s) + put + source.substring(e)
-        return TextEdit(next, s + put.length, s + put.length)
-    }
 }
 
 /**

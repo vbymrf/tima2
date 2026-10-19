@@ -90,7 +90,10 @@ internal fun InputLine(
     typed: String,
     onSet: (String) -> Unit,
     onSend: () -> Unit,
-    typingMarks: io.tima.domain.chat.TypingMarks? = null,
+    /** Набранное со знаками ↔ без знаков (ADR-0048): [typed] — со знаками, поле — без. */
+    source: io.tima.domain.chat.TypedSource = io.tima.domain.chat.PlainTyped,
+    /** «Знаки md»: включены — набранная пара и знак строки сразу становятся оформлением. */
+    marks: Boolean = true,
     /** Редактор; `null` — кнопки нет (комментарии: только строка со знаками, Решения §9). */
     onEditor: (() -> Unit)? = null,
     composed: ComposedLook? = null,
@@ -110,8 +113,29 @@ internal fun InputLine(
     // Поле с местом курсора: эмоджи из области встаёт туда, где курсор, и курсор уходит за него
     // (заказчик 2026-10-18: «курсор не заходит за него»). Текст снаружи сменился (черновик,
     // отправка) — курсор в конец.
-    var field by remember { mutableStateOf(TextFieldValue(typed, TextRange(typed.length))) }
-    val shown = if (field.text == typed) field else TextFieldValue(typed, TextRange(typed.length))
+    // Поле — без знаков (ADR-0048); наружу уходит набранное со знаками. Отрезки с пробелом на краю
+    // запись обрезала бы — поле держит их, пока набранное то же.
+    var live by remember { mutableStateOf<Pair<String, io.tima.domain.chat.Typed>?>(null) }
+    val now = live?.takeIf { it.first == typed }?.second ?: source.read(typed)
+    var field by remember { mutableStateOf(TextFieldValue(now.text, TextRange(now.text.length))) }
+    val shown = if (field.text == now.text) field else TextFieldValue(now.text, TextRange(now.text.length))
+    fun edited(v: TextFieldValue) {
+        if (v.text == now.text) {
+            field = v
+            return
+        }
+        val change = io.tima.domain.chat.TypedEdits.change(now, v.text, v.selection.end, null, convert = marks)
+        val after = change.typed
+        val cursor = change.cursor
+        val stored = source.write(after)
+        live = stored to after
+        field = when {
+            cursor != null -> TextFieldValue(after.text, TextRange(cursor))
+            after.text == v.text -> v
+            else -> TextFieldValue(after.text, TextRange(v.selection.end.coerceIn(0, after.text.length)))
+        }
+        if (stored != typed) onSet(stored)
+    }
     fun open(next: InputArea) {
         keyboard?.hide()
         area = if (area == next) null else next
@@ -141,15 +165,12 @@ internal fun InputLine(
                     }
                     BasicTextField(
                         value = shown,
-                        onValueChange = { v ->
-                            field = v
-                            if (v.text != typed) onSet(v.text)
-                        },
+                        onValueChange = ::edited,
                         // Собрано в редакторе — печатать в разметку нельзя (Решения §9).
                         readOnly = composed != null,
                         textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
                         cursorBrush = SolidColor(colors.navigation),
-                        visualTransformation = rememberEditorView(typingMarks),
+                        visualTransformation = rememberTypedView(now, source, open = marks),
                         modifier = Modifier.fillMaxWidth().testTag(CHAT_INPUT_TAG)
                             .onFocusChanged { if (it.isFocused) area = null },
                     )
@@ -174,8 +195,12 @@ internal fun InputLine(
                 if (typed.isEmpty() && composed == null && onEmojiSend != null) {
                     onEmojiSend(e)
                 } else {
-                    field = shown.inserted(e)
-                    onSet(field.text)
+                    // Эмоджи — текстом, оформление вокруг не продолжает.
+                    val change = io.tima.domain.chat.TypedEdits.insert(now, shown.selection.min, shown.selection.max, io.tima.domain.chat.Typed.plain(e))
+                    val stored = source.write(change.typed)
+                    live = stored to change.typed
+                    field = TextFieldValue(change.typed.text, TextRange(change.cursor ?: change.typed.text.length))
+                    onSet(stored)
                 }
             }
             InputArea.ATTACH -> if (onAttach != null) AttachArea(attachItems, onClose = { area = null }) { item -> area = null; onAttach(item) }

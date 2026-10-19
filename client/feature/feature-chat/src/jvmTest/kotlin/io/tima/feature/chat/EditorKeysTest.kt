@@ -18,7 +18,7 @@ class EditorKeysTest {
 
     @Test
     fun оформление_заголовки_отмена_отправка_назад() {
-        val m = EditorModel(ComposedDoc.of("сбор в 9"))
+        val m = EditorModel(ComposedDoc.of("сбор в 9"), MarkdownTyped)
         m.changed(0, TextFieldValue("сбор в 9", TextRange(0, 4)))
         var sent = 0
         var back = 0

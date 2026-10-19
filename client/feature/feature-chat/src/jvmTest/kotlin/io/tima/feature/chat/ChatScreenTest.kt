@@ -64,17 +64,10 @@ class ChatScreenTest {
     @Test
     fun знаки_в_строке_ввода_спрятаны_а_текст_оформлен() {
         // ADR-0048: закрытая пара — сразу оформление, знаки спрятаны; набранное не меняется.
-        val marks = io.tima.domain.chat.TypingMarks { text ->
-            if (text != "**жирный**") emptyList() else listOf(
-                io.tima.domain.chat.TypingSpan(io.tima.domain.chat.TypingStyle.MARKER, 0, 2),
-                io.tima.domain.chat.TypingSpan(io.tima.domain.chat.TypingStyle.BOLD, 2, 8),
-                io.tima.domain.chat.TypingSpan(io.tima.domain.chat.TypingStyle.MARKER, 8, 10),
-            )
-        }
         val state = ChatState(draft = "**жирный**")
         val plain = capture("чат-ввод-без-знаков", WIDTH, HEIGHT, dark = false) { screen(state) }
         val styled = capture("чат-ввод-знаки", WIDTH, HEIGHT, dark = false) {
-            ChatScreen(typingMarks = marks, state = state, peer = "Аня", caption = "в сети", onSet = {}, onSend = {}, onBack = {})
+            ChatScreen(source = MarkdownTyped, state = state, peer = "Аня", caption = "в сети", onSet = {}, onSend = {}, onBack = {})
         }
         assertTrue(plain.difference(styled) > 0.0, "строка ввода нарисована без оформления")
     }

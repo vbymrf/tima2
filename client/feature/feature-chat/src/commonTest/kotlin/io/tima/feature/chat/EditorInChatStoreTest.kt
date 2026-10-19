@@ -71,9 +71,12 @@ class EditorInChatStoreTest {
         composer = SendComposed(queue, bodies, DedupKeys { "c-${sent.size}" }),
     )
 
-    /** «Знаки md» выключены (ADR-0048): строка уходит как набрана, редактор открывается с выключенными. */
+    /**
+     * «Знаки md» выключены (ADR-0048): строка ввода уже держит знак-текст экранированным — уходит
+     * набранное, как всегда; редактор открывается с выключенными.
+     */
     @Test
-    fun знаки_выключены_строка_уходит_как_набрана() = runTest {
+    fun знаки_выключены_редактор_с_той_же_галочкой() = runTest {
         val md = object : MessageBodyCodec {
             override fun encodeText(text: String) = ("как есть:" + text).encodeToByteArray()
             override fun encodeTyped(text: String) = ("знаки:" + text).encodeToByteArray()
@@ -92,9 +95,9 @@ class EditorInChatStoreTest {
         s.draftChanged("**жирный**")
         s.sendPressed()
         s.marksChanged(false)
-        s.draftChanged("**жирный**")
+        s.draftChanged("\\*\\*жирный\\*\\*")
         s.sendPressed()
-        assertEquals(listOf("знаки:**жирный**", "как есть:**жирный**"), sent)
+        assertEquals(listOf("знаки:**жирный**", "знаки:\\*\\*жирный\\*\\*"), sent)
         s.draftChanged("в редактор")
         assertFalse(s.openEditor()!!.marks, "редактор открыт с той же галочкой")
     }
@@ -169,14 +172,14 @@ class EditorInChatStoreTest {
 
     @Test
     fun модель_набор_подряд_одним_шагом_кнопки_отдельными() {
-        val m = EditorModel(ComposedDoc.of(""))
+        val m = EditorModel(ComposedDoc.of(""), MarkdownTyped)
         for (text in listOf("с", "сб", "сбо", "сбор")) m.changed(0, TextFieldValue(text, TextRange(text.length)))
         m.changed(0, TextFieldValue("сбор ", TextRange(5)))
         m.changed(0, TextFieldValue("сбор в", TextRange(6)))
         m.changed(0, TextFieldValue("сбор в", TextRange(0, 4)))
         m.inline(InlineKind.BOLD)
         assertEquals("**сбор** в", m.focusedText)
-        assertEquals(TextRange(2, 6), m.field.selection, "выделение остаётся на слове")
+        assertEquals(TextRange(0, 4), m.field.selection, "выделение остаётся на слове")
         m.paragraph(ParagraphKind.HEADING1)
         assertEquals("# **сбор** в", m.focusedText)
         m.undo()
@@ -214,7 +217,7 @@ class EditorInChatStoreTest {
 
     @Test
     fun вставка_в_место_курсора_без_экранирования() {
-        val m = EditorModel(ComposedDoc.of("ab"))
+        val m = EditorModel(ComposedDoc.of("ab"), MarkdownTyped)
         m.changed(0, TextFieldValue("ab", TextRange(1)))
         m.paste("**x**")
         assertEquals("a**x**b", m.focusedText)
@@ -226,7 +229,7 @@ class EditorInChatStoreTest {
 
     @Test
     fun модель_ряды_ячейки_и_перенос() {
-        val m = EditorModel(ComposedDoc.of("a"))
+        val m = EditorModel(ComposedDoc.of("a"), MarkdownTyped)
         m.layout(io.tima.domain.chat.ComposedLayout::addRow)
         assertEquals(io.tima.domain.chat.Spot(1, 0), m.spot, "курсор — в первой ячейке нового ряда")
         m.insert(ComposedItem.Widget(ComposedWidget.Emoji("🎉")))

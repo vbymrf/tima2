@@ -155,7 +155,9 @@ object QuickMarkdown {
      * где знак и так не сработает; не сошлось — с экранированием каждого знака пары.
      */
     fun source(content: MessageContent): String? {
-        val markup = content.markup?.takeIf { content.hasMarkup } ?: return content.plainText()
+        // Простое — по строкам абзаца: знак в тексте экранирован, при правке он знаком не станет.
+        val markup = content.markup?.takeIf { content.hasMarkup }
+            ?: return TypedLines.write(content.plainText().split('\n').map { TypedLines.Line(TypedLines.Kind.PARAGRAPH, it) })
         for (escape in listOf(false, true)) {
             val text = Source(content, markup, escape).render() ?: return null
             val back = parse(text)
@@ -216,8 +218,8 @@ object QuickMarkdown {
     /** [OPEN] — открывающий знак без пары: виден серым, оформлением станет, когда наберут закрывающий (ADR-0048). */
     enum class TypingKind { MARKER, OPEN, BOLD, ITALIC, UNDERLINE, STRIKE, HIGHLIGHT, CODE, MENTION, HASHTAG, HEADING, QUOTE }
 
-    private val HEADING = Regex("^(#{1,3}) (.*)$")
-    private val LIST_ITEM = Regex("^( *)- (.*)$")
+    internal val HEADING = Regex("^(#{1,3}) (.*)$")
+    internal val LIST_ITEM = Regex("^( *)- (.*)$")
     private val TABLE_SEPARATOR = Regex("^\\s*\\|?\\s*:?-{3,}:?\\s*(\\|\\s*:?-{3,}:?\\s*)*\\|?\\s*$")
 
     private fun isTableStart(lines: List<String>, i: Int): Boolean =
@@ -381,8 +383,7 @@ object QuickMarkdown {
         }
 
         fun parse(src: String): Pair<String, List<Span>> {
-            val toks = tokenize(src)
-            pair(toks)
+            val toks = pair(tokenize(src))
             val out = StringBuilder()
             val spans = mutableListOf<Span>()
             val openAt = HashMap<Mark, Int>()
@@ -445,6 +446,102 @@ object QuickMarkdown {
             return out.toString()
         }
 
+        /** Виды отрезков, которые набираются знаком пары (ADR-0048): их хранит набранное. */
+        val PAIRED = setOf(EntityType.BOLD, EntityType.ITALIC, EntityType.UNDERLINE, EntityType.STRIKETHROUGH, EntityType.HIGHLIGHT, EntityType.CODE)
+
+        /** Порядок вложения при равных границах: жирный снаружи курсива (`***` — `**` + `*`), код внутри всех. */
+        private val NESTING = listOf(EntityType.BOLD, EntityType.ITALIC, EntityType.UNDERLINE, EntityType.STRIKETHROUGH, EntityType.HIGHLIGHT, EntityType.CODE)
+
+        /**
+         * Отрезки, которые можно записать знаками: только [PAIRED], в границах текста; код без апострофа
+         * внутри и без чужого оформления в себе; одного вида — слиты; края без пробелов (знак пары у
+         * пробела не работает); пересекающийся с соседом — обрезан по нему.
+         */
+        fun normalize(text: String, spans: List<Span>): List<Span> {
+            val len = text.length
+            fun merged(list: List<Span>): List<Span> {
+                val out = mutableListOf<Span>()
+                for (s in list.sortedBy { it.start }) {
+                    val last = out.lastOrNull()
+                    if (last != null && last.type == s.type && s.start <= last.end) out[out.lastIndex] = last.copy(end = maxOf(last.end, s.end)) else out += s
+                }
+                return out
+            }
+            fun trimmed(s: Span): Span? {
+                var a = s.start
+                var b = s.end
+                while (a < b && text[a].isWhitespace()) a++
+                while (b > a && text[b - 1].isWhitespace()) b--
+                return if (b > a) Span(s.type, a, b) else null
+            }
+            val clipped = spans.filter { it.type in PAIRED }
+                .map { Span(it.type, it.start.coerceIn(0, len), it.end.coerceIn(0, len)) }
+                .filter { it.end > it.start }
+            val code = merged(clipped.filter { it.type == EntityType.CODE })
+                .filter { '`' !in text.substring(it.start, it.end) && text.substring(it.start, it.end).isNotBlank() }
+            // Оформление внутри кода не живёт; задевшее код краем — обрезано по нему.
+            val others = clipped.filter { it.type != EntityType.CODE }.mapNotNull { s ->
+                var a = s.start
+                var b = s.end
+                for (c in code) {
+                    if (c.start <= a && b <= c.end) return@mapNotNull null
+                    if (a <= c.start && c.end <= b) continue
+                    if (c.start < a && a < c.end) a = c.end
+                    if (c.start < b && b < c.end) b = c.start
+                }
+                if (b > a) Span(s.type, a, b) else null
+            }
+            val byType = others.groupBy { it.type }.values.flatMap { merged(it) }.mapNotNull(::trimmed)
+            // Пересечение без вложения знаками не записать: позже начавшийся обрезан по раньше начавшемуся.
+            val sorted = (byType + code).sortedWith(compareBy({ it.start }, { -it.end }, { NESTING.indexOf(it.type) })).toMutableList()
+            var k = 0
+            while (k < sorted.size) {
+                val s = sorted[k]
+                val crossing = sorted.subList(0, k).firstOrNull { o -> o.start < s.start && s.start < o.end && o.end < s.end }
+                if (crossing != null) {
+                    val cut = trimmed(s.copy(end = crossing.end))
+                    if (cut == null) sorted.removeAt(k) else { sorted[k] = cut; k++ }
+                    continue
+                }
+                k++
+            }
+            return sorted.sortedWith(compareBy({ it.start }, { -it.end }, { NESTING.indexOf(it.type) }))
+        }
+
+        /**
+         * Строка со знаками по тексту и отрезкам (ADR-0048) — то, что хранит черновик и уходит в
+         * [parse]. Каждый знак пары и обратная косая в тексте экранированы — набранный текстом знак
+         * знаком не станет; адрес в начале слова — как есть: внутри адреса разбор знаков не ищет.
+         * [spans] — уже из [normalize].
+         */
+        fun write(text: String, spans: List<Span>): String {
+            val out = StringBuilder()
+            val open = mutableListOf<Span>()
+            var url = -1
+            for (pos in 0..text.length) {
+                while (open.isNotEmpty() && open.last().end == pos) out.append(sign(open.removeAt(open.lastIndex).type))
+                for (s in spans) if (s.start == pos) { out.append(sign(s.type)); open += s }
+                if (pos == text.length) break
+                val c = text[pos]
+                if (pos >= url && (out.isEmpty() || out.last().isWhitespace() || out.last() in "([{\"'«")) {
+                    URL.find(text.substring(pos))?.let { url = pos + it.value.length }
+                }
+                val inCode = open.any { it.type == EntityType.CODE }
+                if (!inCode && pos >= url && c in "\\*+=~`") out.append('\\')
+                out.append(c)
+            }
+            return out.toString()
+        }
+
+        private fun sign(t: EntityType) = when (t) {
+            EntityType.BOLD -> "**"
+            EntityType.ITALIC -> "*"
+            EntityType.UNDERLINE -> "++"
+            EntityType.HIGHLIGHT -> "=="
+            EntityType.STRIKETHROUGH -> "~~"
+            else -> "`"
+        }
+
         /**
          * Отрезки в координатах **набранного** текста — для строки ввода, где знаки видны серым, а
          * текст уже оформлен (Решения §7). Знак пары, апострофы кода, обратная косая экранирования —
@@ -453,8 +550,7 @@ object QuickMarkdown {
         fun typing(src: String, offset: Int, out: MutableList<TypingMark>) {
             val escapes = mutableListOf<Int>()
             val ticks = mutableListOf<Int>()
-            val toks = tokenize(src, escapes, ticks)
-            pair(toks)
+            val toks = pair(tokenize(src, escapes, ticks))
             for (e in escapes) out += TypingMark(TypingKind.MARKER, offset + e, offset + e + 1)
             // Открывающий апостроф кода без пары — тоже ждёт закрывающего.
             for (t in ticks) out += TypingMark(TypingKind.OPEN, offset + t, offset + t + 1)
@@ -524,6 +620,16 @@ object QuickMarkdown {
                         continue
                     }
                 }
+                // `***` — жирный и курсив вместе; на `**` и `*` его делит разбор пар по тому, что открыто.
+                if (src.startsWith("***", i) && src.getOrNull(i + 3) != '*') {
+                    val before = src.getOrNull(i - 1)
+                    val after = src.getOrNull(i + 3)
+                    val canOpen = after != null && !after.isWhitespace()
+                    val canClose = before != null && !before.isWhitespace()
+                    if (canOpen || canClose) {
+                        flush(); toks += Mark("***", EntityType.BOLD, canOpen, canClose, i); i += 3; continue
+                    }
+                }
                 val pair = PAIRS.firstOrNull { (mark, _) -> src.startsWith(mark, i) }
                 if (pair != null) {
                     val (mark, type) = pair
@@ -543,10 +649,16 @@ object QuickMarkdown {
         }
 
         /** Пары знаков: закрывающий ищет ближайший открывающий того же вида; между ними открытые сгорают. */
-        private fun pair(toks: List<Tok>) {
+        /**
+         * Пары знаков: закрывающий ищет ближайший открывающий того же вида; между ними открытые сгорают.
+         * `***` делится здесь: сверху открыт курсив — `*` + `**` (курсив закрывается первым), иначе
+         * `**` + `*` (жирный снаружи) — так жирный курсив на одном слове читается в обе стороны.
+         */
+        private fun pair(toks: List<Tok>): List<Tok> {
+            val out = mutableListOf<Tok>()
             val stack = mutableListOf<Mark>()
-            for (t in toks) {
-                if (t !is Mark) continue
+            fun step(t: Mark) {
+                out += t
                 if (t.canClose) {
                     val idx = stack.indexOfLast { it.type == t.type && it.raw == t.raw }
                     if (idx >= 0) {
@@ -554,11 +666,22 @@ object QuickMarkdown {
                         opener.pairedWith = t; opener.opener = true
                         t.pairedWith = opener
                         while (stack.size > idx) stack.removeAt(stack.lastIndex)
-                        continue
+                        return
                     }
                 }
                 if (t.canOpen) stack += t
             }
+            for (t in toks) {
+                if (t !is Mark) { out += t; continue }
+                if (t.raw != "***") { step(t); continue }
+                val italicFirst = t.canClose && stack.lastOrNull()?.raw == "*"
+                val first = if (italicFirst) "*" else "**"
+                val second = if (italicFirst) "**" else "*"
+                fun typeOf(raw: String) = if (raw == "*") EntityType.ITALIC else EntityType.BOLD
+                step(Mark(first, typeOf(first), t.canOpen, t.canClose, t.at))
+                step(Mark(second, typeOf(second), t.canOpen, t.canClose, t.at + first.length))
+            }
+            return out
         }
     }
 }

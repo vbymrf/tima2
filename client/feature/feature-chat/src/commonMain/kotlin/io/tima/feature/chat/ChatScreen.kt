@@ -113,7 +113,8 @@ fun ChatScreen(
     /** Отправители, чья личность отменена владельцем (ДУ6, Р30). */
     cancelledSenders: Set<String> = emptySet(),
     /** Строка ввода: знаки серым, текст оформлен (ПЛАН-(РС) РС5); `null` — обычное поле. */
-    typingMarks: io.tima.domain.chat.TypingMarks? = null,
+    /** Набранное со знаками ↔ поле без знаков (ADR-0048). */
+    source: io.tima.domain.chat.TypedSource = io.tima.domain.chat.PlainTyped,
     state: ChatState,
     /** Имя собеседника в шапке. Над сообщениями его нет: в личной переписке подписей нет. */
     peer: String,
@@ -459,8 +460,9 @@ fun ChatScreen(
             typed = state.draft,
             onSet = onSet,
             onSend = onSend,
-            // «Знаки md» выключены — знаки текстом; правка набранного разбирается знаками всегда (ADR-0045).
-            typingMarks = typingMarks.takeIf { state.marks || state.editing > 0 },
+            source = source,
+            // «Знаки md» выключены — набранный знак остаётся текстом; при правке своего — включены (ADR-0045).
+            marks = state.marks || state.editing > 0,
             onEditor = onEditor,
             composed = composed,
             onComposedDrop = onComposedDrop,

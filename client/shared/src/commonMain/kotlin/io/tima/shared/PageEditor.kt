@@ -30,7 +30,7 @@ internal fun PageEditor(
     linkColor: String = "",
     onLinkColor: (String) -> Unit = {},
 ) {
-    val model = remember { EditorModel(state.draft ?: ComposedDoc()) }
+    val model = remember { EditorModel(state.draft ?: ComposedDoc(), io.tima.core.encryption.TypedOverQuickMarkdown) }
     val ew = Tima.words.editor
     var ask by remember { mutableStateOf<String?>(null) }
     val cards = remember { io.tima.core.network.LinkCardsOverHttp() }
@@ -44,7 +44,6 @@ internal fun PageEditor(
         model = model,
         levels = MessageCircle.entries.filter { it != MessageCircle.Secret }.sortedBy { it.level },
         defaultLevel = LEVEL_PAGE,
-        typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
         preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
         problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
         onBack = page::editorBack,

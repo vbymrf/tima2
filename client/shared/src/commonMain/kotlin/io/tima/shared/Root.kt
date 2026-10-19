@@ -4786,8 +4786,8 @@ private fun Chat(
             onUnpin = if (pins != null) store::unpin else null,
             onShowcase = onShowcase,
             cancelledSenders = cancelledSenders,
-            // Знаки быстрого оформления в строке ввода — серым, текст оформлен (ПЛАН-(РС) РС5).
-            typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
+            // Строка ввода правит набранное без знаков (ADR-0048).
+            source = io.tima.core.encryption.TypedOverQuickMarkdown,
             state = state,
             receipt = receipts[chatId],
             onPerson = onPerson,
@@ -5066,7 +5066,7 @@ private fun Chat(
         // Правка своего сообщения (ряд, виджет) — документ исходного; иначе собранный черновик.
         val editingDoc = remember { state.editDoc != null }
         val cw = Tima.words.chat
-        val editorModel = remember { io.tima.feature.chat.EditorModel(state.editDoc ?: state.composed ?: io.tima.domain.chat.ComposedDoc()) }
+        val editorModel = remember { io.tima.feature.chat.EditorModel(state.editDoc ?: state.composed ?: io.tima.domain.chat.ComposedDoc(), io.tima.core.encryption.TypedOverQuickMarkdown) }
         val ew = Tima.words.editor
         var editorNotice by remember { mutableStateOf<String?>(null) }
         var editorAsk by remember { mutableStateOf<String?>(null) }
@@ -5107,7 +5107,6 @@ private fun Chat(
             levels = if (editingDoc) emptyList() else kind?.circles ?: listOf(io.tima.domain.chat.MessageCircle.Secret),
             title = if (editingDoc) Tima.words.chat.editing else null,
             defaultLevel = state.level,
-            typingMarks = io.tima.core.encryption.TypingMarksOverQuickMarkdown,
             preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
             problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
             onBack = { doc ->

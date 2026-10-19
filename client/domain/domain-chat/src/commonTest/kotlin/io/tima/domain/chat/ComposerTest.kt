@@ -6,59 +6,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-/** Редактор (Решения §10): кнопки ставят и снимают знаки так, как набрал бы человек. */
+/** Редактор (Решения §10): история шагов, чип собранного, отправка. Правка текста — [TypedEditsTest]. */
 class ComposerTest {
-
-    @Test
-    fun абзац_меняет_знак_строки_под_курсором() {
-        val src = "первая\nвторая\nтретья"
-        val h = ComposedText.paragraph(src, 9, ParagraphKind.HEADING2)
-        assertEquals("первая\n## вторая\nтретья", h.source)
-        assertEquals(12, h.start, "курсор остаётся на той же букве")
-        assertEquals(ParagraphKind.HEADING2, ComposedText.paragraphAt(h.source, h.start))
-        val q = ComposedText.paragraph(h.source, h.start, ParagraphKind.QUOTE)
-        assertEquals("первая\n--> вторая\nтретья", q.source)
-        val p = ComposedText.paragraph(q.source, q.start, ParagraphKind.PARAGRAPH)
-        assertEquals(src, p.source)
-        assertEquals(ParagraphKind.LIST2, ComposedText.paragraphAt(ComposedText.paragraph(src, 0, ParagraphKind.LIST2).source, 0))
-    }
-
-    @Test
-    fun код_оборачивает_строку_и_снимается_абзацем() {
-        val code = ComposedText.paragraph("a\nfun x()\nb", 4, ParagraphKind.CODE)
-        assertEquals("a\n```\nfun x()\n```\nb", code.source)
-        val back = ComposedText.paragraph(code.source, code.start, ParagraphKind.PARAGRAPH)
-        assertEquals("a\nfun x()\nb", back.source)
-    }
-
-    @Test
-    fun оформление_выделенного_ставится_и_снимается() {
-        val src = "сбор в 9:00 у входа"
-        val bold = ComposedText.inline(src, 7, 11, InlineKind.BOLD)
-        assertEquals("сбор в **9:00** у входа", bold.source)
-        assertEquals("9:00", bold.source.substring(bold.start, bold.end))
-        assertEquals(src, ComposedText.inline(bold.source, bold.start, bold.end, InlineKind.BOLD).source, "знаки вокруг — снять")
-        assertEquals(src, ComposedText.inline(bold.source, 7, 15, InlineKind.BOLD).source, "знаки внутри — снять")
-        assertEquals("сбор в ***9:00*** у входа", ComposedText.inline(bold.source, bold.start, bold.end, InlineKind.ITALIC).source,
-            "курсив поверх жирного — не снятие жирного")
-    }
-
-    @Test
-    fun пробелы_по_краям_выделения_остаются_снаружи() {
-        assertEquals("a ==b== c", ComposedText.inline("a b c", 1, 4, InlineKind.HIGHLIGHT).source)
-        val empty = ComposedText.inline("ab", 1, 1, InlineKind.STRIKE)
-        assertEquals("a~~~~b", empty.source)
-        assertEquals(3, empty.start)
-    }
-
-    @Test
-    fun знак_разметки_кнопкой_экранируется() {
-        assertEquals("a\\*b", ComposedText.symbol("ab", 1, 1, "*", marks = true).source)
-        assertEquals("\\# x", ComposedText.symbol(" x", 0, 0, "#", marks = true).source)
-        assertEquals("a#", ComposedText.symbol("a", 1, 1, "#", marks = true).source, "внутри строки «#» ничего не значит")
-        assertEquals("a*", ComposedText.symbol("a", 1, 1, "*", marks = false).source, "знаки выключены — экранировать незачем")
-        assertEquals("a b", ComposedText.symbol("ab", 1, 1, " ", marks = true).source)
-    }
 
     @Test
     fun история_на_50_шагов() {

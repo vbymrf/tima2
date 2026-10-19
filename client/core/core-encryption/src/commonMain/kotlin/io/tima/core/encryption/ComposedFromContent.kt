@@ -103,9 +103,10 @@ internal object ComposedFromContent {
                 blocks = blocks.map(::remap),
             ),
         )
-        // Один абзац без оформления разбор отдаёт простым текстом, без разметки, — сверять не с чем.
+        // Один абзац без оформления разбор отдаёт простым текстом, без разметки, — сверять не с чем;
+        // знак в его тексте экранирован, как у набранного (ADR-0048).
         val plain = sub.markup?.let { m -> m.entities.isEmpty() && m.blocks.singleOrNull()?.let { it.type == BlockType.PARAGRAPH && it.children.isEmpty() } == true } == true
-        return if (plain) sub.nodes.single() else QuickMarkdown.source(sub)
+        return if (plain) QuickMarkdown.source(MessageContent.text(sub.nodes.single())) else QuickMarkdown.source(sub)
     }
 
     private fun widget(content: MessageContent, b: MarkupBlock): ComposedWidget? {

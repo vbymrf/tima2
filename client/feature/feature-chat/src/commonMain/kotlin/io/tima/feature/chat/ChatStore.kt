@@ -1101,7 +1101,8 @@ class ChatStore(
             ?: NickReply.target(text, _state.value.names, known)
                 ?.takeIf { _state.value.group }
                 ?.let { (who, number) -> ReplyTarget(kind = "group", chatId = chatId, messageId = number, userId = who) }
-        val outcome = send.send(chatId, text, _state.value.level, marks = _state.value.marks, reply = reply)
+        // Набранное — всегда со знаками: знак, набранный текстом, в нём экранирован (ADR-0048).
+        val outcome = send.send(chatId, text, _state.value.level, reply = reply)
 
         _state.value = when (outcome) {
             // Принято: поле чистим — сообщение уже в списке.
@@ -1218,7 +1219,7 @@ data class ChatState(
     val droppedComposed: ComposedDoc? = null,
     /** Серверный номер исправляемого (ADR-0045); 0 — правки нет, отправка — новое сообщение. */
     val editing: Long = 0,
-    /** «Знаки md» (ADR-0048): выключены — набранное уходит как есть, знаки остаются текстом. */
+    /** «Знаки md» (ADR-0048): выключены — набранная пара и знак строки остаются текстом. */
     val marks: Boolean = true,
     /** На что отвечаем (Решения §11.1); `null` — не ответ. */
     val replyTo: ReplyDraft? = null,

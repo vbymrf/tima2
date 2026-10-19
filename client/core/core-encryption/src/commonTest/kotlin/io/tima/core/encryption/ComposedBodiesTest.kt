@@ -51,11 +51,22 @@ class ComposedBodiesTest {
         assertEquals(RichBlock.Emoji("🎉"), row.cells[1].widgets.single())
     }
 
+    /** ADR-0048: знак, набранный текстом, в документе экранирован — в тело уходит текстом. */
     @Test
     fun знаки_выключены_текст_как_есть() {
-        val content = bodies.content(ComposedDoc.of("**не жирный**", marks = false))
+        val typed = TypedOverQuickMarkdown.write(io.tima.domain.chat.Typed.plain("**не жирный**"))
+        val content = bodies.content(ComposedDoc.of(typed, marks = false))
         assertEquals(listOf("**не жирный**"), content.nodes)
         assertNull(content.markup)
+    }
+
+    /** Черновик до 179 со снятыми «Знаками md» хранил текст как набран — при чтении знаки экранируются. */
+    @Test
+    fun прежний_черновик_без_знаков_читается_текстом() {
+        val old = bodies.load("""{"items":[{"text":"**x** # y"}],"marks":false}""")!!
+        assertEquals(listOf("**x** # y"), bodies.content(old).nodes)
+        val kept = bodies.load("""{"items":[{"text":"**x**"}],"marks":true}""")!!
+        assertEquals(listOf("x"), bodies.content(kept).nodes, "со знаками — как было")
     }
 
     @Test

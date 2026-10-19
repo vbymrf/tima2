@@ -293,7 +293,8 @@ private fun EditorCell(
         },
     ) {
         Caption("$percent%", fontSize = 9.sp, color = colors.text3)
-        val value = if (spot == textSpot) model.field else TextFieldValue(cell.text)
+        val shown = model.typedAt(textSpot)
+        val value = if (spot == textSpot) model.field else TextFieldValue(shown.text)
         BasicTextField(
             value = value,
             onValueChange = { v -> model.changedCell(index, c, v) },
@@ -303,7 +304,7 @@ private fun EditorCell(
                 textAlign = alignOf(look.align),
             ),
             cursorBrush = SolidColor(colors.navigation),
-            visualTransformation = rememberEditorView(marks),
+            visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks),
             modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp)
                 .onFocusChanged { if (it.isFocused) model.focusedCell(index, c) }
                 .testTag(EditorTags.cellText(index, c)),
