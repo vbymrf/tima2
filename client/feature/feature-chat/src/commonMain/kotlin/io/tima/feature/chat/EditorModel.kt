@@ -66,6 +66,12 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
      */
     private var sticky: LineKind = LineKind.PARAGRAPH
 
+    /**
+     * Адрес из текста стал блоком-кнопкой (ADR-0050 §3) — окно может заменить её карточкой из сети
+     * ([replaceLink]), если включены «Карточки ссылок».
+     */
+    var onLink: ((String) -> Unit)? = null
+
     var snapshot by mutableStateOf(history.current)
         private set
 
@@ -235,7 +241,78 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         publish(push = !glue, next)
         typingIn = if (word) at else null
         // Набрали «- » в куске-тексте — строка стала пунктом: кусок «Список» (ADR-0049 §4).
-        if (lifts(at, after)) moved(ComposedLists.lift(doc, source, untitled, at, value.selection.end))
+        if (lifts(at, after)) {
+            moved(ComposedLists.lift(doc, source, untitled, at, value.selection.end))
+            return
+        }
+        // Адрес дописан (пробел, перевод строки после него) или вставлен — блок-ссылка (ADR-0050 §3).
+        if (!(inList(at) && at.widget == Spot.TITLE) && (added > 1 || (added == 1 && lastChar?.isWhitespace() == true))) linkOut(at, after)
+    }
+
+    /** Первый законченный адрес вне кода — из текста в блок-ссылку на его месте. */
+    private fun linkOut(at: Spot, t: Typed) {
+        val code = t.spans.filter { it.kind == InlineKind.CODE }
+        val r = io.tima.domain.chat.TextLinks.find(t.text).firstOrNull { r ->
+            val after = t.text.getOrNull(r.last + 1)
+            (after == null || after.isWhitespace()) && t.lines.getOrNull(t.lineAt(r.first)) != LineKind.CODE &&
+                code.none { it.start <= r.last && r.first < it.end }
+        } ?: return
+        val url = t.text.substring(r)
+        val widget = io.tima.domain.chat.ComposedWidget.Link(io.tima.domain.chat.TextLinks.openable(url), mode = "button")
+        // Пробел за адресом уходит вместе с ним.
+        val end = if (t.text.getOrNull(r.last + 1) == ' ') r.last + 2 else r.last + 1
+        val line = t.lineAt(r.first)
+        val lineStart = t.lineStart(line)
+        val lineEnd = t.lineEnd(line)
+        val head = if (line > 0) ComposedLists.slice(t, 0, line) else null
+        val leftPart = ComposedLists.cut(t, lineStart, r.first).copy(lines = listOf(t.lines[line]))
+        val before = if (head != null) ComposedLists.join(head, leftPart) else leftPart
+        val rest = ComposedLists.cut(t, end.coerceAtMost(lineEnd), lineEnd).copy(lines = listOf(t.lines[line]))
+        val below = if (line + 1 < t.lines.size) ComposedLists.slice(t, line + 1, t.lines.size) else null
+        val after = if (below == null) rest else ComposedLists.join(rest, below)
+        typingIn = null
+        pending = null
+        live = null
+        val item = doc.items[at.item]
+        val next: Snapshot = if (item is ComposedItem.Text && at.cell == -1) {
+            // Текст режется на месте адреса: до — кусок, ссылка — блоком, после — кусок.
+            val pieces = buildList {
+                if (before.text.isNotEmpty()) add(ComposedItem.Text(source.write(before), item.style))
+                add(ComposedItem.Widget(widget))
+                add(ComposedItem.Text(source.write(after), item.style))
+            }
+            val items = doc.items.subList(0, at.item) + pieces + doc.items.subList(at.item + 1, doc.items.size)
+            Snapshot(doc.copy(items = items), at.item + pieces.lastIndex, 0, 0)
+        } else {
+            // В ячейке и пункте — адрес из текста, ссылка — в их виджеты.
+            val stored = source.write(ComposedLists.join(before, after.takeIf { it.text.isNotEmpty() }))
+            val withoutUrl = withText(doc, at, stored)
+            val cursor = before.text.length
+            val placed = when (val host = withoutUrl.items[at.item]) {
+                is ComposedItem.Row -> host.copy(cells = host.cells.mapIndexed { c, cell -> if (c == at.cell) cell.copy(widgets = cell.widgets + widget) else cell })
+                is ComposedItem.ItemList -> host.copy(items = host.items.mapIndexed { c, point -> if (c == at.cell) point.copy(widgets = point.widgets + widget) else point })
+                else -> host
+            }
+            Snapshot(withoutUrl.copy(items = withoutUrl.items.toMutableList().apply { set(at.item, placed) }), at.item, cursor, cursor, at.cell, at.widget)
+        }
+        publish(push = true, next)
+        field = fieldOf(next)
+        focusAsk++
+        onLink?.invoke(widget.url)
+    }
+
+    /** Кнопку-ссылку [url] заменить [widget] (карточкой из сети) — где бы она ни стояла. */
+    fun replaceLink(url: String, widget: io.tima.domain.chat.ComposedWidget.Link) {
+        fun swap(w: io.tima.domain.chat.ComposedWidget) = if (w is io.tima.domain.chat.ComposedWidget.Link && w.url == url && w.mode == "button" && w.title.isEmpty()) widget else w
+        val items = doc.items.map { item ->
+            when (item) {
+                is ComposedItem.Widget -> item.copy(widget = swap(item.widget))
+                is ComposedItem.Row -> item.copy(cells = item.cells.map { c -> c.copy(widgets = c.widgets.map(::swap)) })
+                is ComposedItem.ItemList -> item.copy(items = item.items.map { p -> p.copy(widgets = p.widgets.map(::swap)) })
+                else -> item
+            }
+        }
+        if (items != doc.items) publish(push = false, snapshot.copy(doc = doc.copy(items = items)))
     }
 
     /** Запомнить вид строки под курсором — для следующего пустого поля; пункт списка не в счёт. */

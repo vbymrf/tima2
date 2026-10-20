@@ -186,6 +186,11 @@ internal object RichMapper {
             val end = (e.start + e.length).coerceIn(start, text.length)
             if (end <= start) null else RichSpan(kind, start, end, e.attribute.ifEmpty { e.url })
         }
-        return RichText(text, spans)
+        // Адрес текстом без отрезка-ссылки — тоже ссылка (ADR-0050 §3): показ нашим видом, «Перейти · домен».
+        // В коде и поверх ссылки — нет.
+        val taken = spans.filter { it.kind == SpanKind.LINK || it.kind == SpanKind.CODE }
+        val found = io.tima.domain.chat.TextLinks.find(text).filter { r -> taken.none { it.start <= r.last && r.first < it.end } }
+            .map { r -> RichSpan(SpanKind.LINK, r.first, r.last + 1, io.tima.domain.chat.TextLinks.openable(text.substring(r))) }
+        return RichText(text, spans + found)
     }
 }

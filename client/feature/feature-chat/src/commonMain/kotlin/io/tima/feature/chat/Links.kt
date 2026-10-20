@@ -219,18 +219,11 @@ private fun cut(text: io.tima.domain.chat.RichText, ranges: List<IntRange>): io.
     })
 }
 
-/** Адреса в простом тексте: `https://…`, `http://…`, `www.…` — те же, что узнаёт быстрое оформление. */
-private val PLAIN_URL = Regex("""(https?://|www\.)[^\s<>"«»]+""")
+/** Адреса в простом тексте — одна грамматика с показом и редактором ([io.tima.domain.chat.TextLinks], ADR-0050 §3). */
+internal fun urlsIn(text: String): List<IntRange> = io.tima.domain.chat.TextLinks.find(text)
 
-/** Адрес с отрезанными знаками препинания в конце: точка после ссылки — конец предложения. */
-internal fun urlsIn(text: String): List<IntRange> = PLAIN_URL.findAll(text).map { m ->
-    var end = m.range.last
-    while (end > m.range.first && text[end] in ".,;:!?)]}") end--
-    m.range.first..end
-}.toList()
-
-/** Адрес для открытия: `www.` — с `https://`. */
-internal fun openable(url: String): String = if (url.startsWith("www.")) "https://$url" else url
+/** Адрес для открытия: без схемы — с `https://`. */
+internal fun openable(url: String): String = io.tima.domain.chat.TextLinks.openable(url)
 
 /** Ссылка в тексте: цвет ссылок и нажатие — через [rememberLinkOpen]. */
 internal fun AnnotatedString.Builder.linkAt(start: Int, end: Int, url: String, color: androidx.compose.ui.graphics.Color, open: (String) -> Unit) {

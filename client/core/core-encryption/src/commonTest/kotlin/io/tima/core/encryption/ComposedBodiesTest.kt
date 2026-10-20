@@ -134,6 +134,15 @@ class ComposedBodiesTest {
         assertEquals(3, ComposedFromContent.quotedLines(io.tima.crypto.MarkupWidget(cut = "cut")))
     }
 
+    /** ADR-0050 §3: адрес текстом в оформленном сообщении — ссылкой у получателя; в коде — нет. */
+    @Test
+    fun адрес_текстом_становится_ссылкой_при_показе() {
+        val content = bodies.content(ComposedDoc.of("**сбор** у tima.ru/вход и `x.ru`"))
+        val p = assertIs<RichBlock.Paragraph>(RichMapper.from(content)!!.blocks.single())
+        val links = p.text.spans.filter { it.kind == io.tima.domain.chat.SpanKind.LINK }
+        assertEquals(listOf("https://tima.ru/вход"), links.map { it.attribute })
+    }
+
     /** ADR-0048: знак, набранный текстом, в документе экранирован — в тело уходит текстом. */
     @Test
     fun знаки_выключены_текст_как_есть() {

@@ -196,6 +196,27 @@ class EditorTypedTest {
         assertNull(m.listHere, "курсор вне списка — свойств нет")
     }
 
+    /** ADR-0050 §3: дописанный адрес — блок-кнопка на его месте; в коде — текст; окну — адрес для карточки. */
+    @Test
+    fun адрес_в_тексте_становится_блоком() {
+        val m = model("")
+        var asked: String? = null
+        m.onLink = { asked = it }
+        m.typeHere("см tima.ru дальше")
+        assertEquals(
+            listOf(ComposedItem.Text("см "), ComposedItem.Widget(ComposedWidget.Link("https://tima.ru", mode = "button")), ComposedItem.Text("дальше")),
+            m.doc.items,
+        )
+        assertEquals("https://tima.ru", asked)
+        assertEquals(Spot(2), m.spot, "писать дальше — после ссылки")
+        m.replaceLink("https://tima.ru", ComposedWidget.Link("https://tima.ru", "ТИМА", "card"))
+        assertEquals(ComposedWidget.Link("https://tima.ru", "ТИМА", "card"), (m.doc.items[1] as ComposedItem.Widget).widget, "кнопка стала карточкой")
+
+        val code = model("")
+        code.typeHere("`tima.ru` ")
+        assertTrue(code.doc.items.single() is ComposedItem.Text, "в коде адрес — текст")
+    }
+
     /** Enter в заголовке — кнопкой действия клавиатуры (2026-10-20): второй пункт, курсор в нём. */
     @Test
     fun enter_кнопкой_даёт_второй_пункт() {

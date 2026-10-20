@@ -5097,6 +5097,22 @@ private fun Chat(
             if (p != null) put(io.tima.domain.chat.ComposedWidget.Place(p.first, p.second)) else { editorNotice = noPlaceAccess; editorAsk = "place" }
         }
         val linkCards = remember { io.tima.core.network.LinkCardsOverHttp() }
+        // Адрес из текста стал кнопкой (ADR-0050 §3); включены «Карточки ссылок» — кнопка становится карточкой из сети.
+        val linkSettings by environment.settings.all().collectAsState(initial = emptyMap())
+        val cardsOnNow by androidx.compose.runtime.rememberUpdatedState(linkSettings[LINK_CARDS_KEY] != "0")
+        androidx.compose.runtime.SideEffect {
+            editorModel.onLink = { url ->
+                if (cardsOnNow) scope.launch {
+                    val card = linkCards.card(url) ?: return@launch
+                    val image = card.image?.let { bytes ->
+                        val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(bytes) }
+                        val up = prepared?.let { editorUploads.upload(it.full, "image/jpeg", null, null) }
+                        if (prepared != null && up != null) io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", prepared.width, prepared.height, prepared.full.size.toLong()) else null
+                    }
+                    editorModel.replaceLink(url, io.tima.domain.chat.ComposedWidget.Link(url, card.title, "card", card.description, image))
+                }
+            }
+        }
         val replyLines = remember(state.lines) { state.lines.filter { !it.outgoing && it.serverId > 0 }.take(30) }
         val pickList = remember(editorChoice) {
             if (editorChoice == "picks" || editorChoice == "underlay") environment.picks.list(io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community)) else emptyList()
