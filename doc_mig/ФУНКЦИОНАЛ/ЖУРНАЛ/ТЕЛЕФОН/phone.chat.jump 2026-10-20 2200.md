@@ -1,6 +1,6 @@
 # phone.chat.jump 2026-10-20 2200
 
-**Версия:** 2.0.187-dev-v2 (вершина — в журнале работ, строка 75)
+**Версия:** 2.0.187-dev-v2 вершина `b2e26e1f`
 **Чем:** Samsung (Android, `192.168.1.159`); Maestro `maestro/ref-jump.yaml`; автотест `FeedJumpTopTest` (`:feature:feature-chat:jvmTest`)
 
 | Код | Что проверяли | Как | Итог |
