@@ -57,7 +57,7 @@ class ReferencesInChatStoreTest {
     @Test
     fun чего_нет_в_ленте_спрашивается_один_раз() = runTest {
         val s = store(backgroundScope)
-        stream.value = listOf(line(2, RichBlock.Quoted("group", "g-9", 7, author = false, cut = "cut")), line(1))
+        stream.value = listOf(line(2, RichBlock.Quoted("group", "g-9", 7, author = false, lines = 3)), line(1))
         runCurrent()
         stream.value = stream.value.toList()
         runCurrent()

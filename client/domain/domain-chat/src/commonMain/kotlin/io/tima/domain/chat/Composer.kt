@@ -162,16 +162,35 @@ sealed interface ComposedWidget {
     data class Reply(val target: ReplyTarget) : ComposedWidget
 
     /**
-     * Из подборки — ссылка на сообщение, а не копия (Решения §10.4, §11.2). [author] — галочка
-     * «имя владельца»; [cut] — `full` или `cut` (по высоте соседа в ряду, нет соседа — три строки).
+     * Подборка (ADR-0050 §1): ссылка на сообщение, а не копия, — сокращённо в пузыре. [author] — имя
+     * владельца; [lines] — строк, 0 — целиком; [more] — кнопка «Продолжить» (пусто — нет, `default`,
+     * `blank`, `custom` с текстом [moreText]); [tap] — нажимается всё сообщение.
      */
-    data class Quoted(val kind: String, val container: String, val message: Long, val author: Boolean = true, val cut: String = "") : ComposedWidget
+    data class Quoted(
+        val kind: String,
+        val container: String,
+        val message: Long,
+        val author: Boolean = true,
+        val lines: Int = 3,
+        val more: String = "",
+        val moreText: String = "",
+        val tap: Boolean = false,
+    ) : ComposedWidget
 
     /**
-     * Подкладка (Решения §11.3): часть сообщения-источника ниже, без пузыря, [lines] строк и
-     * «Продолжить чтение»; [author] — автор первым. Только в конце сообщения, несколько — списком.
+     * Подкладка (ADR-0050 §1): сообщение-источник целиком под пузырём, текстом, склеено с соседними;
+     * только в конце сообщения. Свойства — те же, что у подборки.
      */
-    data class Underlay(val kind: String, val container: String, val message: Long, val lines: Int = 3, val author: Boolean = false) : ComposedWidget
+    data class Underlay(
+        val kind: String,
+        val container: String,
+        val message: Long,
+        val lines: Int = 0,
+        val author: Boolean = false,
+        val more: String = "",
+        val moreText: String = "",
+        val tap: Boolean = false,
+    ) : ComposedWidget
 }
 
 /** Вид абзаца — «Абзац ▾» (Решения §10.2). */

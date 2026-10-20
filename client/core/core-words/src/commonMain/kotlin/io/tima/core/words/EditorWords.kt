@@ -75,6 +75,15 @@ interface EditorWords {
     val listChoose: String
     /** «Стиль → Свойства»: у выбранного своих свойств нет (ADR-0050 §2). */
     val noProps: String
+    /** Свойства подборки и подкладки (ADR-0050 §1). */
+    val linesAll: String
+    val tapWhole: String
+    /** Кнопка «Продолжить»: пусто — нет, `default`, `blank`, `custom`. */
+    fun moreMode(mode: String): String
+    /** «Подкладка»: несколько сообщений; «Списком» — до 100 списком подборок. */
+    val asList: String
+    val insertPicked: String
+    fun pickedOf(n: Int, max: Int): String
     /** «Разметка → Виджет» (ПЛАН-(ВД)): виджеты с особым действием. */
     /** «Абзац ▾», второй ряд: «Список: 1 2 3 уровень» (заказчик 2026-10-19). */
     val listRow: String
@@ -256,6 +265,17 @@ object RussianEditorWords : EditorWords {
     override val listFlat = "Без отступа"
     override val listChoose = "Встаньте в список, чтобы задать его свойства"
     override val noProps = "У этого блока своих свойств нет — общие ниже в «Стиле»"
+    override val linesAll = "Целиком"
+    override val tapWhole = "Нажимается целиком"
+    override fun moreMode(mode: String) = when (mode) {
+        "default" -> "«Продолжить чтение»"
+        "blank" -> "Кнопка без текста"
+        "custom" -> "Свой текст"
+        else -> "Без кнопки"
+    }
+    override val asList = "Списком"
+    override val insertPicked = "Вставить"
+    override fun pickedOf(n: Int, max: Int) = "Выбрано $n из $max"
     override val listRow = "Список:"
     override val levelWord = "уровень"
     override val widgetPoll = "Опрос"
@@ -432,6 +452,17 @@ object EnglishEditorWords : EditorWords {
     override val listFlat = "No indent"
     override val listChoose = "Put the cursor in a list to set its properties"
     override val noProps = "This block has no properties of its own — the common ones are in \"Style\""
+    override val linesAll = "Whole"
+    override val tapWhole = "Tap anywhere"
+    override fun moreMode(mode: String) = when (mode) {
+        "default" -> "\"Continue reading\""
+        "blank" -> "Button without text"
+        "custom" -> "Own text"
+        else -> "No button"
+    }
+    override val asList = "As a list"
+    override val insertPicked = "Insert"
+    override fun pickedOf(n: Int, max: Int) = "$n of $max chosen"
     override val listRow = "List:"
     override val levelWord = "level"
     override val widgetPoll = "Poll"
@@ -604,6 +635,17 @@ object SpanishEditorWords : EditorWords {
     override val listFlat = "Sin sangría"
     override val listChoose = "Sitúate en una lista para ajustar sus propiedades"
     override val noProps = "Este bloque no tiene propiedades propias; las comunes están en «Estilo»"
+    override val linesAll = "Entero"
+    override val tapWhole = "Se pulsa entero"
+    override fun moreMode(mode: String) = when (mode) {
+        "default" -> "«Seguir leyendo»"
+        "blank" -> "Botón sin texto"
+        "custom" -> "Texto propio"
+        else -> "Sin botón"
+    }
+    override val asList = "En lista"
+    override val insertPicked = "Insertar"
+    override fun pickedOf(n: Int, max: Int) = "Elegidos $n de $max"
     override val listRow = "Lista:"
     override val levelWord = "nivel"
     override val widgetPoll = "Encuesta"

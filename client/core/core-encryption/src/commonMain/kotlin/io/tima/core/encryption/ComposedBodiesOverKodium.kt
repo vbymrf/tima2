@@ -248,11 +248,17 @@ object ComposedBodiesOverKodium : ComposedBodies {
             )
             is ComposedWidget.Quoted -> MarkupBlock(
                 type = BlockType.QUOTED,
-                widget = MarkupWidget(ref = MarkupRef(kind = w.kind, container = w.container, message = w.message), author = w.author, cut = w.cut),
+                widget = MarkupWidget(
+                    ref = MarkupRef(kind = w.kind, container = w.container, message = w.message),
+                    author = w.author, lines = w.lines, more = w.more, moreText = w.moreText, tap = w.tap,
+                ),
             )
             is ComposedWidget.Underlay -> MarkupBlock(
                 type = BlockType.UNDERLAY,
-                widget = MarkupWidget(ref = MarkupRef(kind = w.kind, container = w.container, message = w.message), author = w.author, lines = w.lines),
+                widget = MarkupWidget(
+                    ref = MarkupRef(kind = w.kind, container = w.container, message = w.message),
+                    author = w.author, lines = w.lines, more = w.more, moreText = w.moreText, tap = w.tap,
+                ),
             )
         }
 
@@ -400,6 +406,11 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val description: String = "",
         val lines: Int = 0,
         val color: String = "",
+        /** Строк задано (ADR-0050): у прежних черновиков подборки его нет — тогда по [cut]. */
+        val linesSet: Boolean = false,
+        val more: String = "",
+        val moreText: String = "",
+        val tap: Boolean = false,
     ) {
         private fun media(): OutMedia? = if (mediaId.isEmpty()) null else
             OutMedia(mediaId, Base64.decode(key), mime, width, height, size, Base64.decode(preview), name)
@@ -412,8 +423,8 @@ object ComposedBodiesOverKodium : ComposedBodies {
             "contact" -> ComposedWidget.Contact(name, phone, userId)
             "emoji" -> ComposedWidget.Emoji(text)
             "reply" -> ComposedWidget.Reply(ReplyTarget(kind, chatId, messageId, userId))
-            "quoted" -> ComposedWidget.Quoted(kind, chatId, messageId, author, cut)
-            "underlay" -> ComposedWidget.Underlay(kind, chatId, messageId, lines.coerceAtLeast(1), author)
+            "quoted" -> ComposedWidget.Quoted(kind, chatId, messageId, author, if (linesSet) lines else if (cut == "full") 0 else 3, more, moreText, tap)
+            "underlay" -> ComposedWidget.Underlay(kind, chatId, messageId, lines, author, more, moreText, tap)
             else -> null
         }
 
@@ -437,10 +448,12 @@ object ComposedBodiesOverKodium : ComposedBodies {
                     "reply", kind = w.target.kind, chatId = w.target.chatId, messageId = w.target.messageId, userId = w.target.userId,
                 )
                 is ComposedWidget.Quoted -> SavedWidget(
-                    "quoted", kind = w.kind, chatId = w.container, messageId = w.message, author = w.author, cut = w.cut,
+                    "quoted", kind = w.kind, chatId = w.container, messageId = w.message, author = w.author,
+                    lines = w.lines, linesSet = true, more = w.more, moreText = w.moreText, tap = w.tap,
                 )
                 is ComposedWidget.Underlay -> SavedWidget(
                     "underlay", kind = w.kind, chatId = w.container, messageId = w.message, author = w.author, lines = w.lines,
+                    more = w.more, moreText = w.moreText, tap = w.tap,
                 )
             }
         }

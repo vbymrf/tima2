@@ -22,8 +22,11 @@ class MessagePicks(private val store: PickStore, private val nowMs: () -> Long) 
     fun list(level: String): List<Pick> = store.list(level)
 
     companion object {
-        /** Предложение решений §11.2: до 20 ссылок на уровень. */
-        const val MAX = 20
+        /** До 100 ссылок на уровень (заказчик 2026-10-20; прежде 20 — решения §11.2). */
+        const val MAX = 100
+
+        /** Подкладок за раз — до 10; «Списком» — до [MAX] (ADR-0050 §1). */
+        const val UNDERLAY_MAX = 10
 
         /** Уровень личной переписки: подборка своя, одна на все личные переписки. */
         const val SELF = "self"

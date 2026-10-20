@@ -124,7 +124,17 @@ sealed interface RichBlock {
     data class Contact(val userId: String, val name: String, val phone: String) : RichBlock
 
     /** Вставленное из подборки — ссылка, показывается по своей переписке. `cut`: `full` или `cut`. */
-    data class Quoted(val kind: String, val chatId: String, val messageId: Long, val author: Boolean, val cut: String) : RichBlock
+    data class Quoted(
+        val kind: String,
+        val chatId: String,
+        val messageId: Long,
+        val author: Boolean,
+        /** Строк; 0 — целиком (ADR-0050 §1). */
+        val lines: Int = 3,
+        val more: String = "",
+        val moreText: String = "",
+        val tap: Boolean = false,
+    ) : RichBlock
 
     /** Крупный эмоджи. */
     data class Emoji(val text: String) : RichBlock
@@ -139,7 +149,19 @@ sealed interface RichBlock {
     data class File(val media: Int) : RichBlock
 
     /** Подкладка в конце: [lines] строк исходного и «Продолжить чтение». */
-    data class Underlay(val kind: String, val chatId: String, val messageId: Long, val author: Boolean, val lines: Int) : RichBlock
+    data class Underlay(
+        val kind: String,
+        val chatId: String,
+        val messageId: Long,
+        val author: Boolean,
+        /** Строк; 0 — целиком (ADR-0050 §1). */
+        val lines: Int,
+        val more: String = "",
+        val moreText: String = "",
+        val tap: Boolean = false,
+        /** Разделитель после — у склеенных подкладок (стиль «Раздел.» блока). */
+        val style: BlockStyle = BlockStyle.NONE,
+    ) : RichBlock
 
     /**
      * Ответ (Решения §7 «`@Ник`», §11.1): чьё и какое сообщение. Имя и строку из него рисует экран

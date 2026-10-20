@@ -108,6 +108,32 @@ class ComposedBodiesTest {
         assertEquals(doc.items, bodies.load(bodies.save(doc))!!.items, "черновик")
     }
 
+    /** ADR-0050 §1: свойства подборки и подкладки — строк, «Продолжить», нажатие — доходят до показа и правки. */
+    @Test
+    fun свойства_подборки_и_подкладки() {
+        val quoted = ComposedWidget.Quoted("group", "g-1", 7, author = false, lines = 1, more = "custom", moreText = "Дальше", tap = true)
+        val underlay = ComposedWidget.Underlay("group", "g-1", 8, lines = 0, more = "default")
+        val doc = ComposedDoc(listOf(ComposedItem.Text("до"), ComposedItem.Widget(quoted), ComposedItem.Widget(underlay, mapOf("divider" to "1"))))
+        val content = bodies.content(doc)
+        assertTrue(io.tima.crypto.MarkupRules.check(content, strict = true).isEmpty(), io.tima.crypto.MarkupRules.check(content, strict = true).toString())
+        val raw = io.tima.crypto.MarkupV2.encodeBody(content.markup!!, content.nodes)
+        assertTrue("\"more_text\":\"Дальше\"" in raw && "\"tap\":true" in raw, raw)
+        assertEquals(content.markup, io.tima.crypto.MarkupV2.decodeBody(raw, content.nodes))
+        val shown = RichMapper.from(content)!!.blocks
+        val q = assertIs<RichBlock.Quoted>(assertIs<RichBlock.Row>(shown[1]).cells.single().widgets.single())
+        assertEquals(listOf(1, "custom", "Дальше", true), listOf(q.lines, q.more, q.moreText, q.tap))
+        val u = assertIs<RichBlock.Underlay>(shown[2])
+        assertEquals(0, u.lines, "подкладка — целиком")
+        assertEquals("1", u.style.divider, "разделитель склеенных — стилем блока")
+        val back = ComposedFromContent.doc(content)!!
+        assertEquals(quoted, assertIs<ComposedItem.Widget>(back.items[1]).widget)
+        assertEquals(underlay, assertIs<ComposedItem.Widget>(back.items[2]).widget)
+        assertEquals(doc.items, bodies.load(bodies.save(doc))!!.items, "черновик")
+        // До ADR-0050 у подборки было `cut`: `full` — целиком, `cut` — три строки.
+        assertEquals(0, ComposedFromContent.quotedLines(io.tima.crypto.MarkupWidget(cut = "full")))
+        assertEquals(3, ComposedFromContent.quotedLines(io.tima.crypto.MarkupWidget(cut = "cut")))
+    }
+
     /** ADR-0048: знак, набранный текстом, в документе экранирован — в тело уходит текстом. */
     @Test
     fun знаки_выключены_текст_как_есть() {

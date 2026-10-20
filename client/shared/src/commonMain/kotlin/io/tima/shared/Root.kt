@@ -5236,28 +5236,48 @@ private fun Chat(
                 },
             )
             // Подкладка (Решения §11.3): из подборки — ссылкой; в группе — ещё и новое продолжение своего уровня.
-            "underlay" -> io.tima.feature.chat.ChoiceSheet(
+            // Подкладка (ADR-0050 §1): несколько сообщений целиком в конец, вне пузыря; «Списком» — список
+            // подборок по строке; в группе — ещё и новое продолжение своего уровня.
+            "underlay" -> io.tima.feature.chat.ManyChoiceSheet(
                 title = ew.button("underlay"),
-                items = (if (group) listOf(io.tima.feature.chat.Choice(ew.underlayNew, ew.underlayNewAbout)) else emptyList()) +
-                    pickList.map { pick ->
-                        val here = if (pick.chatId == chatId) state.lines.firstOrNull { it.serverId == pick.serverId } else null
-                        io.tima.feature.chat.Choice(title = here?.text ?: ew.pickElsewhere(pick.serverId))
-                    },
+                items = pickList.map { pick ->
+                    val here = if (pick.chatId == chatId) state.lines.firstOrNull { it.serverId == pick.serverId } else null
+                    io.tima.feature.chat.Choice(title = here?.text ?: ew.pickElsewhere(pick.serverId))
+                },
                 empty = ew.picksEmpty,
-                onCancel = { editorChoice = null },
-                onPick = { i ->
+                max = io.tima.domain.chat.MessagePicks.UNDERLAY_MAX,
+                maxList = io.tima.domain.chat.MessagePicks.MAX,
+                asList = ew.asList,
+                insert = ew.insertPicked,
+                picked = ew::pickedOf,
+                head = if (group) io.tima.feature.chat.Choice(ew.underlayNew, ew.underlayNewAbout) else null,
+                onHead = {
                     editorChoice = null
-                    if (group && i == 0) {
-                        // Закрытая часть — уровнем выше открытого: по умолчанию «по разрешению» (3).
-                        val levels = kind?.circles?.map { it.level }.orEmpty()
-                        editorModel.addContinuation(if (3 in levels) 3 else levels.maxOrNull() ?: 2)
+                    // Закрытая часть — уровнем выше открытого: по умолчанию «по разрешению» (3).
+                    val levels = kind?.circles?.map { it.level }.orEmpty()
+                    editorModel.addContinuation(if (3 in levels) 3 else levels.maxOrNull() ?: 2)
+                },
+                onCancel = { editorChoice = null },
+                onPick = { indices, asList ->
+                    editorChoice = null
+                    val picked = indices.map { pickList[it] }
+                    fun refKind(pick: io.tima.domain.chat.Pick) = if (pick.chatId == chatId && !group) "personal" else "group"
+                    if (asList) {
+                        // «Списком»: пункт «Без имени», под ним по пункту на сообщение — подборка в одну строку.
+                        val items = listOf(io.tima.domain.chat.ComposedListItem(1, ew.untitled)) + picked.map { pick ->
+                            io.tima.domain.chat.ComposedListItem(
+                                2, "", widgets = listOf(io.tima.domain.chat.ComposedWidget.Quoted(refKind(pick), pick.chatId, pick.serverId, author = false, lines = 1)),
+                            )
+                        }
+                        editorModel.appendToMain(io.tima.domain.chat.ComposedItem.ItemList(items))
                     } else {
-                        val pick = pickList[if (group) i - 1 else i]
-                        val refKind = if (pick.chatId == chatId && !group) "personal" else "group"
-                        editorModel.appendToMain(
-                            io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Underlay(refKind, pick.chatId, pick.serverId)),
-                        )
+                        for (pick in picked) {
+                            editorModel.appendToMain(
+                                io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Underlay(refKind(pick), pick.chatId, pick.serverId)),
+                            )
+                        }
                     }
+                    Journal.note(LogCode.PICKS, "подкладка", "сообщений" to picked.size, "списком" to asList)
                 },
             )
             "picks" -> io.tima.feature.chat.ChoiceSheet(

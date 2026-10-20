@@ -34,6 +34,8 @@ object MarkupRules {
 
     /** Строк подкладки до «Продолжить чтение». */
     const val MAX_UNDERLAY_LINES = 50
+    /** Свой текст кнопки «Продолжить» (ADR-0050 §1). */
+    const val MAX_MORE_TEXT = 40
 
     /** Вложенность списков: пункт, вложенный, вложенный во вложенный (§7 Решений: два вложения). */
     const val MAX_LIST_DEPTH = 3
@@ -252,7 +254,12 @@ object MarkupRules {
                 val ref = w?.ref
                 need(ref != null && ref.kind in REF_KINDS && ref.container.isNotBlank() && ref.message > 0, "нет ссылки на сообщение")
                 if (block.type == BlockType.QUOTED) need(w == null || w.cut.isEmpty() || w.cut in setOf("full", "cut"), "вид показа не «full» и не «cut»")
-                if (block.type == BlockType.UNDERLAY) need(w != null && w.lines in 1..MAX_UNDERLAY_LINES, "строк подкладки не 1–$MAX_UNDERLAY_LINES")
+                if (block.type != BlockType.REPLY) {
+                    // ADR-0050 §1: строк 0 (целиком) — MAX; «Продолжить» — из известных видов, свой текст короткий.
+                    need(w == null || w.lines in 0..MAX_UNDERLAY_LINES, "строк не 0–$MAX_UNDERLAY_LINES")
+                    need(w == null || w.more in setOf("", "default", "blank", "custom"), "вид «Продолжить» незнакомый")
+                    need(w == null || w.moreText.length <= MAX_MORE_TEXT, "текст «Продолжить» длиннее $MAX_MORE_TEXT")
+                }
             }
             else -> Unit // текстовые блоки: только узлы и стиль
         }

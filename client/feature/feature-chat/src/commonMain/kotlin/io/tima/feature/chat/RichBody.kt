@@ -185,7 +185,9 @@ private fun BulletList(items: List<Bullet>, depth: Int, closed: Boolean, flat: B
     val arrows = items.any { it.blocks.isNotEmpty() || it.children.isNotEmpty() }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         for (item in items) {
-            val inside = item.blocks.isNotEmpty() || item.children.isNotEmpty()
+            // Пункт без заголовка (подкладка «Списком», ADR-0050 §1) — его блоки у самой точки.
+            val bare = item.text.text.isEmpty() && item.blocks.isNotEmpty()
+            val inside = (!bare && item.blocks.isNotEmpty()) || item.children.isNotEmpty()
             var open by androidx.compose.runtime.saveable.rememberSaveable(item.text.text, closed) { mutableStateOf(!closed) }
             Row {
                 if (arrows) {
@@ -194,11 +196,15 @@ private fun BulletList(items: List<Bullet>, depth: Int, closed: Boolean, flat: B
                     }
                 }
                 if (!(flat && depth > 0)) Caption(mark, fontSize = size, color = color, modifier = Modifier.padding(end = if (flat) 2.dp else 6.dp))
-                Caption(annotated(withoutLinks(item.text)), fontSize = size, color = color)
+                if (bare) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { for (b in item.blocks) RichBlockViewOf(b) }
+                } else {
+                    Caption(annotated(withoutLinks(item.text)), fontSize = size, color = color)
+                }
             }
             if (inside && open) {
                 Column(Modifier.padding(start = if (flat) 0.dp else 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    for (b in item.blocks) RichBlockViewOf(b)
+                    if (!bare) for (b in item.blocks) RichBlockViewOf(b)
                     if (item.children.isNotEmpty()) BulletList(item.children, depth + 1, closed, flat)
                 }
             }

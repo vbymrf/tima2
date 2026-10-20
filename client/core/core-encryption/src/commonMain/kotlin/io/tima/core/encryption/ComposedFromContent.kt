@@ -142,10 +142,17 @@ internal object ComposedFromContent {
             BlockType.CONTACT -> ComposedWidget.Contact(w.name, w.phone, w.userId)
             BlockType.EMOJI -> ComposedWidget.Emoji(w.text)
             BlockType.REPLY -> w.ref?.let { ComposedWidget.Reply(ReplyTarget(it.kind, it.container, it.message, w.userId)) }
-            BlockType.QUOTED -> w.ref?.let { ComposedWidget.Quoted(it.kind, it.container, it.message, w.author, w.cut) }
-            BlockType.UNDERLAY -> w.ref?.let { ComposedWidget.Underlay(it.kind, it.container, it.message, w.lines, w.author) }
+            BlockType.QUOTED -> w.ref?.let { ComposedWidget.Quoted(it.kind, it.container, it.message, w.author, quotedLines(w), w.more, w.moreText, w.tap) }
+            BlockType.UNDERLAY -> w.ref?.let { ComposedWidget.Underlay(it.kind, it.container, it.message, w.lines, w.author, w.more, w.moreText, w.tap) }
             else -> null
         }
+    }
+
+    /** Строк подборки: прежнее `cut` (до ADR-0050) — `full` целиком, `cut` три. */
+    internal fun quotedLines(w: io.tima.crypto.MarkupWidget): Int = when (w.cut) {
+        "full" -> 0
+        "cut" -> 3
+        else -> w.lines
     }
 
     private fun outOf(m: MediaRef) = OutMedia(

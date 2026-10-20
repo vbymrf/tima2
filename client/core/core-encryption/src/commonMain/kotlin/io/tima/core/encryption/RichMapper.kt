@@ -135,8 +135,8 @@ internal object RichMapper {
             BlockType.CONTACT -> RichBlock.Contact(w.userId, w.name, w.phone)
             BlockType.EMOJI -> w.text.takeIf { it.isNotBlank() }?.let { RichBlock.Emoji(it) }
             BlockType.REPLY -> w.ref?.let { RichBlock.Reply(w.userId, it.container, it.message) }
-            BlockType.QUOTED -> w.ref?.let { RichBlock.Quoted(it.kind, it.container, it.message, w.author, w.cut.ifEmpty { "cut" }) }
-            BlockType.UNDERLAY -> w.ref?.let { RichBlock.Underlay(it.kind, it.container, it.message, w.author, w.lines) }
+            BlockType.QUOTED -> w.ref?.let { RichBlock.Quoted(it.kind, it.container, it.message, w.author, ComposedFromContent.quotedLines(w), w.more, w.moreText, w.tap) }
+            BlockType.UNDERLAY -> w.ref?.let { RichBlock.Underlay(it.kind, it.container, it.message, w.author, w.lines, w.more, w.moreText, w.tap, style(block)) }
             else -> null
         }
     }

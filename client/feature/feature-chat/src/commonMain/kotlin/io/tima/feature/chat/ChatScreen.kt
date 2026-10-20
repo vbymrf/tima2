@@ -878,6 +878,45 @@ private fun Bubbled(
     narrowing: Boolean,
     onDigit: (() -> Unit)?,
     onNarrowed: () -> Unit,
+) {
+    // Подкладка — под пузырём, без него (ADR-0050 §1): хвост подкладок рисуется после пузыря.
+    val rich = line.rich
+    val tail = rich?.blocks?.takeLastWhile { it is io.tima.domain.chat.RichBlock.Underlay }.orEmpty()
+    val inside = if (rich == null || tail.isEmpty() || tail.size == rich.blocks.size) line else line.copy(rich = rich.copy(blocks = rich.blocks.dropLast(tail.size)))
+    val apart = if (inside === line) emptyList() else tail
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (line.outgoing) Alignment.End else Alignment.Start) {
+        BubbleOf(inside, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, keyLost, look, onAvatar, narrowing, onDigit, onNarrowed)
+        if (apart.isNotEmpty() && rich != null && !line.deleted) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalRichMedia provides rich.media) {
+                Column(Modifier.fillMaxWidth(UNDERLAY_WIDTH).padding(horizontal = TimaSpacing.about2, vertical = 2.dp).testTag("chat:underlay")) {
+                    for (u in apart) RichBlockViewOf(u)
+                }
+            }
+        }
+    }
+}
+
+/** Подкладка под пузырём — шириной как пузырь. */
+private const val UNDERLAY_WIDTH = 0.85f
+
+@Composable
+private fun BubbleOf(
+    line: ChatLine,
+    author: String?,
+    letter: String,
+    face: ImageBitmap?,
+    strip: Color?,
+    continuation: Boolean,
+    showCircle: Boolean,
+    onNarrow: ((Long, Int, Int) -> Unit)?,
+    onCarry: ((Long, Int) -> Unit)?,
+    onAskChatKeys: (() -> Unit)?,
+    keyLost: Boolean,
+    look: io.tima.core.ui.AvatarLook,
+    onAvatar: (() -> Unit)?,
+    narrowing: Boolean,
+    onDigit: (() -> Unit)?,
+    onNarrowed: () -> Unit,
 ) = Bubble(
     my = line.outgoing,
     author = author,

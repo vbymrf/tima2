@@ -228,13 +228,8 @@ private fun WidgetOptions(model: EditorModel, spot: Spot) {
                     onClick = { put(widget.copy(mode = mode)) }, modifier = Modifier.testTag("editor:style.link.$mode"))
             }
         }
-        is ComposedWidget.Quoted -> androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (cut in listOf("full", "cut")) {
-                Chip(w.cutName(cut), kind = if ((widget.cut.ifEmpty { "full" }) == cut) ChipKind.Selected else ChipKind.Quiet,
-                    onClick = { put(widget.copy(cut = cut)) }, modifier = Modifier.testTag("editor:style.quoted.$cut"))
-            }
-            Chip(w.authorShown, kind = if (widget.author) ChipKind.Selected else ChipKind.Quiet,
-                onClick = { put(widget.copy(author = !widget.author)) }, modifier = Modifier.testTag("editor:style.quoted.author"))
+        is ComposedWidget.Quoted -> RefOptions("quoted", widget.author, widget.lines, widget.more, widget.moreText, widget.tap) { au, li, mo, mt, ta ->
+            put(widget.copy(author = au, lines = li, more = mo, moreText = mt, tap = ta))
         }
         is ComposedWidget.Cloud -> androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (kind in listOf("file", "document", "audio", "video")) {
@@ -242,17 +237,64 @@ private fun WidgetOptions(model: EditorModel, spot: Spot) {
                     onClick = { put(widget.copy(kind = kind)) }, modifier = Modifier.testTag("editor:style.cloud.$kind"))
             }
         }
-        is ComposedWidget.Underlay -> androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (n in listOf(1, 2, 3, 5, 10)) {
-                Chip(w.underlayLines(n), kind = if (widget.lines == n) ChipKind.Selected else ChipKind.Quiet,
-                    onClick = { put(widget.copy(lines = n)) }, modifier = Modifier.testTag("editor:style.underlay.$n"))
-            }
-            Chip(w.authorShown, kind = if (widget.author) ChipKind.Selected else ChipKind.Quiet,
-                onClick = { put(widget.copy(author = !widget.author)) }, modifier = Modifier.testTag("editor:style.underlay.author"))
+        is ComposedWidget.Underlay -> RefOptions("underlay", widget.author, widget.lines, widget.more, widget.moreText, widget.tap) { au, li, mo, mt, ta ->
+            put(widget.copy(author = au, lines = li, more = mo, moreText = mt, tap = ta))
         }
         else -> Tertiary(w.selected("widget"))
     }
 }
+
+/**
+ * Свойства ссылки на сообщение — одни у подборки и подкладки (ADR-0050 §1): имя владельца, строк
+ * (целиком или N), кнопка «Продолжить» (нет, своим словом, без текста, свой текст), нажимается целиком.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RefOptions(
+    tag: String,
+    author: Boolean,
+    lines: Int,
+    more: String,
+    moreText: String,
+    tap: Boolean,
+    onChange: (author: Boolean, lines: Int, more: String, moreText: String, tap: Boolean) -> Unit,
+) {
+    val colors = Tima.colors
+    val w = Tima.words.editor
+    fun kindOf(on: Boolean) = if (on) ChipKind.Selected else ChipKind.Quiet
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Chip(w.authorShown, kind = kindOf(author), onClick = { onChange(!author, lines, more, moreText, tap) },
+            modifier = Modifier.testTag("editor:style.$tag.author"))
+        Chip(w.tapWhole, kind = kindOf(tap), onClick = { onChange(author, lines, more, moreText, !tap) },
+            modifier = Modifier.testTag("editor:style.$tag.tap"))
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (n in listOf(0, 1, 2, 3, 5, 10)) {
+            Chip(if (n == 0) w.linesAll else w.underlayLines(n), kind = kindOf(lines == n), onClick = { onChange(author, n, more, moreText, tap) },
+                modifier = Modifier.testTag("editor:style.$tag.lines.$n"))
+        }
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (mode in listOf("", "default", "blank", "custom")) {
+            Chip(w.moreMode(mode), kind = kindOf(more == mode), onClick = { onChange(author, lines, mode, moreText, tap) },
+                modifier = Modifier.testTag("editor:style.$tag.more.${mode.ifEmpty { "none" }}"))
+        }
+    }
+    if (more == "custom") {
+        BasicTextField(
+            value = moreText,
+            onValueChange = { onChange(author, lines, more, it.take(MORE_TEXT_MAX), tap) },
+            textStyle = TextStyle(fontSize = TimaType.sz5, color = colors.text),
+            cursorBrush = SolidColor(colors.navigation),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().background(colors.functional, RoundedCornerShape(8.dp)).padding(8.dp)
+                .testTag("editor:style.$tag.more.text"),
+        )
+    }
+}
+
+/** Свой текст «Продолжить» — не длиннее, чем принимает проверка разметки. */
+private const val MORE_TEXT_MAX = 40
 
 /** JSON стиля выбранного — только изменённое; «Применить» — после той же проверки, что на отправке. */
 @Composable

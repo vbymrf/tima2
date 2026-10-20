@@ -66,7 +66,7 @@ class SqlMessageRemovalTest {
         val picks = MessagePicks(SqlPicks(db), nowMs = { 0 })
         repeat(MessagePicks.MAX) { assertEquals(PickResult.Added, picks.add("self", "c", it + 1L)) }
         assertEquals(PickResult.Already, picks.add("self", "c", 1))
-        assertEquals(PickResult.Full, picks.add("self", "c", 99))
+        assertEquals(PickResult.Full, picks.add("self", "c", MessagePicks.MAX + 1L))
         assertEquals(PickResult.Added, picks.add("group:g", "g", 99), "у другого уровня — своя подборка")
     }
 }
