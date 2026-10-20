@@ -254,8 +254,9 @@ private fun WidgetOptions(model: EditorModel, spot: Spot) {
 }
 
 /**
- * Свойства ссылки на сообщение — одни у подборки и подкладки (ADR-0050 §1): имя владельца, строк
- * (целиком или N), кнопка «Продолжить» (нет, своим словом, без текста, свой текст), нажимается целиком.
+ * Свойства ссылки на сообщение — одни у подборки и подкладки (ADR-0050 §1): имя владельца; переход —
+ * один из пяти (заказчик 2026-10-20): без перехода, само сообщение, «Продолжить чтение», свой текст,
+ * стрелка; строк (целиком или N).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -274,16 +275,20 @@ private fun RefOptions(
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Chip(w.authorShown, kind = kindOf(author), onClick = { onChange(!author, lines, more, moreText, tap) },
             modifier = Modifier.testTag("editor:style.$tag.author"))
-        Chip(w.tapWhole, kind = kindOf(tap), onClick = { onChange(author, lines, more, moreText, !tap) },
-            modifier = Modifier.testTag("editor:style.$tag.tap"))
     }
+    // «Само сообщение» — поле `tap`, остальное — `more`; вместе не бывают.
+    val jump = if (tap) "tap" else more
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (mode in listOf("", "default", "blank", "custom")) {
-            Chip(w.moreMode(mode), kind = kindOf(more == mode), onClick = { onChange(author, lines, mode, moreText, tap) },
-                modifier = Modifier.testTag("editor:style.$tag.more.${mode.ifEmpty { "none" }}"))
+        for (mode in listOf("", "tap", "default", "custom", "blank")) {
+            Chip(
+                w.moreMode(mode),
+                kind = kindOf(jump == mode),
+                onClick = { onChange(author, lines, if (mode == "tap") "" else mode, moreText, mode == "tap") },
+                modifier = Modifier.testTag(if (mode == "tap") "editor:style.$tag.tap" else "editor:style.$tag.more.${mode.ifEmpty { "none" }}"),
+            )
         }
     }
-    if (more == "custom") {
+    if (more == "custom" && !tap) {
         BasicTextField(
             value = moreText,
             onValueChange = { onChange(author, lines, more, it.take(MORE_TEXT_MAX), tap) },

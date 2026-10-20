@@ -134,6 +134,19 @@ class ComposedBodiesTest {
         assertEquals(3, ComposedFromContent.quotedLines(io.tima.crypto.MarkupWidget(cut = "cut")))
     }
 
+    /** «Списком» (заказчик 2026-10-20): пункт без заголовка, под ним вставленное — доходит до получателя пунктом. */
+    @Test
+    fun вставленное_списком_пункт_без_заголовка() {
+        val items = listOf(7L, 8L).map { io.tima.domain.chat.ComposedListItem(1, "", widgets = listOf(ComposedWidget.Quoted("group", "g-1", it, author = false, lines = 1))) }
+        val doc = ComposedDoc(listOf(ComposedItem.Text("до"), ComposedItem.ItemList(items)))
+        val content = bodies.content(doc)
+        assertTrue(io.tima.crypto.MarkupRules.check(content, strict = true).isEmpty(), io.tima.crypto.MarkupRules.check(content, strict = true).toString())
+        val list = assertIs<RichBlock.Bullets>(RichMapper.from(content)!!.blocks.last())
+        assertEquals(listOf(7L, 8L), list.items.map { assertIs<RichBlock.Quoted>(it.blocks.single()).messageId })
+        assertTrue(list.items.all { it.text.text.isEmpty() })
+        assertEquals(1, assertIs<RichBlock.Quoted>(list.items[0].blocks.single()).lines)
+    }
+
     /** ADR-0050 §3: адрес текстом в оформленном сообщении — ссылкой у получателя; в коде — нет. */
     @Test
     fun адрес_текстом_становится_ссылкой_при_показе() {

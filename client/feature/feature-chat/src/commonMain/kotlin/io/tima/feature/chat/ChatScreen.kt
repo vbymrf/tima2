@@ -801,6 +801,7 @@ fun chatLooks(
             },
             text = found.text,
             deleted = found.deleted,
+            rich = found.rich?.takeUnless { found.deleted },
         )
     }
     return replyLook to quoteLook
@@ -926,54 +927,23 @@ private fun Bubbled(
     onDigit: (() -> Unit)?,
     onNarrowed: () -> Unit,
 ) {
-    // Подкладка — под пузырём, без него (ADR-0050 §1): хвост подкладок рисуется после пузыря.
-    val rich = line.rich
-    val split = rich?.let(::splitUnderlays)
-    val inside = if (split == null || split.second.isEmpty()) line else line.copy(rich = split.first)
+    // Подкладка — внутри пузыря, во всю его ширину (заказчик 2026-10-20; прежде — под пузырём).
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (line.outgoing) Alignment.End else Alignment.Start) {
-        BubbleOf(inside, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, keyLost, look, onAvatar, narrowing, onDigit, onNarrowed)
-        if (split != null && !line.deleted) UnderlayTail(rich, split.second, LocalBubbleTap.current)
+        BubbleOf(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, keyLost, look, onAvatar, narrowing, onDigit, onNarrowed)
     }
 }
 
 /**
  * Сообщение, как его показывает лента (заказчик 2026-10-20: «Показать сообщение» — тем же способом,
- * что в чате): фото без текста и файлы — вне пузыря, подкладки в конце — под пузырём, остальное — в
- * пузыре. Ответ и вставленное называет [ChatLooks].
+ * что в чате): фото без текста и файлы — вне пузыря, остальное, с подкладками, — в пузыре. Ответ и
+ * вставленное называет [ChatLooks].
  */
 @Composable
 fun MessageView(rich: RichContent, my: Boolean = true, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth(), horizontalAlignment = if (my) Alignment.End else Alignment.Start) {
-        if (rich.isOutside()) {
-            AttachmentsView(rich)
-        } else {
-            val (inside, apart) = splitUnderlays(rich)
-            Bubble(my = my) { RichBody(inside) }
-            UnderlayTail(rich, apart)
-        }
+        if (rich.isOutside()) AttachmentsView(rich) else Bubble(my = my) { RichBody(rich) }
     }
 }
-
-/** Тело без хвоста подкладок и сам хвост; одни подкладки — остаются в пузыре (их не с чем разделять). */
-internal fun splitUnderlays(rich: RichContent): Pair<RichContent, List<io.tima.domain.chat.RichBlock>> {
-    val tail = rich.blocks.takeLastWhile { it is io.tima.domain.chat.RichBlock.Underlay }
-    if (tail.isEmpty() || tail.size == rich.blocks.size) return rich to emptyList()
-    return rich.copy(blocks = rich.blocks.dropLast(tail.size)) to tail
-}
-
-/** Подкладки под пузырём — шириной как пузырь. */
-@Composable
-internal fun UnderlayTail(rich: RichContent, apart: List<io.tima.domain.chat.RichBlock>, modifier: Modifier = Modifier) {
-    if (apart.isEmpty()) return
-    androidx.compose.runtime.CompositionLocalProvider(LocalRichMedia provides rich.media) {
-        Column(modifier.fillMaxWidth(UNDERLAY_WIDTH).padding(horizontal = TimaSpacing.about2, vertical = 2.dp).testTag("chat:underlay")) {
-            for (u in apart) RichBlockViewOf(u)
-        }
-    }
-}
-
-/** Подкладка под пузырём — шириной как пузырь. */
-private const val UNDERLAY_WIDTH = 0.85f
 
 @Composable
 private fun BubbleOf(

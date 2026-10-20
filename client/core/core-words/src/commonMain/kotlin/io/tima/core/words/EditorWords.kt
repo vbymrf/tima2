@@ -77,8 +77,7 @@ interface EditorWords {
     val noProps: String
     /** Свойства подборки и подкладки (ADR-0050 §1). */
     val linesAll: String
-    val tapWhole: String
-    /** Кнопка «Продолжить»: пусто — нет, `default`, `blank`, `custom`. */
+    /** Переход (заказчик 2026-10-20): пусто — нет, `tap` — само сообщение, `default`, `blank` — стрелка, `custom`. */
     fun moreMode(mode: String): String
     /** «Подкладка»: несколько сообщений; «Списком» — до 100 списком подборок. */
     val asList: String
@@ -268,12 +267,12 @@ object RussianEditorWords : EditorWords {
     override val listChoose = "Встаньте в список, чтобы задать его свойства"
     override val noProps = "У этого блока своих свойств нет — общие ниже в «Стиле»"
     override val linesAll = "Целиком"
-    override val tapWhole = "Нажимается целиком"
     override fun moreMode(mode: String) = when (mode) {
+        "tap" -> "Само сообщение"
         "default" -> "«Продолжить чтение»"
-        "blank" -> "Кнопка без текста"
+        "blank" -> "Стрелка"
         "custom" -> "Свой текст"
-        else -> "Без кнопки"
+        else -> "Без перехода"
     }
     override val asList = "Списком"
     override val insertPicked = "Вставить"
@@ -457,12 +456,12 @@ object EnglishEditorWords : EditorWords {
     override val listChoose = "Put the cursor in a list to set its properties"
     override val noProps = "This block has no properties of its own — the common ones are in \"Style\""
     override val linesAll = "Whole"
-    override val tapWhole = "Tap anywhere"
     override fun moreMode(mode: String) = when (mode) {
+        "tap" -> "The message itself"
         "default" -> "\"Continue reading\""
-        "blank" -> "Button without text"
+        "blank" -> "Arrow"
         "custom" -> "Own text"
-        else -> "No button"
+        else -> "No jump"
     }
     override val asList = "As a list"
     override val insertPicked = "Insert"
@@ -642,12 +641,12 @@ object SpanishEditorWords : EditorWords {
     override val listChoose = "Sitúate en una lista para ajustar sus propiedades"
     override val noProps = "Este bloque no tiene propiedades propias; las comunes están en «Estilo»"
     override val linesAll = "Entero"
-    override val tapWhole = "Se pulsa entero"
     override fun moreMode(mode: String) = when (mode) {
+        "tap" -> "El propio mensaje"
         "default" -> "«Seguir leyendo»"
-        "blank" -> "Botón sin texto"
+        "blank" -> "Flecha"
         "custom" -> "Texto propio"
-        else -> "Sin botón"
+        else -> "Sin salto"
     }
     override val asList = "En lista"
     override val insertPicked = "Insertar"

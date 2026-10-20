@@ -1433,6 +1433,10 @@ interface ChatWords {
     val linkCopy: String
     /** Окно перехода к сообщению (заказчик 2026-10-20); в редакторе переход недоступен. */
     val messageAsk: String
+    /** Подборка, которая начинается с ряда, списка или таблицы (заказчик 2026-10-20). */
+    val refOpen: String
+    /** Подкладка «Списком» без имени владельца — заголовок пункта (заказчик 2026-10-20). */
+    val refItem: String
     val gateBlocked: String
     /** Меню файла (заказчик 2026-10-20): открыть; открыть нечем. */
     val fileOpen: String
@@ -3561,6 +3565,8 @@ object RussianWords : Words {
         override val linkAskOpen = "Перейти по ссылке? Проверьте сайт:"
         override val linkCopy = "Скопировать ссылку"
         override val messageAsk = "Перейти к сообщению?"
+        override val refOpen = "Откройте сообщение"
+        override val refItem = "Сообщение"
         override val gateBlocked = "В редакторе переход недоступен"
         override val fileOpen = "Открыть"
         override val fileOpenNone = "Открыть нечем — сохраните файл"

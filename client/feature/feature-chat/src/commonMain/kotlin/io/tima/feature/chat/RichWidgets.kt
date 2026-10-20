@@ -56,6 +56,8 @@ data class QuoteLook(
     /** Сервер не отдал: причина (`level`, `closed`) и уровень — «что сделать» по положению читателя. */
     val why: String? = null,
     val whyLevel: Int? = null,
+    /** Исходное целиком — подборка и подкладка показывают его, а не только текст (заказчик 2026-10-20). */
+    val rich: io.tima.domain.chat.RichContent? = null,
 )
 
 val LocalQuoteLook = staticCompositionLocalOf<(kind: String, chatId: String, messageId: Long) -> QuoteLook> {
@@ -167,7 +169,8 @@ internal fun WidgetView(block: RichBlock) {
         is RichBlock.Quoted -> QuotedWidget(block)
         is RichBlock.Underlay -> UnderlayWidget(block)
         is RichBlock.Reply -> {
-            val open = LocalOpenMessage.current
+            // Переход — только через окно перехода (заказчик 2026-10-20).
+            val open = rememberMessageOpen()
             ReplyBlock(LocalReplyLook.current(block)) { open("reply", block.chatId, block.messageId) }
         }
         else -> RichBlockViewOf(block)
@@ -285,67 +288,13 @@ private fun ContactWidget(contact: RichBlock.Contact) {
     }
 }
 
-/** Подборка (ADR-0050 §1): сокращённо — карточкой, целиком — простым текстом; свойства — общие с подкладкой. */
+/** Подборка (ADR-0050 §1): в своём пузыре, только текст и первое фото — [QuotedRef]. */
 @Composable
-private fun QuotedWidget(quoted: RichBlock.Quoted) = MessageRef(
-    quoted.kind, quoted.chatId, quoted.messageId, quoted.author, quoted.lines, quoted.more, quoted.moreText, quoted.tap,
-)
+private fun QuotedWidget(quoted: RichBlock.Quoted) = QuotedRef(quoted)
 
-/** Подкладка (ADR-0050 §1): под пузырём, по умолчанию целиком и текстом; разделитель — стилем блока. */
+/** Подкладка (ADR-0050 §1): внутри основного пузыря, исходное как есть — [UnderlayRef]; разделитель — стилем блока. */
 @Composable
 private fun UnderlayWidget(underlay: RichBlock.Underlay) {
-    Box(Modifier.fillMaxWidth().styled(underlay.style)) {
-        MessageRef(underlay.kind, underlay.chatId, underlay.messageId, underlay.author, underlay.lines, underlay.more, underlay.moreText, underlay.tap)
-    }
+    Box(Modifier.fillMaxWidth().styled(underlay.style)) { UnderlayRef(underlay) }
     DividerAfter(underlay.style)
-}
-
-/**
- * Ссылка на сообщение — подборка и подкладка (ADR-0050 §1). [lines] 0 — целиком, простым текстом;
- * иначе — первые строки карточкой. [tap] — нажимается всё: зелёная полоса слева; [more] — зелёная
- * кнопка «Продолжить» (`default`, `blank` — без текста, `custom` — [moreText]). Нет ни того, ни
- * другого — не нажимается.
- */
-@Composable
-private fun MessageRef(kind: String, chatId: String, messageId: Long, author: Boolean, lines: Int, more: String, moreText: String, tap: Boolean) {
-    val colors = Tima.colors
-    val look = LocalQuoteLook.current(kind, chatId, messageId)
-    // Переход — только через окно перехода (заказчик 2026-10-20).
-    val open = rememberMessageOpen()
-    val full = lines == 0
-    Row(
-        Modifier.fillMaxWidth().height(IntrinsicSize.Min)
-            .then(if (full) Modifier else Modifier.background(colors.functional, RoundedCornerShape(6.dp)))
-            .then(if (tap) Modifier.clickable { open(kind, chatId, messageId) } else Modifier)
-            .testTag(if (tap) "message.ref.tap" else "message.ref"),
-    ) {
-        if (tap) Box(Modifier.width(4.dp).fillMaxHeight().background(colors.navigation, RoundedCornerShape(2.dp)))
-        Column(
-            Modifier.padding(start = if (tap || !full) 8.dp else 0.dp, end = if (full) 0.dp else 8.dp, top = 4.dp, bottom = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (author && look.name != null) Caption(look.name, fontSize = TimaType.sz5, weight = FontWeight.Bold, lineOne = true)
-            when {
-                look.deleted -> Tertiary(Tima.words.chat.deleted, lineOne = true)
-                look.text != null -> Caption(
-                    look.text,
-                    fontSize = if (full) TimaType.sz4 else TimaType.sz5,
-                    color = if (full) colors.text else colors.text2,
-                    maxLines = if (full) Int.MAX_VALUE else lines,
-                )
-                // Сервер не отдал — уровень не открыт читающему (Решения §11.3): «Недоступно» и что делать —
-                // по причине, которую назвал сервер; не спрашивали ещё — общей строкой.
-                look.why != null -> Tertiary(Tima.words.showcase.peekUnavailable(look.why, look.whyLevel))
-                else -> Tertiary(Tima.words.chat.quotedElsewhere)
-            }
-            if (more.isNotEmpty()) {
-                val label = when (more) {
-                    "blank" -> "›"
-                    "custom" -> moreText.ifBlank { "›" }
-                    else -> Tima.words.chat.continueReading
-                }
-                Chip(label, kind = ChipKind.Selected, onClick = { open(kind, chatId, messageId) }, modifier = Modifier.testTag("message.ref.more"))
-            }
-        }
-    }
 }

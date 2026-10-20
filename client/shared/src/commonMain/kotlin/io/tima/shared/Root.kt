@@ -5339,18 +5339,23 @@ private fun Chat(
                     editorChoice = null
                     val picked = indices.map { pickList[it] }
                     fun refKind(pick: io.tima.domain.chat.Pick) = if (pick.chatId == chatId && !group) "personal" else "group"
+                    // Несколько сообщений — по одной строке у каждого; одно — целиком (заказчик 2026-10-20).
+                    val lines = if (picked.size > 1) 1 else 0
                     if (asList) {
-                        // «Списком»: пункт «Без имени», под ним по пункту на сообщение — подборка в одну строку.
-                        val items = listOf(io.tima.domain.chat.ComposedListItem(1, ew.untitled)) + picked.map { pick ->
+                        // «Списком» (заказчик 2026-10-20): пункт на сообщение без заголовка — получатель
+                        // покажет имя владельца или «Сообщение»; под ним сообщение. Подкладку в пункт
+                        // разметка не кладёт (MarkupRules, ADR-0050) — пока в пункте подборка.
+                        val items = picked.map { pick ->
                             io.tima.domain.chat.ComposedListItem(
-                                2, "", widgets = listOf(io.tima.domain.chat.ComposedWidget.Quoted(refKind(pick), pick.chatId, pick.serverId, author = false, lines = 1)),
+                                1, "",
+                                widgets = listOf(io.tima.domain.chat.ComposedWidget.Quoted(refKind(pick), pick.chatId, pick.serverId, author = false, lines = maxOf(lines, 1))),
                             )
                         }
                         editorModel.appendToMain(io.tima.domain.chat.ComposedItem.ItemList(items))
                     } else {
                         for (pick in picked) {
                             editorModel.appendToMain(
-                                io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Underlay(refKind(pick), pick.chatId, pick.serverId)),
+                                io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Underlay(refKind(pick), pick.chatId, pick.serverId, lines = lines)),
                             )
                         }
                     }

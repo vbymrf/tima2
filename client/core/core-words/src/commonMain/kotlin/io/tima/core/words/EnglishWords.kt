@@ -1238,6 +1238,8 @@ object EnglishWords : Words {
         override val linkAskOpen = "Open the link? Check the site:"
         override val linkCopy = "Copy link"
         override val messageAsk = "Go to the message?"
+        override val refOpen = "Open the message"
+        override val refItem = "Message"
         override val gateBlocked = "Not available in the editor"
         override val fileOpen = "Open"
         override val fileOpenNone = "Nothing can open it — save the file"

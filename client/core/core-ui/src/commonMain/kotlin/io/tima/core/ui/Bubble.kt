@@ -181,7 +181,10 @@ fun Bubble(
                         lineOne = true,
                     )
                 }
-                content()
+                androidx.compose.runtime.CompositionLocalProvider(
+                    LocalBubbleInset provides BubbleInset(if (my) 14.dp else 12.dp + STRIP, 14.dp),
+                    content = content,
+                )
                 bottom?.let {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -320,6 +323,12 @@ private val HAIRLINE = 1.dp
 
 /** Ширина полосы автора: `border-left: 4px`. */
 private val STRIP = 4.dp
+
+/** Поля пузыря слева и справа: подкладка выходит на них — во всю ширину пузыря (заказчик 2026-10-20). */
+data class BubbleInset(val start: androidx.compose.ui.unit.Dp, val end: androidx.compose.ui.unit.Dp)
+
+/** Поля пузыря, в котором стоит содержимое; вне пузыря — нулевые. */
+val LocalBubbleInset = androidx.compose.runtime.staticCompositionLocalOf { BubbleInset(0.dp, 0.dp) }
 
 /** Кегль имени автора: 22 (верхняя ступень настроек), уменьшенный в полтора раза — заказчик 2026-09-19. */
 private val AUTHOR_SIZE = 15.sp

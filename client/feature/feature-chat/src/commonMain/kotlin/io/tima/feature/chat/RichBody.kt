@@ -49,7 +49,16 @@ import io.tima.domain.chat.SpanKind
 fun RichBody(content: RichContent, modifier: Modifier = Modifier) {
     androidx.compose.runtime.CompositionLocalProvider(LocalRichMedia provides content.media) {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            for (block in content.blocks) RichBlockViewOf(block)
+            for ((i, block) in content.blocks.withIndex()) {
+                if (block is RichBlock.Underlay && LocalRefDepth.current == 0) {
+                    // Подкладка — как ещё одно сообщение внутри пузыря (заказчик 2026-10-20): во всю его
+                    // ширину; соседние подкладки разделены тонкой линией цвета рамки.
+                    if (content.blocks.getOrNull(i - 1) is RichBlock.Underlay) UnderlaySeparator()
+                    androidx.compose.runtime.CompositionLocalProvider(LocalUnderlayBleed provides true) { RichBlockViewOf(block) }
+                } else {
+                    RichBlockViewOf(block)
+                }
+            }
         }
     }
 }
@@ -64,6 +73,7 @@ internal fun StyledText(text: RichText, style: io.tima.domain.chat.BlockStyle, b
         weight = weight,
         color = io.tima.core.ui.paletteColor(style.color) ?: Tima.colors.text,
         textAlign = alignOf(style.align),
+        maxLines = LocalRefLines.current,
     )
 }
 
@@ -84,7 +94,7 @@ internal fun RichBlockViewOf(block: RichBlock) {
             val shown = withoutLinks(block.text)
             val style = block.style.over(cell)
             if (shown.text.isNotEmpty()) {
-                if (style == io.tima.domain.chat.BlockStyle.NONE) Caption(annotated(shown), fontSize = TimaType.sz4)
+                if (style == io.tima.domain.chat.BlockStyle.NONE) Caption(annotated(shown), fontSize = TimaType.sz4, maxLines = LocalRefLines.current)
                 else StyledText(shown, style, TimaType.sz4)
             }
             LinksUnder(linksOf(block.text))
@@ -214,8 +224,11 @@ private fun BulletList(items: List<Bullet>, depth: Int, closed: Boolean, flat: B
             val itemColor = io.tima.core.ui.paletteColor(own.color) ?: Tima.colors.text
             Column(Modifier.fillMaxWidth().styled(item.style)) {
             androidx.compose.runtime.CompositionLocalProvider(LocalCellText provides own.copy(background = null, padding = null, divider = null, dividerColor = null)) {
-            // Пункт без заголовка (подкладка «Списком», ADR-0050 §1) — его блоки у самой точки.
-            val bare = item.text.text.isEmpty() && item.blocks.isNotEmpty()
+            // «Списком» (заказчик 2026-10-20): пункт без заголовка со вставленным сообщением — заголовок
+            // «имя владельца» или «Сообщение», под ним само сообщение.
+            val refTitle = item.text.text.isEmpty() && (item.blocks.firstOrNull() is RichBlock.Underlay || item.blocks.firstOrNull() is RichBlock.Quoted)
+            // Пункт без заголовка (ADR-0050 §1) — его блоки у самой точки.
+            val bare = item.text.text.isEmpty() && item.blocks.isNotEmpty() && !refTitle
             val inside = (!bare && item.blocks.isNotEmpty()) || item.children.isNotEmpty()
             var open by androidx.compose.runtime.saveable.rememberSaveable(item.text.text, closed) { mutableStateOf(!closed) }
             Row {
@@ -227,13 +240,19 @@ private fun BulletList(items: List<Bullet>, depth: Int, closed: Boolean, flat: B
                 if (!(flat && depth > 0)) Caption(mark, fontSize = itemSize, color = itemColor, modifier = Modifier.padding(end = if (flat) 2.dp else 6.dp))
                 if (bare) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { for (b in item.blocks) RichBlockViewOf(b) }
+                } else if (refTitle) {
+                    Box(Modifier.weight(1f)) { RefTitle(item.blocks.first(), itemSize, itemColor) }
                 } else {
                     Caption(annotated(withoutLinks(item.text)), modifier = Modifier.weight(1f), fontSize = itemSize, color = itemColor, textAlign = alignOf(own.align))
                 }
             }
             if (inside && open) {
                 Column(Modifier.padding(start = if (flat) 0.dp else 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (!bare) for (b in item.blocks) RichBlockViewOf(b)
+                    if (refTitle) {
+                        androidx.compose.runtime.CompositionLocalProvider(LocalRefTitled provides true) { for (b in item.blocks) RichBlockViewOf(b) }
+                    } else if (!bare) {
+                        for (b in item.blocks) RichBlockViewOf(b)
+                    }
                     if (item.children.isNotEmpty()) BulletList(item.children, depth + 1, closed, flat)
                 }
             }

@@ -79,6 +79,8 @@ fun Caption(
     lineOne: Boolean = false,
     /** Выравнивание строк — оформление сообщения (`align`, ADR-0044 §4); по умолчанию — к началу. */
     textAlign: androidx.compose.ui.text.style.TextAlign = androidx.compose.ui.text.style.TextAlign.Unspecified,
+    /** Сколько строк показать — подборка и подкладка с заданным числом строк; обрезанное — с многоточием. */
+    maxLines: Int = Int.MAX_VALUE,
 ) {
     BasicText(
         text = text,
@@ -90,8 +92,8 @@ fun Caption(
             fontFamily = LocalFontFamily.current,
             textAlign = textAlign,
         ),
-        maxLines = if (lineOne) 1 else Int.MAX_VALUE,
-        overflow = if (lineOne) TextOverflow.Ellipsis else TextOverflow.Clip,
+        maxLines = if (lineOne) 1 else maxLines,
+        overflow = if (lineOne || maxLines != Int.MAX_VALUE) TextOverflow.Ellipsis else TextOverflow.Clip,
     )
 }
 
