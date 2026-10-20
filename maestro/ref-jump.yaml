@@ -1,12 +1,14 @@
-# Переход по вставленному сообщению (заказчик 2026-10-20: «ссылки на сообщение нигде не работают»).
+# Переход по вставленному сообщению (заказчик 2026-10-20: «ссылки на сообщение нигде не работают»;
+# «переход идёт на низ сообщения — сделай на верх»).
 #
-# Причина была в коде: прокрутка шла внутри эффекта, ключ которого она сама обнуляла, — и
+# Причина первого была в коде: прокрутка шла внутри эффекта, ключ которого она сама обнуляла, — и
 # отменялась на следующем кадре. Журнал писал «к сообщению», лента не двигалась.
 #
 # Признак, что переход случился: появилась кнопка «назад» (`chat:jump.back`) — её ставит только
-# состоявшийся переход. Снимки до и после — в артефактах.
+# состоявшийся переход. Где встало сообщение (верхом к верху ленты, под закреплённым) — по снимкам.
 #
-# Телефон: Samsung, переписка «redmi», в ней сообщение с подкладкой и кнопкой «Продолжить чтение».
+# Телефон: Samsung, переписка «redmi», в ней сообщение с подборкой и кнопкой «Продолжить чтение».
+# Закреплённое — если есть, переход через его полосу проверяется тоже.
 appId: io.tima.app.v2
 ---
 - launchApp
@@ -18,16 +20,33 @@ appId: io.tima.app.v2
 - assertNotVisible:
     id: "chat:jump.back"
 - takeScreenshot: ref-1-chat
+- runFlow:
+    when:
+      visible:
+        id: "chat:pinned"
+    commands:
+      - tapOn:
+          id: "chat:pinned"
+      - extendedWaitUntil:
+          visible:
+            id: "chat:jump.back"
+          timeout: 5000
+      - takeScreenshot: ref-2-pinned
+- scrollUntilVisible:
+    element: "Продолжить чтение"
+    direction: UP
+    timeout: 30000
 - tapOn: "Продолжить чтение"
 - extendedWaitUntil:
     visible:
       id: "msg:link.ask.open"
     timeout: 5000
-- takeScreenshot: ref-2-gate
+- takeScreenshot: ref-3-gate
 - tapOn:
     id: "msg:link.ask.open"
 - extendedWaitUntil:
     visible:
       id: "chat:jump.back"
     timeout: 5000
-- takeScreenshot: ref-3-jumped
+- waitForAnimationToEnd
+- takeScreenshot: ref-4-jumped

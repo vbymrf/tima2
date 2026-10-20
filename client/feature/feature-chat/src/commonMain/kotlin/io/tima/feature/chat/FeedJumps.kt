@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.sp
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Tima
 import io.tima.domain.chat.ChatLine
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.ui.layout.onSizeChanged
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -47,6 +49,14 @@ class FeedJumps {
 
     /** Кому сказать о переходе — `(to — к сообщению, step — назад или вперёд; длина цепочки)`; журнал ведёт общий слой. */
     var onJump: ((String, Int) -> Unit)? = null
+
+    /**
+     * Сколько пикселей сверху ленты закрыто тем, что лежит **поверх** неё ([coversFeedTop]). Что стоит
+     * **над** лентой (шапка, закреплённое, полосы) — вне её области и учитывается само: верх
+     * считается по области ленты. Сейчас поверх ленты сверху ничего нет.
+     */
+    var topCover by mutableStateOf(0)
+        internal set
 
     fun go(serverId: Long) {
         request = serverId
@@ -78,11 +88,21 @@ const val JUMP_BACK_TAG = "chat:jump.back"
 const val JUMP_FORWARD_TAG = "chat:jump.forward"
 const val DOWN_TAG = "chat:down"
 
-/** Номер сообщения у верхнего края экрана сейчас — то, к чему вернёт «назад». */
+/**
+ * Номер сообщения у края экрана сейчас — то, к чему вернёт «назад». Служебная строка без номера
+ * («Вы закрепили сообщение») пропускается: иначе «назад» после перехода не появлялось (2026-10-20).
+ */
 private fun anchorOf(lines: List<ChatLine>, state: LazyListState): Long? =
-    lines.getOrNull(state.firstVisibleItemIndex)?.serverId?.takeIf { it > 0 }
+    state.layoutInfo.visibleItemsInfo.sortedBy { it.index }
+        .firstNotNullOfOrNull { lines.getOrNull(it.index)?.serverId?.takeIf { id -> id > 0 } }
 
-/** Перейти к сообщению: запомнить, откуда, прокрутить, подсветить. Нет на устройстве — ничего. */
+/**
+ * Перейти к сообщению: запомнить, откуда, прокрутить, подсветить. Нет на устройстве — ничего.
+ *
+ * Одно место для всех переходов — по ссылке, ответу, закреплённому, «назад» и «вперёд»: сообщение
+ * встаёт **верхом к верху** видимой ленты (заказчик 2026-10-20: «переход идёт на низ сообщения —
+ * сделай на верх»). Видимое — область самой ленты без её полей и без [FeedJumps.topCover].
+ */
 internal suspend fun FeedJumps.perform(target: Long, lines: List<ChatLine>, state: LazyListState, record: Boolean = true) {
     val index = lines.indexOfFirst { it.serverId == target }
     if (index < 0) return
@@ -90,9 +110,28 @@ internal suspend fun FeedJumps.perform(target: Long, lines: List<ChatLine>, stat
         anchorOf(lines, state)?.takeIf { it != target }?.let { back.add(it); forward.clear() }
     }
     onJump?.invoke(if (record) "to" else "step", back.size + forward.size)
-    state.animateScrollToItem(index)
+    // Не на экране — сначала довести до него (лента перевёрнута: встаёт низом к низу).
+    if (state.layoutInfo.visibleItemsInfo.none { it.index == index }) state.animateScrollToItem(index)
+    topDelta(state, index, topCover)?.let { if (it != 0) state.animateScrollBy(it.toFloat()) }
     flash(target)
 }
+
+/**
+ * На сколько прокрутить, чтобы верх сообщения [index] встал к верху видимой ленты. Лента
+ * перевёрнута: место сообщения считается от низа, положительная прокрутка ведёт к старым — то есть
+ * опускает сообщения. Выше старых нет — прокрутка упрётся сама.
+ */
+internal fun topDelta(state: LazyListState, index: Int, cover: Int): Int? {
+    val info = state.layoutInfo
+    val item = info.visibleItemsInfo.firstOrNull { it.index == index } ?: return null
+    val top = info.viewportEndOffset - info.afterContentPadding - cover
+    return item.offset + item.size - top
+}
+
+/** Лежит поверх ленты сверху — сообщает свою высоту, чтобы переход не прятал под ним сообщение. */
+fun Modifier.coversFeedTop(jumps: FeedJumps): Modifier = this.then(
+    Modifier.onSizeChanged { jumps.topCover = it.height },
+)
 
 /**
  * Снизу вверх: «вниз», «вперёд», «назад» (§11.4), справа над строкой ввода. «Вниз» — когда
@@ -107,14 +146,14 @@ internal fun JumpButtons(jumps: FeedJumps, lines: List<ChatLine>, state: LazyLis
         if (jumps.back.isNotEmpty()) {
             JumpButton("↩", JUMP_BACK_TAG, onLong = jumps::clear) {
                 val to = jumps.back.removeAt(jumps.back.lastIndex)
-                lines.getOrNull(state.firstVisibleItemIndex)?.serverId?.takeIf { it > 0 }?.let { jumps.forward.add(it) }
+                anchorOf(lines, state)?.let { jumps.forward.add(it) }
                 scope.launch { jumps.perform(to, lines, state, record = false) }
             }
         }
         if (jumps.forward.isNotEmpty()) {
             JumpButton("↪", JUMP_FORWARD_TAG) {
                 val to = jumps.forward.removeAt(jumps.forward.lastIndex)
-                lines.getOrNull(state.firstVisibleItemIndex)?.serverId?.takeIf { it > 0 }?.let { jumps.back.add(it) }
+                anchorOf(lines, state)?.let { jumps.back.add(it) }
                 scope.launch { jumps.perform(to, lines, state, record = false) }
             }
         }
