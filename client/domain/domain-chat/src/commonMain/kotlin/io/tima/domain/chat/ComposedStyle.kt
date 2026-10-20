@@ -25,6 +25,8 @@ object ComposedStyle {
 
     fun styleAt(doc: ComposedDoc, at: Spot): Map<String, String> {
         val item = doc.items.getOrNull(at.item) ?: return emptyMap()
+        // Пункт списка — свой стиль, как у ячейки (заказчик 2026-10-20).
+        if (item is ComposedItem.ItemList && at.cell >= 0) return item.items.getOrNull(at.cell)?.style.orEmpty()
         val cell = cellOf(doc, at)
         return if (cell != null) (item as ComposedItem.Row).cells.getOrNull(cell)?.style.orEmpty() else item.style
     }
@@ -34,6 +36,10 @@ object ComposedStyle {
         val item = doc.items.getOrNull(at.item) ?: return doc
         // Ширину задаёт рамка, слияние — «С левой», «С верхней»: не стилем.
         val clean = style.filterKeys { it != "width" && it != "merge" }
+        if (item is ComposedItem.ItemList && at.cell in item.items.indices) {
+            val items = item.items.mapIndexed { i, p -> if (i == at.cell) p.copy(style = clean - "valign") else p }
+            return doc.copy(items = doc.items.toMutableList().apply { set(at.item, item.copy(items = items)) })
+        }
         val cell = cellOf(doc, at)
         val next: ComposedItem = if (cell != null) {
             val row = item as ComposedItem.Row
@@ -49,6 +55,20 @@ object ComposedStyle {
             }
         }
         return doc.copy(items = doc.items.toMutableList().apply { set(at.item, next) })
+    }
+
+    /** Свойства «Стиля», которые меняют вид у получателя (doc_mig/РЕДАКТОР-СВОЙСТВА-И-ВЛОЖЕНИЕ.md). */
+    val VISUAL = listOf("background", "color", "size", "align", "padding", "divider")
+
+    /**
+     * Какие кнопки «Стиля» действуют на выбранное: текст, ряд, ячейка, список и пункт — все; виджет во
+     * всю ширину и подкладка — фон, отступ, разделитель (цвет ссылки — в её «Свойствах»); ответ и метка
+     * продолжения — ничего.
+     */
+    fun applicable(doc: ComposedDoc, at: Spot): List<String> = when (val item = doc.items.getOrNull(at.item)) {
+        is ComposedItem.Text, is ComposedItem.Row, is ComposedItem.ItemList -> VISUAL
+        is ComposedItem.Widget -> if (item.widget is ComposedWidget.Reply) emptyList() else listOf("background", "padding", "divider")
+        is ComposedItem.Continuation, null -> emptyList()
     }
 
     /** Одно свойство; `null` — убрать его. */

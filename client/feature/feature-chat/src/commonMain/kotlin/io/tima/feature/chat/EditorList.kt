@@ -80,9 +80,17 @@ internal fun EditorList(
             val content = Spot(index, i, Spot.TEXT)
             val here = model.spot.item == index && model.spot.cell == i
             val chosen = here && model.spot.widget == -1
+            // Свой стиль пункта — как у ячейки (заказчик 2026-10-20).
+            val own = blockStyleOf(item.style).over(look.copy(background = null, padding = null, divider = null, dividerColor = null))
+            val itemText = TextStyle(
+                fontSize = sizeOf(own.size, TimaType.sz4),
+                color = io.tima.core.ui.paletteColor(own.color) ?: colors.text,
+                textAlign = alignOf(own.align),
+            )
             Column(
                 Modifier.fillMaxWidth().padding(start = (ListFit.STEP_DP * (item.depth - 1)).dp)
-                    .then(if (here) Modifier.background(colors.functional, RoundedCornerShape(4.dp)) else Modifier),
+                    .then(if (here) Modifier.background(colors.functional, RoundedCornerShape(4.dp)) else Modifier)
+                    .styled(blockStyleOf(item.style)),
             ) {
                 Row(verticalAlignment = Alignment.Top) {
                     Caption(
@@ -105,7 +113,7 @@ internal fun EditorList(
                     BasicTextField(
                         value = if (model.spot == title) model.field else TextFieldValue(shown.text),
                         onValueChange = { v -> model.changedItem(index, i, Spot.TITLE, v) },
-                        textStyle = textStyle,
+                        textStyle = itemText,
                         cursorBrush = SolidColor(colors.navigation),
                         visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks),
                         singleLine = true,
@@ -133,7 +141,7 @@ internal fun EditorList(
                             BasicTextField(
                                 value = if (model.spot == content) model.field else TextFieldValue(shown.text),
                                 onValueChange = { v -> model.changedItem(index, i, Spot.TEXT, v) },
-                                textStyle = textStyle,
+                                textStyle = itemText,
                                 cursorBrush = SolidColor(colors.navigation),
                                 visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks),
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 24.dp).focusRequester(focus)

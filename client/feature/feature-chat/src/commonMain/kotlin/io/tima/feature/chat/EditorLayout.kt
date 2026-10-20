@@ -145,8 +145,15 @@ internal fun EditorWidget(
             .testTag(EditorTags.spot(spot)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // В редакторе нажатие на ссылку и на сообщение-ссылку выбирает виджет — его свойства в «Стиле»,
+        // а не переход (заказчик 2026-10-20).
         Box(Modifier.weight(1f)) {
-            preview(ComposedDoc(listOf(ComposedItem.Widget(widget)), marks = model.doc.marks))?.let { RichBody(it) }
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalLinkOpen provides { _ -> model.select(spot) },
+                LocalOpenMessage provides { _, _, _ -> model.select(spot) },
+            ) {
+                preview(ComposedDoc(listOf(ComposedItem.Widget(widget)), marks = model.doc.marks))?.let { RichBody(it) }
+            }
         }
         // Ручка — для мыши: тянуть сразу, без долгого нажатия.
         Caption(
@@ -215,7 +222,7 @@ internal fun EditorRow(
                 SpanGrid(columns, widths, spans, gap, Modifier.fillMaxWidth()) { c ->
                     val (w, _) = spans[c]
                     val percent = (c % columns until c % columns + w).sumOf { widths.getOrElse(it) { 0 } }
-                    EditorCell(row.cells[c], index, c, percent, model, drag, marks, preview, Modifier)
+                    EditorCell(row.cells[c], index, c, percent, model, drag, marks, preview, Modifier, look)
                 }
             }
         }
@@ -267,12 +274,14 @@ private fun EditorCell(
     marks: TypingMarks?,
     preview: (ComposedDoc) -> RichContent?,
     modifier: Modifier,
+    rowLook: io.tima.domain.chat.BlockStyle = io.tima.domain.chat.BlockStyle.NONE,
 ) {
     val colors = Tima.colors
     val spot = model.spot
     val cellChosen = spot.item == index && spot.cell == c
     val textSpot = Spot(index, c, Spot.TEXT)
-    val look = blockStyleOf(cell.style)
+    // Цвет, размер и выравнивание ряда — ячейке, если у неё своих нет; как у получателя.
+    val look = blockStyleOf(cell.style).over(rowLook.copy(background = null, padding = null, divider = null, dividerColor = null))
     val border = when {
         drag.over(index, c) -> colors.confirmed
         cellChosen && spot.widget == -1 -> colors.navigation

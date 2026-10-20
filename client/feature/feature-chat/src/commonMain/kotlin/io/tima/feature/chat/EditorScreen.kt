@@ -417,9 +417,12 @@ fun EditorScreen(
                 )
             }
         }
+        // В «Стиле» — только то, что действует на выбранное (doc_mig/РЕДАКТОР-СВОЙСТВА-И-ВЛОЖЕНИЕ.md).
+        val styleKeys = io.tima.domain.chat.ComposedStyle.applicable(doc, model.spot)
         Ribbon(
             tab, marksOn = doc.marks, active = active, paragraph = w.paragraph(model.paragraphHere.name),
             scroll = ribbonScroll, onPress = ::press,
+            hidden = if (tab == EditorTab.STYLE) (io.tima.domain.chat.ComposedStyle.VISUAL - styleKeys.toSet()).toSet() else emptySet(),
         )
         if (panel != null && panel != "level" && panel != "emoji" && panel != "symbol") {
             Box(Modifier.fillMaxWidth().heightIn(max = PANEL_MAX).verticalScroll(rememberScrollState())) {
@@ -658,13 +661,13 @@ private fun LevelList(levels: List<MessageCircle>, current: Int, onPick: (Int) -
  * название того, что включено под курсором, сколько вместится (заказчик 2026-10-19).
  */
 @Composable
-private fun Ribbon(tab: EditorTab, marksOn: Boolean, active: Set<String>, paragraph: String, scroll: androidx.compose.foundation.ScrollState, onPress: (String) -> Unit) {
+private fun Ribbon(tab: EditorTab, marksOn: Boolean, active: Set<String>, paragraph: String, scroll: androidx.compose.foundation.ScrollState, onPress: (String) -> Unit, hidden: Set<String> = emptySet()) {
     val colors = Tima.colors
     val w = Tima.words.editor
     val width = RIBBON_BUTTON
     Box(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().horizontalScroll(scroll).padding(vertical = 4.dp)) {
-            for (key in tab.buttons) {
+            for (key in tab.buttons.filter { it !in hidden }) {
                 if (key == "paragraph") {
                     Column(
                         Modifier.width(width * 2).clickable { onPress(key) }.padding(horizontal = 4.dp, vertical = 4.dp).testTag(EditorTags.button(key)),

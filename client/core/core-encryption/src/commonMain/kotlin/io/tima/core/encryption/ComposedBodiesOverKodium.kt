@@ -181,7 +181,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
                     val content = if (it.text.isBlank()) emptyList() else graft(parsed(it.text.trim('\n')))
                     val widgets = it.widgets.map(::widget)
                     val nested = if (i < items.size && items[i].depth > depth && depth < MarkupRules.MAX_LIST_DEPTH) listOf(level(depth + 1)) else emptyList()
-                    out += MarkupBlock(type = BlockType.LIST_ITEM, nodeIds = listOf(title), children = content + widgets + nested)
+                    out += MarkupBlock(type = BlockType.LIST_ITEM, nodeIds = listOf(title), children = content + widgets + nested, style = it.style)
                 }
                 return MarkupBlock(type = BlockType.LIST, children = out)
             }
@@ -354,11 +354,12 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val title: String = "",
         val text: String = "",
         val widgets: List<SavedWidget> = emptyList(),
+        val style: Map<String, String> = emptyMap(),
     ) {
-        fun toItem() = ComposedListItem(depth, title, text, widgets.mapNotNull { it.toWidget() })
+        fun toItem() = ComposedListItem(depth, title, text, widgets.mapNotNull { it.toWidget() }, style)
 
         companion object {
-            fun of(i: ComposedListItem) = SavedListItem(i.depth, i.title, i.text, i.widgets.map(SavedWidget::of))
+            fun of(i: ComposedListItem) = SavedListItem(i.depth, i.title, i.text, i.widgets.map(SavedWidget::of), i.style)
         }
     }
 

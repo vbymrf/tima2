@@ -222,11 +222,20 @@ private fun WidgetOptions(model: EditorModel, spot: Spot) {
     }
     fun put(next: ComposedWidget) = model.layout { d, s -> withWidget(d, s, next) to s }
     when (widget) {
-        is ComposedWidget.Link -> androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (mode in listOf("plain", "button", "card")) {
-                Chip(w.linkMode(mode), kind = if (widget.mode == mode) ChipKind.Selected else ChipKind.Quiet,
-                    onClick = { put(widget.copy(mode = mode)) }, modifier = Modifier.testTag("editor:style.link.$mode"))
+        // Ссылка (ADR-0050 §3): вид задаёт свойство — по умолчанию кнопка «Перейти»; карточка — из сети
+        // по выбору, не сама; цвет — её свой.
+        is ComposedWidget.Link -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (mode in listOf("plain", "button", "card")) {
+                    Chip(w.linkMode(mode), kind = if (widget.mode == mode) ChipKind.Selected else ChipKind.Quiet,
+                        onClick = {
+                            put(widget.copy(mode = mode))
+                            if (mode == "card" && widget.title.isEmpty() && widget.description.isEmpty()) model.onLink?.invoke(widget.url)
+                        },
+                        modifier = Modifier.testTag("editor:style.link.$mode"))
+                }
             }
+            PaletteRow(widget.color.ifEmpty { null }, "editor:style.link.color") { c -> put(widget.copy(color = c.orEmpty())) }
         }
         is ComposedWidget.Quoted -> RefOptions("quoted", widget.author, widget.lines, widget.more, widget.moreText, widget.tap) { au, li, mo, mt, ta ->
             put(widget.copy(author = au, lines = li, more = mo, moreText = mt, tap = ta))
@@ -269,12 +278,6 @@ private fun RefOptions(
             modifier = Modifier.testTag("editor:style.$tag.tap"))
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (n in listOf(0, 1, 2, 3, 5, 10)) {
-            Chip(if (n == 0) w.linesAll else w.underlayLines(n), kind = kindOf(lines == n), onClick = { onChange(author, n, more, moreText, tap) },
-                modifier = Modifier.testTag("editor:style.$tag.lines.$n"))
-        }
-    }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (mode in listOf("", "default", "blank", "custom")) {
             Chip(w.moreMode(mode), kind = kindOf(more == mode), onClick = { onChange(author, lines, mode, moreText, tap) },
                 modifier = Modifier.testTag("editor:style.$tag.more.${mode.ifEmpty { "none" }}"))
@@ -290,6 +293,13 @@ private fun RefOptions(
             modifier = Modifier.fillMaxWidth().background(colors.functional, RoundedCornerShape(8.dp)).padding(8.dp)
                 .testTag("editor:style.$tag.more.text"),
         )
+    }
+    // Строк — последним рядом, только «Целиком», 1, 2, 3 (заказчик 2026-10-20).
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (n in listOf(0, 1, 2, 3)) {
+            Chip(if (n == 0) w.linesAll else w.underlayLines(n), kind = kindOf(lines == n), onClick = { onChange(author, n, more, moreText, tap) },
+                modifier = Modifier.testTag("editor:style.$tag.lines.$n"))
+        }
     }
 }
 

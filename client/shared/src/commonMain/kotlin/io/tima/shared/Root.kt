@@ -5097,12 +5097,11 @@ private fun Chat(
             if (p != null) put(io.tima.domain.chat.ComposedWidget.Place(p.first, p.second)) else { editorNotice = noPlaceAccess; editorAsk = "place" }
         }
         val linkCards = remember { io.tima.core.network.LinkCardsOverHttp() }
-        // Адрес из текста стал кнопкой (ADR-0050 §3); включены «Карточки ссылок» — кнопка становится карточкой из сети.
-        val linkSettings by environment.settings.all().collectAsState(initial = emptyMap())
-        val cardsOnNow by androidx.compose.runtime.rememberUpdatedState(linkSettings[LINK_CARDS_KEY] != "0")
+        // Ссылке выбрали вид «Карточка» в «Свойствах» (ADR-0050 §3) — карточка из сети. Сама кнопка
+        // карточкой не становится (заказчик 2026-10-20: «стала Карточкой… с лагом 2 секунды»).
         androidx.compose.runtime.SideEffect {
             editorModel.onLink = { url ->
-                if (cardsOnNow) scope.launch {
+                scope.launch {
                     val card = linkCards.card(url) ?: return@launch
                     val image = card.image?.let { bytes ->
                         val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(bytes) }

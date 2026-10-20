@@ -95,7 +95,7 @@ internal object ComposedFromContent {
                 val texts = item.children.filter { it.type != BlockType.LIST && it.type !in WIDGETS }
                 val text = if (texts.isEmpty()) "" else textOf(content, markup, texts) ?: return false
                 val widgets = item.children.filter { it.type in WIDGETS }.map { w -> widget(content, w) ?: return false }
-                items += ComposedListItem(depth, title, text, widgets)
+                items += ComposedListItem(depth, title, text, widgets, item.style)
                 for (nested in item.children.filter { it.type == BlockType.LIST }) if (!walk(nested, depth + 1)) return false
             }
             return true

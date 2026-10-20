@@ -49,14 +49,15 @@ internal object RichMapper {
             when (block.type) {
                 BlockType.PARAGRAPH -> RichBlock.Paragraph(rich(block.nodeIds.firstOrNull() ?: -1), style(block))
                 BlockType.HEADING -> RichBlock.Heading(block.level.coerceIn(1, 3), rich(block.nodeIds.firstOrNull() ?: -1), style(block))
-                BlockType.QUOTE -> RichBlock.Quote(block.nodeIds.map(::rich))
+                BlockType.QUOTE -> RichBlock.Quote(block.nodeIds.map(::rich), style(block))
                 // Пункт — контейнер (ADR-0049 §2): его блоки и виджеты — под заголовком.
                 BlockType.LIST -> RichBlock.Bullets(
                     bullets(block, ::rich) { b -> if (b.type in CELL_TEXT) map(b) else widget(b) },
                     closed = block.style["fold"] == "closed",
                     flat = block.style["indent"] == "flat",
+                    style = style(block),
                 )
-                BlockType.CODE_BLOCK -> RichBlock.CodeBlock(nodeText(block.nodeIds.firstOrNull() ?: -1))
+                BlockType.CODE_BLOCK -> RichBlock.CodeBlock(nodeText(block.nodeIds.firstOrNull() ?: -1), style(block))
                 BlockType.DIVIDER -> RichBlock.Divider
                 BlockType.TABLE -> RichBlock.Table(
                     block.children.map { row ->
@@ -163,6 +164,7 @@ internal object RichMapper {
                 text = rich(item.nodeIds.firstOrNull() ?: -1),
                 children = item.children.filter { it.type == BlockType.LIST }.flatMap { bullets(it, rich, inner) },
                 blocks = item.children.filter { it.type != BlockType.LIST }.mapNotNull(inner),
+                style = style(item),
             )
         }
 

@@ -40,6 +40,17 @@ class RichListScreenTest {
         androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.width(300.dp)) { RichBody(content) }
     }
 
+    /** Заказчик 2026-10-20: у пункта свой стиль — фон, цвет, выравнивание; соседний — без. */
+    @Test
+    fun стиль_пункта() {
+        val styled = RichContent(listOf(RichBlock.Bullets(listOf(
+            Bullet(RichText("Заглавие"), style = io.tima.domain.chat.BlockStyle(background = "amber-soft", color = "red", align = "center")),
+            Bullet(RichText("Второй")),
+        ))))
+        val plain = RichContent(listOf(RichBlock.Bullets(listOf(Bullet(RichText("Заглавие")), Bullet(RichText("Второй"))))))
+        assertTrue(shot("список-стиль-пункта", styled).difference(shot("список-без-стиля", plain)) > 0.0)
+    }
+
     @Test
     fun свёрнутый_развёрнутый_и_без_отступа() {
         val open = shot("список-развёрнут", list(closed = false, flat = false))

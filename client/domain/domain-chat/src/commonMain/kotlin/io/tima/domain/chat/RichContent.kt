@@ -81,12 +81,12 @@ sealed interface RichBlock {
     data class Heading(val level: Int, val text: RichText, val style: BlockStyle = BlockStyle.NONE) : RichBlock
 
     /** Строки цитаты — каждая своей строкой. */
-    data class Quote(val lines: List<RichText>) : RichBlock
+    data class Quote(val lines: List<RichText>, val style: BlockStyle = BlockStyle.NONE) : RichBlock
 
     /** Список (ADR-0049 §3): [closed] — показать свёрнутым, [flat] — без отступа вложенного. */
-    data class Bullets(val items: List<Bullet>, val closed: Boolean = false, val flat: Boolean = false) : RichBlock
+    data class Bullets(val items: List<Bullet>, val closed: Boolean = false, val flat: Boolean = false, val style: BlockStyle = BlockStyle.NONE) : RichBlock
 
-    data class CodeBlock(val text: String) : RichBlock
+    data class CodeBlock(val text: String, val style: BlockStyle = BlockStyle.NONE) : RichBlock
 
     data object Divider : RichBlock
 
@@ -193,7 +193,7 @@ data class RowCell(
 
 /** Пункт списка и вложенные в него пункты. */
 /** Пункт — контейнер (ADR-0049 §2): заголовок, свои блоки и виджеты, вложенные пункты. */
-data class Bullet(val text: RichText, val children: List<Bullet> = emptyList(), val blocks: List<RichBlock> = emptyList())
+data class Bullet(val text: RichText, val children: List<Bullet> = emptyList(), val blocks: List<RichBlock> = emptyList(), val style: BlockStyle = BlockStyle.NONE)
 
 data class TableCell(
     val text: RichText?,

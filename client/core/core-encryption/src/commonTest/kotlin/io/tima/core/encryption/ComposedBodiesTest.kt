@@ -143,6 +143,31 @@ class ComposedBodiesTest {
         assertEquals(listOf("https://tima.ru/вход"), links.map { it.attribute })
     }
 
+    /** Заказчик 2026-10-20: у пункта списка свой стиль, как у ячейки; цитата и код — со стилем куска. */
+    @Test
+    fun стиль_пункта_цитаты_и_кода() {
+        val list = ComposedItem.ItemList(
+            listOf(
+                io.tima.domain.chat.ComposedListItem(1, "раз", style = mapOf("background" to "amber-soft", "align" to "center")),
+                io.tima.domain.chat.ComposedListItem(1, "два"),
+            ),
+            style = mapOf("color" to "blue"),
+        )
+        val doc = ComposedDoc(listOf(list, ComposedItem.Text("--> цитата\n```\nкод\n```", mapOf("color" to "red", "size" to "larger"))))
+        val content = bodies.content(doc)
+        assertTrue(io.tima.crypto.MarkupRules.check(content, strict = true).isEmpty(), io.tima.crypto.MarkupRules.check(content, strict = true).toString())
+        val shown = RichMapper.from(content)!!.blocks
+        val bullets = assertIs<RichBlock.Bullets>(shown[0])
+        assertEquals("blue", bullets.style.color)
+        assertEquals("amber-soft", bullets.items[0].style.background)
+        assertEquals("center", bullets.items[0].style.align)
+        assertEquals(io.tima.domain.chat.BlockStyle.NONE, bullets.items[1].style)
+        assertEquals("red", assertIs<RichBlock.Quote>(shown[1]).style.color)
+        assertEquals("larger", assertIs<RichBlock.CodeBlock>(shown[2]).style.size)
+        assertEquals(list, ComposedFromContent.doc(content)!!.items[0], "правка открывает пункты с их стилем")
+        assertEquals(doc.items, bodies.load(bodies.save(doc))!!.items, "черновик")
+    }
+
     /** ADR-0048: знак, набранный текстом, в документе экранирован — в тело уходит текстом. */
     @Test
     fun знаки_выключены_текст_как_есть() {

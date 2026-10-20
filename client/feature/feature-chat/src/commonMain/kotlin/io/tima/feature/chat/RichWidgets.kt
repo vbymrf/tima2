@@ -121,13 +121,13 @@ internal fun RichRow(row: RichBlock.Row) {
     val widths = first.map { if (named) it.width!! else 1 }
     val spans = remember(row) { io.tima.domain.chat.GridSpans.of(row.cells.map { it.merge }, columns) }
     SpanGrid(columns, widths, spans, CELL_GAP.dp, Modifier.fillMaxWidth().styled(row.style)) { i ->
-        RowCellView(row.cells[i], Modifier)
+        RowCellView(row.cells[i], Modifier, row.style)
     }
     DividerAfter(row.style)
 }
 
 @Composable
-private fun RowCellView(cell: RowCell, modifier: Modifier) {
+private fun RowCellView(cell: RowCell, modifier: Modifier, rowStyle: io.tima.domain.chat.BlockStyle = io.tima.domain.chat.BlockStyle.NONE) {
     val vertical = when (cell.style.valign) {
         "center" -> Alignment.CenterVertically
         "bottom" -> Alignment.Bottom
@@ -135,7 +135,9 @@ private fun RowCellView(cell: RowCell, modifier: Modifier) {
     }
     Column(modifier.styled(cell.style), verticalArrangement = Arrangement.spacedBy(4.dp, vertical)) {
         // Фон и поля — у ячейки; тексту остаются цвет, размер и выравнивание.
+        // Цвет, размер и выравнивание ряда — ячейкам, если у ячейки своих нет.
         val textStyle = cell.style.copy(background = null, padding = null, divider = null, dividerColor = null)
+            .over(rowStyle.copy(background = null, padding = null, divider = null, dividerColor = null))
         cell.text?.takeIf { it.text.isNotEmpty() }?.let {
             val shown = withoutLinks(it)
             if (shown.text.isNotEmpty()) StyledText(shown, textStyle, TimaType.sz4)
@@ -292,7 +294,9 @@ private fun QuotedWidget(quoted: RichBlock.Quoted) = MessageRef(
 /** Подкладка (ADR-0050 §1): под пузырём, по умолчанию целиком и текстом; разделитель — стилем блока. */
 @Composable
 private fun UnderlayWidget(underlay: RichBlock.Underlay) {
-    MessageRef(underlay.kind, underlay.chatId, underlay.messageId, underlay.author, underlay.lines, underlay.more, underlay.moreText, underlay.tap)
+    Box(Modifier.fillMaxWidth().styled(underlay.style)) {
+        MessageRef(underlay.kind, underlay.chatId, underlay.messageId, underlay.author, underlay.lines, underlay.more, underlay.moreText, underlay.tap)
+    }
     DividerAfter(underlay.style)
 }
 

@@ -131,6 +131,8 @@ data class ComposedListItem(
     val title: String = "",
     val text: String = "",
     val widgets: List<ComposedWidget> = emptyList(),
+    /** Свой стиль пункта — как у ячейки ряда (заказчик 2026-10-20): на заголовок и всё под ним. */
+    val style: Map<String, String> = emptyMap(),
 )
 
 /** Виджеты редактора (Решения §10.4). */
