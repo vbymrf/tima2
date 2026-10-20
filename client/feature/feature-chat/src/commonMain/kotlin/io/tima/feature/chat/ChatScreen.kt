@@ -62,6 +62,7 @@ import io.tima.core.ui.Chip
 import io.tima.domain.chat.PersonField
 import io.tima.domain.chat.PersonLook
 import io.tima.domain.chat.RichContent
+import kotlinx.coroutines.launch
 import io.tima.domain.chat.letter
 import io.tima.domain.chat.line
 import io.tima.domain.chat.CarryToPage
@@ -505,11 +506,15 @@ private fun Feed(
         }
     }
     // Просьба перейти — от блока ответа и вставленного; ведёт лента: прокрутка у неё.
+    // Прокрутка — своей задачей, как у «назад» и «вперёд»: `taken()` меняет ключ эффекта, и прокрутка
+    // внутри него отменялась на следующем кадре — переход писался в журнал, но не случался (2026-10-20).
     if (jumps != null) {
+        val jumpScope = androidx.compose.runtime.rememberCoroutineScope()
+        val feed by androidx.compose.runtime.rememberUpdatedState(lines)
         LaunchedEffect(jumps.request) {
             val target = jumps.request ?: return@LaunchedEffect
             jumps.taken()
-            jumps.perform(target, lines, listState)
+            jumpScope.launch { jumps.perform(target, feed, listState) }
         }
     }
     val flashColor = Tima.colors.activity.copy(alpha = 0.22f)

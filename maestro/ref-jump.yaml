@@ -1,0 +1,33 @@
+# Переход по вставленному сообщению (заказчик 2026-10-20: «ссылки на сообщение нигде не работают»).
+#
+# Причина была в коде: прокрутка шла внутри эффекта, ключ которого она сама обнуляла, — и
+# отменялась на следующем кадре. Журнал писал «к сообщению», лента не двигалась.
+#
+# Признак, что переход случился: появилась кнопка «назад» (`chat:jump.back`) — её ставит только
+# состоявшийся переход. Снимки до и после — в артефактах.
+#
+# Телефон: Samsung, переписка «redmi», в ней сообщение с подкладкой и кнопкой «Продолжить чтение».
+appId: io.tima.app.v2
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "redmi.*"
+    timeout: 20000
+- tapOn: "redmi.*"
+- waitForAnimationToEnd
+- assertNotVisible:
+    id: "chat:jump.back"
+- takeScreenshot: ref-1-chat
+- tapOn: "Продолжить чтение"
+- extendedWaitUntil:
+    visible:
+      id: "msg:link.ask.open"
+    timeout: 5000
+- takeScreenshot: ref-2-gate
+- tapOn:
+    id: "msg:link.ask.open"
+- extendedWaitUntil:
+    visible:
+      id: "chat:jump.back"
+    timeout: 5000
+- takeScreenshot: ref-3-jumped
