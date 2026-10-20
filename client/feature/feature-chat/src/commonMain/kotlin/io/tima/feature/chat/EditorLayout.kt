@@ -145,12 +145,13 @@ internal fun EditorWidget(
             .testTag(EditorTags.spot(spot)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // В редакторе нажатие на ссылку и на сообщение-ссылку выбирает виджет — его свойства в «Стиле»,
-        // а не переход (заказчик 2026-10-20).
+        // В редакторе нажатие на ссылку и на сообщение-ссылку выбирает виджет и показывает то же окно
+        // перехода, но переход в нём заблокирован (заказчик 2026-10-20).
         Box(Modifier.weight(1f)) {
+            val gate = LocalGate.current
             androidx.compose.runtime.CompositionLocalProvider(
-                LocalLinkOpen provides { _ -> model.select(spot) },
-                LocalOpenMessage provides { _, _, _ -> model.select(spot) },
+                LocalGateBlocked provides true,
+                LocalGate provides { ask -> model.select(spot); gate?.invoke(ask) },
             ) {
                 preview(ComposedDoc(listOf(ComposedItem.Widget(widget)), marks = model.doc.marks))?.let { RichBody(it) }
             }

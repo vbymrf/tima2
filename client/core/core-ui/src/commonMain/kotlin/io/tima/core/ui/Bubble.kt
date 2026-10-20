@@ -99,6 +99,8 @@ fun Bubble(
     look: AvatarLook = AvatarLook.Free,
     /** Нажатие на аватар — страница человека (заказчик 2026-10-07, во всех видах). `null` — не нажимается. */
     onAvatar: (() -> Unit)? = null,
+    /** Сам пузырь (не строка вокруг): что делает нажатие по нему — у переписки свои правила. */
+    surface: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     val colors = Tima.colors
@@ -132,7 +134,7 @@ fun Bubble(
     ) {
         Box {
             Column(
-                modifier = Modifier
+                modifier = surface
                     // Предел ширины считается вместе с рамкой и полем: справа от пузыря
                     // должно остаться место кнопке.
                     .widthIn(max = BUBBLE_MAX_WIDTH)

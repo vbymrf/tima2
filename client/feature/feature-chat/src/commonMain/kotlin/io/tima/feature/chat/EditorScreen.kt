@@ -83,7 +83,9 @@ import io.tima.domain.chat.TypingMarks
 object EditorTags {
     const val WINDOW = "editor:window"
     const val BACK = "editor:back"
-    const val TITLE = "editor:title"
+    /** Шапка: свойства блока и эмоджи (заказчик 2026-10-20) — те же, что в ленте, своей меткой. */
+    const val HEAD_PROPS = "editor:head.props"
+    const val HEAD_EMOJI = "editor:head.emoji"
     const val UNDO = "editor:undo"
     const val REDO = "editor:redo"
     const val LEVEL = "editor:level"
@@ -125,10 +127,12 @@ object EditorTags {
 
 /** Разделы редактора и кнопки ленты (Решения §10.2) — ключи подписей `EditorWords.button`. */
 internal enum class EditorTab(val key: String, val buttons: List<String>) {
-    TEXT("text", listOf("paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol", "paste")),
-    INSERT("insert", listOf("picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply")),
-    LAYOUT("layout", listOf("row", "widget", "marks", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "up", "down", "delete")),
-    STYLE("style", listOf("props", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
+    // Заказчик 2026-10-20: «Уровень» — первым в «Тексте»; «Виджет» — первым во «Вставке», «С оформлением» —
+    // последним там же; «Вид» (просмотр) и «Свойства» — первыми в «Стиле».
+    TEXT("text", listOf("level", "paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol")),
+    INSERT("insert", listOf("widget", "picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply", "paste")),
+    LAYOUT("layout", listOf("row", "marks", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "up", "down", "delete")),
+    STYLE("style", listOf("view", "props", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
 }
 
 /**
@@ -222,6 +226,7 @@ internal fun editorGlyph(key: String): String = when (key) {
     "delete" -> "🗑"
     "widget" -> "◳"
     "props" -> "⚙"
+    "view" -> "🖼"
     "background" -> "◼"
     "color" -> "A"
     "size" -> "Aa"
@@ -329,6 +334,10 @@ fun EditorScreen(
         hint = null
         when (key) {
             "paragraph" -> toggle("paragraph")
+            // «Текст → Уровень» (заказчик 2026-10-20): один уровень — выбирать нечего.
+            "level" -> if (levels.size > 1) toggle("level")
+            // «Стиль → Вид»: сообщение так, как его увидит получатель.
+            "view" -> showPreview = !showPreview
             "bold" -> model.inline(InlineKind.BOLD)
             "italic" -> model.inline(InlineKind.ITALIC)
             "underline" -> model.inline(InlineKind.UNDERLINE)
@@ -370,7 +379,7 @@ fun EditorScreen(
             "down" -> model.layout { d, s -> io.tima.domain.chat.ComposedLayout.shift(d, s, 1) }
             "delete" -> model.layout(io.tima.domain.chat.ComposedLayout::removeAt)
             // Раздел «Стиль» (§10.2): на выбранное.
-            // «Разметка → Виджет» (ПЛАН-(ВД)): опрос, мероприятие, видеоклипы, аудио.
+            // «Вставка → Виджет» (ПЛАН-(ВД)): опрос, мероприятие, видеоклипы, аудио.
             "widget" -> toggle("widgets")
             // «Стиль → Свойства» (ADR-0050 §2): свойства выбранного блока.
             "props" -> toggle("style.props")
@@ -388,22 +397,21 @@ fun EditorScreen(
             .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
             .onPreviewKeyEvent { e -> editorKeys(e, model, trouble.isEmpty(), onSend = { onSend(model.doc) }, onBack = { onBack(model.doc) }) },
     ) {
-        // ── Шапка (заказчик 2026-10-19): ‹ · просмотр · удалить · ↶ ↷ · уровень · ➤ ──
-        // «‹» зелёная; «➤» зелёная без ошибок, красная с ошибками.
+        // ── Шапка (заказчик 2026-10-20): ‹ · свойства блока · удалить · эмоджи · ↶ ↷ · ➤ ──
+        // «‹» зелёная; «➤» зелёная без ошибок, красная с ошибками. Просмотр — «Стиль → Вид», уровень — «Текст».
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = TimaSpacing.about2),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(glyph = "‹", onClick = { onBack(model.doc) }, live = true, modifier = Modifier.testTag(EditorTags.BACK))
-            HeaderToggle("🖼", showPreview, EditorTags.TITLE) { showPreview = !showPreview }
+            HeaderToggle("⚙", panel == "style.props", EditorTags.HEAD_PROPS) { press("props") }
             HeaderGlyph("🗑", true, EditorTags.DELETE) { model.layout(io.tima.domain.chat.ComposedLayout::removeAt) }
+            HeaderToggle("🙂", panel == "emoji", EditorTags.HEAD_EMOJI) { press("emoji") }
             HeaderGlyph("↶", model.canUndo, EditorTags.UNDO) { model.undo() }
             HeaderGlyph("↷", model.canRedo, EditorTags.REDO) { model.redo() }
-            LevelButton(level, enabled = levels.size > 1) { toggle("level") }
             SendButton(ready = !doc.isEmpty, broken = trouble.isNotEmpty()) { onSend(model.doc) }
         }
-        if (panel == "level") LevelList(levels, level) { picked -> model.level(picked); panel = null }
 
         // ── Разделы и лента (§10.2) — закреплены вверху (заказчик 2026-10-19: «Закрепляем меню вверху
         // обратно»); прокручивается сообщение. Окно выбора не выше [PANEL_MAX] — дальше листается само.
@@ -420,10 +428,11 @@ fun EditorScreen(
         // В «Стиле» — только то, что действует на выбранное (doc_mig/РЕДАКТОР-СВОЙСТВА-И-ВЛОЖЕНИЕ.md).
         val styleKeys = io.tima.domain.chat.ComposedStyle.applicable(doc, model.spot)
         Ribbon(
-            tab, marksOn = doc.marks, active = active, paragraph = w.paragraph(model.paragraphHere.name),
-            scroll = ribbonScroll, onPress = ::press,
+            tab, marksOn = doc.marks, active = if (showPreview) active + "view" else active, paragraph = w.paragraph(model.paragraphHere.name),
+            scroll = ribbonScroll, onPress = ::press, level = level, levelOn = levels.size > 1,
             hidden = if (tab == EditorTab.STYLE) (io.tima.domain.chat.ComposedStyle.VISUAL - styleKeys.toSet()).toSet() else emptySet(),
         )
+        if (panel == "level") LevelList(levels, level) { picked -> model.level(picked); panel = null }
         if (panel != null && panel != "level" && panel != "emoji" && panel != "symbol") {
             Box(Modifier.fillMaxWidth().heightIn(max = PANEL_MAX).verticalScroll(rememberScrollState())) {
                 when {
@@ -477,8 +486,14 @@ fun EditorScreen(
             val window = maxHeight
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), enabled = drag.from == null).padding(TimaSpacing.about3)) {
                 if (showPreview) {
-                    Bubble(my = true, modifier = Modifier.testTag(EditorTags.PREVIEW)) {
-                        preview(doc)?.let { RichBody(it) } ?: Caption(doc.firstLine, fontSize = TimaType.sz4)
+                    // Как в ленте (заказчик 2026-10-20): тот же показ; переходы — окном, но заблокированы.
+                    androidx.compose.runtime.CompositionLocalProvider(LocalGateBlocked provides true) {
+                        val shown = preview(doc)
+                        if (shown != null) {
+                            MessageView(shown, my = true, modifier = Modifier.testTag(EditorTags.PREVIEW))
+                        } else {
+                            Bubble(my = true, modifier = Modifier.testTag(EditorTags.PREVIEW)) { Caption(doc.firstLine, fontSize = TimaType.sz4) }
+                        }
                     }
                 } else {
                     doc.items.forEachIndexed { i, item ->
@@ -590,7 +605,7 @@ private fun HeaderGlyph(glyph: String, enabled: Boolean, tag: String, onClick: (
     }
 }
 
-/** Кнопка шапки, которая бывает нажата: «Просмотр» — фон, пока показано глазами получателя. */
+/** Кнопка шапки, которая бывает нажата: фон, пока открыто её окно («Свойства», эмоджи). */
 @Composable
 private fun HeaderToggle(glyph: String, on: Boolean, tag: String, onClick: () -> Unit) {
     val colors = Tima.colors
@@ -616,21 +631,6 @@ private fun SendButton(ready: Boolean, broken: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Caption("➤", fontSize = 18.sp, weight = FontWeight.Bold, color = if (ready || broken) colors.onAccent else colors.text3)
-    }
-}
-
-/** На кнопке — только цифра уровня (§10.1); один уровень — серая. */
-@Composable
-private fun LevelButton(level: Int, enabled: Boolean, onClick: () -> Unit) {
-    val colors = Tima.colors
-    Box(
-        Modifier.size(34.dp)
-            .background(if (enabled) colors.navigation else colors.functional, CircleShape)
-            .clickable(enabled = enabled, onClick = onClick)
-            .testTag(EditorTags.LEVEL),
-        contentAlignment = Alignment.Center,
-    ) {
-        Caption(level.toString(), fontSize = TimaType.sz5, weight = FontWeight.Black, color = if (enabled) colors.onAccent else colors.text3)
     }
 }
 
@@ -661,7 +661,17 @@ private fun LevelList(levels: List<MessageCircle>, current: Int, onPick: (Int) -
  * название того, что включено под курсором, сколько вместится (заказчик 2026-10-19).
  */
 @Composable
-private fun Ribbon(tab: EditorTab, marksOn: Boolean, active: Set<String>, paragraph: String, scroll: androidx.compose.foundation.ScrollState, onPress: (String) -> Unit, hidden: Set<String> = emptySet()) {
+private fun Ribbon(
+    tab: EditorTab,
+    marksOn: Boolean,
+    active: Set<String>,
+    paragraph: String,
+    scroll: androidx.compose.foundation.ScrollState,
+    onPress: (String) -> Unit,
+    hidden: Set<String> = emptySet(),
+    level: Int = 0,
+    levelOn: Boolean = false,
+) {
     val colors = Tima.colors
     val w = Tima.words.editor
     val width = RIBBON_BUTTON
@@ -678,6 +688,22 @@ private fun Ribbon(tab: EditorTab, marksOn: Boolean, active: Set<String>, paragr
                             contentAlignment = Alignment.CenterStart,
                         ) {
                             Caption("▾ $paragraph", fontSize = 14.sp, weight = FontWeight.Bold, color = colors.text, lineOne = true)
+                        }
+                        Caption(w.button(key), fontSize = 10.sp, color = colors.text2, lineOne = true)
+                    }
+                    continue
+                }
+                if (key == "level") {
+                    // Уровень — цифрой в кружке (§10.1); один уровень — серый.
+                    Column(
+                        Modifier.width(width).clickable(enabled = levelOn) { onPress(key) }.padding(vertical = 4.dp).testTag(EditorTags.LEVEL),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(
+                            Modifier.size(30.dp).background(if (levelOn) colors.navigation else colors.functional, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Caption(level.toString(), fontSize = 15.sp, weight = FontWeight.Black, color = if (levelOn) colors.onAccent else colors.text3)
                         }
                         Caption(w.button(key), fontSize = 10.sp, color = colors.text2, lineOne = true)
                     }

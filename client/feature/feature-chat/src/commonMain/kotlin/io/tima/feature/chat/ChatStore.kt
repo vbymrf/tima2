@@ -696,6 +696,7 @@ class ChatStore(
                 is Forwarded.Text -> send.send(chatId, item.text, _state.value.level, marks = item.marks)
                 is Forwarded.Doc -> composer?.send(chatId, item.doc, _state.value.level, null)
                 is Forwarded.Photo -> sendPhotos(listOf(item.bytes to item.mime))
+                is Forwarded.File -> sendFile(item.bytes, item.mime, item.name)
             }
         }
         _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.forwarded(items.size)))
@@ -1384,4 +1385,7 @@ sealed interface Forwarded {
     data class Text(val text: String, val marks: Boolean = true) : Forwarded
     data class Doc(val doc: ComposedDoc) : Forwarded
     class Photo(val bytes: ByteArray, val mime: String) : Forwarded
+
+    /** Файл из меню файла (заказчик 2026-10-20) — уходит файлом, как приложенный. */
+    class File(val bytes: ByteArray, val mime: String, val name: String) : Forwarded
 }

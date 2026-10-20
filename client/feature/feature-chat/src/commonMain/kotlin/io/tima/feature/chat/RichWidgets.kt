@@ -310,7 +310,8 @@ private fun UnderlayWidget(underlay: RichBlock.Underlay) {
 private fun MessageRef(kind: String, chatId: String, messageId: Long, author: Boolean, lines: Int, more: String, moreText: String, tap: Boolean) {
     val colors = Tima.colors
     val look = LocalQuoteLook.current(kind, chatId, messageId)
-    val open = LocalOpenMessage.current
+    // Переход — только через окно перехода (заказчик 2026-10-20).
+    val open = rememberMessageOpen()
     val full = lines == 0
     Row(
         Modifier.fillMaxWidth().height(IntrinsicSize.Min)

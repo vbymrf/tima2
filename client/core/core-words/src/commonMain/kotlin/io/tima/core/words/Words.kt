@@ -1431,6 +1431,12 @@ interface ChatWords {
     val linkGo: String
     val linkAskOpen: String
     val linkCopy: String
+    /** Окно перехода к сообщению (заказчик 2026-10-20); в редакторе переход недоступен. */
+    val messageAsk: String
+    val gateBlocked: String
+    /** Меню файла (заказчик 2026-10-20): открыть; открыть нечем. */
+    val fileOpen: String
+    val fileOpenNone: String
     /** Выбор нескольких сообщений долгим нажатием (заказчик 2026-10-19). */
     fun selected(count: Int): String
     val selectPick: String
@@ -3554,6 +3560,10 @@ object RussianWords : Words {
         override val linkGo = "Перейти"
         override val linkAskOpen = "Перейти по ссылке? Проверьте сайт:"
         override val linkCopy = "Скопировать ссылку"
+        override val messageAsk = "Перейти к сообщению?"
+        override val gateBlocked = "В редакторе переход недоступен"
+        override val fileOpen = "Открыть"
+        override val fileOpenNone = "Открыть нечем — сохраните файл"
         override fun selected(count: Int) = "Выбрано: $count"
         override val selectPick = "В Подборку"
         override val selectCopy = "Скопировать"

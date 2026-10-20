@@ -4634,6 +4634,11 @@ private fun Chat(
     var photoNotice by remember { mutableStateOf<String?>(null) }
     var forwardOf by remember { mutableStateOf<io.tima.feature.chat.PhotoAt?>(null) }
     val shareImage = io.tima.core.media.rememberShareImage()
+    // Меню файла (заказчик 2026-10-20): на какой файл нажали; какой пересылается.
+    var fileFor by remember { mutableStateOf<io.tima.domain.chat.RichMedia?>(null) }
+    var fileForward by remember { mutableStateOf<io.tima.domain.chat.RichMedia?>(null) }
+    val shareFile = io.tima.core.media.rememberShareFile()
+    val openFile = io.tima.core.media.rememberOpenFile()
     val photoWords = Tima.words.chat
     var asking by remember { mutableStateOf<AttachAsk?>(null) }
     var askTrouble by remember { mutableStateOf<String?>(null) }
@@ -4859,6 +4864,11 @@ private fun Chat(
             },
                 saveFile = { file -> saveFromChat(file) },
                 fetched = { id -> id in fetchedFiles },
+                fileMenu = { file ->
+                    // Идёт выбор — нажатие отмечает сообщение с файлом, как у фото.
+                    val owner = state.lines.firstOrNull { l -> l.rich?.media?.any { it.mediaId == file.mediaId } == true }
+                    if (chosenLines.isNotEmpty() && owner != null) chooseToggle(owner) else fileFor = file
+                },
             ),
             onMenu = { line -> menuFor = line },
             onSelect = { line -> selectFor = line },
@@ -5048,6 +5058,55 @@ private fun Chat(
             },
         )
     }
+    fileFor?.let { file ->
+        // Меню файла (заказчик 2026-10-20): «Открыть», «Сохранить как», «Поделиться», «Переслать»,
+        // «Удалить у себя» — сообщение, в котором файл. Чего платформа не умеет — пункта нет.
+        val owner = state.lines.firstOrNull { l -> l.rich?.media?.any { it.mediaId == file.mediaId } == true }
+        val named = file.name.ifBlank { "file" }
+        val items = buildList<Pair<String, () -> Unit>> {
+            if (openFile != null) add(photoWords.fileOpen to {
+                scope.launch {
+                    val plain = plainOf(file, store::said) ?: return@launch
+                    val opened = openFile(plain, file.mime, named)
+                    Journal.note(LogCode.FILE_STORE, "открыть", "вышло" to opened)
+                    if (!opened) store.said(photoWords.fileOpenNone)
+                }
+            })
+            add(photoWords.fileSaveAs to { saveFromChat(file) })
+            if (shareFile != null) add(photoWords.menuShare to {
+                scope.launch { plainOf(file, store::said)?.let { plain -> if (!shareFile(plain, file.mime, named)) store.said(photoWords.fileOpenNone) } }
+            })
+            if (onForward != null && forwardTargets.isNotEmpty()) add(photoWords.photoForward to { fileForward = file })
+            if (owner != null) add(photoWords.menuDeleteForMe to { store.deleteForMe(owner) })
+        }
+        io.tima.feature.chat.ChoiceSheet(
+            title = file.name.ifBlank { file.mime },
+            items = items.map { io.tima.feature.chat.Choice(title = it.first) },
+            empty = file.name,
+            onCancel = { fileFor = null },
+            onPick = { i ->
+                fileFor = null
+                items[i].second()
+            },
+        )
+    }
+    fileForward?.let { file ->
+        io.tima.feature.chat.ChoiceSheet(
+            title = photoWords.photoForwardTitle,
+            items = forwardTargets.map { io.tima.feature.chat.Choice(title = it.second) },
+            empty = photoWords.photoForwardTitle,
+            onCancel = { fileForward = null },
+            onPick = { i ->
+                val (target, title) = forwardTargets[i]
+                fileForward = null
+                scope.launch {
+                    val plain = plainOf(file, store::said) ?: return@launch
+                    Journal.note(LogCode.FILE_SEND, "переслать", "вид" to "файл")
+                    onForward?.invoke(target, title, listOf(io.tima.feature.chat.Forwarded.File(plain, file.mime, file.name.ifBlank { "file" })))
+                }
+            },
+        )
+    }
     selectFor?.let { line ->
         val text = line.text.orEmpty()
         io.tima.feature.chat.SelectSheet(
@@ -5116,6 +5175,8 @@ private fun Chat(
         val pickList = remember(editorChoice) {
             if (editorChoice == "picks" || editorChoice == "underlay") environment.picks.list(io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community)) else emptyList()
         }
+        // Ответ и вставленное в просмотре — как в ленте (заказчик 2026-10-20).
+        io.tima.feature.chat.ChatLooks(state, name ?: "Без имени", authorLook) {
         io.tima.feature.chat.EditorScreen(
             model = editorModel,
             // Правка уходит уровнем исходного — уровень не выбирается.
@@ -5208,6 +5269,7 @@ private fun Chat(
                 }
             },
         )
+        }
         editorAsk?.let { ask ->
             val settingsNow by environment.settings.all().collectAsState(initial = emptyMap())
             EditorAskSheet(

@@ -61,6 +61,8 @@ class AttachmentActions(
     val fetched: (mediaId: String) -> Boolean = { false },
     /** Долгое нажатие на фото — выбор сообщения, в котором оно (заказчик 2026-10-19). */
     val selectPhoto: (RichMedia) -> Unit = {},
+    /** Нажатие на файл — меню: открыть, сохранить, поделиться, переслать, удалить (заказчик 2026-10-20); `null` — сразу «Сохранить как». */
+    val fileMenu: ((RichMedia) -> Unit)? = null,
 )
 
 /** Галочки «получатель забрал» у своего фото или файла вне пузыря (Решения §6). */
@@ -129,7 +131,7 @@ private fun FileView(file: RichMedia) {
     val actions = LocalAttachmentActions.current
     Row(
         Modifier.widthIn(max = 280.dp).background(Tima.colors.functional, RoundedCornerShape(10.dp))
-            .clickable { actions.saveFile(file) }.padding(10.dp).testTag("msg:file"),
+            .clickable { actions.fileMenu?.invoke(file) ?: actions.saveFile(file) }.padding(10.dp).testTag("msg:file"),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -138,7 +140,8 @@ private fun FileView(file: RichMedia) {
             Caption(file.name.ifBlank { file.mime }, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
             Tertiary(sizeText(file.size, Tima.words.chat.sizeUnits), lineOne = true)
         }
-        Chip(Tima.words.chat.fileSaveAs, kind = ChipKind.Quiet, onClick = { actions.saveFile(file) })
+        // Меню у файла — нажатием на него; без меню — «Сохранить как», как было.
+        if (actions.fileMenu == null) Chip(Tima.words.chat.fileSaveAs, kind = ChipKind.Quiet, onClick = { actions.saveFile(file) })
     }
 }
 

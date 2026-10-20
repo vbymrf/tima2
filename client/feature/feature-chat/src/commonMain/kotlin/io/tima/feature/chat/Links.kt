@@ -52,40 +52,98 @@ object LinkTags {
 }
 
 /**
+ * Что спрашивает окно перехода (заказчик 2026-10-20: «все кликабельные — через окно перехода… если
+ * окно откроется в редакторе, переход заблокирован»): ссылка или сообщение. [blocked] — окно то же,
+ * «Перейти» недоступно.
+ */
+sealed interface GateAsk {
+    val blocked: Boolean
+
+    data class Link(val url: String, override val blocked: Boolean = false) : GateAsk
+
+    /** Переход к сообщению: кто и что в нём; [go] — сам переход. */
+    data class Message(val name: String?, val preview: String?, val go: () -> Unit, override val blocked: Boolean = false) : GateAsk
+}
+
+/** Окно перехода над всем приложением — ставит [LinkGate]; нет его (снимки, проверки) — переход сразу. */
+val LocalGate = staticCompositionLocalOf<((GateAsk) -> Unit)?> { null }
+
+/** Здесь переход заблокирован — редактор (заказчик 2026-10-20): окно показывается, «Перейти» — нет. */
+val LocalGateBlocked = staticCompositionLocalOf { false }
+
+/**
  * Открыть ссылку из сообщения. Всякая ссылка — сначала через окно с доменом и вопросом (заказчик
- * 2026-10-19: «Показывает домен и спрашивает. Для всех ссылок»); окно ставит [LinkGate]. Без него
- * (снимки экранов, проверки) — сразу.
+ * 2026-10-19: «Показывает домен и спрашивает. Для всех ссылок»). Прежний вход — для мест без окна.
  */
 val LocalLinkOpen = staticCompositionLocalOf<((String) -> Unit)?> { null }
 
-/** Как открыть ссылку здесь: через окно приложения, а нет его — сразу. */
+/** Как открыть ссылку здесь: через окно перехода, а нет его — сразу. */
 @Composable
 internal fun rememberLinkOpen(): (String) -> Unit {
-    val gate = LocalLinkOpen.current
+    val gate = LocalGate.current
+    val blocked = LocalGateBlocked.current
+    val old = LocalLinkOpen.current
     val uri = LocalUriHandler.current
-    return gate ?: { url -> runCatching { uri.openUri(url) } }
+    return when {
+        gate != null -> { url -> gate(GateAsk.Link(url, blocked)) }
+        old != null -> old
+        else -> { url -> runCatching { uri.openUri(url) } }
+    }
 }
 
 /**
- * Окно «Перейти по ссылке?» поверх всего приложения: домен крупно (его не подделать длинным
- * путём), ниже адрес целиком; «Перейти» открывает, «Отмена» — нет.
+ * Как перейти к сообщению здесь: через окно перехода — автор и строка из сообщения; нет окна —
+ * сразу. Сам переход — [LocalOpenMessage] переписки.
+ */
+@Composable
+internal fun rememberMessageOpen(): (kind: String, chatId: String, messageId: Long) -> Unit {
+    val gate = LocalGate.current
+    val blocked = LocalGateBlocked.current
+    val look = LocalQuoteLook.current
+    val open = LocalOpenMessage.current
+    return { kind, chat, id ->
+        if (gate == null) {
+            open(kind, chat, id)
+        } else {
+            val l = look(kind, chat, id)
+            gate(GateAsk.Message(l.name, l.text, { open(kind, chat, id) }, blocked))
+        }
+    }
+}
+
+/**
+ * Окно перехода поверх всего приложения: у ссылки — домен крупно (его не подделать длинным путём) и
+ * адрес целиком; у сообщения — автор и строка. «Перейти» переходит, «✕» — нет.
  */
 @Composable
 fun LinkGate(content: @Composable () -> Unit) {
-    var asked by remember { mutableStateOf<String?>(null) }
+    var asked by remember { mutableStateOf<GateAsk?>(null) }
     val uri = LocalUriHandler.current
-    CompositionLocalProvider(LocalLinkOpen provides { url -> asked = url }) {
+    CompositionLocalProvider(
+        LocalGate provides { ask -> asked = ask },
+        LocalLinkOpen provides { url -> asked = GateAsk.Link(url) },
+    ) {
         Box(Modifier.fillMaxSize()) {
             content()
-            asked?.let { url ->
-                LinkAsk(
-                    url = url,
+            when (val ask = asked) {
+                is GateAsk.Link -> LinkAsk(
+                    url = ask.url,
+                    blocked = ask.blocked,
                     onOpen = {
                         asked = null
-                        runCatching { uri.openUri(url) }
+                        runCatching { uri.openUri(ask.url) }
                     },
                     onCancel = { asked = null },
                 )
+                is GateAsk.Message -> MessageAsk(
+                    ask,
+                    onOpen = {
+                        asked = null
+                        ask.go()
+                    },
+                    onCancel = { asked = null },
+                )
+                null -> Unit
             }
         }
     }
@@ -93,13 +151,61 @@ fun LinkGate(content: @Composable () -> Unit) {
 
 /**
  * Окно ссылки — как меню сообщения (заказчик 2026-10-19): сверху домен крупно и «✕» справа, под ним
- * адрес целиком — только здесь он и виден; ниже строки «Перейти» и «Скопировать ссылку».
+ * адрес целиком — только здесь он и виден; ниже строки «Перейти» и «Скопировать ссылку». В редакторе
+ * «Перейти» недоступно.
  */
 @Composable
-private fun LinkAsk(url: String, onOpen: () -> Unit, onCancel: () -> Unit) {
+private fun LinkAsk(url: String, blocked: Boolean, onOpen: () -> Unit, onCancel: () -> Unit) {
     val colors = Tima.colors
     val w = Tima.words.chat
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    GateSheet(onCancel) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Tertiary(w.linkAskOpen, lineOne = true)
+                Caption(hostOf(url), fontSize = TimaType.sz2, weight = FontWeight.ExtraBold, color = colors.link)
+                Caption(url, fontSize = TimaType.sz5, color = colors.text2)
+                if (url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
+            }
+            IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
+        }
+        GoItem(blocked, LinkTags.ASK_OPEN, onOpen)
+        LinkItem(w.linkCopy, LinkTags.ASK_COPY) {
+            clipboard.setText(AnnotatedString(url))
+            onCancel()
+        }
+    }
+}
+
+/** Окно перехода к сообщению: автор, строка из сообщения, «Перейти» (в редакторе — недоступно), «✕». */
+@Composable
+private fun MessageAsk(ask: GateAsk.Message, onOpen: () -> Unit, onCancel: () -> Unit) {
+    val w = Tima.words.chat
+    GateSheet(onCancel) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Tertiary(w.messageAsk, lineOne = true)
+                ask.name?.let { Caption(it, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold) }
+                Caption(ask.preview ?: w.quotedElsewhere, fontSize = TimaType.sz5, color = Tima.colors.text2, maxLines = 3)
+            }
+            IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
+        }
+        GoItem(ask.blocked, LinkTags.ASK_OPEN, onOpen)
+    }
+}
+
+/** Подложка окна перехода: тень на всё, снизу — лист. */
+@Composable
+private fun GateSheet(onCancel: () -> Unit, content: @Composable () -> Unit) {
+    val colors = Tima.colors
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
         contentAlignment = Alignment.BottomCenter,
@@ -107,26 +213,21 @@ private fun LinkAsk(url: String, onOpen: () -> Unit, onCancel: () -> Unit) {
         Column(
             Modifier.fillMaxWidth().padding(top = TimaZones.zone1).background(colors.surface).clickable(enabled = false) {}
                 .testTag(LinkTags.ASK),
-        ) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
-                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
-                verticalAlignment = Alignment.Top,
-            ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Tertiary(w.linkAskOpen, lineOne = true)
-                    Caption(hostOf(url), fontSize = TimaType.sz2, weight = FontWeight.ExtraBold, color = colors.link)
-                    Caption(url, fontSize = TimaType.sz5, color = colors.text2)
-                    if (url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
-                }
-                IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
-            }
-            LinkItem(w.linkGo, LinkTags.ASK_OPEN, onOpen)
-            LinkItem(w.linkCopy, LinkTags.ASK_COPY) {
-                clipboard.setText(AnnotatedString(url))
-                onCancel()
-            }
-        }
+        ) { content() }
+    }
+}
+
+/** «Перейти»; в редакторе — серой строкой «переход недоступен». */
+@Composable
+private fun GoItem(blocked: Boolean, tag: String, onOpen: () -> Unit) {
+    val w = Tima.words.chat
+    if (blocked) {
+        ListLine(
+            modifier = Modifier.testTag(tag),
+            middle = { Tertiary(w.gateBlocked, lineOne = true) },
+        )
+    } else {
+        LinkItem(w.linkGo, tag, onOpen)
     }
 }
 

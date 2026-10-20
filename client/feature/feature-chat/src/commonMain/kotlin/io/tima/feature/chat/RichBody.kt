@@ -156,7 +156,8 @@ internal fun RichBlockViewOf(block: RichBlock) {
         }
         is RichBlock.Fallback -> Caption(block.text, fontSize = TimaType.sz4)
         is RichBlock.Reply -> {
-            val open = LocalOpenMessage.current
+            // Переход — только через окно перехода (заказчик 2026-10-20).
+            val open = rememberMessageOpen()
             ReplyBlock(LocalReplyLook.current(block)) { open("reply", block.chatId, block.messageId) }
         }
     }

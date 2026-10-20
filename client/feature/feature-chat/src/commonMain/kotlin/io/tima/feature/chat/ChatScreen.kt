@@ -61,6 +61,7 @@ import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Chip
 import io.tima.domain.chat.PersonField
 import io.tima.domain.chat.PersonLook
+import io.tima.domain.chat.RichContent
 import io.tima.domain.chat.letter
 import io.tima.domain.chat.line
 import io.tima.domain.chat.CarryToPage
@@ -313,39 +314,8 @@ fun ChatScreen(
         }
         banner?.invoke()
 
-        // Блок ответа называет автора и строку из сообщения по этой же переписке (в теле — ссылка).
-        val remote: (String, Long) -> ChatLine? = { chat, number ->
-            (state.found["$chat/$number"] as? io.tima.domain.chat.FoundMessage.Found)?.line
-        }
-        val replyLook: (io.tima.domain.chat.RichBlock.Reply) -> ReplyLook = { reply ->
-            val found = state.lines.firstOrNull { it.serverId == reply.messageId } ?: remote(reply.chatId, reply.messageId)
-            val name = when {
-                !state.group -> peer
-                else -> state.names[reply.userId]?.line(authorLook) ?: words.someone
-            }
-            ReplyLook(name = name, preview = found?.text, deleted = found?.deleted == true)
-        }
-        // Вставленное и подкладка — по этой же переписке; из другой — «Сообщение из другой переписки»
-        // до получения по номеру (ПЛАН-(РС) РС7).
-        val quoteLook: (String, String, Long) -> QuoteLook = { _, chat, number ->
-            // Продолжения в ленте нет, но подкладка показывает именно его (Решения §11.3).
-            val found = (state.lines.firstOrNull { it.serverId == number && it.chatId == chat }
-                ?: state.continuations.firstOrNull { it.serverId == number && it.chatId == chat }
-                ?: remote(chat, number))
-            if (found == null) {
-                // Сервер ответил «нет такого» — так и сказать, а не «из другой переписки».
-                val stub = state.found["$chat/$number"] as? io.tima.domain.chat.FoundMessage.Unavailable
-                QuoteLook(null, null, deleted = stub?.reason == "missing", why = stub?.reason?.takeIf { it != "missing" }, whyLevel = stub?.level)
-            } else QuoteLook(
-                name = when {
-                    found.outgoing -> null
-                    !state.group && found.chatId == state.lines.firstOrNull()?.chatId -> peer
-                    else -> state.names[found.senderId]?.line(authorLook) ?: words.someone
-                },
-                text = found.text,
-                deleted = found.deleted,
-            )
-        }
+        // Блок ответа и вставленное — тем же способом, что в просмотре редактора (заказчик 2026-10-20).
+        val (replyLook, quoteLook) = chatLooks(state, peer, authorLook, words.someone)
         // Переходы по ответу, вставленному и «Продолжить чтение» — внутри переписки (§11.4).
         val jumps = remember { FeedJumps() }
         jumps.onJump = onJump
@@ -716,6 +686,17 @@ private fun Reply(
     val canSelect = selection != null && selectable(line)
     val choosing = selection?.active == true
     val chosen = selection?.keys?.contains(line.dedupKey) == true
+    // Нажатие по самому сообщению (заказчик 2026-10-20) — только то, что в него встроено: ссылки,
+    // ответ, подборка, фото, файл. Меню действий — нажатием рядом с пузырём и по дате; долгое нажатие
+    // по пузырю — выбор, как раньше. Неотправленное — целиком, как было.
+    val longPress: (() -> Unit)? = if (canSelect) ({ selection!!.toggle(line) }) else onSelect?.let { { it(line) } }
+    val quiet = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val bubbleTap = when {
+        failed -> Modifier
+        choosing && canSelect -> Modifier.clickable(interactionSource = quiet, indication = null) { selection!!.toggle(line) }
+        else -> Modifier.combinedClickable(interactionSource = quiet, indication = null, onClick = {}, onLongClick = longPress)
+    }
+    val timeTap: (() -> Unit)? = if (menu && !choosing) ({ onMenu!!(line) }) else null
     Row(verticalAlignment = Alignment.CenterVertically) {
     if (choosing && canSelect && line.outgoing) SelectMark(chosen)
     Column(
@@ -743,6 +724,7 @@ private fun Reply(
         // Только эмоджи — крупно и без пузыря (Решения §2): это не текст, а знак.
         val emoji = line.text?.takeIf { line.rich == null && !line.deleted && isEmojiOnly(it) }
         val rich = line.rich
+        androidx.compose.runtime.CompositionLocalProvider(LocalBubbleTap provides bubbleTap, LocalTimeTap provides timeTap) {
         if (rich != null && !line.deleted && rich.isOutside()) {
             // Фото без текста и файлы — вне пузыря (Решения §2).
             OutsideBubble(line) { AttachmentsView(rich) }
@@ -754,6 +736,7 @@ private fun Reply(
                 look = avatarLook,
                 onAvatar = line.senderId?.let { who -> onAuthor?.let { open -> { open(who) } } },
             )
+        }
         }
         // «Ветка · N ответов» — под сообщением, отдельной строкой, а не внутри пузыря:
         // это не часть сказанного, а вход в разговор о нём (ADR-0024 §7).
@@ -778,6 +761,65 @@ private fun Reply(
 }
 
 /**
+ * Как назвать ответ и вставленное: автор и строка по этой переписке, из другой — «Сообщение из другой
+ * переписки» до получения по номеру (ПЛАН-(РС) РС7). Одно на ленту и просмотр редактора (заказчик
+ * 2026-10-20: «Показать сообщение» — как в чате).
+ */
+fun chatLooks(
+    state: ChatState,
+    peer: String,
+    authorLook: PersonLook,
+    someone: String,
+): Pair<(io.tima.domain.chat.RichBlock.Reply) -> ReplyLook, (String, String, Long) -> QuoteLook> {
+    val remote: (String, Long) -> ChatLine? = { chat, number ->
+        (state.found["$chat/$number"] as? io.tima.domain.chat.FoundMessage.Found)?.line
+    }
+    val replyLook: (io.tima.domain.chat.RichBlock.Reply) -> ReplyLook = { reply ->
+        val found = state.lines.firstOrNull { it.serverId == reply.messageId } ?: remote(reply.chatId, reply.messageId)
+        val name = when {
+            !state.group -> peer
+            else -> state.names[reply.userId]?.line(authorLook) ?: someone
+        }
+        ReplyLook(name = name, preview = found?.text, deleted = found?.deleted == true)
+    }
+    // Вставленное и подкладка — по этой же переписке; из другой — «Сообщение из другой переписки»
+    // до получения по номеру (ПЛАН-(РС) РС7).
+    val quoteLook: (String, String, Long) -> QuoteLook = { _, chat, number ->
+        // Продолжения в ленте нет, но подкладка показывает именно его (Решения §11.3).
+        val found = (state.lines.firstOrNull { it.serverId == number && it.chatId == chat }
+            ?: state.continuations.firstOrNull { it.serverId == number && it.chatId == chat }
+            ?: remote(chat, number))
+        if (found == null) {
+            // Сервер ответил «нет такого» — так и сказать, а не «из другой переписки».
+            val stub = state.found["$chat/$number"] as? io.tima.domain.chat.FoundMessage.Unavailable
+            QuoteLook(null, null, deleted = stub?.reason == "missing", why = stub?.reason?.takeIf { it != "missing" }, whyLevel = stub?.level)
+        } else QuoteLook(
+            name = when {
+                found.outgoing -> null
+                !state.group && found.chatId == state.lines.firstOrNull()?.chatId -> peer
+                else -> state.names[found.senderId]?.line(authorLook) ?: someone
+            },
+            text = found.text,
+            deleted = found.deleted,
+        )
+    }
+    return replyLook to quoteLook
+}
+
+/** Ответ и вставленное по переписке [state] — для того, что показывается вне ленты (просмотр редактора). */
+@Composable
+fun ChatLooks(state: ChatState, peer: String, authorLook: PersonLook, content: @Composable () -> Unit) {
+    val (reply, quote) = chatLooks(state, peer, authorLook, Tima.words.chat.someone)
+    androidx.compose.runtime.CompositionLocalProvider(LocalReplyLook provides reply, LocalQuoteLook provides quote, content = content)
+}
+
+/** Нажатие по самому сообщению — только встроенное (заказчик 2026-10-20); ставит строка ленты. */
+internal val LocalBubbleTap = androidx.compose.runtime.staticCompositionLocalOf<Modifier> { Modifier }
+
+/** Нажатие по дате и времени — меню действий с сообщением (заказчик 2026-10-20). */
+internal val LocalTimeTap = androidx.compose.runtime.staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/**
  * Сообщение вне пузыря (Решения §2): эмоджи, фото без текста, файл. Сторона — как у пузыря, под
  * содержимым — время и отметка.
  */
@@ -787,8 +829,13 @@ internal fun OutsideBubble(line: ChatLine, content: @Composable () -> Unit) = Ro
     horizontalArrangement = if (line.outgoing) Arrangement.End else Arrangement.Start,
 ) {
     Column(horizontalAlignment = if (line.outgoing) Alignment.End else Alignment.Start) {
-        content()
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(LocalBubbleTap.current) { content() }
+        val timeTap = LocalTimeTap.current
+        Row(
+            (if (timeTap != null) Modifier.clickable(onClick = timeTap) else Modifier).testTag("chat:time"),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (line.edits > 0) Tertiary(Tima.words.chat.edited, lineOne = true)
             Tertiary(time(line.atMs), lineOne = true)
             markOf(line.display, line.atMs, LocalChatReceipt.current)?.let { Mark(it) }
@@ -881,17 +928,46 @@ private fun Bubbled(
 ) {
     // Подкладка — под пузырём, без него (ADR-0050 §1): хвост подкладок рисуется после пузыря.
     val rich = line.rich
-    val tail = rich?.blocks?.takeLastWhile { it is io.tima.domain.chat.RichBlock.Underlay }.orEmpty()
-    val inside = if (rich == null || tail.isEmpty() || tail.size == rich.blocks.size) line else line.copy(rich = rich.copy(blocks = rich.blocks.dropLast(tail.size)))
-    val apart = if (inside === line) emptyList() else tail
+    val split = rich?.let(::splitUnderlays)
+    val inside = if (split == null || split.second.isEmpty()) line else line.copy(rich = split.first)
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (line.outgoing) Alignment.End else Alignment.Start) {
         BubbleOf(inside, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, keyLost, look, onAvatar, narrowing, onDigit, onNarrowed)
-        if (apart.isNotEmpty() && rich != null && !line.deleted) {
-            androidx.compose.runtime.CompositionLocalProvider(LocalRichMedia provides rich.media) {
-                Column(Modifier.fillMaxWidth(UNDERLAY_WIDTH).padding(horizontal = TimaSpacing.about2, vertical = 2.dp).testTag("chat:underlay")) {
-                    for (u in apart) RichBlockViewOf(u)
-                }
-            }
+        if (split != null && !line.deleted) UnderlayTail(rich, split.second, LocalBubbleTap.current)
+    }
+}
+
+/**
+ * Сообщение, как его показывает лента (заказчик 2026-10-20: «Показать сообщение» — тем же способом,
+ * что в чате): фото без текста и файлы — вне пузыря, подкладки в конце — под пузырём, остальное — в
+ * пузыре. Ответ и вставленное называет [ChatLooks].
+ */
+@Composable
+fun MessageView(rich: RichContent, my: Boolean = true, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth(), horizontalAlignment = if (my) Alignment.End else Alignment.Start) {
+        if (rich.isOutside()) {
+            AttachmentsView(rich)
+        } else {
+            val (inside, apart) = splitUnderlays(rich)
+            Bubble(my = my) { RichBody(inside) }
+            UnderlayTail(rich, apart)
+        }
+    }
+}
+
+/** Тело без хвоста подкладок и сам хвост; одни подкладки — остаются в пузыре (их не с чем разделять). */
+internal fun splitUnderlays(rich: RichContent): Pair<RichContent, List<io.tima.domain.chat.RichBlock>> {
+    val tail = rich.blocks.takeLastWhile { it is io.tima.domain.chat.RichBlock.Underlay }
+    if (tail.isEmpty() || tail.size == rich.blocks.size) return rich to emptyList()
+    return rich.copy(blocks = rich.blocks.dropLast(tail.size)) to tail
+}
+
+/** Подкладки под пузырём — шириной как пузырь. */
+@Composable
+internal fun UnderlayTail(rich: RichContent, apart: List<io.tima.domain.chat.RichBlock>, modifier: Modifier = Modifier) {
+    if (apart.isEmpty()) return
+    androidx.compose.runtime.CompositionLocalProvider(LocalRichMedia provides rich.media) {
+        Column(modifier.fillMaxWidth(UNDERLAY_WIDTH).padding(horizontal = TimaSpacing.about2, vertical = 2.dp).testTag("chat:underlay")) {
+            for (u in apart) RichBlockViewOf(u)
         }
     }
 }
@@ -927,14 +1003,23 @@ private fun BubbleOf(
     continuation = continuation,
     look = look,
     onAvatar = onAvatar,
+    surface = LocalBubbleTap.current,
     bottom = {
         // Уровень — цифрой в кружке перед временем, только нестандартный (В29: −1 и 2 —
         // стандарт); с включённым показом кругов — и стандартный открытый. Шифр метки не носит.
         if (line.level >= 0 && (line.level != STANDARD_OPEN_LEVEL || showCircle)) LevelDigit(line.level, onDigit)
-        // Исправленное (ADR-0045): пометка у времени — у всех, кто видит сообщение.
-        if (line.edits > 0) Tertiary(Tima.words.chat.edited, lineOne = true)
-        Tertiary(time(line.atMs), lineOne = true)
-        markOf(line.display, line.atMs, LocalChatReceipt.current)?.let { Mark(it) }
+        // Дата и время — меню действий с сообщением (заказчик 2026-10-20).
+        val timeTap = LocalTimeTap.current
+        Row(
+            (if (timeTap != null) Modifier.clickable(onClick = timeTap) else Modifier).testTag("chat:time"),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Исправленное (ADR-0045): пометка у времени — у всех, кто видит сообщение.
+            if (line.edits > 0) Tertiary(Tima.words.chat.edited, lineOne = true)
+            Tertiary(time(line.atMs), lineOne = true)
+            markOf(line.display, line.atMs, LocalChatReceipt.current)?.let { Mark(it) }
+        }
     },
 ) {
     val text = line.text
