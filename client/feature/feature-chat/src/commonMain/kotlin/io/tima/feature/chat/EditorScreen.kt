@@ -127,7 +127,7 @@ object EditorTags {
 internal enum class EditorTab(val key: String, val buttons: List<String>) {
     TEXT("text", listOf("paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol", "paste")),
     INSERT("insert", listOf("picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply")),
-    LAYOUT("layout", listOf("row", "widget", "marks", "list", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "up", "down", "delete")),
+    LAYOUT("layout", listOf("row", "widget", "marks", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "up", "down", "delete")),
     STYLE("style", listOf("props", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
 }
 
@@ -159,7 +159,7 @@ private fun GridAsk(onInsert: (lines: Int, columns: Int) -> Unit) {
 
 /** «Список»: «Развернуть по умолчанию», «Без отступа» — на весь список (ADR-0049 §3); нажата — включено. */
 @Composable
-private fun ListAsk(list: io.tima.domain.chat.ComposedItem.ItemList, onChange: (open: Boolean, flat: Boolean) -> Unit) {
+internal fun ListAsk(list: io.tima.domain.chat.ComposedItem.ItemList, onChange: (open: Boolean, flat: Boolean) -> Unit) {
     val colors = Tima.colors
     val w = Tima.words.editor
     Row(
@@ -359,8 +359,6 @@ fun EditorScreen(
             // Раздел «Разметка» (§10.2–§10.3; заказчик 2026-10-18): ряд строк × столбцов, слияние в оба
             // направления; таблицы в редакторе больше нет — она стала рядом.
             "row" -> toggle("grid")
-            // Свойства всего списка (ADR-0049 §3): курсор должен стоять в списке.
-            "list" -> if (model.listHere == null) hint = w.listChoose else toggle("list")
             "colAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addColumn)
             "colRemove" -> model.layout(io.tima.domain.chat.ComposedLayout::removeColumn)
             "lineAdd" -> model.layout(io.tima.domain.chat.ComposedLayout::addLine)
@@ -375,7 +373,7 @@ fun EditorScreen(
             // «Разметка → Виджет» (ПЛАН-(ВД)): опрос, мероприятие, видеоклипы, аудио.
             "widget" -> toggle("widgets")
             // «Стиль → Свойства» (ADR-0050 §2): свойства выбранного блока.
-            "props" -> toggle("style.widget")
+            "props" -> toggle("style.props")
             "background", "color", "size", "align", "padding", "divider", "json" -> toggle("style.$key")
             "reset" -> model.layout { d, s -> io.tima.domain.chat.ComposedStyle.setStyle(d, s, emptyMap()) to s }
             else -> if (onButton?.invoke(key) != true) hint = w.soon
@@ -428,7 +426,6 @@ fun EditorScreen(
                 when {
                     panel == "paragraph" -> ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); panel = null }
                     panel == "widgets" -> WidgetsAsk { hint = w.widgetSoon; panel = null }
-                    panel == "list" -> model.listHere?.let { l -> ListAsk(l) { open, flat -> model.listProps(open, flat) } }
                     panel == "grid" -> GridAsk { lines, columns ->
                         panel = null
                         model.layout { d, s -> io.tima.domain.chat.ComposedLayout.addRow(d, s, lines, columns) }

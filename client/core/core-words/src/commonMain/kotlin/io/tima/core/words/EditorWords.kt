@@ -73,6 +73,8 @@ interface EditorWords {
     val listFlat: String
     /** «Список» нажат вне списка. */
     val listChoose: String
+    /** «Стиль → Свойства»: у выбранного своих свойств нет (ADR-0050 §2). */
+    val noProps: String
     /** «Разметка → Виджет» (ПЛАН-(ВД)): виджеты с особым действием. */
     /** «Абзац ▾», второй ряд: «Список: 1 2 3 уровень» (заказчик 2026-10-19). */
     val listRow: String
@@ -253,6 +255,7 @@ object RussianEditorWords : EditorWords {
     override val listOpen = "Развернуть по умолчанию"
     override val listFlat = "Без отступа"
     override val listChoose = "Встаньте в список, чтобы задать его свойства"
+    override val noProps = "У этого блока своих свойств нет — общие ниже в «Стиле»"
     override val listRow = "Список:"
     override val levelWord = "уровень"
     override val widgetPoll = "Опрос"
@@ -428,6 +431,7 @@ object EnglishEditorWords : EditorWords {
     override val listOpen = "Expanded by default"
     override val listFlat = "No indent"
     override val listChoose = "Put the cursor in a list to set its properties"
+    override val noProps = "This block has no properties of its own — the common ones are in \"Style\""
     override val listRow = "List:"
     override val levelWord = "level"
     override val widgetPoll = "Poll"
@@ -599,6 +603,7 @@ object SpanishEditorWords : EditorWords {
     override val listOpen = "Desplegada por defecto"
     override val listFlat = "Sin sangría"
     override val listChoose = "Sitúate en una lista para ajustar sus propiedades"
+    override val noProps = "Este bloque no tiene propiedades propias; las comunes están en «Estilo»"
     override val listRow = "Lista:"
     override val levelWord = "nivel"
     override val widgetPoll = "Encuesta"

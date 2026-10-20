@@ -87,10 +87,11 @@ internal fun blockStyleOf(style: Map<String, String>): io.tima.domain.chat.Block
         )
     }
 
-/** Виджет на выбранном месте: во всю ширину или в ячейке ряда. */
+/** Виджет на выбранном месте: во всю ширину, в ячейке ряда или в пункте списка. */
 private fun widgetAt(doc: ComposedDoc, at: Spot): ComposedWidget? = when (val item = doc.items.getOrNull(at.item)) {
     is ComposedItem.Widget -> item.widget.takeIf { at.cell == -1 }
     is ComposedItem.Row -> item.cells.getOrNull(at.cell)?.widgets?.getOrNull(at.widget)
+    is ComposedItem.ItemList -> item.items.getOrNull(at.cell)?.widgets?.getOrNull(at.widget)
     else -> null
 }
 
@@ -102,6 +103,11 @@ private fun withWidget(doc: ComposedDoc, at: Spot, widget: ComposedWidget): Comp
             item is ComposedItem.Row -> item.copy(
                 cells = item.cells.mapIndexed { c, cell ->
                     if (c != at.cell) cell else cell.copy(widgets = cell.widgets.mapIndexed { w, old -> if (w == at.widget) widget else old })
+                },
+            )
+            item is ComposedItem.ItemList -> item.copy(
+                items = item.items.mapIndexed { c, point ->
+                    if (c != at.cell) point else point.copy(widgets = point.widgets.mapIndexed { w, old -> if (w == at.widget) widget else old })
                 },
             )
             else -> item
@@ -163,19 +169,45 @@ internal fun StylePanel(key: String, model: EditorModel, problems: (ComposedDoc)
             "background" -> palette("background")
             "color" -> palette("color")
             "size" -> steps("size")
-            "align" -> {
-                steps("align")
-                // У ячейки — ещё и по вертикали.
-                if (spot.cell >= 0) steps("valign")
-            }
+            "align" -> steps("align")
             "padding" -> steps("padding")
             "divider" -> {
                 steps("divider")
                 palette("divider_color")
             }
-            "widget" -> WidgetOptions(model, spot)
+            // «Свойства» (ADR-0050 §2): то, что можно изменить у выбранного блока.
+            "props" -> Props(model, spot) { prop, value -> set(prop, value) }
             "json" -> JsonStyle(model, spot, style, problems)
         }
+    }
+}
+
+/**
+ * «Стиль → Свойства» (ADR-0050 §2): только то, что можно изменить у выбранного блока. Список —
+ * «Развернуть по умолчанию», «Без отступа»; виджет — свои; ячейка — по вертикали.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Props(model: EditorModel, spot: Spot, set: (String, String?) -> Unit) {
+    val w = Tima.words.editor
+    val item = model.doc.items.getOrNull(spot.item)
+    when {
+        widgetAt(model.doc, spot) != null -> WidgetOptions(model, spot)
+        item is ComposedItem.ItemList -> ListAsk(item) { open, flat -> model.listProps(open, flat) }
+        item is ComposedItem.Row && spot.cell >= 0 -> {
+            val style = ComposedStyle.styleAt(model.doc, spot)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (value in ComposedStyle.STEPS.getValue("valign")) {
+                    Chip(
+                        w.stepName("valign", value),
+                        kind = if (style["valign"] == value) ChipKind.Selected else ChipKind.Quiet,
+                        onClick = { set("valign", if (style["valign"] == value) null else value) },
+                        modifier = Modifier.testTag("editor:style.valign.$value"),
+                    )
+                }
+            }
+        }
+        else -> Tertiary(w.noProps)
     }
 }
 

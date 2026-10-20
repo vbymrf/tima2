@@ -173,6 +173,17 @@ class EditorScreenTest {
         assertTrue(plain.difference(styled) > 0.001, "фон и выравнивание куска не видны в редакторе")
     }
 
+    /** «Стиль → Свойства» (ADR-0050 §2): у списка — его свойства, у текста — «своих свойств нет». */
+    @Test
+    fun свойства_блока() {
+        val list = EditorModel(ComposedDoc(listOf(ComposedItem.ItemList(listOf(io.tima.domain.chat.ComposedListItem(1, "a"))))), MarkdownTyped)
+        list.select(io.tima.domain.chat.Spot(0, 0))
+        val text = EditorModel(ComposedDoc.of("a"), MarkdownTyped)
+        val a = capture("свойства-список", 360, 120, dark = false) { StylePanel("props", list) { emptyList() } }
+        val b = capture("свойства-текст", 360, 120, dark = false) { StylePanel("props", text) { emptyList() } }
+        assertTrue(a.difference(b) > 0.0)
+    }
+
     @Test
     fun панель_стиля_палитра_ступени_json() {
         val model = EditorModel(ComposedDoc(listOf(ComposedItem.Text("x", mapOf("background" to "amber-soft")))))
