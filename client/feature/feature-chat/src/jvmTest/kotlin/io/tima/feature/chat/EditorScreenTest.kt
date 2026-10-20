@@ -71,13 +71,15 @@ class EditorScreenTest {
     }
 
     /**
-     * «Абзац ▾» в два ряда (заказчик 2026-10-19): абзац и заголовки; цитата и списки 1–3 уровня. При
-     * крупном шрифте за край уходит только конец второго ряда — «уровень» последнего списка.
+     * «Абзац ▾» в три ряда (заказчик 2026-10-20): абзац и заголовки; цитата, маркер, код; списки 1–3
+     * уровня. При крупном шрифте за край уходит только конец ряда — «уровень» последнего списка.
      */
     @Test
-    fun абзац_в_два_ряда_и_крупный_шрифт() {
-        val normal = capture("абзац-два-ряда", 360, 140, dark = false) { ParagraphList(io.tima.domain.chat.ParagraphKind.LIST2) {} }
-        val big = capture("абзац-два-ряда-крупно", 360, 140, dark = false) {
+    fun абзац_в_три_ряда_и_крупный_шрифт() {
+        val normal = capture("абзац-три-ряда", 360, 180, dark = false) { ParagraphList(io.tima.domain.chat.ParagraphKind.LIST2, marker = true) {} }
+        val plain = capture("абзац-три-ряда-без-маркера", 360, 180, dark = false) { ParagraphList(io.tima.domain.chat.ParagraphKind.LIST2) {} }
+        assertTrue(normal.difference(plain) > 0.0, "включённый маркер не виден")
+        val big = capture("абзац-три-ряда-крупно", 360, 180, dark = false) {
             androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(1f, 1.6f)) {
                 ParagraphList(io.tima.domain.chat.ParagraphKind.LIST2) {}
             }

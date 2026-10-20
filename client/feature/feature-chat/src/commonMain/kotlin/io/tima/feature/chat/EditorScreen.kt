@@ -128,10 +128,11 @@ object EditorTags {
 /** Разделы редактора и кнопки ленты (Решения §10.2) — ключи подписей `EditorWords.button`. */
 internal enum class EditorTab(val key: String, val buttons: List<String>) {
     // Заказчик 2026-10-20: «Уровень» — первым в «Тексте»; «Виджет» — первым во «Вставке», «С оформлением» —
-    // последним там же; «Вид» (просмотр) и «Свойства» — первыми в «Стиле».
-    TEXT("text", listOf("level", "paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol")),
+    // последним там же; «Вид» (просмотр) и «Свойства» — первыми в «Стиле». Маркер и Код — в «Абзац ▾»,
+    // кнопок в ленте нет; «Выше» и «Ниже» — первыми в «Разметке».
+    TEXT("text", listOf("level", "paragraph", "bold", "italic", "underline", "strike", "symbol")),
     INSERT("insert", listOf("widget", "picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply", "paste")),
-    LAYOUT("layout", listOf("row", "marks", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "up", "down", "delete")),
+    LAYOUT("layout", listOf("up", "down", "row", "marks", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "delete")),
     STYLE("style", listOf("view", "props", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
 }
 
@@ -436,7 +437,13 @@ fun EditorScreen(
         if (panel != null && panel != "level" && panel != "emoji" && panel != "symbol") {
             Box(Modifier.fillMaxWidth().heightIn(max = PANEL_MAX).verticalScroll(rememberScrollState())) {
                 when {
-                    panel == "paragraph" -> ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); panel = null }
+                    panel == "paragraph" -> ParagraphList(
+                        model.paragraphHere,
+                        marker = "highlight" in active,
+                        code = "code" in active,
+                        onMarker = { model.inline(InlineKind.HIGHLIGHT); panel = null },
+                        onCode = { model.code(); panel = null },
+                    ) { kind -> model.paragraph(kind); panel = null }
                     panel == "widgets" -> WidgetsAsk { hint = w.widgetSoon; panel = null }
                     panel == "grid" -> GridAsk { lines, columns ->
                         panel = null
@@ -735,11 +742,20 @@ private fun Ribbon(
 }
 
 /**
- * «Абзац ▾» в два ряда (заказчик 2026-10-19): «Абзац», «Заголовок 1…3»; «Цитата», «Список: 1 2 3
- * уровень». Не влезло (крупный шрифт, узкий экран) — ряд листается: за край уходит его конец.
+ * «Абзац ▾» в три ряда (заказчик 2026-10-20): «Абзац», «Заголовок 1…3»; «Цитата», «Маркер», «Код»;
+ * «Список: 1 2 3 уровень». Маркер и Код — те же действия, что были кнопками ленты: маркер — у
+ * выделенного или ждёт букв, код — в строке или блоком. Не влезло (крупный шрифт, узкий экран) — ряд
+ * листается: за край уходит его конец.
  */
 @Composable
-internal fun ParagraphList(current: ParagraphKind, onPick: (ParagraphKind) -> Unit) {
+internal fun ParagraphList(
+    current: ParagraphKind,
+    marker: Boolean = false,
+    code: Boolean = false,
+    onMarker: () -> Unit = {},
+    onCode: () -> Unit = {},
+    onPick: (ParagraphKind) -> Unit,
+) {
     val colors = Tima.colors
     val w = Tima.words.editor
     @Composable
@@ -750,6 +766,18 @@ internal fun ParagraphList(current: ParagraphKind, onPick: (ParagraphKind) -> Un
         color = if (kind == current) colors.navigation else colors.text,
         lineOne = true,
         modifier = Modifier.clickable { onPick(kind) }.padding(vertical = 6.dp, horizontal = 2.dp).testTag(EditorTags.paragraph(kind)),
+    )
+    // Маркер и Код — не вид абзаца, а оформление: нажаты, если уже включены.
+    @Composable
+    fun action(tag: String, label: String, on: Boolean, onClick: () -> Unit) = Caption(
+        label,
+        fontSize = TimaType.sz5,
+        weight = if (on) FontWeight.Black else FontWeight.Normal,
+        color = if (on) colors.navigation else colors.text,
+        lineOne = true,
+        modifier = Modifier
+            .then(if (tag == "marker") Modifier.background(colors.activity.copy(alpha = 0.35f), RoundedCornerShape(4.dp)) else Modifier)
+            .clickable(onClick = onClick).padding(vertical = 6.dp, horizontal = 4.dp).testTag("editor:paragraph.$tag"),
     )
     @Composable
     fun row(content: @Composable () -> Unit) = Row(
@@ -766,6 +794,10 @@ internal fun ParagraphList(current: ParagraphKind, onPick: (ParagraphKind) -> Un
         }
         row {
             item(ParagraphKind.QUOTE, w.paragraph(ParagraphKind.QUOTE.name), TimaType.sz5)
+            action("marker", w.button("highlight"), marker, onMarker)
+            action("code", w.button("code"), code, onCode)
+        }
+        row {
             Caption(w.listRow, fontSize = TimaType.sz5, color = colors.text2, lineOne = true)
             item(ParagraphKind.LIST, "1", TimaType.sz4, bold = true)
             item(ParagraphKind.LIST2, "2", TimaType.sz4, bold = true)
