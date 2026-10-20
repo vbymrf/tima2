@@ -128,9 +128,9 @@ object EditorTags {
 /** Разделы редактора и кнопки ленты (Решения §10.2) — ключи подписей `EditorWords.button`. */
 internal enum class EditorTab(val key: String, val buttons: List<String>) {
     // Заказчик 2026-10-20: «Уровень» — первым в «Тексте»; «Виджет» — первым во «Вставке», «С оформлением» —
-    // последним там же; «Вид» (просмотр) и «Свойства» — первыми в «Стиле». Маркер и Код — в «Абзац ▾»,
-    // кнопок в ленте нет; «Выше» и «Ниже» — первыми в «Разметке».
-    TEXT("text", listOf("level", "paragraph", "bold", "italic", "underline", "strike", "symbol")),
+    // последним там же; «Вид» (просмотр) и «Свойства» — первыми в «Стиле»; «Выше» и «Ниже» — первыми в
+    // «Разметке». Маркер и Код — кнопками в «Тексте», как были (вернули 2026-10-20).
+    TEXT("text", listOf("level", "paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol")),
     INSERT("insert", listOf("widget", "picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply", "paste")),
     LAYOUT("layout", listOf("up", "down", "row", "marks", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "delete")),
     STYLE("style", listOf("view", "props", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
@@ -437,13 +437,7 @@ fun EditorScreen(
         if (panel != null && panel != "level" && panel != "emoji" && panel != "symbol") {
             Box(Modifier.fillMaxWidth().heightIn(max = PANEL_MAX).verticalScroll(rememberScrollState())) {
                 when {
-                    panel == "paragraph" -> ParagraphList(
-                        model.paragraphHere,
-                        marker = "highlight" in active,
-                        code = "code" in active,
-                        onMarker = { model.inline(InlineKind.HIGHLIGHT); panel = null },
-                        onCode = { model.code(); panel = null },
-                    ) { kind -> model.paragraph(kind); panel = null }
+                    panel == "paragraph" -> ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); panel = null }
                     panel == "widgets" -> WidgetsAsk { hint = w.widgetSoon; panel = null }
                     panel == "grid" -> GridAsk { lines, columns ->
                         panel = null
@@ -742,67 +736,71 @@ private fun Ribbon(
 }
 
 /**
- * «Абзац ▾» в три ряда (заказчик 2026-10-20): «Абзац», «Заголовок 1…3»; «Цитата», «Маркер», «Код»;
- * «Список: 1 2 3 уровень». Маркер и Код — те же действия, что были кнопками ленты: маркер — у
- * выделенного или ждёт букв, код — в строке или блоком. Не влезло (крупный шрифт, узкий экран) — ряд
- * листается: за край уходит его конец.
+ * «Абзац ▾» в два ряда (заказчик 2026-10-20): «Абзац» · «Заголовок: 1 2 3»; «Цитата» · «Список: 1 2 3
+ * уровень». Цифра — в серой заливке шириной в четыре знака: пальцу есть куда попасть. Не влезло
+ * (крупный шрифт, узкий экран) — ряд листается: за край уходит его конец.
  */
 @Composable
-internal fun ParagraphList(
-    current: ParagraphKind,
-    marker: Boolean = false,
-    code: Boolean = false,
-    onMarker: () -> Unit = {},
-    onCode: () -> Unit = {},
-    onPick: (ParagraphKind) -> Unit,
-) {
+internal fun ParagraphList(current: ParagraphKind, onPick: (ParagraphKind) -> Unit) {
     val colors = Tima.colors
     val w = Tima.words.editor
     @Composable
-    fun item(kind: ParagraphKind, label: String, size: androidx.compose.ui.unit.TextUnit, bold: Boolean = false) = Caption(
+    fun item(kind: ParagraphKind, label: String) = Caption(
         label,
-        fontSize = size,
-        weight = if (kind == current) FontWeight.Black else if (bold) FontWeight.Bold else FontWeight.Normal,
+        fontSize = TimaType.sz5,
+        weight = if (kind == current) FontWeight.Black else FontWeight.Normal,
         color = if (kind == current) colors.navigation else colors.text,
         lineOne = true,
         modifier = Modifier.clickable { onPick(kind) }.padding(vertical = 6.dp, horizontal = 2.dp).testTag(EditorTags.paragraph(kind)),
     )
-    // Маркер и Код — не вид абзаца, а оформление: нажаты, если уже включены.
+    // Ширина заливки — четыре цифры этим кеглем, с учётом крупного шрифта.
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val scale = io.tima.core.ui.LocalTextScale.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val pill = remember(scale, density) {
+        with(density) {
+            measurer.measure("0000", androidx.compose.ui.text.TextStyle(fontSize = TimaType.sz4 * scale, fontWeight = FontWeight.Black)).size.width.toDp()
+        }
+    }
     @Composable
-    fun action(tag: String, label: String, on: Boolean, onClick: () -> Unit) = Caption(
-        label,
-        fontSize = TimaType.sz5,
-        weight = if (on) FontWeight.Black else FontWeight.Normal,
-        color = if (on) colors.navigation else colors.text,
-        lineOne = true,
-        modifier = Modifier
-            .then(if (tag == "marker") Modifier.background(colors.activity.copy(alpha = 0.35f), RoundedCornerShape(4.dp)) else Modifier)
-            .clickable(onClick = onClick).padding(vertical = 6.dp, horizontal = 4.dp).testTag("editor:paragraph.$tag"),
-    )
+    fun number(kind: ParagraphKind, digit: String) = Box(
+        Modifier.width(pill).background(colors.functional, RoundedCornerShape(8.dp)).clickable { onPick(kind) }
+            .padding(vertical = 4.dp).testTag(EditorTags.paragraph(kind)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Caption(
+            digit,
+            fontSize = TimaType.sz4,
+            weight = if (kind == current) FontWeight.Black else FontWeight.Bold,
+            color = if (kind == current) colors.navigation else colors.text,
+            lineOne = true,
+        )
+    }
+    @Composable
+    fun label(text: String) = Caption(text, fontSize = TimaType.sz5, color = colors.text2, lineOne = true)
     @Composable
     fun row(content: @Composable () -> Unit) = Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = TimaSpacing.about4),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = TimaSpacing.about4, vertical = 3.dp),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
         verticalAlignment = Alignment.CenterVertically,
     ) { content() }
     Column(Modifier.fillMaxWidth().background(colors.surface).padding(vertical = 4.dp)) {
         row {
-            item(ParagraphKind.PARAGRAPH, w.paragraph(ParagraphKind.PARAGRAPH.name), TimaType.sz5)
-            item(ParagraphKind.HEADING1, w.paragraph(ParagraphKind.HEADING1.name), TimaType.sz3, bold = true)
-            item(ParagraphKind.HEADING2, w.paragraph(ParagraphKind.HEADING2.name), TimaType.sz4, bold = true)
-            item(ParagraphKind.HEADING3, w.paragraph(ParagraphKind.HEADING3.name), TimaType.sz4, bold = true)
+            item(ParagraphKind.PARAGRAPH, w.paragraph(ParagraphKind.PARAGRAPH.name))
+            Box(Modifier.width(TimaSpacing.about2))
+            label(w.headingRow)
+            number(ParagraphKind.HEADING1, "1")
+            number(ParagraphKind.HEADING2, "2")
+            number(ParagraphKind.HEADING3, "3")
         }
         row {
-            item(ParagraphKind.QUOTE, w.paragraph(ParagraphKind.QUOTE.name), TimaType.sz5)
-            action("marker", w.button("highlight"), marker, onMarker)
-            action("code", w.button("code"), code, onCode)
-        }
-        row {
-            Caption(w.listRow, fontSize = TimaType.sz5, color = colors.text2, lineOne = true)
-            item(ParagraphKind.LIST, "1", TimaType.sz4, bold = true)
-            item(ParagraphKind.LIST2, "2", TimaType.sz4, bold = true)
-            item(ParagraphKind.LIST3, "3", TimaType.sz4, bold = true)
-            Caption(w.levelWord, fontSize = TimaType.sz5, color = colors.text2, lineOne = true)
+            item(ParagraphKind.QUOTE, w.paragraph(ParagraphKind.QUOTE.name))
+            Box(Modifier.width(TimaSpacing.about2))
+            label(w.listRow)
+            number(ParagraphKind.LIST, "1")
+            number(ParagraphKind.LIST2, "2")
+            number(ParagraphKind.LIST3, "3")
+            label(w.levelWord)
         }
     }
 }

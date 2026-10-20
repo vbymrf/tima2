@@ -104,7 +104,7 @@ internal fun RichBlockViewOf(block: RichBlock) {
             StyledText(
                 withoutLinks(block.text),
                 block.style.over(cell),
-                when (block.level) { 1 -> TimaType.sz2; 2 -> TimaType.sz3; else -> TimaType.sz4 },
+                when (block.level) { 1 -> TimaType.heading1; 2 -> TimaType.heading2; else -> TimaType.heading3 },
                 FontWeight.ExtraBold,
             )
             LinksUnder(linksOf(block.text))

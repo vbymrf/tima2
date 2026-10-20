@@ -86,6 +86,8 @@ interface EditorWords {
     /** «Разметка → Виджет» (ПЛАН-(ВД)): виджеты с особым действием. */
     /** «Абзац ▾», второй ряд: «Список: 1 2 3 уровень» (заказчик 2026-10-19). */
     val listRow: String
+    /** «Абзац ▾»: «Заголовок: 1 2 3» (заказчик 2026-10-20). */
+    val headingRow: String
     val levelWord: String
     val widgetPoll: String
     val widgetEvent: String
@@ -278,6 +280,7 @@ object RussianEditorWords : EditorWords {
     override val insertPicked = "Вставить"
     override fun pickedOf(n: Int, max: Int) = "Выбрано $n из $max"
     override val listRow = "Список:"
+    override val headingRow = "Заголовок:"
     override val levelWord = "уровень"
     override val widgetPoll = "Опрос"
     override val widgetEvent = "Мероприятие"
@@ -467,6 +470,7 @@ object EnglishEditorWords : EditorWords {
     override val insertPicked = "Insert"
     override fun pickedOf(n: Int, max: Int) = "$n of $max chosen"
     override val listRow = "List:"
+    override val headingRow = "Heading:"
     override val levelWord = "level"
     override val widgetPoll = "Poll"
     override val widgetEvent = "Event"
@@ -652,6 +656,7 @@ object SpanishEditorWords : EditorWords {
     override val insertPicked = "Insertar"
     override fun pickedOf(n: Int, max: Int) = "Elegidos $n de $max"
     override val listRow = "Lista:"
+    override val headingRow = "Encabezado:"
     override val levelWord = "nivel"
     override val widgetPoll = "Encuesta"
     override val widgetEvent = "Evento"

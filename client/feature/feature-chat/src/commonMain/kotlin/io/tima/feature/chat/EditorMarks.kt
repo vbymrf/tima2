@@ -68,9 +68,10 @@ internal fun rememberTypedView(typed: Typed, marks: TypingMarks?, open: Boolean)
                 val at = b.length
                 b.append(lines[i])
                 val style = when (kinds[i]) {
-                    LineKind.HEADING1 -> SpanStyle(fontWeight = FontWeight.ExtraBold, fontSize = TimaType.sz3)
-                    LineKind.HEADING2 -> SpanStyle(fontWeight = FontWeight.ExtraBold, fontSize = TimaType.sz4)
-                    LineKind.HEADING3 -> SpanStyle(fontWeight = FontWeight.Bold)
+                    // Размеры — те же, что в ленте (заказчик 2026-10-20: 22, 20, 18).
+                    LineKind.HEADING1 -> SpanStyle(fontWeight = FontWeight.ExtraBold, fontSize = TimaType.heading1)
+                    LineKind.HEADING2 -> SpanStyle(fontWeight = FontWeight.ExtraBold, fontSize = TimaType.heading2)
+                    LineKind.HEADING3 -> SpanStyle(fontWeight = FontWeight.ExtraBold, fontSize = TimaType.heading3)
                     LineKind.QUOTE -> SpanStyle(fontStyle = FontStyle.Italic, color = quote)
                     LineKind.CODE -> SpanStyle(fontFamily = FontFamily.Monospace, background = code)
                     else -> null
