@@ -182,7 +182,8 @@ enum class ParagraphKind(val sign: String) {
     HEADING3("### "),
     QUOTE("--> "),
     LIST("- "),
-    LIST2("    - "),
+    LIST2("  - "),
+    LIST3("    - "),
     CODE("```"),
 }
 

@@ -12,7 +12,8 @@ enum class LineKind {
             HEADING3 -> ParagraphKind.HEADING3
             QUOTE -> ParagraphKind.QUOTE
             LIST1 -> ParagraphKind.LIST
-            LIST2, LIST3 -> ParagraphKind.LIST2
+            LIST2 -> ParagraphKind.LIST2
+            LIST3 -> ParagraphKind.LIST3
             CODE -> ParagraphKind.CODE
             PARAGRAPH, DIVIDER -> ParagraphKind.PARAGRAPH
         }
@@ -26,6 +27,7 @@ enum class LineKind {
             ParagraphKind.QUOTE -> QUOTE
             ParagraphKind.LIST -> LIST1
             ParagraphKind.LIST2 -> LIST2
+            ParagraphKind.LIST3 -> LIST3
             ParagraphKind.CODE -> CODE
         }
     }

@@ -301,7 +301,7 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         val line = LineKind.of(kind)
         val list = line == LineKind.LIST1 || line == LineKind.LIST2 || line == LineKind.LIST3
         if (inList(spot) && spot.widget != Spot.TEXT) {
-            val m = if (list) ComposedLists.depth(doc, spot, if (line == LineKind.LIST1) 1 else 2, untitled)
+            val m = if (list) ComposedLists.depth(doc, spot, LIST_DEPTH.getValue(line), untitled)
             else ComposedLists.toText(doc, spot, line, source)
             m?.let { moved(it.copy(cursor = if (list) snapshot.start else it.cursor)) }
             return
@@ -314,13 +314,19 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         if (lifts(spot, after)) moved(ComposedLists.lift(doc, source, untitled, spot, shift(snapshot.start)))
     }
 
+    private val LIST_DEPTH = mapOf(LineKind.LIST1 to 1, LineKind.LIST2 to 2, LineKind.LIST3 to 3)
+
     /** Вид строки под курсором — для отметки в «Абзац ▾»; в заголовке пункта — ступень. */
     val paragraphHere: ParagraphKind
         get() {
             val list = doc.items.getOrNull(spot.item) as? ComposedItem.ItemList
             if (list != null && spot.widget != Spot.TEXT) {
                 val depth = list.items.getOrNull(spot.cell)?.depth ?: return ParagraphKind.PARAGRAPH
-                return if (depth == 1) ParagraphKind.LIST else ParagraphKind.LIST2
+                return when (depth) {
+                    1 -> ParagraphKind.LIST
+                    2 -> ParagraphKind.LIST2
+                    else -> ParagraphKind.LIST3
+                }
             }
             val t = focusedTyped ?: return ParagraphKind.PARAGRAPH
             return t.lines.getOrElse(t.lineAt(selection(t).first)) { LineKind.PARAGRAPH }.paragraph

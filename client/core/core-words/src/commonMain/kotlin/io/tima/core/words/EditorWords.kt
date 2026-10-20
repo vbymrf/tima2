@@ -73,6 +73,15 @@ interface EditorWords {
     val listFlat: String
     /** «Список» нажат вне списка. */
     val listChoose: String
+    /** «Разметка → Виджет» (ПЛАН-(ВД)): виджеты с особым действием. */
+    /** «Абзац ▾», второй ряд: «Список: 1 2 3 уровень» (заказчик 2026-10-19). */
+    val listRow: String
+    val levelWord: String
+    val widgetPoll: String
+    val widgetEvent: String
+    val widgetClips: String
+    val widgetAudio: String
+    val widgetSoon: String
     /** Вставленное из подборки: `full`, `cut`. */
     fun cutName(key: String): String
     val authorShown: String
@@ -135,6 +144,7 @@ object RussianEditorWords : EditorWords {
         "reply" -> "Ответ"
         "row" -> "Ряд"
         "list" -> "Список"
+        "props" -> "Свойства"
         "colAdd" -> "+Столбец"
         "colRemove" -> "−Столбец"
         "lineAdd" -> "+Строка"
@@ -161,8 +171,9 @@ object RussianEditorWords : EditorWords {
         "HEADING2" -> "Заголовок 2"
         "HEADING3" -> "Заголовок 3"
         "QUOTE" -> "Цитата"
-        "LIST" -> "Список"
-        "LIST2" -> "Список, второй уровень"
+        "LIST" -> "Список 1 уровень"
+        "LIST2" -> "Список 2 уровень"
+        "LIST3" -> "Список 3 уровень"
         "CODE" -> "Блок кода"
         else -> "Абзац"
     }
@@ -242,6 +253,13 @@ object RussianEditorWords : EditorWords {
     override val listOpen = "Развернуть по умолчанию"
     override val listFlat = "Без отступа"
     override val listChoose = "Встаньте в список, чтобы задать его свойства"
+    override val listRow = "Список:"
+    override val levelWord = "уровень"
+    override val widgetPoll = "Опрос"
+    override val widgetEvent = "Мероприятие"
+    override val widgetClips = "Видеоклипы"
+    override val widgetAudio = "Аудио"
+    override val widgetSoon = "Этот виджет появится следующими срезами"
     override fun cutName(key: String) = if (key == "cut") "Обрезать" else "Полностью"
     override val authorShown = "Имя владельца"
     override val nothingChosen = "Выберите ряд, ячейку или виджет"
@@ -301,6 +319,7 @@ object EnglishEditorWords : EditorWords {
         "reply" -> "Reply"
         "row" -> "Row"
         "list" -> "List"
+        "props" -> "Properties"
         "colAdd" -> "+Column"
         "colRemove" -> "−Column"
         "lineAdd" -> "+Line"
@@ -327,8 +346,9 @@ object EnglishEditorWords : EditorWords {
         "HEADING2" -> "Heading 2"
         "HEADING3" -> "Heading 3"
         "QUOTE" -> "Quote"
-        "LIST" -> "List"
-        "LIST2" -> "List, second level"
+        "LIST" -> "List level 1"
+        "LIST2" -> "List level 2"
+        "LIST3" -> "List level 3"
         "CODE" -> "Code block"
         else -> "Paragraph"
     }
@@ -408,6 +428,13 @@ object EnglishEditorWords : EditorWords {
     override val listOpen = "Expanded by default"
     override val listFlat = "No indent"
     override val listChoose = "Put the cursor in a list to set its properties"
+    override val listRow = "List:"
+    override val levelWord = "level"
+    override val widgetPoll = "Poll"
+    override val widgetEvent = "Event"
+    override val widgetClips = "Video clips"
+    override val widgetAudio = "Audio"
+    override val widgetSoon = "This widget comes in the next slices"
     override fun cutName(key: String) = if (key == "cut") "Trim" else "Full"
     override val authorShown = "Owner's name"
     override val nothingChosen = "Choose a row, cell or widget"
@@ -463,6 +490,7 @@ object SpanishEditorWords : EditorWords {
         "reply" -> "Respuesta"
         "row" -> "Fila"
         "list" -> "Lista"
+        "props" -> "Propiedades"
         "colAdd" -> "+Columna"
         "colRemove" -> "−Columna"
         "lineAdd" -> "+Línea"
@@ -489,8 +517,9 @@ object SpanishEditorWords : EditorWords {
         "HEADING2" -> "Título 2"
         "HEADING3" -> "Título 3"
         "QUOTE" -> "Cita"
-        "LIST" -> "Lista"
-        "LIST2" -> "Lista, segundo nivel"
+        "LIST" -> "Lista nivel 1"
+        "LIST2" -> "Lista nivel 2"
+        "LIST3" -> "Lista nivel 3"
         "CODE" -> "Bloque de código"
         else -> "Párrafo"
     }
@@ -570,6 +599,13 @@ object SpanishEditorWords : EditorWords {
     override val listOpen = "Desplegada por defecto"
     override val listFlat = "Sin sangría"
     override val listChoose = "Sitúate en una lista para ajustar sus propiedades"
+    override val listRow = "Lista:"
+    override val levelWord = "nivel"
+    override val widgetPoll = "Encuesta"
+    override val widgetEvent = "Evento"
+    override val widgetClips = "Videoclips"
+    override val widgetAudio = "Audio"
+    override val widgetSoon = "Este widget llegará en las próximas partes"
     override fun cutName(key: String) = if (key == "cut") "Recortar" else "Completo"
     override val authorShown = "Nombre del dueño"
     override val nothingChosen = "Elige una fila, celda o widget"

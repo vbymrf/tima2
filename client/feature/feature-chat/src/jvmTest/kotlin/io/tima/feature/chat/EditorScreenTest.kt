@@ -70,6 +70,21 @@ class EditorScreenTest {
         assertTrue(wide.difference(plain) > 0.0, "кнопка «Абзац» не показывает, что включено")
     }
 
+    /**
+     * «Абзац ▾» в два ряда (заказчик 2026-10-19): абзац и заголовки; цитата и списки 1–3 уровня. При
+     * крупном шрифте за край уходит только конец второго ряда — «уровень» последнего списка.
+     */
+    @Test
+    fun абзац_в_два_ряда_и_крупный_шрифт() {
+        val normal = capture("абзац-два-ряда", 360, 140, dark = false) { ParagraphList(io.tima.domain.chat.ParagraphKind.LIST2) {} }
+        val big = capture("абзац-два-ряда-крупно", 360, 140, dark = false) {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(1f, 1.6f)) {
+                ParagraphList(io.tima.domain.chat.ParagraphKind.LIST2) {}
+            }
+        }
+        assertTrue(normal.difference(big) > 0.0, "крупный шрифт не виден")
+    }
+
     /** Список в редакторе (ADR-0049): точки, заголовки, содержимое и виджет пункта. */
     @Test
     fun список_в_редакторе() {
