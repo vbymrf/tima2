@@ -93,7 +93,7 @@ class TypedEditsTest {
     }
 
     @Test
-    fun перевод_строки_продолжает_список_и_кончает_заголовок() {
+    fun перевод_строки_продолжает_список_и_заголовок() {
         val list = Typed("пункт", listOf(LineKind.LIST1))
         val next = type(list, 5, "\n", convert = false).typed
         assertEquals(listOf(LineKind.LIST1, LineKind.LIST1), next.lines)
@@ -101,8 +101,9 @@ class TypedEditsTest {
         assertEquals("пункт\n", ended.typed.text, "пустой пункт — список кончился, перевода нет")
         assertEquals(listOf(LineKind.LIST1, LineKind.PARAGRAPH), ended.typed.lines)
         val heading = Typed("Заг", listOf(LineKind.HEADING1))
-        assertEquals(listOf(LineKind.HEADING1, LineKind.PARAGRAPH), type(heading, 3, "\n").typed.lines)
-        assertEquals(listOf(LineKind.PARAGRAPH, LineKind.HEADING1), type(heading, 0, "\n").typed.lines, "в начале — заголовок уходит вниз")
+        // Вид сохраняется на новой строке (заказчик 2026-10-19: «Закрепляем тип Абзац»).
+        assertEquals(listOf(LineKind.HEADING1, LineKind.HEADING1), type(heading, 3, "\n").typed.lines)
+        assertEquals(listOf(LineKind.HEADING1, LineKind.HEADING1), type(heading, 0, "\n").typed.lines, "в начале — тоже")
     }
 
     @Test

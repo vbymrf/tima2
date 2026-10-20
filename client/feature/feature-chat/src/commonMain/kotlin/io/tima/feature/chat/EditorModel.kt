@@ -60,6 +60,12 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
     /** Заголовок пункта, который встаёт над пунктом ступени без родителя (ADR-0049 §4) — из словаря. */
     var untitled: String = ""
 
+    /**
+     * Вид строки, где набирали последним (заказчик 2026-10-19: «Закрепляем тип Абзац при переходе на
+     * новую строку, ячейку»): первая буква в пустом поле — этим видом. Пункт списка — не переносится.
+     */
+    private var sticky: LineKind = LineKind.PARAGRAPH
+
     var snapshot by mutableStateOf(history.current)
         private set
 
@@ -196,8 +202,14 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
             publish(push = false, Snapshot(doc, at.item, typed.selection.start, typed.selection.end, at.cell, at.widget))
             return
         }
+        // Пустое поле получает вид, которым набирали последним.
+        val start = if (before.text.isEmpty() && sticky != LineKind.PARAGRAPH && !(inList(at) && at.widget == Spot.TITLE)) {
+            before.copy(lines = listOf(sticky))
+        } else {
+            before
+        }
         val change = TypedEdits.change(
-            before, typed.text, typed.selection.end, pending, convert = doc.marks,
+            start, typed.text, typed.selection.end, pending, convert = doc.marks,
             lineSigns = !(inList(at) && at.widget == Spot.TITLE),
             // В содержимом пункта вложенный пункт — ступенью, а не строкой со знаком.
             listSigns = !inList(at),
@@ -214,6 +226,7 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         val stored = source.write(after)
         live = Live(at, stored, after)
         field = value
+        remember(after, value.selection.start)
         val next = Snapshot(withText(doc, at, stored), at.item, value.selection.start, value.selection.end, at.cell, at.widget)
         val added = after.text.length - before.text.length
         val lastChar = after.text.getOrNull(value.selection.start - 1)
@@ -223,6 +236,24 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         typingIn = if (word) at else null
         // Набрали «- » в куске-тексте — строка стала пунктом: кусок «Список» (ADR-0049 §4).
         if (lifts(at, after)) moved(ComposedLists.lift(doc, source, untitled, at, value.selection.end))
+    }
+
+    /** Запомнить вид строки под курсором — для следующего пустого поля; пункт списка не в счёт. */
+    private fun remember(t: Typed, cursor: Int) {
+        val kind = t.lines.getOrNull(t.lineAt(cursor)) ?: return
+        if (kind != LineKind.LIST1 && kind != LineKind.LIST2 && kind != LineKind.LIST3 && kind != LineKind.DIVIDER) sticky = kind
+    }
+
+    /**
+     * Enter в заголовке пункта [item] списка [index] (кнопка действия клавиатуры, Enter на ПК):
+     * новый пункт с тем, что за курсором; в пустом — ступенью выше или конец списка.
+     */
+    fun enterItem(index: Int, item: Int) {
+        val at = Spot(index, item, Spot.TITLE)
+        textAt(doc, at) ?: return
+        val title = typedAt(at)
+        val cursor = if (spot == at) field.selection.start else title.text.length
+        ComposedLists.enter(doc, at, title, cursor, source)?.let(::moved)
     }
 
     private fun lifts(at: Spot, t: Typed) = doc.items.getOrNull(at.item) is ComposedItem.Text &&
@@ -310,6 +341,7 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         val t = focusedTyped ?: return
         val (s, e) = selection(t)
         val (after, shift) = TypedEdits.parents(TypedEdits.lines(t, s, e, line), untitled)
+        if (!list) sticky = line
         applyTyped(after, shift(snapshot.start), shift(snapshot.end))
         if (lifts(spot, after)) moved(ComposedLists.lift(doc, source, untitled, spot, shift(snapshot.start)))
     }

@@ -145,8 +145,8 @@ object TypedEdits {
         val breaks = inserted.count { it == '\n' }
         val atLineStart = p == before.lineStart(upperLine)
         val middle = if (atLineStart && deleted.isEmpty() && breaks > 0 && inserted.all { it == '\n' }) {
-            // Перевод строки в её начале: строка уходит вниз со своим видом, сверху — пустые абзацы.
-            List(breaks) { LineKind.PARAGRAPH } + upper
+            // Перевод строки в её начале: строка уходит вниз со своим видом, сверху — того же вида.
+            List(breaks) { continuation(upper) } + upper
         } else {
             List(breaks + 1) { i -> if (i == 0) upper else continuation(upper) }
         }
@@ -234,10 +234,8 @@ object TypedEdits {
         normalized(Typed(t.text.removeRange(from, to), t.lines, replaced(t.spans, from, to, 0)))
 
     /** Строка после перевода в конце строки [kind]. */
-    private fun continuation(kind: LineKind): LineKind = when (kind) {
-        LineKind.HEADING1, LineKind.HEADING2, LineKind.HEADING3, LineKind.DIVIDER -> LineKind.PARAGRAPH
-        else -> kind
-    }
+    /** Вид сохраняется на новой строке (заказчик 2026-10-19: «Закрепляем тип Абзац»); у разделителя — абзац. */
+    private fun continuation(kind: LineKind): LineKind = if (kind == LineKind.DIVIDER) LineKind.PARAGRAPH else kind
 
     /**
      * Что поменялось: начало, конец стёртого в прежнем, конец вставленного в новом. Курсор после

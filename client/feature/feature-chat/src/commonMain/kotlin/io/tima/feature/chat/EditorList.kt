@@ -1,6 +1,15 @@
 package io.tima.feature.chat
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,9 +68,11 @@ internal fun EditorList(
         fontSize = sizeOf(look.size, TimaType.sz4),
         color = io.tima.core.ui.paletteColor(look.color) ?: colors.text,
     )
+    // Рамка — видно, где список кончается (заказчик 2026-10-19); не помещается — красная.
     Column(
         Modifier.fillMaxWidth().padding(vertical = 2.dp).styled(look)
-            .then(if (tooWide) Modifier.border(2.dp, colors.alarm, RoundedCornerShape(6.dp)).padding(4.dp) else Modifier)
+            .border(if (tooWide) 2.dp else 1.dp, if (tooWide) colors.alarm else colors.line, RoundedCornerShape(6.dp))
+            .padding(4.dp)
             .testTag(EditorTags.list(index)),
     ) {
         list.items.forEachIndexed { i, item ->
@@ -69,7 +80,10 @@ internal fun EditorList(
             val content = Spot(index, i, Spot.TEXT)
             val here = model.spot.item == index && model.spot.cell == i
             val chosen = here && model.spot.widget == -1
-            Column(Modifier.fillMaxWidth().padding(start = (ListFit.STEP_DP * (item.depth - 1)).dp)) {
+            Column(
+                Modifier.fillMaxWidth().padding(start = (ListFit.STEP_DP * (item.depth - 1)).dp)
+                    .then(if (here) Modifier.background(colors.functional, RoundedCornerShape(4.dp)) else Modifier),
+            ) {
                 Row(verticalAlignment = Alignment.Top) {
                     Caption(
                         when (item.depth) { 1 -> "•"; 2 -> "◦"; else -> "▪" },
@@ -86,14 +100,24 @@ internal fun EditorList(
                             keyboard?.show()
                         }
                     }
+                    // Заголовок — одна строка; Enter — кнопка действия клавиатуры, а не перевод строки:
+                    // клавиатура Samsung присылала перевод строки так, что заголовок резался не там (2026-10-20).
                     BasicTextField(
                         value = if (model.spot == title) model.field else TextFieldValue(shown.text),
                         onValueChange = { v -> model.changedItem(index, i, Spot.TITLE, v) },
                         textStyle = textStyle,
                         cursorBrush = SolidColor(colors.navigation),
                         visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { model.enterItem(index, i) }),
                         modifier = Modifier.weight(1f).heightIn(min = 28.dp).focusRequester(focus)
                             .onFocusChanged { if (it.isFocused) model.focusedItem(index, i, Spot.TITLE) }
+                            .onPreviewKeyEvent { e ->
+                                val enter = e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter)
+                                if (enter) model.enterItem(index, i)
+                                enter
+                            }
                             .testTag(EditorTags.listTitle(index, i)),
                     )
                 }
@@ -118,9 +142,10 @@ internal fun EditorList(
                             )
                         }
                     }
-                    item.widgets.forEachIndexed { k, widget ->
-                        EditorWidget(widget, Spot(index, i, k), model.spot == Spot(index, i, k), model, drag, preview)
-                    }
+                }
+                // Виджет пункта — под его точкой (заказчик 2026-10-19).
+                item.widgets.forEachIndexed { k, widget ->
+                    EditorWidget(widget, Spot(index, i, k), model.spot == Spot(index, i, k), model, drag, preview)
                 }
             }
         }

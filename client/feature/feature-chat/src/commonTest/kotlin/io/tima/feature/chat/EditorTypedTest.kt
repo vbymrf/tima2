@@ -196,6 +196,32 @@ class EditorTypedTest {
         assertNull(m.listHere, "курсор вне списка — свойств нет")
     }
 
+    /** Enter в заголовке — кнопкой действия клавиатуры (2026-10-20): второй пункт, курсор в нём. */
+    @Test
+    fun enter_кнопкой_даёт_второй_пункт() {
+        val m = model("")
+        m.typeHere("- раз")
+        m.enterItem(0, 0)
+        assertEquals(listOf("раз", ""), (m.doc.items[0] as ComposedItem.ItemList).items.map { it.title })
+        assertEquals(Spot(0, 1, Spot.TITLE), m.spot)
+        m.typeHere("два")
+        m.enterItem(0, 1)
+        m.typeHere("три")
+        assertEquals(listOf("раз", "два", "три"), (m.doc.items[0] as ComposedItem.ItemList).items.map { it.title })
+    }
+
+    /** Вид строки сохраняется (заказчик 2026-10-19): заголовком набирали — новая ячейка начинается заголовком. */
+    @Test
+    fun вид_строки_переходит_в_новую_ячейку() {
+        val m = EditorModel(ComposedDoc(listOf(ComposedItem.Row(listOf(io.tima.domain.chat.ComposedCell(50), io.tima.domain.chat.ComposedCell(50))))), MarkdownTyped)
+        m.focusedCell(0, 0)
+        m.paragraph(ParagraphKind.HEADING1)
+        m.typeHere("А")
+        m.focusedCell(0, 1)
+        m.typeHere("Б")
+        assertEquals("# Б", (m.doc.items[0] as ComposedItem.Row).cells[1].text)
+    }
+
     /** Ступень 2 без 1 (заказчик 2026-10-19): над ней пункт «Без имени», правится как любой. */
     @Test
     fun ступень_без_родителя_получает_без_имени() {
