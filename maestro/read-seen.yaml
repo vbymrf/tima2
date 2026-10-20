@@ -1,0 +1,33 @@
+# «Прочитано» — только когда переписку видят 3 секунды подряд (заказчик 2026-10-20: «зашли в чат,
+# свернули — всё равно прочитали, хотя человек не видел»).
+#
+# Результат — строки журнала приложения (`STATES`): «переписка видна — прочитано» и «переписка не
+# видна». Сценарий только нажимает; журнал снимает run.sh, проверяет человек или агент:
+#   1) открыли и сразу свернули — строки «видна» нет;
+#   2) вернулись в открытую переписку и смотрим 5 с — «видна — прочитано»;
+#   3) свернули — «не видна».
+# Телефон: Samsung, переписка «redmi».
+appId: io.tima.app.v2
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "redmi.*"
+    timeout: 20000
+- tapOn: "redmi.*"
+- pressKey: Home
+- extendedWaitUntil:
+    visible: "never-there-read-seen"
+    timeout: 5000
+    optional: true
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "never-there-read-seen"
+    timeout: 6000
+    optional: true
+- takeScreenshot: seen-1-back
+- pressKey: Home
+- extendedWaitUntil:
+    visible: "never-there-read-seen"
+    timeout: 2000
+    optional: true

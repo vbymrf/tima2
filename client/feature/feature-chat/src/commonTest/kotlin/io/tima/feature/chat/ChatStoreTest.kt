@@ -100,6 +100,45 @@ class ChatStoreTest {
         assertTrue(marked.all { it == "chat-1" }, "чужую переписку отмечать нечем: $marked")
     }
 
+    /**
+     * Не видна — не прочитана (заказчик 2026-10-20: «зашли в чат, свернули приложение — всё равно
+     * прочитали, хотя человек не видел»). Открыта, но не видна: приходящее не отмечается; увидели —
+     * отмечено; снова не видна — новое опять не отмечается.
+     */
+    @Test
+    fun невидимая_переписка_не_отмечается_прочитанной() = runTest {
+        val marked = mutableListOf<String>()
+        val store = ChatStore(
+            io = kotlinx.coroutines.Dispatchers.Unconfined,
+            chatId = "chat-1",
+            observe = ObserveChat(feed),
+            send = SendMessage(
+                queue = OutgoingQueue { _, _, _, _, _, _ -> true },
+                codec = object : MessageBodyCodec {
+                    override fun encodeText(text: String) = ByteArray(1)
+                    override fun decodeText(body: ByteArray): String? = null
+                },
+                keys = DedupKeys { "d-1" },
+            ),
+            scope = backgroundScope,
+            markRead = MarkRead(ReadMarks { chatId -> marked += chatId; 1 }),
+            seenAtStart = false,
+        )
+
+        stream.value = listOf(line("d-1", MessageDisplay.RECEIVED))
+        store.state.first { it.lines.isNotEmpty() }
+        assertTrue(marked.isEmpty(), "не видна — а отмечена: $marked")
+
+        store.seen(true)
+        repeat(20) { kotlinx.coroutines.yield() }
+        assertEquals(listOf("chat-1"), marked, "увидели — отметить")
+
+        store.seen(false)
+        stream.value = listOf(line("d-1", MessageDisplay.RECEIVED), line("d-2", MessageDisplay.RECEIVED))
+        store.state.first { it.lines.size == 2 }
+        assertEquals(1, marked.size, "свернули — пришедшее не прочитано: $marked")
+    }
+
     @Test
     fun удачная_отправка_чистит_поле() = runTest {
         // Сообщение уже видно в списке, и оставленный текст выглядел бы как второе.

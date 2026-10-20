@@ -2855,7 +2855,12 @@ private fun App(
     // Один объект на всё время: секунды читает только плашка (ПЛАН-(БС) Э5.6), а новый
     // объект на каждую перерисовку корня перерисовывал бы все окна, которые его читают.
     val activeCall = remember(callHost, session.deviceId) { ActiveCall(seconds = { callHost.seconds }, onOpen = { showCall() }) }
+    // Смотрит ли человек на приложение (заказчик 2026-10-20): окно на экране, замка нет, окно звонка
+    // не открыто. Отсюда «прочитано» и снятие уведомлений — [rememberSeen].
+    val windowUp by assembled.notices.shown.collectAsState()
+    val looking = windowUp && !(locked && pin != null && lockWho != null && !callHost.active) && window != Window.Call
     CompositionLocalProvider(
+        LocalLooking provides looking,
         LocalActiveCall provides activeCall.takeIf { callHost.active && window != Window.Call },
         io.tima.feature.shell.LocalWindowTabs provides windowTabs,
         LocalInnerPopups provides innerPopups,
@@ -3196,10 +3201,9 @@ private fun App(
                     },
                     // Открыли «Звонки» — число вкладки обнуляется (ЖУ6): сущностей для
                     // просмотра там нет, всё и так увидели.
-                    onOpenedCalls = {
-                        callsLog.opened()
-                        assembled.notices.callsViewed()
-                    },
+                    onOpenedCalls = { callsLog.opened() },
+                    // Снять уведомления «Звонков» — когда вкладку увидели, а не мельком (2026-10-20).
+                    onCallsSeen = { assembled.notices.callsViewed() },
                     noticeCounts = noticeCounts,
                     // Имя пользователя и ник у контактов — со справочника, пачкой по разу.
                     personOf = personOfBook,
@@ -4402,10 +4406,13 @@ private fun Chat(
     val groupTop = liveStates?.tops?.collectAsState()?.value?.get("group:$chatId")?.topId
     // Вид группы — из списка групп; список мог не доехать, тогда признак — сама вершина.
     val publicGroup = group && liveStates != null && (kind == GroupKind.Public || groupTop != null)
-    LaunchedEffect(chatId, publicGroup, groupTop) {
+    // Увидел ли человек переписку (заказчик 2026-10-20): окно на экране без замка и звонка поверх,
+    // 3 секунды подряд. Только тогда — «прочитано» и снятие уведомлений; мелькнувшая — не считается.
+    val seen = rememberSeen(chatId)
+    LaunchedEffect(chatId, publicGroup, groupTop, seen) {
         if (!publicGroup || liveStates == null) return@LaunchedEffect
         val newest = runCatching { onPullGroupNew(chatId) }.getOrDefault(0L)
-        if (newest > 0) liveStates.readEntity("group", chatId, newest)
+        if (newest > 0 && seen) liveStates.readEntity("group", chatId, newest)
     }
     // Собеседник личной переписки — ему «печатает», за его «в сети» смотрим (ПЛАН-(ОП)).
     val peerUser = remember(chatId, group) { if (group) null else environment.chatFacts.peerOf(chatId) }
@@ -4419,18 +4426,24 @@ private fun Chat(
             }
         }
     }
-    // Пока переписка на экране — уведомлений о ней нет (У10): человек читает её глазами,
+    // Пока переписку видят — уведомлений о ней нет (У10): человек читает её глазами,
     // и строка в шторке была бы уведомлением о том, что он уже видит. `DisposableEffect`,
     // а не `LaunchedEffect`: уход с экрана обязан снять отметку, иначе закрытая переписка
     // останется «открытой» навсегда и замолчит насовсем.
-    DisposableEffect(chatId, notices) {
-        notices?.watching(chatId)
-        seenUpTo(environment, chatId)
-        onDispose {
-            notices?.watching(null)
-            // И на выходе: пока переписка была открыта, в ней могло прийти новое — его тоже
-            // видели.
+    //
+    // Отметка — только когда переписку **увидели** ([rememberSeen], 2026-10-20): открыли кнопкой
+    // звонка, стоит замок, свёрнуто — не увидели, и «прочитано» отправителю было бы неправдой.
+    DisposableEffect(chatId, notices, seen) {
+        if (seen) {
+            notices?.watching(chatId)
             seenUpTo(environment, chatId)
+        }
+        onDispose {
+            if (seen) {
+                notices?.watching(null)
+                // И на уходе: пока переписку видели, в ней могло прийти новое — его тоже видели.
+                seenUpTo(environment, chatId)
+            }
         }
     }
     // Store живёт столько, сколько открыта переписка: ключ по chatId, чтобы при переходе в
@@ -4442,6 +4455,7 @@ private fun Chat(
             send = environment.send,
             scope = scope,
             markRead = environment.reading,
+            seenAtStart = false,
             // Запрос недостающего ключа и имена авторов — только у группы: у личной
             // переписки просить не у кого, а собеседник назван в шапке.
             requestKeys = if (group) {
@@ -4591,6 +4605,14 @@ private fun Chat(
     }
     val state by store.state.collectAsState()
     LaunchedEffect(pinMay) { store.pinAllowed(pinMay) }
+    // «Прочитано» — только пока переписку видят (2026-10-20). Строка в журнале — по ней проверяется,
+    // что открытая кнопкой звонка, под замком или свёрнутая переписка прочитанной не стала.
+    var wasSeen by remember(store) { mutableStateOf(false) }
+    LaunchedEffect(store, seen) {
+        store.seen(seen)
+        if (seen != wasSeen) Journal.note(LogCode.STATES, if (seen) "переписка видна — прочитано" else "переписка не видна", "чат" to chatId.take(8))
+        wasSeen = seen
+    }
     LaunchedEffect(superDraft) {
         superDraft?.let { doc ->
             store.composeSuper(doc)
@@ -6870,8 +6892,10 @@ private fun PhoneWindow(
     faceOfCall: (CallRecord) -> String? = { null },
     /** Перезвонить из журнала — **тем же видом**, каким звонили тогда (Ж6). */
     onCallAgain: ((CallRecord) -> Unit)? = null,
-    /** Открыли вкладку «Звонки»: сходить за свежим журналом и погасить счётчик. */
+    /** Открыли вкладку «Звонки»: сходить за свежим журналом. */
     onOpenedCalls: () -> Unit = {},
+    /** Вкладку «Звонки» увидели ([rememberSeen]) — погасить счётчик и уведомления. */
+    onCallsSeen: () -> Unit = {},
     /** Числа вкладок и строк — из журнала уведомлений (ЖУ2). */
     noticeCounts: io.tima.domain.chat.NoticeCounts = io.tima.domain.chat.NoticeCounts.NONE,
     /** Открыли вкладку: прочитать телефонную книгу и сверить. */
@@ -7079,6 +7103,8 @@ private fun PhoneWindow(
                     }
                     onOpenedCalls()
                 }
+                val callsSeen = rememberSeen("calls")
+                LaunchedEffect(callsSeen) { if (callsSeen) onCallsSeen() }
                 CallsScreen(
                     // ── ФИЛЬТРЫ ВТОРОГО РЯДА ────────────────────────────────
                     //
