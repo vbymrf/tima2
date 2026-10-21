@@ -147,6 +147,24 @@ class ComposedBodiesTest {
         assertEquals(1, assertIs<RichBlock.Quoted>(list.items[0].blocks.single()).lines)
     }
 
+    /** Заказчик 2026-10-21: доля ширины картинки — в теле, у получателя и в черновике; 100 — не пишется. */
+    @Test
+    fun доля_ширины_картинки() {
+        val media = OutMedia("m-1", ByteArray(32) { 5 }, "image/jpeg", 10, 20, 300, ByteArray(3) { 1 })
+        val doc = ComposedDoc(listOf(ComposedItem.Widget(ComposedWidget.Image(media, share = 60)), ComposedItem.Widget(ComposedWidget.Image(media))))
+        val content = bodies.content(doc)
+        assertTrue(io.tima.crypto.MarkupRules.check(content, strict = true).isEmpty(), io.tima.crypto.MarkupRules.check(content, strict = true).toString())
+        val raw = io.tima.crypto.MarkupV2.encodeBody(content.markup!!, content.nodes)
+        assertEquals(1, Regex("\"share\":60").findAll(raw).count(), raw)
+        assertTrue("\"share\":100" !in raw, "во всю ширину — поля нет")
+        val shown = RichMapper.from(content)!!.blocks
+        val first = assertIs<RichBlock.Row>(shown[0]).cells.single().widgets.single()
+        assertEquals(60, assertIs<RichBlock.Image>(first).share)
+        assertEquals(60, assertIs<ComposedWidget.Image>(assertIs<ComposedItem.Widget>(ComposedFromContent.doc(content)!!.items[0]).widget).share)
+        val draft = bodies.load(bodies.save(doc))!!.items.map { (assertIs<ComposedItem.Widget>(it).widget as ComposedWidget.Image).share }
+        assertEquals(listOf(60, 100), draft, "черновик")
+    }
+
     /** Заказчик 2026-10-21: подкладка — в середине и в пункте списка; разметка та же, v2. */
     @Test
     fun подкладка_в_середине_и_в_пункте_списка() {

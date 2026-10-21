@@ -135,7 +135,7 @@ internal object ComposedFromContent {
         val w = b.widget ?: return null
         fun media(i: Int): OutMedia? = content.media.getOrNull(i)?.let(::outOf)
         return when (b.type) {
-            BlockType.IMAGE -> media(w.media)?.let { ComposedWidget.Image(it) }
+            BlockType.IMAGE -> media(w.media)?.let { ComposedWidget.Image(it, w.share.takeIf { s -> s in 20..99 } ?: 100) }
             BlockType.LINK -> ComposedWidget.Link(w.url, w.title, w.mode, w.description, if (w.media >= 0) media(w.media) ?: return null else null, b.style["color"].orEmpty())
             BlockType.CLOUD -> ComposedWidget.Cloud(w.url, w.kind, w.title)
             BlockType.MAP -> ComposedWidget.Place(w.lat ?: return null, w.lon ?: return null, w.label)

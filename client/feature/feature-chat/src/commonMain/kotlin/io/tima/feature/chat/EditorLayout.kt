@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.background
@@ -215,6 +216,7 @@ internal fun EditorWidget(
                     indication = null,
                 ) { model.select(spot) },
             )
+            if (chosen && widget is ComposedWidget.Image) ImageHandle(widget, spot, model)
         }
         // Ручка — для мыши: тянуть сразу, без долгого нажатия.
         Caption(
@@ -225,6 +227,54 @@ internal fun EditorWidget(
                 .draggable(drag, spot, { corner }, onDrop, { model.doc.items.size }, longPress = false, intoCells, intoLists)
                 .testTag(EditorTags.spot(spot) + ".handle"),
         )
+    }
+}
+
+/**
+ * Ручка ширины картинки (заказчик 2026-10-21): у края выбранной картинки — тянуть пальцем или мышью,
+ * доля ширины места ступенями по 5 %, от 20 до 100. Край — по выравниванию содержимого: слева —
+ * правый край, по центру — правый (вдвое быстрее), справа — левый.
+ */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.ImageHandle(widget: ComposedWidget.Image, spot: Spot, model: EditorModel) {
+    val colors = Tima.colors
+    val current by androidx.compose.runtime.rememberUpdatedState(widget)
+    val item = model.doc.items.getOrNull(spot.item)
+    val align = when (item) {
+        is ComposedItem.Row -> item.cells.getOrNull(spot.cell)?.style?.get("align") ?: item.style["align"]
+        else -> item?.style?.get("align")
+    }
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.matchParentSize()) {
+        val full = constraints.maxWidth.toFloat()
+        val w = full * current.share / 100f
+        val (edge, scale) = when (align) {
+            "center" -> (full + w) / 2f to 2f
+            "end" -> (full - w) to -1f
+            else -> w to 1f
+        }
+        val half = with(androidx.compose.ui.platform.LocalDensity.current) { 9.dp.toPx() }
+        var moved by remember { mutableStateOf(0f) }
+        Box(
+            Modifier.offset { IntOffset((edge - half).roundToInt(), 0) }
+                .width(18.dp).fillMaxHeight()
+                .pointerInput(spot) {
+                    detectHorizontalDragGestures(onDragEnd = { moved = 0f }) { change, dx ->
+                        change.consume()
+                        moved += dx * scale
+                        val step = full * 5f / 100f
+                        val steps = (moved / step).toInt()
+                        if (steps != 0 && full > 0f) {
+                            moved -= steps * step
+                            val next = (current.share + steps * 5).coerceIn(20, 100)
+                            if (next != current.share) model.layout { d, s -> withWidget(d, s, current.copy(share = next)) to s }
+                        }
+                    }
+                }
+                .testTag(EditorTags.spot(spot) + ".width"),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(Modifier.width(6.dp).fillMaxHeight().padding(vertical = 8.dp).background(colors.navigation, RoundedCornerShape(3.dp)))
+        }
     }
 }
 
@@ -365,6 +415,11 @@ private fun EditorCell(
         Caption("$percent%", fontSize = 9.sp, color = colors.text3)
         val shown = model.typedAt(textSpot)
         val value = if (spot == textSpot) model.field else TextFieldValue(shown.text)
+        // Курсор просили сюда (новый ряд, 2026-10-21) — встать в текст ячейки.
+        val cellFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+        androidx.compose.runtime.LaunchedEffect(model.focusAsk) {
+            if (model.focusAsk > 0 && model.spot == textSpot) runCatching { cellFocus.requestFocus() }
+        }
         BasicTextField(
             value = value,
             onValueChange = { v -> model.changedCell(index, c, v) },
@@ -376,6 +431,7 @@ private fun EditorCell(
             cursorBrush = SolidColor(colors.navigation),
             visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks),
             modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp)
+                .focusRequester(cellFocus)
                 .onFocusChanged { if (it.isFocused) model.focusedCell(index, c) }
                 .testTag(EditorTags.cellText(index, c)),
         )

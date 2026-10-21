@@ -45,11 +45,14 @@ import io.tima.domain.chat.Spot
 /** Порядок цветов в образцах: яркий, затем мягкий того же цвета. */
 /**
  * Цвета ссылки — только яркие, что не сольются с фоном (заказчик 2026-10-21): без белого, чёрного,
- * серых и подложек — среди них и цвет своих сообщений.
+ * серых и подложек — среди них и цвет своих сообщений. Одни и в «Свойствах», и при вставке ссылки.
  */
-private val LINK_COLORS = listOf("accent", "amber", "green", "blue", "red")
+val LinkColors = listOf("accent", "amber", "yellow", "green", "blue", "lilac", "pink", "red")
 
-private val PALETTE_ORDER = listOf("text", "surface", "accent", "accent-soft", "amber", "amber-soft", "green", "green-soft", "blue", "blue-soft", "red", "red-soft", "grey", "grey-soft")
+private val PALETTE_ORDER = listOf(
+    "text", "surface", "accent", "accent-soft", "amber", "amber-soft", "yellow", "green", "green-soft",
+    "blue", "blue-soft", "lilac", "pink", "red", "red-soft", "grey", "grey-soft",
+)
 
 /**
  * Выбор цвета из палитры сообщений: «Нет» и образцы. Им же выбирают цвет ссылки в «Вставить
@@ -101,7 +104,7 @@ private fun widgetAt(doc: ComposedDoc, at: Spot): ComposedWidget? = when (val it
     else -> null
 }
 
-private fun withWidget(doc: ComposedDoc, at: Spot, widget: ComposedWidget): ComposedDoc = doc.copy(
+internal fun withWidget(doc: ComposedDoc, at: Spot, widget: ComposedWidget): ComposedDoc = doc.copy(
     items = doc.items.mapIndexed { i, item ->
         when {
             i != at.item -> item
@@ -257,7 +260,7 @@ private fun WidgetOptions(model: EditorModel, spot: Spot) {
                 modifier = Modifier.fillMaxWidth().background(Tima.colors.functional, RoundedCornerShape(8.dp)).padding(8.dp)
                     .testTag("editor:style.link.title"),
             )
-            PaletteRow(widget.color.ifEmpty { null }, "editor:style.link.color", only = LINK_COLORS) { c -> put(widget.copy(color = c.orEmpty())) }
+            PaletteRow(widget.color.ifEmpty { null }, "editor:style.link.color", only = LinkColors) { c -> put(widget.copy(color = c.orEmpty())) }
         }
         is ComposedWidget.Quoted -> RefOptions("quoted", widget.author, widget.lines, widget.more, widget.moreText, widget.tap) { au, li, mo, mt, ta ->
             put(widget.copy(author = au, lines = li, more = mo, moreText = mt, tap = ta))

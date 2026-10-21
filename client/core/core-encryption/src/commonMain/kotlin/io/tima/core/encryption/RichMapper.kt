@@ -123,7 +123,7 @@ internal object RichMapper {
     private fun widget(block: MarkupBlock): RichBlock? {
         val w = block.widget ?: return null
         return when (block.type) {
-            BlockType.IMAGE -> w.media.takeIf { it >= 0 }?.let { RichBlock.Image(it) }
+            BlockType.IMAGE -> w.media.takeIf { it >= 0 }?.let { RichBlock.Image(it, w.share.takeIf { s -> s in 20..99 } ?: 100) }
             BlockType.LINK -> w.takeIf { it.url.isNotBlank() }?.let {
                 RichBlock.Link(it.url, it.mode.ifEmpty { "plain" }, it.title, it.description, it.media, block.style["color"].orEmpty())
             }

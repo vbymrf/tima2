@@ -53,7 +53,7 @@ internal fun EditorAskSheet(
         ok = cw.ok,
         cancel = cw.cancel,
         options = options,
-        extra = if (ask == "link") ({ io.tima.feature.chat.PaletteRow(color, "chat:ask.color") { color = it.orEmpty() } }) else null,
+        extra = if (ask == "link") ({ io.tima.feature.chat.PaletteRow(color, "chat:ask.color", only = io.tima.feature.chat.LinkColors) { color = it.orEmpty() } }) else null,
         onCancel = onClose,
         onDone = { v ->
             val url = v[0].trim().let { if (it.isEmpty() || "://" in it) it else "https://$it" }

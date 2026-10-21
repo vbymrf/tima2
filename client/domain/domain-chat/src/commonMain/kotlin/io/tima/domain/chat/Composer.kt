@@ -138,7 +138,11 @@ data class ComposedListItem(
 /** Виджеты редактора (Решения §10.4). */
 sealed interface ComposedWidget {
     /** Картинка — уже загружена и закрыта своим ключом. */
-    data class Image(val media: OutMedia) : ComposedWidget
+    /**
+     * Картинка; [share] — доля ширины своего места, 20…100 % (заказчик 2026-10-21): правится ручкой в
+     * редакторе, при переносе — снова 100.
+     */
+    data class Image(val media: OutMedia, val share: Int = 100) : ComposedWidget
 
     /** Ссылка: `plain`, `button`, `card`; у карточки — описание и картинка со страницы (Решения §4). */
     data class Link(

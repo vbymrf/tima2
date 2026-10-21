@@ -97,6 +97,21 @@ class MarkupRulesTest {
         assertTrue("cell-node" in rules(c))
     }
 
+    /** Заказчик 2026-10-21: доля ширины картинки — 20…99, иначе нарушение. */
+    @Test
+    fun доля_ширины_картинки_в_пределах() {
+        fun image(share: Int) = MessageContent(nodes = emptyList(), media = listOf(MediaRef(media_id = "m", mime = "image/jpeg")), markup = Markup(blocks = listOf(
+            MarkupBlock(type = BlockType.FLEX, children = listOf(
+                MarkupBlock(type = BlockType.CELL, style = mapOf("width" to "100"), children = listOf(
+                    MarkupBlock(type = BlockType.IMAGE, widget = MarkupWidget(media = 0, share = share)),
+                )),
+            )),
+        )))
+        assertTrue(rules(image(0)).isEmpty(), rules(image(0)).toString())
+        assertTrue(rules(image(40)).isEmpty())
+        assertTrue(rules(image(10)).isNotEmpty())
+    }
+
     /** Заказчик 2026-10-21: подкладка — где угодно на верхнем уровне и в пункте списка; в ячейке ряда — нет. */
     @Test
     fun подкладка_в_середине_и_в_пункте_списка_но_не_в_ряду() {

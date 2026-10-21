@@ -14,6 +14,7 @@ class MessagePaletteTest {
         "amber", "amber-soft", "green", "green-soft",
         "blue", "blue-soft", "red", "red-soft",
         "grey", "grey-soft",
+        "yellow", "lilac", "pink",
     )
 
     @Test

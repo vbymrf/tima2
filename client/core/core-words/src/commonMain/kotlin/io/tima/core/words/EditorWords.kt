@@ -132,6 +132,7 @@ object RussianEditorWords : EditorWords {
         "text" -> "Текст"
         "insert" -> "Вставка"
         "layout" -> "Разметка"
+        "level" -> "Уровень"
         else -> "Стиль"
     }
     override fun button(key: String) = when (key) {
@@ -168,7 +169,7 @@ object RussianEditorWords : EditorWords {
         "split" -> "Разъедин."
         "up" -> "Выше"
         "down" -> "Ниже"
-        "delete" -> "Удалить"
+        "delete" -> "Убрать"
         "widget" -> "Виджет"
         "background" -> "Фон"
         "color" -> "Цвет"
@@ -235,6 +236,9 @@ object RussianEditorWords : EditorWords {
         "blue" -> "синий"
         "red" -> "красный"
         "grey" -> "серый"
+        "yellow" -> "жёлтый"
+        "lilac" -> "сиреневый"
+        "pink" -> "розовый"
         else -> key
     } + if (key.endsWith("-soft")) ", мягкий" else ""
     override fun stepName(key: String, value: String) = when (key to value) {
@@ -322,6 +326,7 @@ object EnglishEditorWords : EditorWords {
         "text" -> "Text"
         "insert" -> "Insert"
         "layout" -> "Layout"
+        "level" -> "Level"
         else -> "Style"
     }
     override fun button(key: String) = when (key) {
@@ -358,7 +363,7 @@ object EnglishEditorWords : EditorWords {
         "split" -> "Split"
         "up" -> "Up"
         "down" -> "Down"
-        "delete" -> "Delete"
+        "delete" -> "Remove"
         "widget" -> "Widget"
         "background" -> "Fill"
         "color" -> "Color"
@@ -425,6 +430,9 @@ object EnglishEditorWords : EditorWords {
         "blue" -> "blue"
         "red" -> "red"
         "grey" -> "grey"
+        "yellow" -> "yellow"
+        "lilac" -> "lilac"
+        "pink" -> "pink"
         else -> key
     } + if (key.endsWith("-soft")) ", soft" else ""
     override fun stepName(key: String, value: String) = when (key to value) {
@@ -508,6 +516,7 @@ object SpanishEditorWords : EditorWords {
         "text" -> "Texto"
         "insert" -> "Insertar"
         "layout" -> "Diseño"
+        "level" -> "Nivel"
         else -> "Estilo"
     }
     override fun button(key: String) = when (key) {
@@ -544,7 +553,7 @@ object SpanishEditorWords : EditorWords {
         "split" -> "Separar"
         "up" -> "Arriba"
         "down" -> "Abajo"
-        "delete" -> "Borrar"
+        "delete" -> "Quitar"
         "widget" -> "Widget"
         "background" -> "Relleno"
         "color" -> "Color"
@@ -611,6 +620,9 @@ object SpanishEditorWords : EditorWords {
         "blue" -> "azul"
         "red" -> "rojo"
         "grey" -> "gris"
+        "yellow" -> "amarillo"
+        "lilac" -> "lila"
+        "pink" -> "rosa"
         else -> key
     } + if (key.endsWith("-soft")) ", suave" else ""
     override fun stepName(key: String, value: String) = when (key to value) {

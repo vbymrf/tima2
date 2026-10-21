@@ -156,7 +156,9 @@ private fun RowCellView(cell: RowCell, modifier: Modifier, rowStyle: io.tima.dom
                 for (b in cell.blocks) RichBlockViewOf(b)
             }
         }
-        for (w in cell.widgets) WidgetView(w)
+        androidx.compose.runtime.CompositionLocalProvider(LocalWidgetAlign provides textStyle.align) {
+            for (w in cell.widgets) WidgetView(w)
+        }
     }
 }
 
@@ -190,8 +192,22 @@ private fun ImageWidget(image: RichBlock.Image) {
         return
     }
     val aspect = if (media.width > 0 && media.height > 0) media.width.toFloat() / media.height else null
-    MessagePicture(mediaUri(media.mediaId, media.key), aspect, Tima.words.chat.pictureMissing)
+    // Доля ширины места (заказчик 2026-10-21); узкая — по выравниванию содержимого из «Стиля».
+    val where = when (LocalWidgetAlign.current) {
+        "center" -> Alignment.TopCenter
+        "end" -> Alignment.TopEnd
+        else -> Alignment.TopStart
+    }
+    Box(Modifier.fillMaxWidth(), contentAlignment = where) {
+        MessagePicture(
+            mediaUri(media.mediaId, media.key), aspect, Tima.words.chat.pictureMissing,
+            modifier = Modifier.fillMaxWidth(image.share.coerceIn(20, 100) / 100f),
+        )
+    }
 }
+
+/** Выравнивание содержимого места (ряда, ячейки) — по нему встаёт узкая картинка (2026-10-21). */
+internal val LocalWidgetAlign = staticCompositionLocalOf<String?> { null }
 
 @Composable
 private fun LinkWidget(link: RichBlock.Link) {
@@ -214,7 +230,7 @@ private fun LinkWidget(link: RichBlock.Link) {
         }
         // Текстом с названием — название цветом ссылки; синяя полоса справа на рамке пузыря, как у
         // нажимаемого вставленного (заказчик 2026-10-21).
-        link.mode == "plain" && link.title.isNotBlank() -> Box(Modifier.fillMaxWidth().edgeStripe(color)) {
+        link.mode == "plain" && link.title.isNotBlank() -> Box(Modifier.fillMaxWidth().edgeStripe(linkStripe())) {
             Caption(
                 link.title,
                 fontSize = TimaType.sz4,
@@ -226,7 +242,7 @@ private fun LinkWidget(link: RichBlock.Link) {
         // Кнопкой — пузырь «Перейти · домен» (заказчик 2026-10-19); с названием — только название,
         // без домена (заказчик 2026-10-21). Текстом без названия — тот же пузырь. Полный адрес — только
         // в окне перехода.
-        else -> Box(if (link.mode == "plain") Modifier.fillMaxWidth().edgeStripe(color) else Modifier) {
+        else -> Box(if (link.mode == "plain") Modifier.fillMaxWidth().edgeStripe(linkStripe()) else Modifier) {
             Caption(
                 if (link.mode == "button" && link.title.isNotBlank()) link.title else linkLabel(link.title.ifBlank { Tima.words.chat.linkGo }, link.url),
                 fontSize = TimaType.sz5,
@@ -239,6 +255,10 @@ private fun LinkWidget(link: RichBlock.Link) {
         }
     }
 }
+
+/** Полоса у ссылки «Текстом» — всегда синяя, какого бы цвета ни была сама ссылка (заказчик 2026-10-21). */
+@Composable
+private fun linkStripe(): androidx.compose.ui.graphics.Color = paletteColor("blue") ?: Tima.colors.link
 
 /** В ячейке ряда (не во всю ширину пузыря) — полосе на рамке пузыря там не место. */
 internal val LocalInCell = staticCompositionLocalOf { false }

@@ -395,6 +395,10 @@ internal val LightMessagePalette: Map<String, Color> = mapOf(
     "red-soft" to Color(0x33E5533D),
     "grey" to Color(0xFF6B6B6B),
     "grey-soft" to Color(0x1F000000),
+    // Яркие для ссылок (заказчик 2026-10-21): на белом — темнее, чтобы читались.
+    "yellow" to Color(0xFFB89A00),
+    "lilac" to Color(0xFF8A56D6),
+    "pink" to Color(0xFFD6337F),
 )
 
 /** Палитра сообщений тёмной темы: яркие светлее — держат контраст на тёмном. */
@@ -413,4 +417,7 @@ internal val DarkMessagePalette: Map<String, Color> = mapOf(
     "red-soft" to Color(0x4DE5533D),
     "grey" to Color(0xFFB0B0B0),
     "grey-soft" to Color(0x29FFFFFF),
+    "yellow" to Color(0xFFFFE066),
+    "lilac" to Color(0xFFC9A8FF),
+    "pink" to Color(0xFFFF8CC2),
 )

@@ -258,6 +258,44 @@ class ComposedLayoutTest {
         assertEquals(underlay, (jumped.items[1] as ComposedItem.Widget).widget)
     }
 
+    /** Заказчик 2026-10-21: текст, заголовок, цитата, список без виджетов — тоже идут через ряд. */
+    @Test
+    fun текст_и_список_идут_через_ряд() {
+        val row = ComposedItem.Row(listOf(ComposedCell(50, "x"), ComposedCell(50, "")))
+        val doc = ComposedDoc(listOf(ComposedItem.Text("# Заголовок"), row))
+        val (into, s1) = ComposedLayout.shift(doc, Spot(0), 1)
+        assertEquals(Spot(0, 0, Spot.TEXT), s1)
+        assertEquals("# Заголовок\nx", into.row(0).cells[0].text, "в начало первой ячейки")
+        val (next, s2) = ComposedLayout.shift(into, s1, 1)
+        assertEquals(Spot(0, 1, Spot.TEXT), s2)
+        assertEquals("", next.row(0).cells[0].text)
+        assertEquals("# Заголовок\nx", next.row(0).cells[1].text, "текст ячейки идёт целиком")
+        val (out, s3) = ComposedLayout.shift(next, s2, 1)
+        assertEquals(Spot(1), s3)
+        assertEquals("# Заголовок\nx", (out.items[1] as ComposedItem.Text).source)
+
+        val list = ComposedItem.ItemList(listOf(ComposedListItem(1, "а"), ComposedListItem(2, "б")))
+        val (withList, s4) = ComposedLayout.shift(ComposedDoc(listOf(row, list)), Spot(1), -1)
+        assertEquals(Spot(0, 1, Spot.TEXT), s4, "снизу — в последнюю ячейку")
+        assertEquals(1, withList.items.size, "список ушёл в ряд")
+        assertTrue(withList.row(0).cells[1].text.contains("а") && withList.row(0).cells[1].text.contains("б"), "пункты — строками ячейки")
+        val refList = ComposedItem.ItemList(listOf(ComposedListItem(1, "а", widgets = listOf(ComposedWidget.Underlay("group", "g", 7)))))
+        val (jumped, s5) = ComposedLayout.shift(ComposedDoc(listOf(row, refList)), Spot(1), -1)
+        assertEquals(Spot(0), s5, "список с подкладкой перепрыгивает ряд")
+        assertIs<ComposedItem.ItemList>(jumped.items[0])
+    }
+
+    /** Заказчик 2026-10-21: перенесённая картинка — снова во всю ширину. */
+    @Test
+    fun перенос_возвращает_картинке_всю_ширину() {
+        val image = ComposedWidget.Image(OutMedia("m", ByteArray(1), "image/jpeg", 10, 10, 1), share = 40)
+        val doc = ComposedDoc(listOf(ComposedItem.Widget(image), ComposedItem.Row(listOf(ComposedCell(50, "a"), ComposedCell(50, "b")))))
+        val (moved, _) = ComposedLayout.move(doc, Spot(0), Drop.IntoCell(1, 1))
+        assertEquals(100, (moved.row(0).cells[1].widgets.single() as ComposedWidget.Image).share)
+        val (shifted, _) = ComposedLayout.shift(doc, Spot(0), 1)
+        assertEquals(100, (shifted.row(0).cells[0].widgets.single() as ComposedWidget.Image).share)
+    }
+
     @Test
     fun перенос_в_слитое_попадает_в_первую_ячейку() {
         var doc = grid(1, 2)

@@ -27,6 +27,9 @@ sealed interface Drop {
     data class IntoList(val item: Int, val before: Int) : Drop
 }
 
+/** Перенесённая картинка — снова во всю ширину нового места, дальше её можно сузить (заказчик 2026-10-21). */
+internal fun ComposedWidget.fresh(): ComposedWidget = if (this is ComposedWidget.Image) copy(share = 100) else this
+
 /** Подборка и подкладка — их можно вести по готовому списку; подкладку — не в ряд. */
 val ComposedWidget.isRef: Boolean get() = this is ComposedWidget.Quoted || this is ComposedWidget.Underlay
 
@@ -311,7 +314,7 @@ object ComposedLayout {
      * «Выше» и «Ниже» (−1, +1): виджет внутри ячейки — среди соседей по ячейке; кусок — среди
      * кусков. Ячейки ряда местами не меняются: у них строки и столбцы.
      */
-    fun shift(doc: ComposedDoc, at: Spot, by: Int, refTitle: String = ""): Pair<ComposedDoc, Spot> {
+    fun shift(doc: ComposedDoc, at: Spot, by: Int, refTitle: String = "", source: TypedSource = PlainTyped): Pair<ComposedDoc, Spot> {
         // Список (ADR-0049): виджет — внутри пункта, пункт — внутри списка, со своей ступенью.
         val list = doc.items.getOrNull(at.item) as? ComposedItem.ItemList
         if (list != null && at.cell in list.items.indices) {
@@ -366,14 +369,32 @@ object ComposedLayout {
             val emptied = row.cells.toMutableList().apply { set(at.cell, cell.copy(widgets = cell.widgets.filterIndexed { i, _ -> i != at.widget })) }
             if (next != null) {
                 val target = emptied[next]
-                val widgets = if (by > 0) listOf(widget) + target.widgets else target.widgets + widget
+                val widgets = if (by > 0) listOf(widget.fresh()) + target.widgets else target.widgets + widget.fresh()
                 emptied[next] = target.copy(widgets = widgets)
                 return doc.setRow(at.item, row.copy(cells = emptied)) to Spot(at.item, next, if (by > 0) 0 else widgets.lastIndex)
             }
             val items = doc.items.toMutableList()
             items[at.item] = row.copy(cells = emptied)
             val place = if (by < 0) at.item else at.item + 1
-            items.add(place, ComposedItem.Widget(widget))
+            items.add(place, ComposedItem.Widget(widget.fresh()))
+            return doc.copy(items = items) to Spot(place)
+        }
+        // Текст ячейки — целиком в соседнюю ячейку (вливается в её текст), на краю ряда — вон куском
+        // (заказчик 2026-10-21: «тот же механизм» для текста, заголовка, цитаты, списка).
+        if (row != null && at.cell in row.cells.indices && at.widget == Spot.TEXT && row.cells[at.cell].text.isNotBlank()) {
+            val text = row.cells[at.cell].text
+            val owners = row.cells.indices.filter { ownerOf(row, it) == it }
+            val next = owners.getOrNull(owners.indexOf(at.cell) + by)
+            val cells = row.cells.toMutableList().apply { set(at.cell, row.cells[at.cell].copy(text = "")) }
+            if (next != null) {
+                val target = cells[next]
+                cells[next] = target.copy(text = if (by > 0) merged(source, text, target.text) else merged(source, target.text, text))
+                return doc.setRow(at.item, row.copy(cells = cells)) to Spot(at.item, next, Spot.TEXT)
+            }
+            val items = doc.items.toMutableList()
+            items[at.item] = row.copy(cells = cells)
+            val place = if (by < 0) at.item else at.item + 1
+            items.add(place, ComposedItem.Text(text))
             return doc.copy(items = items) to Spot(place)
         }
         if (row != null && at.cell in row.cells.indices) return doc to at
@@ -387,12 +408,30 @@ object ComposedLayout {
             val owners = nextRow.cells.indices.filter { ownerOf(nextRow, it) == it }
             val enter = if (by > 0) owners.first() else owners.last()
             val target = nextRow.cells[enter]
-            val widgets = if (by > 0) listOf(piece.widget) + target.widgets else target.widgets + piece.widget
+            val widgets = if (by > 0) listOf(piece.widget.fresh()) + target.widgets else target.widgets + piece.widget.fresh()
             val cells = nextRow.cells.toMutableList().apply { set(enter, target.copy(widgets = widgets)) }
             val without = doc.items.toMutableList().apply { removeAt(at.item) }
             val rowAt = if (by < 0) to else to - 1
             without[rowAt] = nextRow.copy(cells = cells)
             return doc.copy(items = without) to Spot(rowAt, enter, if (by > 0) 0 else widgets.lastIndex)
+        }
+        // Текст и список без виджетов рядом с рядом — входят в него текстом (заказчик 2026-10-21): сверху —
+        // в начало первой ячейки, снизу — в конец последней. Список с виджетами ряд перепрыгивает.
+        val asText = when (piece) {
+            is ComposedItem.Text -> piece.source.takeIf { it.isNotBlank() }
+            is ComposedItem.ItemList -> listAsText(piece, source)
+            else -> null
+        }
+        if (asText != null && nextRow != null && nextRow.cells.isNotEmpty()) {
+            val owners = nextRow.cells.indices.filter { ownerOf(nextRow, it) == it }
+            val enter = if (by > 0) owners.first() else owners.last()
+            val target = nextRow.cells[enter]
+            val text = if (by > 0) merged(source, asText, target.text) else merged(source, target.text, asText)
+            val cells = nextRow.cells.toMutableList().apply { set(enter, target.copy(text = text)) }
+            val without = doc.items.toMutableList().apply { removeAt(at.item) }
+            val rowAt = if (by < 0) to else to - 1
+            without[rowAt] = nextRow.copy(cells = cells)
+            return doc.copy(items = without) to Spot(rowAt, enter, Spot.TEXT)
         }
         // Подборка или подкладка рядом с готовым списком — входит в него крайним пунктом (2026-10-21).
         val next = doc.items[to] as? ComposedItem.ItemList
@@ -405,6 +444,26 @@ object ComposedLayout {
             return doc.copy(items = without) to Spot(listAt, if (by < 0) items.lastIndex else 0, 0)
         }
         return doc.copy(items = doc.items.toMutableList().apply { add(to, removeAt(at.item)) }) to Spot(to)
+    }
+
+    /** Два набранных текста — строками друг за другом; пустой не добавляет пустую строку. */
+    private fun merged(source: TypedSource, first: String, second: String): String = when {
+        first.isBlank() -> second
+        second.isBlank() -> first
+        else -> source.write(ComposedLists.join(source.read(first), source.read(second)))
+    }
+
+    /** Список без виджетов — строками-пунктами своих ступеней; с виджетами — `null`: в ячейку он не встаёт. */
+    private fun listAsText(list: ComposedItem.ItemList, source: TypedSource): String? {
+        if (list.items.isEmpty() || list.items.any { it.widgets.isNotEmpty() }) return null
+        var out: Typed? = null
+        for (item in list.items) {
+            val kind = when (item.depth) { 1 -> LineKind.LIST1; 2 -> LineKind.LIST2; else -> LineKind.LIST3 }
+            val title = source.read(item.title).let { it.copy(lines = List(it.lines.size) { kind }) }
+            val one = ComposedLists.join(title, item.text.takeIf { it.isNotEmpty() }?.let(source::read))
+            out = out?.let { ComposedLists.join(it, one) } ?: one
+        }
+        return out?.let(source::write)
     }
 
     /** «Удалить» выбранное: виджет, текст ячейки, содержимое ячейки или кусок целиком. */
@@ -505,7 +564,7 @@ object ComposedLayout {
                 val row = without.row(item) ?: return doc to from
                 val cell = row.cells.getOrNull(target.cell) ?: return doc to from
                 val next = when (carried) {
-                    is Carried.W -> cell.copy(widgets = cell.widgets + carried.widget)
+                    is Carried.W -> cell.copy(widgets = cell.widgets + carried.widget.fresh())
                     is Carried.T -> cell.copy(text = listOf(cell.text, carried.text).filter { it.isNotBlank() }.joinToString("\n"))
                 }
                 val cells = row.cells.toMutableList().apply { set(target.cell, next) }
@@ -515,7 +574,7 @@ object ComposedLayout {
             is Drop.Between -> {
                 val at = shifted(target.before).coerceIn(0, without.items.size)
                 val piece = when (carried) {
-                    is Carried.W -> ComposedItem.Widget(carried.widget)
+                    is Carried.W -> ComposedItem.Widget(carried.widget.fresh())
                     is Carried.T -> ComposedItem.Text(carried.text)
                 }
                 without.copy(items = without.items.toMutableList().apply { add(at, piece) }) to Spot(at)

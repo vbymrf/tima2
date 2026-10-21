@@ -1,5 +1,7 @@
 package io.tima.feature.chat
 
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -89,6 +91,10 @@ object EditorTags {
     const val UNDO = "editor:undo"
     const val REDO = "editor:redo"
     const val LEVEL = "editor:level"
+    /** Раздел «Уровень»: серое поле с описанием выбранного уровня (2026-10-21). */
+    const val LEVEL_ABOUT = "editor:level.about"
+    /** Невидимое поле при выбранном виджете: Enter и буквы — новая строка под ним. */
+    const val WIDGET_KEYS = "editor:widget.keys"
     const val SEND = "editor:send"
     const val PREVIEW = "editor:preview"
     const val PROBLEMS = "editor:problems"
@@ -130,10 +136,13 @@ internal enum class EditorTab(val key: String, val buttons: List<String>) {
     // Заказчик 2026-10-20: «Уровень» — первым в «Тексте»; «Виджет» — первым во «Вставке», «С оформлением» —
     // последним там же; «Вид» (просмотр) и «Свойства» — первыми в «Стиле»; «Выше» и «Ниже» — первыми в
     // «Разметке». Маркер и Код — кнопками в «Тексте», как были (вернули 2026-10-20).
-    TEXT("text", listOf("level", "paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol")),
+    // 2026-10-21: «Убрать» (ряд целиком) — сразу после «Ряд»; «md» — в конце «Стиля»; «Уровень» —
+    // отдельным разделом в конце: кнопки уровней, под ними описание выбранного.
+    TEXT("text", listOf("paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol")),
     INSERT("insert", listOf("widget", "picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply", "paste")),
-    LAYOUT("layout", listOf("up", "down", "row", "marks", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split", "delete")),
-    STYLE("style", listOf("view", "props", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
+    LAYOUT("layout", listOf("up", "down", "row", "delete", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split")),
+    STYLE("style", listOf("view", "props", "background", "color", "size", "align", "padding", "divider", "reset", "json", "marks")),
+    LEVEL("level", emptyList()),
 }
 
 /**
@@ -379,7 +388,8 @@ fun EditorScreen(
             "split" -> model.layout(io.tima.domain.chat.ComposedLayout::split)
             "up" -> model.shift(-1)
             "down" -> model.shift(1)
-            "delete" -> model.layout(io.tima.domain.chat.ComposedLayout::removeAt)
+            // «Убрать» — ряд целиком (заказчик 2026-10-21); корзина в шапке удаляет выбранное, как была.
+            "delete" -> model.removeRow()
             // Раздел «Стиль» (§10.2): на выбранное.
             // «Вставка → Виджет» (ПЛАН-(ВД)): опрос, мероприятие, видеоклипы, аудио.
             "widget" -> toggle("widgets")
@@ -417,7 +427,10 @@ fun EditorScreen(
 
         // ── Разделы и лента (§10.2) — закреплены вверху (заказчик 2026-10-19: «Закрепляем меню вверху
         // обратно»); прокручивается сообщение. Окно выбора не выше [PANEL_MAX] — дальше листается само.
-        Row(Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about2), horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = TimaSpacing.about2),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+        ) {
             for (t in EditorTab.entries) {
                 io.tima.core.ui.Tab(
                     label = w.tab(t.key),
@@ -429,12 +442,15 @@ fun EditorScreen(
         }
         // В «Стиле» — только то, что действует на выбранное (doc_mig/РЕДАКТОР-СВОЙСТВА-И-ВЛОЖЕНИЕ.md).
         val styleKeys = io.tima.domain.chat.ComposedStyle.applicable(doc, model.spot)
-        Ribbon(
-            tab, marksOn = doc.marks, active = if (showPreview) active + "view" else active, paragraph = w.paragraph(model.paragraphHere.name),
-            scroll = ribbonScroll, onPress = ::press, level = level, levelOn = levels.size > 1,
-            hidden = if (tab == EditorTab.STYLE) (io.tima.domain.chat.ComposedStyle.VISUAL - styleKeys.toSet()).toSet() else emptySet(),
-        )
-        if (panel == "level") LevelList(levels, level) { picked -> model.level(picked); panel = null }
+        if (tab == EditorTab.LEVEL) {
+            LevelRibbon(levels, level) { picked -> model.level(picked) }
+        } else {
+            Ribbon(
+                tab, marksOn = doc.marks, active = if (showPreview) active + "view" else active, paragraph = w.paragraph(model.paragraphHere.name),
+                scroll = ribbonScroll, onPress = ::press,
+                hidden = if (tab == EditorTab.STYLE) (io.tima.domain.chat.ComposedStyle.VISUAL - styleKeys.toSet()).toSet() else emptySet(),
+            )
+        }
         if (panel != null && panel != "level" && panel != "emoji" && panel != "symbol") {
             Box(Modifier.fillMaxWidth().heightIn(max = PANEL_MAX).verticalScroll(rememberScrollState())) {
                 when {
@@ -442,7 +458,7 @@ fun EditorScreen(
                     panel == "widgets" -> WidgetsAsk { hint = w.widgetSoon; panel = null }
                     panel == "grid" -> GridAsk { lines, columns ->
                         panel = null
-                        model.layout { d, s -> io.tima.domain.chat.ComposedLayout.addRow(d, s, lines, columns) }
+                        model.insertRow(lines, columns)
                     }
                     panel?.startsWith("style.") == true -> StylePanel(panel!!.removePrefix("style."), model, problems)
                 }
@@ -469,6 +485,10 @@ fun EditorScreen(
         }
         // Над выделенным полоски Ж К Ч нет (заказчик 2026-10-18): она ложилась на системное «Вырезать ·
         // Копировать · Выделить всё». Оформляют кнопки ленты — нажата, если выделенное уже такое.
+
+        // Выбран виджет, а клавиатура открыта — Enter и буквы ловит невидимое поле: новая строка под
+        // виджетом (заказчик 2026-10-21). Прежде нажатое уходило в прежний текст, где стоял курсор.
+        WidgetKeys(model)
 
         // ── Сообщение ──
         val drag = rememberEditorDrag()
@@ -576,6 +596,8 @@ internal fun editorCommand(key: Key, ctrl: Boolean, shift: Boolean, model: Edito
     fun heading(kind: ParagraphKind): Boolean { model.paragraph(kind); return true }
     return when {
         key == Key.Escape -> { onBack(); true }
+        // Enter при выбранном виджете — новая строка под ним (заказчик 2026-10-21).
+        !ctrl && (key == Key.Enter || key == Key.NumPadEnter) && model.widgetChosen -> { model.lineAfterSelected(); true }
         !ctrl -> false
         key == Key.B -> mark(InlineKind.BOLD)
         key == Key.I -> mark(InlineKind.ITALIC)
@@ -633,6 +655,60 @@ private fun SendButton(ready: Boolean, broken: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Caption("➤", fontSize = 18.sp, weight = FontWeight.Bold, color = if (ready || broken) colors.onAccent else colors.text3)
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun WidgetKeys(model: EditorModel) {
+    if (!model.widgetChosen) return
+    val catcher = remember { FocusRequester() }
+    // Клавиатура на экране — снизу её отступ; на ПК его нет, там Enter ловит [editorCommand].
+    val ime = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+    LaunchedEffect(model.spot) { if (ime) runCatching { catcher.requestFocus() } }
+    BasicTextField(
+        value = "",
+        onValueChange = { v -> if (v.isNotEmpty()) model.lineAfterSelected(v.replace("\n", "")) },
+        modifier = Modifier.size(1.dp).alpha(0f).focusRequester(catcher).testTag(EditorTags.WIDGET_KEYS),
+    )
+}
+
+/**
+ * Раздел «Уровень» (заказчик 2026-10-21): кнопка на уровень — цифра в кружке, под ней название; под
+ * лентой — серое поле: что даёт выбранный уровень. Один уровень (правка своего) — выбирать нечего.
+ */
+@Composable
+private fun LevelRibbon(levels: List<MessageCircle>, current: Int, onPick: (Int) -> Unit) {
+    val colors = Tima.colors
+    val shown = levels.ifEmpty { MessageCircle.entries.filter { it.level == current } }
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+            for (c in shown) {
+                val on = c.level == current
+                Column(
+                    Modifier.width(RIBBON_BUTTON * 1.4f).clickable(enabled = levels.size > 1) { onPick(c.level) }
+                        .padding(vertical = 4.dp).testTag(EditorTags.level(c.level)),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        Modifier.size(30.dp).background(if (on) colors.navigation else colors.functional, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Caption(c.level.toString(), fontSize = 15.sp, weight = FontWeight.Black, color = if (on) colors.onAccent else colors.text)
+                    }
+                    Caption(c.title, fontSize = 10.sp, color = if (on) colors.text else colors.text2, lineOne = true)
+                }
+            }
+        }
+        shown.firstOrNull { it.level == current }?.let { c ->
+            Column(
+                Modifier.fillMaxWidth().background(colors.functional).padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+                    .testTag(EditorTags.LEVEL_ABOUT),
+            ) {
+                Caption(c.title, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                Tertiary(c.about)
+            }
+        }
     }
 }
 

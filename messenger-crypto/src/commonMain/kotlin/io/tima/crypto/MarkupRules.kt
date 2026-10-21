@@ -49,6 +49,8 @@ object MarkupRules {
         "amber", "amber-soft", "green", "green-soft",
         "blue", "blue-soft", "red", "red-soft",
         "grey", "grey-soft",
+        // Яркие для ссылок (заказчик 2026-10-21): жёлтый, сиреневый, розовый.
+        "yellow", "lilac", "pink",
     )
 
     private val STEPS: Map<String, Set<String>> = mapOf(
@@ -235,6 +237,7 @@ object MarkupRules {
             BlockType.IMAGE -> {
                 ctx.images++
                 need(w != null && w.media in 0 until ctx.mediaCount, "нет картинки в теле сообщения")
+                need(w == null || w.share == 0 || w.share in 20..99, "доля ширины не из 20…99")
             }
             BlockType.LINK -> {
                 need(w != null && w.url.isNotBlank(), "нет адреса")

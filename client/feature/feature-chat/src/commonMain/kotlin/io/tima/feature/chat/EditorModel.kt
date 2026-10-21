@@ -649,8 +649,44 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
     /** Перенос пальцем или мышью (Решения §10.3). */
     fun drop(from: Spot, to: Drop) = layout { d, _ -> ComposedLayout.move(d, from, to, refTitle) }
 
+    /**
+     * «Разметка → Ряд» (заказчик 2026-10-21): курсор — в текст первой ячейки нового ряда, и набранное
+     * пишется туда. Прежде ряд выбирал ячейку, а курсор оставался в прежнем тексте.
+     */
+    fun insertRow(lines: Int, columns: Int) {
+        layout { d, s -> ComposedLayout.addRow(d, s, lines, columns).let { (next, at) -> next to Spot(at.item, at.cell.coerceAtLeast(0), Spot.TEXT) } }
+        focusAsk++
+    }
+
+    /** «Убрать» (заказчик 2026-10-21): ряд целиком; вне ряда — ничего. */
+    fun removeRow() = layout { d, s ->
+        if (d.items.getOrNull(s.item) is ComposedItem.Row) ComposedLayout.removeAt(d, Spot(s.item)) else d to s
+    }
+
+    /** Выбран виджет (во всю ширину, в ячейке или в пункте) — не текст. */
+    val widgetChosen: Boolean get() = spot.widget >= 0 || (spot.cell < 0 && doc.items.getOrNull(spot.item) is ComposedItem.Widget)
+
+    /**
+     * Enter при выбранном виджете (заказчик 2026-10-21) — новая строка под куском, где он стоит; набранное
+     * следом — в неё. Пустой текст сразу под куском уже есть — в него.
+     */
+    fun lineAfterSelected(typed: String = "") {
+        typingIn = null
+        pending = null
+        val at = (spot.item + 1).coerceIn(0, doc.items.size)
+        val text = if (typed.isEmpty()) "" else source.write(Typed.plain(typed))
+        val items = doc.items.toMutableList()
+        val next = items.getOrNull(at)
+        if (next is ComposedItem.Text && next.source.isEmpty()) items[at] = next.copy(source = text) else items.add(at, ComposedItem.Text(text))
+        val len = typed.length
+        val snap = Snapshot(doc.copy(items = items), at, len, len)
+        publish(push = true, snap)
+        field = fieldOf(snap)
+        focusAsk++
+    }
+
     /** «Выше» и «Ниже»: подборка и подкладка входят в готовый список и идут по нему (2026-10-21). */
-    fun shift(by: Int) = layout { d, s -> ComposedLayout.shift(d, s, by, refTitle) }
+    fun shift(by: Int) = layout { d, s -> ComposedLayout.shift(d, s, by, refTitle, source) }
 
     fun undo() {
         typingIn = null

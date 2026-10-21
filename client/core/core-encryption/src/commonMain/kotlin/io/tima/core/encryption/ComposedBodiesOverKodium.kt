@@ -227,7 +227,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
         fun widget(w: ComposedWidget): MarkupBlock = when (w) {
             is ComposedWidget.Image -> {
                 media += ref(w.media)
-                MarkupBlock(type = BlockType.IMAGE, widget = MarkupWidget(media = media.size - 1))
+                MarkupBlock(type = BlockType.IMAGE, widget = MarkupWidget(media = media.size - 1, share = w.share.takeIf { it in 20..99 } ?: 0))
             }
             is ComposedWidget.Link -> {
                 val image = w.image?.let { media += ref(it); media.size - 1 } ?: -1
@@ -412,12 +412,14 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val more: String = "",
         val moreText: String = "",
         val tap: Boolean = false,
+        /** Картинка: доля ширины, 20…100; 0 — у прежних черновиков, то есть 100. */
+        val share: Int = 0,
     ) {
         private fun media(): OutMedia? = if (mediaId.isEmpty()) null else
             OutMedia(mediaId, Base64.decode(key), mime, width, height, size, Base64.decode(preview), name)
 
         fun toWidget(): ComposedWidget? = when (type) {
-            "image" -> media()?.let { ComposedWidget.Image(it) }
+            "image" -> media()?.let { ComposedWidget.Image(it, share.takeIf { s -> s in 20..100 } ?: 100) }
             "link" -> ComposedWidget.Link(url, title, mode, description, media(), color)
             "cloud" -> ComposedWidget.Cloud(url, kind, title)
             "place" -> ComposedWidget.Place(lat, lon, label)
@@ -434,7 +436,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
                 is ComposedWidget.Image -> SavedWidget(
                     "image", mediaId = w.media.mediaId, key = Base64.encode(w.media.key), mime = w.media.mime,
                     width = w.media.width, height = w.media.height, size = w.media.size,
-                    preview = Base64.encode(w.media.preview), name = w.media.name,
+                    preview = Base64.encode(w.media.preview), name = w.media.name, share = w.share,
                 )
                 is ComposedWidget.Link -> SavedWidget(
                     "link", url = w.url, title = w.title, mode = w.mode, description = w.description, color = w.color,

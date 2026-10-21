@@ -101,7 +101,8 @@ sealed interface RichBlock {
     data class Row(val cells: List<RowCell>, val style: BlockStyle = BlockStyle.NONE, val columns: Int = cells.size) : RichBlock
 
     /** Картинка внутри сообщения: номер в [RichContent.media]. */
-    data class Image(val media: Int) : RichBlock
+    /** [share] — доля ширины места, 20…100 % (2026-10-21); выравнивание — по стилю содержимого. */
+    data class Image(val media: Int, val share: Int = 100) : RichBlock
 
     /** Ссылка: `plain` — текстом, `button` — кнопкой, `card` — карточкой с заголовком и картинкой. */
     data class Link(
