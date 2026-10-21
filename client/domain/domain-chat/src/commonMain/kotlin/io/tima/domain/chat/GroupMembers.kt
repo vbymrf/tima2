@@ -25,6 +25,11 @@ class ManageGroupMembers(
     private val rotator: GroupKeyRotator,
     /** Справочник по нику; `null` — позвать можно только по номеру. */
     private val nicknames: NicknameDirectory? = null,
+    /**
+     * Вид группы с устройства (заказчик 2026-10-21: сначала вид, потом ключ). Открытой ключ не положен —
+     * смена состава её ключа не трогает; `null` — вид неизвестен, ротация идёт, отказ `not_e2e` — успех.
+     */
+    private val kind: () -> GroupKind? = { null },
 ) {
 
     suspend fun members(groupId: String): MembersStep = groups.members(groupId)
@@ -68,7 +73,7 @@ class ManageGroupMembers(
         apply(groupId, groups.removeMember(groupId, userId), RotationReason.MemberLeave)
 
     private suspend fun apply(groupId: String, step: MemberStep, reason: RotationReason): MembershipStep = when (step) {
-        MemberStep.Done -> when (val rotation = rotator.rotate(groupId, reason)) {
+        MemberStep.Done -> if (kind() == GroupKind.Public) MembershipStep.Done(switchedKey = false) else when (val rotation = rotator.rotate(groupId, reason)) {
             RotateStep.Rotated -> MembershipStep.Done(switchedKey = true)
 
             // Кто-то ротировал раньше нас: версия уже другая, и наша попытка не нужна.
@@ -81,9 +86,12 @@ class ManageGroupMembers(
             RotateStep.NotAdmin -> MembershipStep.DoneWithoutRotation(
                 "Состав изменён, но сменить ключ может только владелец или админ",
             )
-            is RotateStep.Refused -> MembershipStep.DoneWithoutRotation(
-                "Состав изменён, но ключ не сменился: ${rotation.reason}",
-            )
+            // Сервер: группа без шифрования — ключа нет, и менять нечего (как в `HealGroupKey`).
+            is RotateStep.Refused -> if (rotation.reason.contains("not_e2e")) {
+                MembershipStep.Done(switchedKey = false)
+            } else {
+                MembershipStep.DoneWithoutRotation("Состав изменён, но ключ не сменился: ${rotation.reason}")
+            }
         }
         MemberStep.NoSuchUser -> MembershipStep.NoSuchUser
         MemberStep.Forbidden -> MembershipStep.Forbidden

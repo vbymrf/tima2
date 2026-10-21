@@ -65,6 +65,22 @@ class ManageGroupMembersTest {
         assertTrue("владелец или админ" in without.warning)
     }
 
+    /** Заказчик 2026-10-21: «Не получилось… not_e2e» после добавления в открытую группу — ей ключ не положен. */
+    @Test
+    fun открытая_группа_состав_без_ротации() = runTest {
+        val rotator = FakeRotation(RotateStep.Rotated)
+        val step = ManageGroupMembers(FakeGroupMembers(), FakeDirectoryMembers, rotator, kind = { GroupKind.Public })
+            .invite(group, "+79990000002")
+        assertIs<MembershipStep.Done>(step)
+        assertEquals(emptyList(), rotator.rotated, "открытой группе ключ не меняют")
+    }
+
+    @Test
+    fun вид_неизвестен_отказ_not_e2e_не_ошибка() = runTest {
+        val step = case(rotator = FakeRotation(RotateStep.Refused("not_e2e"))).invite(group, "+79990000002")
+        assertIs<MembershipStep.Done>(step)
+    }
+
     @Test
     fun незарегистрированный_номер_не_доходит_до_сервера() = runTest {
         val groups = FakeGroupMembers()

@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,8 +101,10 @@ fun NewGroupScreen(
         SubwindowHeader(title = stepTitle(state.step), onBack = onBack)
         StepBar(state.step)
 
+        // Прокрутка: на шаге имени с двумя приглашёнными «Создать» уходила за край экрана, и создать
+        // группу было нельзя (найдено 2026-10-21 на Samsung, заказчик: «да» — чинить).
         Box(
-            modifier = Modifier.fillMaxSize().padding(TimaSpacing.about5),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(TimaSpacing.about5),
             contentAlignment = Alignment.TopCenter,
         ) {
             Column(

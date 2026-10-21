@@ -4450,6 +4450,7 @@ private fun App(
                         scope = scope,
                         onBack = { where = Where.Chat(current.groupId, current.name) },
                         onAccess = { where = Where.Access(current.groupId, current.name) },
+                        groupKind = listState.chats.firstOrNull { it.chatId == current.groupId }?.groupKind,
                         people = people,
                         look = communityView.look(),
                         contacts = bookStateForChats.all.filter { it.inTima }.map { entry ->
@@ -6941,10 +6942,13 @@ private fun Members(
     onBack: () -> Unit,
     /** Открыть подокно «Доступ»: просьбы и выдача третьего круга. */
     onAccess: () -> Unit = {},
+    /** Вид группы из базы устройства: открытой смена состава ключа не трогает. */
+    groupKind: GroupKind? = null,
     people: ChatPeople? = null,
     look: PersonLook = PersonLook.DEFAULT,
     contacts: List<InviteCandidate>? = null,
 ) {
+    val kindNow by rememberUpdatedState(groupKind)
     val store = remember(groupId) {
         MembersStore(
             members = ManageGroupMembers(
@@ -6962,6 +6966,7 @@ private fun Members(
                     // состава из «Участников» обходила проверку.
                     trust = environment.trustGate,
                 ),
+                kind = { kindNow },
             ),
             groupId = groupId,
             myUserId = session.userId,
