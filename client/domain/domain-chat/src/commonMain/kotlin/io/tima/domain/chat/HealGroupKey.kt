@@ -19,9 +19,9 @@ package io.tima.domain.chat
 class HealGroupKey(
     private val sync: SyncGroupKeys,
     private val rotator: GroupKeyRotator,
-) {
+) : KeyHealing {
 
-    suspend fun heal(groupId: String): HealStep {
+    override suspend fun heal(groupId: String): HealStep {
         // Сначала — забрать то, что могло быть выдано нам, но не приехало: ротация
         // соседа, пропущенный кадр. Это дешевле выпуска и правильнее его.
         val synced = sync.refresh(groupId)
@@ -41,6 +41,11 @@ class HealGroupKey(
             else -> HealStep.Unknown
         }
     }
+}
+
+/** Лечение группы без ключа — то, что зовёт экран переписки; реализация — [HealGroupKey]. */
+fun interface KeyHealing {
+    suspend fun heal(groupId: String): HealStep
 }
 
 sealed interface HealStep {

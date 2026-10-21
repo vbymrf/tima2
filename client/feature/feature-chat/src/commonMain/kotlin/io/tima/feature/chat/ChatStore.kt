@@ -28,8 +28,8 @@ import io.tima.domain.chat.MessagePicks
 import io.tima.domain.chat.PickResult
 import io.tima.domain.chat.NickReply
 import io.tima.domain.chat.ReplyTarget
-import io.tima.domain.chat.HealGroupKey
 import io.tima.domain.chat.HealStep
+import io.tima.domain.chat.KeyHealing
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.NarrowMessageLevel
 import io.tima.domain.chat.NarrowStep
@@ -134,7 +134,12 @@ class ChatStore(
      * ключа не было ни у кого — выпустить первый. Публичной группе сообщает, что ключ ей
      * не положен, и баннер снимается. Подробности — `HealGroupKey`.
      */
-    private val heal: HealGroupKey? = null,
+    private val heal: KeyHealing? = null,
+    /**
+     * Группа открытая — известно заранее (вид из списка групп): ключа ей не положено, и проверять его
+     * при открытии незачем. Иначе это узнаёт лечение — ответом сервера.
+     */
+    openAtStart: Boolean = false,
     /** Сколько строк держать на экране. Столько же просит и запрос к базе. */
     pageSize: Int = ObserveChat.DEFAULT_PAGE,
     /**
@@ -222,7 +227,7 @@ class ChatStore(
     // Признак берётся из наличия случая, а не задаётся отдельно: два источника одной
     // правды разошлись бы, и кнопка появилась бы там, где нажимать её нечем.
     private val _state = MutableStateFlow(
-        ChatState(keyAskMay = requestKeys != null, group = names != null, chatKeysMay = askChatKeys != null),
+        ChatState(keyAskMay = requestKeys != null, group = names != null, chatKeysMay = askChatKeys != null, openGroup = openAtStart),
     )
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
@@ -291,8 +296,12 @@ class ChatStore(
                 val noKey = withContext(io) { anyKey?.invoke() == false } && !_state.value.openGroup
                 if (noKey && !healed) {
                     healed = true
-                    heal?.let { launchHeal(it) }
+                    heal?.let {
+                        healing = true
+                        launchHeal(it)
+                    }
                 }
+                lastNoKey = noKey
                 known = lines
                 sendPendingMain(lines)
                 superSent(lines)
@@ -314,7 +323,10 @@ class ChatStore(
                         // появляется в ней сам, без перечитывания.
                         open.copy(replies = lines.filter { it.threadRoot == open.rootId })
                     },
-                    noGroupKey = noKey,
+                    // Пока лечение не ответило, полосы нет (заказчик 2026-10-21: «при каждом заходе в
+                    // группу… запросить ключ… висит не более 1 секунды»): у открытой группы ключа не
+                    // бывает, у закрытой его чаще всего привозит само лечение.
+                    noGroupKey = noKey && !healing,
                 )
                 // Недоступные сообщения — один запрос ключей сами, без фразы (заказчик
                 // 2026-10-06: «автоматический режим в виде одного запроса»). Молча: откажут по
@@ -382,9 +394,20 @@ class ChatStore(
     /** Лечение запускалось: второй раз не надо — ответ придёт потоком из базы. */
     private var healed = false
 
-    private fun launchHeal(case: HealGroupKey) {
+    /** Лечение идёт — «ключа нет» ещё не окончательно, полоса ждёт его ответа. */
+    private var healing = false
+
+    /** «Ключа нет» по последнему пересчёту — его покажет полоса, когда лечение ответит «не вышло». */
+    private var lastNoKey = false
+
+    private fun launchHeal(case: KeyHealing) {
         scope.launch {
-            when (withContext(io) { case.heal(chatId) }) {
+            val step = try {
+                withContext(io) { case.heal(chatId) }
+            } finally {
+                healing = false
+            }
+            when (step) {
                 // Ключ выпущен или приехал — снять баннер СЕЙЧАС. Состояние «ключа нет»
                 // пересчитывается по потоку сообщений, а ключ в базе этот поток не будит:
                 // на стенде 2026-09-18 ротация прошла, а баннер висел до следующего
@@ -399,7 +422,8 @@ class ChatStore(
                     level = if (_state.value.level == MessageCircle.Secret.level) MessageCircle.Outside.level else _state.value.level,
                 )
 
-                HealStep.NeedAsk, HealStep.Unknown -> Unit
+                // Не вышло — теперь «ключа нет» окончательно: полоса с «Запросить ключ».
+                HealStep.NeedAsk, HealStep.Unknown -> _state.value = _state.value.copy(noGroupKey = lastNoKey && !_state.value.openGroup)
             }
         }
     }
