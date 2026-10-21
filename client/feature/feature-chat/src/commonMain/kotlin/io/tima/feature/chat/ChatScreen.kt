@@ -176,6 +176,8 @@ fun ChatScreen(
     onComposedRestore: (() -> Unit)? = null,
     /** Переход внутри переписки — `(что, длина цепочки)`: для журнала (ПЛАН-(ЖС) §5). */
     onJump: ((String, Int) -> Unit)? = null,
+    /** Буфер переходов переписки и выходы за её пределы (ПЛАН-(БП)); `null` — буфер только в памяти. */
+    jumpPlace: JumpPlace? = null,
     /** Галерея и Скрепка; `null` — кнопок нет. */
     onAttach: ((AttachItem) -> Unit)? = null,
     /** Эмоджи при пустой строке — отдельным сообщением. */
@@ -317,12 +319,31 @@ fun ChatScreen(
 
         // Блок ответа и вставленное — тем же способом, что в просмотре редактора (заказчик 2026-10-20).
         val (replyLook, quoteLook) = chatLooks(state, peer, authorLook, words.someone)
-        // Переходы по ответу, вставленному и «Продолжить чтение» — внутри переписки (§11.4).
-        val jumps = remember { FeedJumps() }
+        // Переходы по ответу, вставленному и «Продолжить чтение» — буфер переходов (§11.4, ПЛАН-(БП)).
+        val jumps = remember(jumpPlace?.chatId, jumpPlace?.key) { FeedJumps(jumpPlace) }
         jumps.onJump = onJump
         val openMessage: (String, String, Long) -> Unit = { kind, chat, number ->
-            if (state.lines.any { it.serverId == number && it.chatId == chat }) jumps.go(number)
-            else onPeek?.invoke(kind, chat, number)
+            when {
+                state.lines.any { it.serverId == number && it.chatId == chat } -> jumps.go(number)
+                // Группа того же сообщества — туда и к сообщению, а не окно одного сообщения (БП4).
+                jumpPlace != null && chat != jumpPlace.chatId && jumpPlace.sameBuffer(chat) -> jumps.elsewhere(chat, number)
+                else -> onPeek?.invoke(kind, chat, number)
+            }
+        }
+        // Переписку открыли, чтобы перейти к сообщению: точки уже в буфере — перейти без записи. Нет
+        // его в ленте и после загрузки — окно одного сообщения.
+        val arrive = jumpPlace?.jumpTo
+        var arriving by remember(jumpPlace?.chatId, arrive) { mutableStateOf(arrive) }
+        LaunchedEffect(arriving, state.lines.size) {
+            val target = arriving ?: return@LaunchedEffect
+            if (state.lines.any { it.serverId == target }) {
+                jumps.go(target, record = false)
+                arriving = null
+            } else if (state.lines.isNotEmpty()) {
+                kotlinx.coroutines.delay(ARRIVE_WAIT_MS)
+                arriving = null
+                onPeek?.invoke(if (state.group) "group" else "personal", jumpPlace?.chatId.orEmpty(), target)
+            }
         }
         // Закреплённое — полоса под шапкой: строка сообщения, нажатие — переход к нему (§11.4),
         // ✕ — снять, у кого право (ПЛАН-(ЗО) ЗО3). Не загружено — заглушка.
@@ -514,9 +535,12 @@ private fun Feed(
         LaunchedEffect(jumps.request) {
             val target = jumps.request ?: return@LaunchedEffect
             jumps.taken()
-            jumpScope.launch { jumps.perform(target, feed, listState) }
+            jumpScope.launch { jumps.perform(target, feed, listState, record = jumps.record) }
         }
     }
+    if (jumps != null) WatchLeaving(jumps, lines, listState)
+    // Нажатие на ссылку внутри сообщения — оно и есть «откуда» (ПЛАН-(БП)).
+    val openOuter = LocalOpenMessage.current
     val flashColor = Tima.colors.activity.copy(alpha = 0.22f)
     // Список в сообщении раскрыли или свернули — лента сдвигается, строка пункта стоит на месте (2026-10-21).
     val nudge: (Float) -> Unit = remember(listState) { { d -> listState.dispatchRawDelta(d) } }
@@ -564,6 +588,12 @@ private fun Feed(
             }
             // Переход сюда — коротко подсвечено (В34).
             Box(if (jumps != null && line.serverId > 0 && jumps.highlight == line.serverId) Modifier.background(flashColor, androidx.compose.foundation.shape.RoundedCornerShape(10.dp)) else Modifier) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalOpenMessage provides { kind, chat, number ->
+                    if (jumps != null && line.serverId > 0) jumps.from = line.serverId
+                    openOuter(kind, chat, number)
+                },
+            ) {
             Reply(
                 line = line,
                 author = authorName(line),
@@ -588,6 +618,7 @@ private fun Feed(
                 onSelect = onSelect,
             )
             }
+            }
         }
     }
     }
@@ -597,6 +628,9 @@ private fun Feed(
 
 /** Стандартный открытый уровень в группе — цифра у него не рисуется (В29). */
 private const val STANDARD_OPEN_LEVEL = 2
+
+/** Сколько ждать сообщения, ради которого открыли переписку, прежде чем показать его одно (ПЛАН-(БП)). */
+private const val ARRIVE_WAIT_MS = 3_000L
 
 /** Метка цифры уровня — для сценариев. */
 const val LEVEL_DIGIT_TAG = "chat:level"

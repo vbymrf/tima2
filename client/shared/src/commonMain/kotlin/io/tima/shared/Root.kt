@@ -831,8 +831,11 @@ private sealed interface Where {
      */
     data class Members(val groupId: String, val name: String?) : Where
 
-    /** Переписка. Имя хранится здесь, потому что строка в списке появится позже — потоком. */
-    data class Chat(val chatId: String, val name: String?) : Where
+    /**
+     * Переписка. Имя хранится здесь, потому что строка в списке появится позже — потоком. [jumpTo] —
+     * открыли, чтобы перейти к этому сообщению (буфер переходов, ПЛАН-(БП)).
+     */
+    data class Chat(val chatId: String, val name: String?, val jumpTo: Long? = null) : Where
 
     /** Доступ к закрытым записям: просьбы и выдача. Открывается из состава группы. */
     data class Access(val groupId: String, val name: String?) : Where
@@ -1009,6 +1012,15 @@ private fun App(
     // а не разовым списком: разблокировали — переписка возвращается сама.
     val list = remember { ChatsStore(environment.chats, scope, blocked = environment.book.blocked()) }
     var where by remember { mutableStateOf<Where>(Where.Nothing) }
+    // Буферы переходов (ПЛАН-(БП)): на устройстве, в настройках; читаются один раз — дальше живут здесь.
+    val jumpStored by androidx.compose.runtime.produceState<Map<String, String>?>(null) {
+        value = runCatching { environment.settings.all().first() }.getOrDefault(emptyMap())
+    }
+    val jumpBuffers = remember(jumpStored != null) {
+        jumpStored?.let { stored ->
+            io.tima.feature.chat.JumpBuffers(stored) { k, v -> scope.launch { runCatching { environment.settings.put(k, v) } } }
+        }
+    }
     // Суперсообщение группы из «Описания» (ПЛАН-(ЗО) ЗО5): переписка откроется с редактором, в
     // котором уже стоят подкладки всех сообщений уровня 0.
     var superDraft by remember { mutableStateOf<Pair<String, io.tima.domain.chat.ComposedDoc>?>(null) }
@@ -3927,6 +3939,20 @@ private fun App(
                         kind = socialState.mine.firstOrNull { it.groupId == current.chatId }?.kind,
                         // Подборка — сообщества, если группа в нём (Решения §11.2).
                         community = socialState.mine.firstOrNull { it.groupId == current.chatId }?.communityId,
+                        // Буфер переходов — сообщества, если группа в нём; иначе своей переписки (ПЛАН-(БП)).
+                        jumpPlace = jumpBuffers?.let { buffers ->
+                            val mineGroup = socialState.mine.firstOrNull { it.groupId == current.chatId }
+                            val isGroup = mineGroup != null || listState.chats.firstOrNull { it.chatId == current.chatId }?.kind == ChatKind.Group
+                            val home = mineGroup?.communityId?.ifBlank { null }
+                            io.tima.feature.chat.JumpPlace(
+                                buffers = buffers,
+                                chatId = current.chatId,
+                                key = io.tima.domain.chat.JumpBuffer.keyOf(current.chatId, isGroup, home),
+                                sameBuffer = { other -> home != null && socialState.mine.any { it.groupId == other && it.communityId == home } },
+                                elsewhere = { other, number -> where = Where.Chat(other, null, jumpTo = number) },
+                                jumpTo = current.jumpTo,
+                            )
+                        },
                         myUserId = session.userId,
                         reopenUnreadable = { assembled.receiver.reopenUnreadable() },
                         // Вид группы — один на сообщества (2026-10-07); нажатие на аватар — страница.
@@ -4383,6 +4409,8 @@ private fun Chat(
     onSuperTaken: () -> Unit = {},
     /** Сообщение по номеру — вставленное, подкладка, переход (Решения §11.3–§11.4). */
     finder: io.tima.domain.chat.MessageFinder? = null,
+    /** Буфер переходов переписки (ПЛАН-(БП)); `null` — только в памяти. */
+    jumpPlace: io.tima.feature.chat.JumpPlace? = null,
     /** Открыть другую переписку — из сообщения, показанного одним. */
     onOpenChat: ((String) -> Unit)? = null,
     /** Куда переслать фото из просмотра: переписки, кроме этой — номер и название. */
@@ -4872,7 +4900,8 @@ private fun Chat(
                 store.restoreComposed()
                 Journal.note(LogCode.EDITOR, "вернуть")
             }) else null,
-            onJump = { what, chain -> Journal.note(LogCode.JUMP, if (what == "to") "к сообщению" else "назад или вперёд", "цепочка" to chain) },
+            onJump = { what, chain -> Journal.note(LogCode.JUMP, if (what == "to") "к сообщению" else "назад или вперёд", "точек" to chain, "буфер" to jumpPlace?.key?.substringBefore(':')) },
+            jumpPlace = jumpPlace,
             onAttach = if (store.canAttach) attachHandler else null,
             attachItems = attachItems,
             attachments = io.tima.feature.chat.AttachmentActions(
