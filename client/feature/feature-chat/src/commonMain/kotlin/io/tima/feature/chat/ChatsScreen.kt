@@ -308,7 +308,7 @@ private fun ChatLine(
             Box(Modifier.sizeIn(minWidth = edges.sign.width, minHeight = edges.sign.height), contentAlignment = Alignment.Center) {
                 when {
                     count > 0 -> Counter(count)
-                    chat.lastOutgoing -> markOf(chat.lastDisplay, chat.atMs, receipt)?.let { Mark(it, side = MARK_SIDE) }
+                    chat.lastOutgoing -> markOf(chat.lastDisplay, chat.atMs, receipt, own = true)?.let { Mark(it, side = MARK_SIDE) }
                 }
             }
             // Время и дата — по пять знаков. Ширина задана образцом «00:00» тем же кеглем, а

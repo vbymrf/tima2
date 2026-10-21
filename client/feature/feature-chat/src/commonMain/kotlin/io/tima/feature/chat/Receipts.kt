@@ -16,19 +16,24 @@ internal val LocalChatReceipt = compositionLocalOf<ChatReceipt?> { null }
 
 /**
  * Знак своего сообщения: ждёт, сервер принял, доставлено, прочитано, не ушло. У чужого и
- * служебного знака нет.
+ * служебного знака нет. [own] — сообщение своё: написанное с другого своего устройства приходит
+ * сюда входящим, но знаки у него те же (заказчик 2026-10-21) — оно на сервере, раз пришло, а
+ * отметки собеседника приходят всем устройствам отправителя.
  */
-fun markOf(display: MessageDisplay?, atMs: Long?, receipt: ChatReceipt?): MarkKind? = when (display) {
+fun markOf(display: MessageDisplay?, atMs: Long?, receipt: ChatReceipt?, own: Boolean = false): MarkKind? = when (display) {
     MessageDisplay.PENDING -> MarkKind.Waits
-    MessageDisplay.SENT -> when {
-        receipt == null || atMs == null -> MarkKind.Left
-        receipt.readMs > 0 && atMs <= receipt.readMs -> MarkKind.Read
-        receipt.deliveredMs > 0 && atMs <= receipt.deliveredMs -> MarkKind.Delivered
-        else -> MarkKind.Left
-    }
+    MessageDisplay.SENT -> sentMark(atMs, receipt)
     MessageDisplay.FAILED -> MarkKind.NotLeft
+    MessageDisplay.RECEIVED -> if (own) sentMark(atMs, receipt) else null
     // Служебной строке отмечать нечего: её никто не отправлял.
-    MessageDisplay.RECEIVED, MessageDisplay.UNREADABLE, MessageDisplay.SYSTEM, null -> null
+    MessageDisplay.UNREADABLE, MessageDisplay.SYSTEM, null -> null
+}
+
+private fun sentMark(atMs: Long?, receipt: ChatReceipt?): MarkKind = when {
+    receipt == null || atMs == null -> MarkKind.Left
+    receipt.readMs > 0 && atMs <= receipt.readMs -> MarkKind.Read
+    receipt.deliveredMs > 0 && atMs <= receipt.deliveredMs -> MarkKind.Delivered
+    else -> MarkKind.Left
 }
 
 /**

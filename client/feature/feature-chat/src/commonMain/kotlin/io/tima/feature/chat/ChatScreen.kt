@@ -848,7 +848,7 @@ internal fun OutsideBubble(line: ChatLine, content: @Composable () -> Unit) = Ro
         ) {
             if (line.edits > 0) Tertiary(Tima.words.chat.edited, lineOne = true)
             Tertiary(time(line.atMs), lineOne = true)
-            markOf(line.display, line.atMs, LocalChatReceipt.current)?.let { Mark(it) }
+            markOf(line.display, line.atMs, LocalChatReceipt.current, own = line.outgoing)?.let { Mark(it) }
             // Своё фото или файл забрал получатель — галочки «приложение забрало» (Решения §6).
             val actions = LocalAttachmentActions.current
             val media = line.rich?.media.orEmpty()
@@ -997,7 +997,7 @@ private fun BubbleOf(
             // Исправленное (ADR-0045): пометка у времени — у всех, кто видит сообщение.
             if (line.edits > 0) Tertiary(Tima.words.chat.edited, lineOne = true)
             Tertiary(time(line.atMs), lineOne = true)
-            markOf(line.display, line.atMs, LocalChatReceipt.current)?.let { Mark(it) }
+            markOf(line.display, line.atMs, LocalChatReceipt.current, own = line.outgoing)?.let { Mark(it) }
         }
     },
 ) {
