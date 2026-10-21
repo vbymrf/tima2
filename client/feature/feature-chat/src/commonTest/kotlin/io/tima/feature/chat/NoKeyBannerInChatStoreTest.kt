@@ -58,6 +58,19 @@ class NoKeyBannerInChatStoreTest {
         assertEquals(0, asked, "ключ открытой группе не положен — лечить незачем")
     }
 
+    @Test
+    fun открытая_по_вершине_полосы_нет_и_после_отказа() = runTest {
+        // Выпуск ключа открытой группе сервер отвергает (400), лечение кончается «не вышло».
+        val store = store(backgroundScope, { HealStep.Unknown })
+        runCurrent()
+        assertTrue(store.state.value.noGroupKey)
+        store.openKnown()
+        assertFalse(store.state.value.noGroupKey, "вершина в ленте состояний — группа открытая")
+        stream.value = listOf(ChatLine(dedupKey = "m1", chatId = "g-1", display = io.tima.domain.chat.MessageDisplay.RECEIVED, text = "x", outgoing = false, atMs = 1, localId = 1))
+        runCurrent()
+        assertFalse(store.state.value.noGroupKey, "и пересчёт по ленте её не возвращает")
+    }
+
     private fun store(scope: kotlinx.coroutines.CoroutineScope, heal: KeyHealing, openAtStart: Boolean = false) = ChatStore(
         io = kotlinx.coroutines.Dispatchers.Unconfined,
         chatId = "g-1",
