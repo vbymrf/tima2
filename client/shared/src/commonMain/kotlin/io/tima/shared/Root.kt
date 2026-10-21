@@ -4834,8 +4834,6 @@ private fun Chat(
             }
         }
     }
-    // Открытая группа по вершине в ленте состояний — полосы «ключа нет» у неё не бывает (2026-10-21).
-    LaunchedEffect(store, publicGroup) { if (publicGroup) store.openKnown() }
     val state by store.state.collectAsState()
     LaunchedEffect(pinMay) { store.pinAllowed(pinMay) }
     // «Прочитано» — только пока переписку видят (2026-10-20). Строка в журнале — по ней проверяется,

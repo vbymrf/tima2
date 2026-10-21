@@ -428,20 +428,6 @@ class ChatStore(
         }
     }
 
-    /**
-     * Группа открытая — узнали снаружи (у неё есть вершина в ленте состояний): ключа ей не положено,
-     * полосы «ключа нет» быть не должно, даже если лечение ответит отказом (2026-10-21: сервер отвечал
-     * 400 на выпуск ключа открытой группе, и лечение кончалось «не вышло»).
-     */
-    fun openKnown() {
-        if (_state.value.openGroup) return
-        _state.value = _state.value.copy(
-            openGroup = true,
-            noGroupKey = false,
-            level = if (_state.value.level == MessageCircle.Secret.level) MessageCircle.Outside.level else _state.value.level,
-        )
-    }
-
     /** Человек набирает текст. */
     fun draftChanged(text: String) {
         _state.value = _state.value.copy(draft = text, notice = null)
