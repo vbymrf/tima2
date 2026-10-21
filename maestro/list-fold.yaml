@@ -1,0 +1,22 @@
+# Список в сообщении: свернуть и развернуть строкой пункта (заказчик 2026-10-21: «кликабельной всю
+# строку после точки… раскрытие вниз; при сворачивании экран не должен переезжать»).
+# Признак — снимки до и после: строка пункта на том же месте. Samsung, переписка «redmi».
+appId: io.tima.app.v2
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "redmi.*"
+    timeout: 20000
+- tapOn: "redmi.*"
+- waitForAnimationToEnd
+- takeScreenshot: fold-0-open
+- tapOn:
+    id: "bullet:fold"
+    index: 0
+- waitForAnimationToEnd
+- takeScreenshot: fold-1-closed
+- tapOn:
+    id: "bullet:fold"
+    index: 0
+- waitForAnimationToEnd
+- takeScreenshot: fold-2-open-again
