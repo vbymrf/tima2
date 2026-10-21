@@ -446,6 +446,125 @@ object ComposedLayout {
         return doc.copy(items = doc.items.toMutableList().apply { add(to, removeAt(at.item)) }) to Spot(to)
     }
 
+    /** Перенос строк: документ, где теперь текст со строками, и номер первой перенесённой строки в нём. */
+    data class Lines(val doc: ComposedDoc, val spot: Spot, val line: Int)
+
+    /**
+     * «Выше» и «Ниже» над текстом (заказчик 2026-10-21: «функционально нужно переносить строки только»):
+     * строки [a]…[b] текста в [at] (кусок или текст ячейки). Внутри текста — меняются местами с соседней
+     * строкой. На краю — уходят за значимый элемент: за виджет, список, метку — в текст по ту сторону, а
+     * нет его — новым куском; в ряд — в текст ячейки и дальше по ячейкам; из ряда — так же наружу.
+     * Соседний текст без значимого между — просто принимает строки: куски зря не плодятся. Опустевший
+     * кусок уходит. `null` — переносить некуда.
+     */
+    fun moveLines(doc: ComposedDoc, at: Spot, a: Int, b: Int, by: Int, source: TypedSource): Lines? {
+        val item = doc.items.getOrNull(at.item) ?: return null
+        val row = item as? ComposedItem.Row
+        val text = when {
+            item is ComposedItem.Text && at.cell < 0 -> item.source
+            row != null && at.widget == Spot.TEXT -> row.cells.getOrNull(at.cell)?.text ?: return null
+            else -> return null
+        }
+        val t = source.read(text)
+        val n = t.lines.size
+        if (a !in 0 until n || b !in a until n) return null
+        fun part(from: Int, to: Int): Typed? = if (from >= to) null else ComposedLists.slice(t, from, to)
+        fun glue(vararg parts: Typed?): Typed? = parts.filterNotNull().reduceOrNull { x, y -> ComposedLists.join(x, y) }
+        val block = part(a, b + 1)!!
+        fun withText(d: ComposedDoc, value: String): ComposedDoc =
+            if (row != null) d.setRow(at.item, row.copy(cells = row.cells.toMutableList().apply { set(at.cell, row.cells[at.cell].copy(text = value)) }))
+            else d.setItem(at.item, (item as ComposedItem.Text).copy(source = value))
+        // Внутри текста — с соседней строкой.
+        if (by < 0 && a > 0) return Lines(withText(doc, source.write(glue(part(0, a - 1), block, part(a - 1, a), part(b + 1, n))!!)), at, a - 1)
+        if (by > 0 && b < n - 1) return Lines(withText(doc, source.write(glue(part(0, a), part(b + 1, b + 2), block, part(b + 2, n))!!)), at, a + 1)
+        val rest = glue(part(0, a), part(b + 1, n))
+        val restText = rest?.let(source::write) ?: ""
+        // Строки — в конец текста (сверху вниз пришли снизу) или в начало: номер первой перенесённой.
+        fun into(old: String): Pair<String, Int> = when {
+            old.isBlank() -> source.write(block) to 0
+            by < 0 -> source.read(old).let { o -> source.write(ComposedLists.join(o, block)) to o.lines.size }
+            else -> source.write(ComposedLists.join(block, source.read(old))) to 0
+        }
+        // Из ячейки — в соседнюю ячейку по порядку чтения.
+        if (row != null) {
+            val owners = row.cells.indices.filter { ownerOf(row, it) == it }
+            val next = owners.getOrNull(owners.indexOf(at.cell) + by)
+            val cells = row.cells.toMutableList().apply { set(at.cell, row.cells[at.cell].copy(text = restText)) }
+            if (next != null) {
+                val (joined, line) = into(cells[next].text)
+                cells[next] = cells[next].copy(text = joined)
+                return Lines(doc.setRow(at.item, row.copy(cells = cells)), Spot(at.item, next, Spot.TEXT), line)
+            }
+            return outside(doc.setRow(at.item, row.copy(cells = cells)), at.item, false, by, block, source, ::into)
+        }
+        // Из куска — наружу; опустевший кусок уходит.
+        return outside(withText(doc, restText), at.item, rest == null, by, block, source, ::into)
+    }
+
+    /**
+     * Строки [block] уходят из места [from] в сторону [by]: в соседний текст, в ряд, за значимый элемент.
+     * [dropFrom] — само место опустело и уходит (кусок без строк).
+     */
+    private fun outside(
+        doc: ComposedDoc,
+        from: Int,
+        dropFrom: Boolean,
+        by: Int,
+        block: Typed,
+        source: TypedSource,
+        into: (String) -> Pair<String, Int>,
+    ): Lines? {
+        val j = from + by
+        // Из ряда на краю сообщения — новым куском рядом с рядом; из куска на краю — некуда.
+        if (j !in doc.items.indices) {
+            if (doc.items.getOrNull(from) !is ComposedItem.Row) return null
+            val at = if (by < 0) from else from + 1
+            return Lines(doc.withItems(doc.items.toMutableList().apply { add(at, ComposedItem.Text(source.write(block))) }), Spot(at), 0)
+        }
+        val items = doc.items.toMutableList()
+        var spot: Spot
+        var line = 0
+        var inserted = -1
+        when (val near = items[j]) {
+            is ComposedItem.Text -> {
+                val (joined, l) = into(near.source)
+                items[j] = near.copy(source = joined)
+                spot = Spot(j)
+                line = l
+            }
+            is ComposedItem.Row -> {
+                val owners = near.cells.indices.filter { ownerOf(near, it) == it }
+                if (owners.isEmpty()) return null
+                val enter = if (by > 0) owners.first() else owners.last()
+                val (joined, l) = into(near.cells[enter].text)
+                items[j] = near.copy(cells = near.cells.toMutableList().apply { set(enter, near.cells[enter].copy(text = joined)) })
+                spot = Spot(j, enter, Spot.TEXT)
+                line = l
+            }
+            else -> {
+                // За значимым элементом — текст: в него; нет — новый кусок сразу за элементом.
+                val k = j + by
+                val beyond = items.getOrNull(k) as? ComposedItem.Text
+                if (k in items.indices && beyond != null && k != from) {
+                    val (joined, l) = into(beyond.source)
+                    items[k] = beyond.copy(source = joined)
+                    spot = Spot(k)
+                    line = l
+                } else {
+                    inserted = if (by < 0) j else j + 1
+                    items.add(inserted, ComposedItem.Text(source.write(block)))
+                    spot = Spot(inserted)
+                }
+            }
+        }
+        if (dropFrom) {
+            val src = if (inserted in 0..from) from + 1 else from
+            items.removeAt(src)
+            if (spot.item > src) spot = spot.copy(item = spot.item - 1)
+        }
+        return Lines(doc.withItems(items), spot, line)
+    }
+
     /** Два набранных текста — строками друг за другом; пустой не добавляет пустую строку. */
     private fun merged(source: TypedSource, first: String, second: String): String = when {
         first.isBlank() -> second

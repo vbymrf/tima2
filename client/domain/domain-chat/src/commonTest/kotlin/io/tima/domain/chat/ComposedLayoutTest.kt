@@ -296,6 +296,41 @@ class ComposedLayoutTest {
         assertEquals(100, (shifted.row(0).cells[0].widgets.single() as ComposedWidget.Image).share)
     }
 
+    /** Заказчик 2026-10-21: «Выше»/«Ниже» над текстом переносят строки, не кусок; новый кусок — только за значимым. */
+    @Test
+    fun строки_переносятся_по_одной() {
+        fun texts(d: ComposedDoc) = d.items.map { (it as? ComposedItem.Text)?.source ?: it::class.simpleName }
+        val src = PlainTyped
+        // Внутри куска — с соседней строкой.
+        val inside = ComposedLayout.moveLines(ComposedDoc(listOf(ComposedItem.Text("a\nb\nc"))), Spot(0), 1, 1, -1, src)!!
+        assertEquals(listOf("b\na\nc"), texts(inside.doc))
+        assertEquals(0, inside.line)
+        // На краю — за виджет, в текст по ту сторону; кусок остаётся с оставшимися строками.
+        val doc = ComposedDoc(listOf(ComposedItem.Text("a\nb"), ComposedItem.Widget(emoji), ComposedItem.Text("c")))
+        val over = ComposedLayout.moveLines(doc, Spot(0), 1, 1, 1, src)!!
+        assertEquals(listOf("a", "Widget", "b\nc"), texts(over.doc))
+        assertEquals(Spot(2), over.spot)
+        // За виджетом текста нет — новый кусок.
+        val alone = ComposedLayout.moveLines(ComposedDoc(listOf(ComposedItem.Text("a\nb"), ComposedItem.Widget(emoji))), Spot(0), 1, 1, 1, src)!!
+        assertEquals(listOf("a", "Widget", "b"), texts(alone.doc))
+        // Последняя строка ушла — пустой кусок не остаётся.
+        val whole = ComposedLayout.moveLines(doc, Spot(0), 0, 1, 1, src)!!
+        assertEquals(listOf("Widget", "a\nb\nc"), texts(whole.doc))
+        assertEquals(Spot(1), whole.spot)
+        // В ряд — в текст ячейки, дальше по ячейкам и вон.
+        val row = ComposedItem.Row(listOf(ComposedCell(50, "x"), ComposedCell(50, "")))
+        val inRow = ComposedLayout.moveLines(ComposedDoc(listOf(ComposedItem.Text("a"), row)), Spot(0), 0, 0, 1, src)!!
+        assertEquals("a\nx", inRow.doc.row(0).cells[0].text)
+        assertEquals(Spot(0, 0, Spot.TEXT), inRow.spot)
+        val below = ComposedLayout.moveLines(inRow.doc, inRow.spot, 0, 0, 1, src)!!
+        assertEquals(listOf("x\na", ""), below.doc.row(0).cells.map { it.text }, "внутри ячейки — ниже «x»")
+        val next = ComposedLayout.moveLines(below.doc, below.spot, 1, 1, 1, src)!!
+        assertEquals(listOf("x", "a"), next.doc.row(0).cells.map { it.text }, "с края ячейки — в следующую")
+        val out = ComposedLayout.moveLines(next.doc, next.spot, 0, 0, 1, src)!!
+        assertEquals("a", (out.doc.items[1] as ComposedItem.Text).source, "с края ряда — новым куском под ним")
+        assertEquals(Spot(1), out.spot)
+    }
+
     @Test
     fun перенос_в_слитое_попадает_в_первую_ячейку() {
         var doc = grid(1, 2)

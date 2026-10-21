@@ -686,7 +686,30 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
     }
 
     /** «Выше» и «Ниже»: подборка и подкладка входят в готовый список и идут по нему (2026-10-21). */
-    fun shift(by: Int) = layout { d, s -> ComposedLayout.shift(d, s, by, refTitle, source) }
+    fun shift(by: Int) {
+        // Курсор в тексте — переносятся строки под курсором или выделенные (заказчик 2026-10-21), курсор
+        // идёт вместе с ними. Иначе — выбранное целиком, как прежде.
+        val t = focusedTyped
+        val textSpot = spot.cell < 0 && doc.items.getOrNull(spot.item) is ComposedItem.Text ||
+            doc.items.getOrNull(spot.item) is ComposedItem.Row && spot.widget == Spot.TEXT
+        if (t != null && textSpot) {
+            val (s, e) = selection(t)
+            val a = t.lineAt(s)
+            val b = t.lineAt(e)
+            val moved = ComposedLayout.moveLines(doc, spot, a, b, by, source) ?: return
+            typingIn = null
+            pending = null
+            val now = typedIn(moved.doc, moved.spot)
+            val start = (now.lineStart(moved.line) + (s - t.lineStart(a))).coerceIn(0, now.text.length)
+            val end = (start + (e - s)).coerceIn(0, now.text.length)
+            val next = Snapshot(moved.doc, moved.spot.item, start, end, moved.spot.cell, moved.spot.widget)
+            publish(push = true, next)
+            field = fieldOf(next)
+            focusAsk++
+            return
+        }
+        layout { d, at -> ComposedLayout.shift(d, at, by, refTitle, source) }
+    }
 
     fun undo() {
         typingIn = null

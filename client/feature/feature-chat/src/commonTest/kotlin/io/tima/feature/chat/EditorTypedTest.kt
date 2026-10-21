@@ -28,6 +28,21 @@ class EditorTypedTest {
         return m
     }
 
+    /**
+     * «Выше» в тексте (заказчик 2026-10-21): переносится строка под курсором, а не кусок; курсор — с ней.
+     * Заголовок, абзац, цитата — строки одного куска, у каждой свой вид.
+     */
+    @Test
+    fun выше_переносит_строку_под_курсором() {
+        val m = model("# Заголовок\nабзац\n--> цитата", cursor = "Заголовок\n".length + 2)
+        m.shift(-1)
+        val now = m.focusedTyped!!
+        assertEquals("абзац\nЗаголовок\nцитата", now.text)
+        assertEquals(listOf(LineKind.PARAGRAPH, LineKind.HEADING1, LineKind.QUOTE), now.lines)
+        assertEquals(2, m.field.selection.start, "курсор — в той же строке, на том же месте")
+        assertEquals(1, m.doc.items.size, "новый кусок не появился")
+    }
+
     /** Набрать [s] по букве на месте курсора — как клавиатура. */
     private fun EditorModel.type(s: String) {
         for (ch in s) {
