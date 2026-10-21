@@ -43,6 +43,27 @@ class EditorTypedTest {
         assertEquals(1, m.doc.items.size, "новый кусок не появился")
     }
 
+    /**
+     * Заказчик 2026-10-21: Enter между строк и вставка — виджет встаёт на место пустой строки, кусок
+     * режется; виджет убрали — текст снова один кусок, курсор на стыке. Ряд встаёт так же.
+     */
+    @Test
+    fun вставка_на_строку_курсора_и_слияние() {
+        val m = model("раз\nдва", cursor = 3)
+        fun pieces() = m.doc.items.map { (it as? ComposedItem.Text)?.source ?: it::class.simpleName }
+        m.type("\n")
+        m.insert(ComposedItem.Widget(ComposedWidget.Emoji("🎒")))
+        assertEquals(listOf("раз", "Widget", "два"), pieces(), "виджет — вместо пустой строки")
+        assertEquals(1, m.focus, "выбран вставленный")
+        m.remove(1)
+        assertEquals(listOf("раз\nдва"), pieces(), "убрали — куски слились")
+        assertEquals(3, m.field.selection.start, "курсор на стыке")
+        m.changed(0, TextFieldValue(m.field.text, TextRange(4)))
+        m.insertRow(1, 2)
+        assertEquals(listOf("раз", "Row", "два"), pieces(), "ряд — над строкой, в начале которой курсор")
+        assertEquals(Spot(1, 0, Spot.TEXT), m.spot)
+    }
+
     /** Набрать [s] по букве на месте курсора — как клавиатура. */
     private fun EditorModel.type(s: String) {
         for (ch in s) {

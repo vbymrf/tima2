@@ -19,6 +19,7 @@ import io.tima.domain.chat.Spot
 import io.tima.domain.chat.Typed
 import io.tima.domain.chat.TypedEdits
 import io.tima.domain.chat.TypedSource
+import io.tima.domain.chat.fitsCell
 
 /**
  * Состояние редактора между нажатиями (Решения §10): документ, где курсор, отменить и повторить.
@@ -539,8 +540,10 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
     }
 
     /**
-     * Поставить кусок после того, где курсор, и встать в него. Выбрана ячейка ряда, а вставляется
-     * виджет, — он встаёт в ячейку, под её виджеты (Решения §10.3).
+     * Поставить кусок туда, где курсор, и встать в него. Курсор в тексте — на его строку, кусок режется
+     * (заказчик 2026-10-21, [ComposedLayout.gapAt]); иначе — за выбранным. Выбрана ячейка ряда, а
+     * вставляется виджет, — он встаёт в ячейку, под её виджеты (Решения §10.3); подкладка и ответ в ряд
+     * не встают — за ряд. Подборка и подкладка ставятся так же, как любой виджет.
      */
     fun insert(item: ComposedItem) {
         typingIn = null
@@ -555,7 +558,7 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
             return
         }
         val row = doc.items.getOrNull(focus) as? ComposedItem.Row
-        if (item is ComposedItem.Widget && row != null && snapshot.cell in row.cells.indices) {
+        if (item is ComposedItem.Widget && item.widget.fitsCell && row != null && snapshot.cell in row.cells.indices) {
             val cell = row.cells[snapshot.cell]
             val cells = row.cells.toMutableList().apply { set(snapshot.cell, cell.copy(widgets = cell.widgets + item.widget)) }
             val next = Snapshot(doc.copy(items = doc.items.toMutableList().apply { set(focus, row.copy(cells = cells)) }), focus, 0, 0, snapshot.cell, cell.widgets.size)
@@ -563,13 +566,23 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
             field = fieldOf(next)
             return
         }
-        val at = (focus + 1).coerceIn(0, doc.items.size)
-        val items = doc.items.toMutableList().apply { add(at, item) }
+        val (base, at) = gap()
+        val items = base.items.toMutableList().apply { add(at, item) }
         // После виджета — пустой текст, чтобы было куда писать дальше.
         if (item !is ComposedItem.Text && items.getOrNull(at + 1) !is ComposedItem.Text) items.add(at + 1, ComposedItem.Text(""))
-        val next = Snapshot(doc.copy(items = items), at, 0, 0)
+        val next = Snapshot(base.copy(items = items), at, 0, 0)
         publish(push = true, next)
         field = fieldOf(next)
+    }
+
+    /** Курсор в куске-тексте — сам кусок (для вставки он режется). */
+    private val inText: Boolean get() = spot.cell < 0 && doc.items.getOrNull(focus) is ComposedItem.Text
+
+    /** Место вставки: курсор в тексте — его строка, кусок режется надвое; иначе — сразу за выбранным. */
+    private fun gap(): Pair<ComposedDoc, Int> {
+        if (!inText) return doc to (focus + 1).coerceIn(0, doc.items.size)
+        val t = typedIn(doc, spot)
+        return ComposedLayout.gapAt(doc, focus, t, selection(t).first, source)
     }
 
     /**
@@ -596,18 +609,6 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         focusAsk++
     }
 
-    /** Где кончается основное сообщение: перед меткой продолжения или в самом конце. */
-    private val mainEnd: Int get() = doc.items.indexOfFirst { it is ComposedItem.Continuation }.let { if (it < 0) doc.items.size else it }
-
-    /** Подкладка — только в конец сообщения, несколько — списком (Решения §11.3). */
-    fun appendToMain(item: ComposedItem) {
-        typingIn = null
-        val at = mainEnd
-        val next = Snapshot(doc.copy(items = doc.items.toMutableList().apply { add(at, item) }), at, 0, 0)
-        publish(push = true, next)
-        field = fieldOf(next)
-    }
-
     /** Метка «Продолжение» уровня [level] в конце и пустой текст под ней; уже есть — встать в неё. */
     fun addContinuation(level: Int) {
         typingIn = null
@@ -630,12 +631,16 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         field = fieldOf(snapshot)
     }
 
-    /** Действие раздела «Разметка» над выбранным местом — шаг истории. */
+    /**
+     * Действие раздела «Разметка» над выбранным местом — шаг истории. Сошлись рядом два куска текста
+     * (виджет между ними убрали или увели) — они сливаются в один, курсор на стыке (заказчик 2026-10-21).
+     */
     fun layout(op: (ComposedDoc, Spot) -> Pair<ComposedDoc, Spot>) {
         typingIn = null
-        val (next, at) = op(doc, spot)
-        if (next == doc && at == spot) return
-        val len = if (textAt(next, at) == null) 0 else typedIn(next, at).text.length
+        val (made, to) = op(doc, spot)
+        if (made == doc && to == spot) return
+        val (next, at, caret) = ComposedLayout.joinTexts(made, to, source)
+        val len = caret ?: if (textAt(next, at) == null) 0 else typedIn(next, at).text.length
         publish(push = true, Snapshot(next, at.item, len, len, at.cell, at.widget))
         field = fieldOf(snapshot)
     }
@@ -654,7 +659,12 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
      * пишется туда. Прежде ряд выбирал ячейку, а курсор оставался в прежнем тексте.
      */
     fun insertRow(lines: Int, columns: Int) {
-        layout { d, s -> ComposedLayout.addRow(d, s, lines, columns).let { (next, at) -> next to Spot(at.item, at.cell.coerceAtLeast(0), Spot.TEXT) } }
+        // Курсор в тексте — ряд встаёт на его строку, как любая вставка (заказчик 2026-10-21).
+        val (base, gapAt) = gap()
+        layout { d, s ->
+            val made = if (inText) ComposedLayout.rowAt(base, gapAt, lines, columns) else ComposedLayout.addRow(d, s, lines, columns)
+            made.let { (next, at) -> next to Spot(at.item, at.cell.coerceAtLeast(0), Spot.TEXT) }
+        }
         focusAsk++
     }
 

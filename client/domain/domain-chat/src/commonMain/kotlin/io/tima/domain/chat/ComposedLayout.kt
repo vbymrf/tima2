@@ -144,18 +144,27 @@ object ComposedLayout {
      * ширину — он сам становится первой ячейкой ряда: так собирают «картинка слева, текст справа».
      */
     fun addRow(doc: ComposedDoc, at: Spot, lines: Int = 1, columns: Int = 2): Pair<ComposedDoc, Spot> {
-        val n = columns.coerceIn(1, MAX_COLUMNS)
-        val l = lines.coerceIn(1, MAX_LINES)
-        val w = widths(n)
         val item = doc.items.getOrNull(at.item)
-        val cells = MutableList(l * n) { p -> ComposedCell(w[p % n]) }
         if (item is ComposedItem.Widget) {
+            val n = columns.coerceIn(1, MAX_COLUMNS)
+            val cells = cellsOf(lines, columns)
             cells[0] = cells[0].copy(widgets = listOf(item.widget))
             return doc.setRow(at.item, ComposedItem.Row(cells, item.style, n)) to Spot(at.item, if (n > 1) 1 else 0)
         }
-        val index = (at.item + 1).coerceIn(0, doc.items.size)
-        val items = doc.items.toMutableList().apply { add(index, ComposedItem.Row(cells, columns = n)) }
-        return doc.withItems(items) to Spot(index, 0)
+        return rowAt(doc, at.item + 1, lines, columns)
+    }
+
+    /** Пустой ряд [lines] × [columns] на место [index] — туда, где курсор разрезал текст (заказчик 2026-10-21). */
+    fun rowAt(doc: ComposedDoc, index: Int, lines: Int = 1, columns: Int = 2): Pair<ComposedDoc, Spot> {
+        val at = index.coerceIn(0, doc.items.size)
+        val items = doc.items.toMutableList().apply { add(at, ComposedItem.Row(cellsOf(lines, columns), columns = columns.coerceIn(1, MAX_COLUMNS))) }
+        return doc.withItems(items) to Spot(at, 0)
+    }
+
+    private fun cellsOf(lines: Int, columns: Int): MutableList<ComposedCell> {
+        val n = columns.coerceIn(1, MAX_COLUMNS)
+        val w = widths(n)
+        return MutableList(lines.coerceIn(1, MAX_LINES) * n) { p -> ComposedCell(w[p % n]) }
     }
 
     /** Строка и столбец выбранной ячейки; ячейка не выбрана — последние. */
@@ -570,6 +579,61 @@ object ComposedLayout {
         first.isBlank() -> second
         second.isBlank() -> first
         else -> source.write(ComposedLists.join(source.read(first), source.read(second)))
+    }
+
+    // ── Вставка на строку курсора и слияние текста ────────────────────────────
+
+    /**
+     * Куда встаёт вставленное, когда курсор в куске-тексте [item] на знаке [caret] его видимого текста
+     * [typed] (заказчик 2026-10-21): на пустой строке — вместо неё, в начале непустой — над ней, иначе — под
+     * строкой курсора. Кусок режется надвое; число — номер места, куда ставить вставленное.
+     */
+    fun gapAt(doc: ComposedDoc, item: Int, typed: Typed, caret: Int, source: TypedSource): Pair<ComposedDoc, Int> {
+        val piece = doc.items.getOrNull(item) as? ComposedItem.Text ?: return doc to (item + 1).coerceIn(0, doc.items.size)
+        val n = typed.lines.size
+        val line = typed.lineAt(caret)
+        val start = typed.lineStart(line)
+        val (above, below) = when {
+            start == typed.lineEnd(line) -> line to line + 1
+            caret <= start -> line to line
+            else -> line + 1 to line + 1
+        }
+        val before = if (above > 0) ComposedLists.slice(typed, 0, above) else null
+        val after = if (below < n) ComposedLists.slice(typed, below, n) else null
+        val items = doc.items.toMutableList()
+        items.removeAt(item)
+        if (after != null) items.add(item, piece.copy(source = source.write(after)))
+        if (before != null) items.add(item, piece.copy(source = source.write(before)))
+        return doc.copy(items = items) to item + if (before != null) 1 else 0
+    }
+
+    /** Слитый текст: документ, выбранное место и знак курсора в слитом — там, где кончался его прежний кусок. */
+    data class Joined(val doc: ComposedDoc, val spot: Spot, val caret: Int?)
+
+    /**
+     * Соседние куски-тексты одного вида — один кусок (заказчик 2026-10-21): виджет между ними убрали или
+     * увели — разрезу больше нечем держаться. [at] — выбранное место; курсор в слившемся тексте встаёт на
+     * стык, а не в конец. Ничего не слилось — `caret` пустой.
+     */
+    fun joinTexts(doc: ComposedDoc, at: Spot, source: TypedSource): Joined {
+        val items = mutableListOf<ComposedItem>()
+        val index = IntArray(doc.items.size)
+        // Слитое вплоть до выбранного куска включительно: его длина — стык.
+        var upTo: String? = null
+        doc.items.forEachIndexed { i, item ->
+            val last = items.lastOrNull()
+            if (item is ComposedItem.Text && last is ComposedItem.Text && last.style == item.style) {
+                items[items.lastIndex] = last.copy(source = merged(source, last.source, item.source))
+            } else {
+                items += item
+            }
+            index[i] = items.lastIndex
+            if (i == at.item && at.cell < 0) upTo = (items.last() as? ComposedItem.Text)?.source
+        }
+        if (items.size == doc.items.size) return Joined(doc, at, null)
+        val spot = if (at.item in doc.items.indices) at.copy(item = index[at.item]) else at
+        val caret = upTo?.takeIf { doc.items[at.item] != items[spot.item] }?.let { source.read(it).text.length }
+        return Joined(doc.withItems(items), spot, caret)
     }
 
     /** Список без виджетов — строками-пунктами своих ступеней; с виджетами — `null`: в ячейку он не встаёт. */

@@ -205,7 +205,8 @@ class EditorInChatStoreTest {
         m.move(1, -1)
         assertTrue(m.doc.items.first() is ComposedItem.Widget)
         m.remove(0)
-        assertEquals(listOf("a", ""), m.doc.items.map { (it as ComposedItem.Text).source })
+        // Текст и пустой текст под виджетом сошлись — один кусок (заказчик 2026-10-21).
+        assertEquals(listOf("a"), m.doc.items.map { (it as ComposedItem.Text).source })
         m.toggleMarks()
         assertFalse(m.doc.marks)
         m.level(3)

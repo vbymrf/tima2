@@ -331,6 +331,32 @@ class ComposedLayoutTest {
         assertEquals(Spot(1), out.spot)
     }
 
+    /** Заказчик 2026-10-21: вставка — на строку курсора, кусок режется; сошедшиеся куски текста сливаются. */
+    @Test
+    fun вставка_режет_кусок_и_сошедшиеся_сливаются() {
+        fun texts(d: ComposedDoc) = d.items.map { (it as? ComposedItem.Text)?.source ?: it::class.simpleName }
+        val src = PlainTyped
+        val doc = ComposedDoc(listOf(ComposedItem.Text("a\nb\nc")))
+        val t = src.read("a\nb\nc")
+        fun gap(caret: Int) = ComposedLayout.gapAt(doc, 0, t, caret, src).let { (d, at) -> texts(d) to at }
+        assertEquals(listOf("a", "b\nc") to 1, gap(2), "в начале строки — над ней")
+        assertEquals(listOf("a\nb", "c") to 1, gap(3), "в конце строки — под ней")
+        assertEquals(listOf("a\nb\nc") to 1, gap(5), "в последней строке — за куском")
+        assertEquals(listOf("a\nb\nc") to 0, gap(0), "в начале куска — над ним")
+        val blank = ComposedDoc(listOf(ComposedItem.Text("a\n\nb")))
+        assertEquals(listOf("a", "b") to 1, ComposedLayout.gapAt(blank, 0, src.read("a\n\nb"), 2, src).let { (d, at) -> texts(d) to at }, "пустая строка — уходит")
+        assertEquals(0, ComposedLayout.gapAt(ComposedDoc(listOf(ComposedItem.Text(""))), 0, src.read(""), 0, src).first.items.size, "пустой кусок — весь под вставку")
+
+        val apart = ComposedDoc(listOf(ComposedItem.Text("a"), ComposedItem.Text("b"), ComposedItem.Widget(emoji), ComposedItem.Text("c"), ComposedItem.Text("")))
+        val joined = ComposedLayout.joinTexts(apart, Spot(1), src)
+        assertEquals(listOf("a\nb", "Widget", "c"), texts(joined.doc))
+        assertEquals(Spot(0), joined.spot)
+        assertEquals(3, joined.caret)
+        assertEquals(1, ComposedLayout.joinTexts(apart, Spot(0), src).caret, "курсор — на стыке, в конце своего куска")
+        val styled = ComposedDoc(listOf(ComposedItem.Text("a"), ComposedItem.Text("b", mapOf("background" to "yellow"))))
+        assertEquals(styled, ComposedLayout.joinTexts(styled, Spot(0), src).doc, "разный вид — не сливаются")
+    }
+
     @Test
     fun перенос_в_слитое_попадает_в_первую_ячейку() {
         var doc = grid(1, 2)

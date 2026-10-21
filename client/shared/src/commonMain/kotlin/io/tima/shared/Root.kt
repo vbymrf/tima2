@@ -5375,10 +5375,11 @@ private fun Chat(
                                 widgets = listOf(io.tima.domain.chat.ComposedWidget.Quoted(refKind(pick), pick.chatId, pick.serverId, author = false, lines = maxOf(lines, 1))),
                             )
                         }
-                        editorModel.appendToMain(io.tima.domain.chat.ComposedItem.ItemList(items))
+                        editorModel.insert(io.tima.domain.chat.ComposedItem.ItemList(items))
                     } else {
+                        // На строку курсора, как любой виджет (заказчик 2026-10-21); несколько — друг под другом.
                         for (pick in picked) {
-                            editorModel.appendToMain(
+                            editorModel.insert(
                                 io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Underlay(refKind(pick), pick.chatId, pick.serverId, lines = lines)),
                             )
                         }
