@@ -62,6 +62,8 @@ object PopupCode {
     const val SECTIONS = "sections"
     const val COMMUNITY_SECTIONS = "community.sections"
     const val COMMUNITY_VIEW = "community.view"
+    const val POINTER_SECTIONS = "pointer.sections"
+    const val POINTER_VIEW = "pointer.view"
     const val CONTACT_VIEW = "contact.view"
     const val CONTACT_SOUND = "contact.sound"
     const val CALL_SETUP = "call.setup"

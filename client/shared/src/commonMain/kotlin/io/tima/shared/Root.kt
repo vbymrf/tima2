@@ -184,6 +184,7 @@ import io.tima.core.ui.IconButton
 import io.tima.core.ui.TimaSpacing
 import io.tima.feature.chat.GuestPageScreen
 import io.tima.feature.chat.PERSON_FIRST_LINE
+import io.tima.feature.chat.asLine
 import io.tima.core.call.CallEngine
 import io.tima.core.call.CallStage
 import io.tima.feature.call.BenchLine
@@ -1095,6 +1096,23 @@ private fun App(
         environment.settings.all().collect { communityView = BookView.from(it, BookView.COMMUNITY) }
     }
     var communityViewSheet by remember { mutableStateOf(false) }
+    // ── Указатели (ПЛАН-(УК)): подборка устройства, свои разделы и свой «Вид» под префиксом `pointers` ──
+    val pointerList by remember(environment) { environment.picks.pointers() }.collectAsState(initial = emptyList())
+    val pointerShelfRows by remember(environment) { environment.pointerSections.sections() }.collectAsState(initial = emptyList())
+    val pointerShelves = pointerShelfRows.filterNot { it.common }
+    val pointerCommon = pointerShelfRows.firstOrNull { it.common }
+    var pointerView by remember { mutableStateOf(BookView()) }
+    LaunchedEffect(environment) {
+        environment.settings.all().collect { pointerView = BookView.from(it, BookView.POINTERS) }
+    }
+    var pointerViewSheet by remember { mutableStateOf(false) }
+    var pointerSectionsScreen by remember { mutableStateOf(false) }
+    var pointerSection by remember { mutableStateOf("") }
+    var pointerOpened by remember { mutableStateOf<String?>(null) }
+    // Найденные сообщения указателей: ключ — «переписка/номер».
+    val pointerFound = remember { androidx.compose.runtime.mutableStateMapOf<String, io.tima.domain.chat.FoundMessage>() }
+    // Последний переход по указателю — «назад» вкладки повторяет его (заказчик 2026-10-21); помнится один.
+    var pointerLast by remember { mutableStateOf<io.tima.domain.chat.Pointer?>(null) }
     /** Вкладка Социума — здесь, чтобы пережить подокно «Вид» (оно перестраивает окно). */
     // «Социум» открывается на «Каталоге» — он первый (заказчик 2026-10-05).
     // Вкладки окон — правило состава журнала («открытие окна, вкладки»); до 2026-10-08 их не
@@ -2255,6 +2273,139 @@ private fun App(
             forPeople = false,
         )
         ScreenMarks(place, PopupCode.COMMUNITY_VIEW)
+        return
+    }
+
+    // Сущности указателей (ПЛАН-(УК) УК3): сообщество, группа, личная переписка — имя и что это.
+    val pointerWords = Tima.words.book
+    val pointerEntities: List<io.tima.feature.chat.PointerEntity> = pointerList.groupBy { it.level }.map { (level, list) ->
+        val id = level.substringAfter(':')
+        when {
+            level.startsWith("community:") -> io.tima.feature.chat.PointerEntity(
+                level,
+                socialState.communities.firstOrNull { it.communityId == id }?.title ?: pointerWords.pointerKindCommunity,
+                pointerWords.pointerKindCommunity,
+                null,
+                list,
+            )
+            level.startsWith("group:") -> {
+                val g = socialState.mine.firstOrNull { it.groupId == id }
+                io.tima.feature.chat.PointerEntity(
+                    level,
+                    g?.title ?: listState.chats.firstOrNull { it.chatId == id }?.title ?: id.take(8),
+                    if (g?.kind == io.tima.domain.chat.GroupKind.Public) pointerWords.pointerKindGroupOpen else pointerWords.pointerKindGroupClosed,
+                    null,
+                    list,
+                )
+            }
+            else -> {
+                val chat = listState.chats.firstOrNull { it.chatId == id }
+                io.tima.feature.chat.PointerEntity(
+                    level,
+                    chat?.let { personOfChat(it)?.line(bookStateForChats.view.look(), PERSON_FIRST_LINE) ?: it.title } ?: id.take(8),
+                    pointerWords.pointerKindChat,
+                    chat?.let(faceOfChat),
+                    list,
+                )
+            }
+        }
+    }.sortedByDescending { e -> e.pointers.maxOf { it.atMs } }
+    val pointerLoading = pointerWords.pointerLoading
+    val pointerUnavailable = pointerWords.pointerUnavailable
+    val pointerLineOf: (io.tima.domain.chat.Pointer) -> ChatLine = { p ->
+        p.asLine(pointerFound["${p.chatId}/${p.serverId}"], pointerLoading, pointerUnavailable)
+    }
+    // Найти сообщения указателей: база устройства, сохранённая копия, сервер (ПЛАН-(УК) УК1).
+    val lookUpPointers: (List<io.tima.domain.chat.Pointer>) -> Unit = { wanted ->
+        for (p in wanted) {
+            val key = "${p.chatId}/${p.serverId}"
+            val known = pointerFound[key]
+            if (known != null && known !is io.tima.domain.chat.FoundMessage.Offline) continue
+            scope.launch {
+                val kind = if (p.level.startsWith(io.tima.domain.chat.MessagePicks.PERSONAL)) "personal" else "group"
+                val found = runCatching { assembled.receiver.pointerFinder.find(kind, p.chatId, p.serverId) }
+                    .getOrDefault(io.tima.domain.chat.FoundMessage.Offline)
+                pointerFound[key] = found
+            }
+        }
+    }
+    // Переход по указателю: в буфер сущности — «из Указателей» и «куда» (ПЛАН-(БП)), переписку — открыть.
+    val openPointer: (io.tima.domain.chat.Pointer) -> Unit = { p ->
+        pointerLast = p
+        jumpBuffers?.let { buffers ->
+            buffers.of(p.level).jumped(
+                io.tima.domain.chat.JumpPoint("", 0, io.tima.domain.chat.JumpKind.POINTERS),
+                io.tima.domain.chat.JumpPoint(p.chatId, p.serverId, io.tima.domain.chat.JumpKind.TO),
+            )
+            buffers.save(p.level)
+        }
+        Journal.note(LogCode.JUMP, "из указателей", "буфер" to p.level.substringBefore(':'))
+        pointerViewSheet = false
+        where = Where.Chat(p.chatId, null, jumpTo = p.serverId)
+    }
+
+    if (pointerViewSheet) {
+        BookViewSheet(
+            view = pointerView,
+            onChange = { changed ->
+                pointerView = changed
+                scope.launch { changed.save(environment.settings, BookView.POINTERS) }
+            },
+            onClose = { pointerViewSheet = false },
+            onSections = {
+                pointerViewSheet = false
+                pointerSectionsScreen = true
+            },
+            forPeople = false,
+            pointersLedger = { mod ->
+                LaunchedEffect(pointerList) { lookUpPointers(pointerList) }
+                io.tima.feature.chat.PointersLedgerPage(
+                    entities = pointerEntities,
+                    sections = pointerShelves,
+                    common = pointerCommon,
+                    lineOf = pointerLineOf,
+                    onMove = { list, to -> scope.launch { environment.picks.moveTo(list, to) } },
+                    onRemove = { list -> scope.launch { environment.picks.remove(list) } },
+                    onJump = openPointer,
+                    modifier = mod,
+                )
+            },
+        )
+        ScreenMarks(place, PopupCode.POINTER_VIEW)
+        return
+    }
+
+    // Разделы указателей — тот же экран, третий набор (ПЛАН-(УК) УК2).
+    if (pointerSectionsScreen) {
+        val shelves = environment.pointerSections
+        SectionsScreen(
+            sections = pointerShelves,
+            countOf = { key -> pointerList.count { it.sectionId.ifEmpty { COMMON_SECTION } == key } },
+            onAdd = { name, icon -> scope.launch { shelves.add(name.trim(), icon) } },
+            onRename = { id, name, icon -> scope.launch { shelves.rename(id, name.trim(), icon) } },
+            onMove = { id, up ->
+                val list = orderedSections(pointerShelves, pointerCommon, commonName)
+                val at = list.indexOfFirst { it.id == id }
+                val to = if (up) at - 1 else at + 1
+                if (at >= 0 && to in list.indices) {
+                    val moved = list.toMutableList().apply { add(to, removeAt(at)) }
+                    scope.launch {
+                        if (pointerCommon == null && moved.last().id != COMMON_SECTION) shelves.setCommon(commonName, 0)
+                        moved.forEachIndexed { place, section -> shelves.place(section.id, place) }
+                    }
+                }
+            },
+            onRemove = { id ->
+                scope.launch { shelves.remove(id) }
+                if (pointerSection == id) pointerSection = ""
+            },
+            onBack = { pointerSectionsScreen = false },
+            forPeople = false,
+            forPointers = true,
+            common = pointerCommon,
+            onRenameCommon = { name, icon -> scope.launch { shelves.setCommon(name.trim(), icon) } },
+        )
+        ScreenMarks(place, PopupCode.POINTER_SECTIONS)
         return
     }
 
@@ -3419,6 +3570,33 @@ private fun App(
                     onSearch = {},
                     onSettings = toSettings,
                     onNeighbourWindow = switchWindow,
+                    pointers = {
+                        val opened = pointerEntities.firstOrNull { it.level == pointerOpened }
+                        LaunchedEffect(opened?.level, opened?.pointers?.size) { opened?.let { lookUpPointers(it.pointers) } }
+                        io.tima.feature.chat.PointersTab(
+                            entities = pointerEntities,
+                            sections = pointerShelves,
+                            common = pointerCommon,
+                            icons = pointerView.icons,
+                            section = pointerSection,
+                            onSection = { pointerSection = it },
+                            opened = pointerOpened,
+                            onOpenEntity = { pointerOpened = it },
+                            lineOf = pointerLineOf,
+                            authorOf = { line ->
+                                val who = line.senderId?.let { peopleCards[it] }?.line(communityView.look(), PERSON_FIRST_LINE)
+                                val group = socialState.mine.firstOrNull { it.groupId == line.chatId }?.title
+                                // У сообщества — из какой группы сообщение (ПЛАН-(УК) УК3).
+                                listOfNotNull(if (line.outgoing) null else who, group?.takeIf { pointerOpened?.startsWith("community:") == true }).joinToString(" · ").ifBlank { null }
+                            },
+                            onJump = openPointer,
+                            onRemove = { list -> scope.launch { environment.picks.remove(list) } },
+                            onRemoveEntity = { level -> scope.launch { environment.picks.removeLevel(level) }; if (pointerOpened == level) pointerOpened = null },
+                            onMove = { list, to -> scope.launch { environment.picks.moveTo(list, to) } },
+                            onView = { pointerViewSheet = true },
+                            onRepeat = pointerLast?.let { last -> { openPointer(last) } },
+                        )
+                    },
                 )
 
                 // Окно стенда — временное, как и окно 0: его видно, только пока
@@ -3950,6 +4128,12 @@ private fun App(
                                 key = io.tima.domain.chat.JumpBuffer.keyOf(current.chatId, isGroup, home),
                                 sameBuffer = { other -> home != null && socialState.mine.any { it.groupId == other && it.communityId == home } },
                                 elsewhere = { other, number -> where = Where.Chat(other, null, jumpTo = number) },
+                                pointers = {
+                                    pointerOpened = io.tima.domain.chat.JumpBuffer.keyOf(current.chatId, isGroup, home)
+                                    windowTabs.choose(Window.Activity, WindowTab.Pointers)
+                                    window = Window.Activity
+                                    where = Where.Nothing
+                                },
                                 jumpTo = current.jumpTo,
                             )
                         },

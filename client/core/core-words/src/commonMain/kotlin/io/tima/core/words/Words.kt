@@ -704,6 +704,39 @@ interface BookWords {
     val sectionsEmptyAboutCommunity: String
     val removeSectionAboutCommunity: String
     fun groupsInSection(count: Int): String
+
+    // Разделы указателей (ПЛАН-(УК) УК2) и подтверждение «Убрать раздел» — у всех наборов.
+    val sectionsScreenPointers: String
+    val sectionsEmptyAboutPointers: String
+    val removeSectionAboutPointers: String
+    fun pointersInSection(count: Int): String
+    val removeSectionAsk: String
+    val pointersLedgerTitle: String
+    val pointersLedgerAbout: String
+
+    // Вкладка «Указатели» окна «Общение» (ПЛАН-(УК) УК3–УК5).
+    val pointersEmpty: String
+    val pointersEmptyAbout: String
+    val pointerKindChat: String
+    val pointerKindGroupOpen: String
+    val pointerKindGroupClosed: String
+    val pointerKindCommunity: String
+    val pointerKindChannel: String
+    val pointerToSection: String
+    val pointerRemove: String
+    val pointerOpen: String
+    fun pointerRemoveEntityAsk(title: String): String
+    val pointerRemoveEntityAbout: String
+    val pointerWhereTo: String
+    val pointerUnavailable: String
+    val pointerLoading: String
+    val pointerSearch: String
+    val pointerAllKinds: String
+    val pointerKindsChats: String
+    val pointerKindsGroups: String
+    val pointerKindsCommunities: String
+    fun pointerChosen(count: Int): String
+    val pointerRepeat: String
     val moveUp: String
     val moveDown: String
     val save: String
@@ -2097,6 +2130,8 @@ interface TabWords {
     val answers: String
     val reactions: String
     val collections: String
+    /** Вкладка «Указатели» окна «Общение» — вместо «Коллекций» (ПЛАН-(УК)). */
+    val pointers: String
 
     // Фильтры «Реакций».
     val comments: String
@@ -3259,6 +3294,45 @@ object RussianWords : Words {
         override val sectionsEmptyAboutCommunity =
             "Раздел — полка для групп и каналов: «Работа», «Соседи», «Учёба». Заведите первый"
         override val removeSectionAboutCommunity = "группы из него вернутся в «Общий»"
+        override val sectionsScreenPointers = "Разделы указателей"
+        override val sectionsEmptyAboutPointers =
+            "Раздел — полка для указателей: «Важное», «Работа», «Прочитать». Заведите первый"
+        override val removeSectionAboutPointers = "указатели из него вернутся в «Общий»"
+        override fun pointersInSection(count: Int): String {
+            val ten = count % 10
+            val hundred = count % 100
+            return when {
+                count == 0 -> "пусто"
+                ten == 1 && hundred != 11 -> "$count указатель"
+                ten in 2..4 && hundred !in 12..14 -> "$count указателя"
+                else -> "$count указателей"
+            }
+        }
+        override val removeSectionAsk = "Убрать раздел?"
+        override val pointersLedgerTitle = "Журнал указателей"
+        override val pointersLedgerAbout = "все указатели разом: в раздел, убрать, перейти"
+        override val pointersEmpty = "Указателей пока нет"
+        override val pointersEmptyAbout = "Указатель ставится в меню сообщения: «В указатели». Здесь они собраны по группам, сообществам и чатам"
+        override val pointerKindChat = "чат"
+        override val pointerKindGroupOpen = "группа открытая"
+        override val pointerKindGroupClosed = "группа закрытая"
+        override val pointerKindCommunity = "сообщество"
+        override val pointerKindChannel = "канал открытый"
+        override val pointerToSection = "В раздел"
+        override val pointerRemove = "Убрать"
+        override val pointerOpen = "Перейти"
+        override fun pointerRemoveEntityAsk(title: String) = "Убрать все указатели «$title»?"
+        override val pointerRemoveEntityAbout = "сами сообщения останутся на месте — уйдут только указатели"
+        override val pointerWhereTo = "Куда положить выбранные"
+        override val pointerUnavailable = "Сообщение недоступно"
+        override val pointerLoading = "Сообщение загружается…"
+        override val pointerSearch = "Текст сообщения"
+        override val pointerAllKinds = "Все"
+        override val pointerKindsChats = "Чаты"
+        override val pointerKindsGroups = "Группы"
+        override val pointerKindsCommunities = "Сообщества"
+        override fun pointerChosen(count: Int) = "Выделено: $count"
+        override val pointerRepeat = "назад — туда, куда переходили последний раз"
         override fun groupsInSection(count: Int): String {
             val ten = count % 10
             val hundred = count % 100
@@ -3548,16 +3622,16 @@ object RussianWords : Words {
         override val menuShare = "Поделиться"
         override val menuCopy = "Скопировать текст"
         override val selectHint = "Выделите нужное и скопируйте — или весь текст кнопкой"
-        override val menuPick = "Добавить в Подборку"
+        override val menuPick = "В указатели"
         override val menuCarry = "Перенести себе"
         override val edited = "изменено"
         override val editing = "Изменение"
         override val replyingTo = "Ответ"
         override val deleted = "Сообщение удалено"
         override val copied = "Текст скопирован"
-        override val picked = "Добавлено в Подборку"
-        override val pickedAlready = "Уже в Подборке"
-        override val picksFull = "В Подборке уже 20 сообщений — лишнее убирается в редакторе"
+        override val picked = "Добавлено в указатели"
+        override val pickedAlready = "Уже в указателях"
+        override val picksFull = "Здесь уже 100 указателей — лишние уберите во вкладке «Указатели»"
         override val editStructure = "Правка меняет только текст: строки, заголовки и списки остаются"
         override val editInEditor = "Такое сообщение правится в редакторе"
         override val editImpossible = "Это сообщение изменить нельзя"
@@ -3571,13 +3645,13 @@ object RussianWords : Words {
         override val fileOpen = "Открыть"
         override val fileOpenNone = "Открыть нечем — сохраните файл"
         override fun selected(count: Int) = "Выбрано: $count"
-        override val selectPick = "В Подборку"
+        override val selectPick = "В указатели"
         override val selectCopy = "Скопировать"
         override val selectForward = "Переслать"
         override val selectDelete = "Удалить"
         override fun deleteManyTitle(count: Int) = "Удалить выбранные ($count)"
         override fun deleteManyAsk(count: Int) = "Удалить у всех: $count? Вернуть будет нельзя"
-        override fun pickedMany(count: Int) = "Добавлено в Подборку: $count"
+        override fun pickedMany(count: Int) = "Добавлено в указатели: $count"
         override fun forwarded(count: Int) = "Переслано: $count"
         override val forwardNothing = "Пересылать нечего: файлы — через «Сохранить как»"
         override val editLimit = "Сообщение уже исправлено три раза"
@@ -4312,6 +4386,7 @@ object RussianWords : Words {
         override val answers = "Ответы"
         override val reactions = "Реакции"
         override val collections = "Коллекции"
+        override val pointers = "Указатели"
 
         override val comments = "Комментарии"
         override val marks = "Оценки"

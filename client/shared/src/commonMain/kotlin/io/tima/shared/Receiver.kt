@@ -949,27 +949,77 @@ class Receiver(
      */
     val finder = io.tima.domain.chat.MessageFinder { kind, chatId, serverId ->
         environment.localMessages.line(chatId, serverId)?.let { return@MessageFinder io.tima.domain.chat.FoundMessage.Found(it) }
-        when (val answer = network.byNumber.find(kind, chatId, serverId)) {
-            is io.tima.core.network.MessageByNumberOverHttp.Answer.GroupFrame -> {
-                val frame = GroupFrame.parse(answer.stored)
-                    ?: return@MessageFinder io.tima.domain.chat.FoundMessage.Unavailable("missing")
-                captionKey(frame.senderId, frame.senderDevice)
-                val opened = openGroupFrame(frame) as? OpenOutcome.Opened
-                    ?: return@MessageFinder io.tima.domain.chat.FoundMessage.Unavailable("closed")
-                val line = io.tima.core.encryption.TextBodyCodec.decodeLine(opened.body)
-                    ?: return@MessageFinder io.tima.domain.chat.FoundMessage.Unavailable("closed")
-                io.tima.domain.chat.FoundMessage.Found(remoteLine(chatId, serverId, frame.senderId, line, frame.createdAtUnixMs, frame.level.toInt()))
+        val answer = network.byNumber.find(kind, chatId, serverId)
+        val found = answered(chatId, serverId, answer)
+        // Полученное — на устройство, закрытым ключом устройства (ПЛАН-(УК) УК1): «Указатели» берут оттуда.
+        // Сервер сказал «нет» — прежняя копия уходит.
+        when {
+            found is io.tima.domain.chat.FoundMessage.Found -> runCatching {
+                when (answer) {
+                    is io.tima.core.network.MessageByNumberOverHttp.Answer.GroupFrame -> environment.refCache.put(chatId, serverId, REF_FRAME, answer.stored)
+                    is io.tima.core.network.MessageByNumberOverHttp.Answer.Open -> environment.refCache.put(chatId, serverId, REF_OPEN, openBytes(answer))
+                    else -> Unit
+                }
             }
-            is io.tima.core.network.MessageByNumberOverHttp.Answer.Open -> {
-                val line = io.tima.core.encryption.ComposedBodiesOverKodium.readOpen(answer.nodes, answer.markup)
-                    ?: return@MessageFinder io.tima.domain.chat.FoundMessage.Unavailable("missing")
-                io.tima.domain.chat.FoundMessage.Found(remoteLine(chatId, serverId, answer.authorId, line, answer.atMs, 0))
-            }
-            io.tima.core.network.MessageByNumberOverHttp.Answer.Personal -> io.tima.domain.chat.FoundMessage.Unavailable("closed")
-            is io.tima.core.network.MessageByNumberOverHttp.Answer.Unavailable -> io.tima.domain.chat.FoundMessage.Unavailable(answer.reason, answer.level)
-            io.tima.core.network.MessageByNumberOverHttp.Answer.Offline -> io.tima.domain.chat.FoundMessage.Offline
+            found is io.tima.domain.chat.FoundMessage.Unavailable -> runCatching { environment.refCache.drop(chatId, serverId) }
         }
+        found
     }
+
+    /**
+     * Сообщение по номеру для «Указателей» (ПЛАН-(УК)): база устройства, сохранённая копия с сервера,
+     * и только потом сервер.
+     */
+    val pointerFinder = io.tima.domain.chat.MessageFinder { kind, chatId, serverId ->
+        environment.localMessages.line(chatId, serverId)?.let { return@MessageFinder io.tima.domain.chat.FoundMessage.Found(it) }
+        val kept = runCatching { environment.refCache.get(chatId, serverId) }.getOrNull()
+        val fromKept = when (kept?.first) {
+            REF_FRAME -> answered(chatId, serverId, io.tima.core.network.MessageByNumberOverHttp.Answer.GroupFrame(kept.second))
+            REF_OPEN -> openOf(kept.second)?.let { answered(chatId, serverId, it) }
+            else -> null
+        }
+        fromKept as? io.tima.domain.chat.FoundMessage.Found ?: finder.find(kind, chatId, serverId)
+    }
+
+    /** Ответ сервера по номеру — строка или «недоступно». */
+    private suspend fun answered(
+        chatId: String,
+        serverId: Long,
+        answer: io.tima.core.network.MessageByNumberOverHttp.Answer,
+    ): io.tima.domain.chat.FoundMessage = when (answer) {
+        is io.tima.core.network.MessageByNumberOverHttp.Answer.GroupFrame -> run {
+            val frame = GroupFrame.parse(answer.stored)
+                ?: return@run io.tima.domain.chat.FoundMessage.Unavailable("missing")
+            captionKey(frame.senderId, frame.senderDevice)
+            val opened = openGroupFrame(frame) as? OpenOutcome.Opened
+                ?: return@run io.tima.domain.chat.FoundMessage.Unavailable("closed")
+            val line = io.tima.core.encryption.TextBodyCodec.decodeLine(opened.body)
+                ?: return@run io.tima.domain.chat.FoundMessage.Unavailable("closed")
+            io.tima.domain.chat.FoundMessage.Found(remoteLine(chatId, serverId, frame.senderId, line, frame.createdAtUnixMs, frame.level.toInt()))
+        }
+        is io.tima.core.network.MessageByNumberOverHttp.Answer.Open -> {
+            val line = io.tima.core.encryption.ComposedBodiesOverKodium.readOpen(answer.nodes, answer.markup)
+            if (line == null) io.tima.domain.chat.FoundMessage.Unavailable("missing")
+            else io.tima.domain.chat.FoundMessage.Found(remoteLine(chatId, serverId, answer.authorId, line, answer.atMs, 0))
+        }
+        io.tima.core.network.MessageByNumberOverHttp.Answer.Personal -> io.tima.domain.chat.FoundMessage.Unavailable("closed")
+        is io.tima.core.network.MessageByNumberOverHttp.Answer.Unavailable -> io.tima.domain.chat.FoundMessage.Unavailable(answer.reason, answer.level)
+        io.tima.core.network.MessageByNumberOverHttp.Answer.Offline -> io.tima.domain.chat.FoundMessage.Offline
+    }
+
+    /** Открытая запись — в байты для хранения: автор, время, разметка и узлы, каждое строкой Base64. */
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    private fun openBytes(a: io.tima.core.network.MessageByNumberOverHttp.Answer.Open): ByteArray {
+        val b64 = kotlin.io.encoding.Base64
+        val fields = listOf(a.authorId.orEmpty(), a.atMs.toString(), a.markup) + a.nodes
+        return fields.joinToString("\n") { b64.encode(it.encodeToByteArray()) }.encodeToByteArray()
+    }
+
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    private fun openOf(bytes: ByteArray): io.tima.core.network.MessageByNumberOverHttp.Answer.Open? = runCatching {
+        val f = bytes.decodeToString().split('\n').map { kotlin.io.encoding.Base64.decode(it).decodeToString() }
+        io.tima.core.network.MessageByNumberOverHttp.Answer.Open(f[0].ifEmpty { null }, f.drop(3), f[2], f[1].toLong())
+    }.getOrNull()
 
     private fun remoteLine(chatId: String, serverId: Long, sender: String?, line: io.tima.domain.chat.DecodedLine, atMs: Long, level: Int) =
         io.tima.domain.chat.ChatLine(
@@ -1552,3 +1602,7 @@ internal suspend fun callsFrom(hint: Long, mine: Long, realTop: suspend () -> Lo
 
 /** Пропущенный кончился до входа устройства в аккаунт (время неизвестно — не до). */
 internal fun missedBeforeDevice(atMs: Long, since: Long): Boolean = atMs in 1 until since
+
+/** Вид сохранённого ответа сервера по номеру (ПЛАН-(УК) УК1): кадр группы или открытая запись. */
+private const val REF_FRAME = "frame"
+private const val REF_OPEN = "open"

@@ -823,9 +823,15 @@ class Environment private constructor(
     /** «Только продолжение» у своего исходящего (Решения §11.3). */
     val continuations: io.tima.domain.chat.ContinuationMarks = io.tima.core.database.SqlContinuationMarks(db)
 
-    /** Подборка сообщений на устройстве (Решения §11.2). */
+    /** Подборка сообщений — указатели — на устройстве (Решения §11.2, ПЛАН-(УК)). */
     val picks: io.tima.domain.chat.MessagePicks =
         io.tima.domain.chat.MessagePicks(io.tima.core.database.SqlPicks(db), nowMs = { msNow() })
+
+    /** Разделы указателей — свой набор (ПЛАН-(УК) УК2). */
+    val pointerSections: io.tima.core.database.SqlPointerSections = io.tima.core.database.SqlPointerSections(db)
+
+    /** Сообщения-цели, полученные с сервера, — закрытые ключом устройства (ПЛАН-(УК) УК1). */
+    val refCache: io.tima.domain.chat.RefCache = io.tima.core.database.SqlRefCache(db, cipher)
 
     /**
      * Правка своего сообщения (ADR-0045): та же очередь, те же ключи, исходное — из ленты.

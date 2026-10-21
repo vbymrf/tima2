@@ -53,6 +53,9 @@ enum class WindowTab {
     Reactions,
     Collections,
 
+    /** «Указатели» окна 4 — вместо «Коллекций» (ПЛАН-(УК), заказчик 2026-10-21). */
+    Pointers,
+
     // Фильтры «Реакций».
     Comments,
     Marks,

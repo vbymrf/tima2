@@ -97,6 +97,8 @@ fun BookViewScreen(
      * четырёх пунктов «Списков» нет: они стали его фильтром.
      */
     onOpenLedger: (() -> Unit)? = null,
+    /** Журнал указателей (ПЛАН-(УК) УК5) — верхним пунктом вместо журнала контактов. */
+    pointersLedger: Boolean = false,
 ) {
     Column(
         modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2),
@@ -105,13 +107,13 @@ fun BookViewScreen(
         val words = Tima.words.book
         // Журнал контактов — выше «Разделов» (заказчик 2026-09-26): в нём раздел, список и
         // своя мелодия назначаются нескольким сразу.
-        if (onOpenLedger != null && forPeople) {
+        if (onOpenLedger != null && (forPeople || pointersLedger)) {
             ListLine(
                 onClick = onOpenLedger,
                 middle = {
                     Column {
-                        Name(words.ledgerTitle)
-                        Tertiary(words.ledgerAbout, lineOne = true)
+                        Name(if (pointersLedger) words.pointersLedgerTitle else words.ledgerTitle)
+                        Tertiary(if (pointersLedger) words.pointersLedgerAbout else words.ledgerAbout, lineOne = true)
                     }
                 },
                 right = { Tertiary("›", lineOne = true) },
@@ -658,6 +660,8 @@ fun BookViewSheet(
     faceOf: (BookEntry) -> String? = { null },
     /** Выбрать мелодию выделенным — панель рисует тот, у кого выбор звука. */
     onSound: (List<BookEntry>) -> Unit = {},
+    /** Журнал указателей (ПЛАН-(УК) УК5): страница на весь экран вместо журнала контактов. */
+    pointersLedger: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.book
@@ -713,6 +717,7 @@ fun BookViewSheet(
                         Name(
                             when {
                                 ledger && ledgerHelp -> words.ledgerHelpTitle
+                                ledger && pointersLedger != null -> words.pointersLedgerTitle
                                 ledger -> words.ledgerTitle
                                 list != null -> words.roster(list)
                                 current == ViewPage.Sections -> words.sectionsLook
@@ -723,7 +728,7 @@ fun BookViewSheet(
                     }
                 }
                 // «?» — перед крестиком, только в журнале: что делает каждая кнопка.
-                if (ledger && !ledgerHelp) IconButton(glyph = "?", onClick = { ledgerHelp = true })
+                if (ledger && !ledgerHelp && pointersLedger == null) IconButton(glyph = "?", onClick = { ledgerHelp = true })
                 IconButton(glyph = "✕", onClick = onClose)
             }
             // `weight(fill = false)`: короткое содержимое — панель по содержимому, длинное —
@@ -734,6 +739,7 @@ fun BookViewSheet(
                 // Журнал со своим списком и полосой внизу — не в общей прокрутке: список в
                 // прокрутке прокручиваться не может.
                 ledger && ledgerHelp -> LedgerHelpPage(scrolling)
+                ledger && pointersLedger != null -> pointersLedger(Modifier.weight(1f))
                 ledger && onPickList != null && onPickSection != null -> ContactLedgerPage(
                     people = everyone,
                     sections = sections,
@@ -783,11 +789,12 @@ fun BookViewSheet(
                     countIn = { r -> everyone.count { r.holds(it) } },
                     // Журнал есть и при пустой книге (заказчик 2026-10-08: «журнал контактов
                     // должен существовать вне зависимости разрешений»).
-                    onOpenLedger = if (onPickList == null || onPickSection == null) {
+                    onOpenLedger = if (pointersLedger == null && (onPickList == null || onPickSection == null)) {
                         null
                     } else {
                         { ledger = true }
                     },
+                    pointersLedger = pointersLedger != null,
                 )
             }
         }

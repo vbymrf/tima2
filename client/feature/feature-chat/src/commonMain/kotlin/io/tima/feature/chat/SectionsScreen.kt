@@ -22,10 +22,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
+import io.tima.core.ui.ConfirmPlate
 import io.tima.core.ui.Caption
 import io.tima.core.ui.EmptyArea
 import io.tima.core.ui.Field
@@ -80,16 +82,38 @@ fun SectionsScreen(
      * на полке каталога лежат группы, и «7 человек» там — враньё в самом видном месте.
      */
     forPeople: Boolean = true,
+    /** Набор указателей (ПЛАН-(УК) УК2): тот же механизм, свои слова. */
+    forPointers: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = Tima.colors
     val words = Tima.words.book
+    val title = when {
+        forPointers -> words.sectionsScreenPointers
+        forPeople -> words.sectionsScreen
+        else -> words.sectionsScreenCommunity
+    }
+    val emptyAbout = when {
+        forPointers -> words.sectionsEmptyAboutPointers
+        forPeople -> words.sectionsEmptyAbout
+        else -> words.sectionsEmptyAboutCommunity
+    }
+    val countWords: (Int) -> String = when {
+        forPointers -> words::pointersInSection
+        forPeople -> words::peopleInSection
+        else -> words::groupsInSection
+    }
+    val removeAbout = when {
+        forPointers -> words.removeSectionAboutPointers
+        forPeople -> words.removeSectionAbout
+        else -> words.removeSectionAboutCommunity
+    }
     var editing by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize().background(colors.surface)) {
         SubwindowHeader(
-            title = if (forPeople) words.sectionsScreen else words.sectionsScreenCommunity,
+            title = title,
             onBack = onBack,
         )
 
@@ -107,7 +131,7 @@ fun SectionsScreen(
                     Box(Modifier.padding(TimaSpacing.about4)) {
                         EmptyArea(
                             title = words.sectionsEmpty,
-                            explanation = if (forPeople) words.sectionsEmptyAbout else words.sectionsEmptyAboutCommunity,
+                            explanation = emptyAbout,
                         )
                     }
                 }
@@ -130,7 +154,7 @@ fun SectionsScreen(
                                 editing = null
                             }
                         },
-                        forPeople = forPeople,
+                        removeAbout = removeAbout,
                     )
                 } else {
                     val first = rows.first().id == section.id
@@ -145,10 +169,7 @@ fun SectionsScreen(
                             Column {
                                 Name(section.name)
                                 Tertiary(
-                                    (
-                                        if (forPeople) words.peopleInSection(countOf(section.id))
-                                        else words.groupsInSection(countOf(section.id))
-                                        ) + if (section.common) " · " + words.commonSectionAbout else "",
+                                    countWords(countOf(section.id)) + if (section.common) " · " + words.commonSectionAbout else "",
                                     lineOne = true,
                                 )
                             }
@@ -176,7 +197,7 @@ fun SectionsScreen(
                 },
                 onCancel = { adding = false },
                 onRemove = null,
-                forPeople = forPeople,
+                removeAbout = removeAbout,
             )
         } else {
             Box(Modifier.fillMaxWidth().padding(TimaSpacing.about4)) {
@@ -207,7 +228,8 @@ private fun SectionEditor(
     onSave: (String, Int) -> Unit,
     onCancel: () -> Unit,
     onRemove: (() -> Unit)?,
-    forPeople: Boolean = true,
+    /** Что станет с содержимым убранного раздела — словами набора. */
+    removeAbout: String,
 ) {
     val colors = Tima.colors
     val words = Tima.words.book
@@ -245,20 +267,30 @@ private fun SectionEditor(
             Button(label = Tima.words.common.cancel, kind = ButtonKind.Quiet, onClick = onCancel)
         }
         if (onRemove != null) {
-            // Отдельной строкой и ниже: убрать — не то же, что отменить правку, и стоять
-            // рядом с «Сохранить» ему нельзя — промах стоит раздела.
-            ListLine(
-                onClick = onRemove,
-                middle = {
-                    Column {
-                        Name(words.removeSection)
-                        Tertiary(
-                            if (forPeople) words.removeSectionAbout else words.removeSectionAboutCommunity,
-                            lineOne = true,
-                        )
-                    }
-                },
-            )
+            // Отдельно и ниже: убрать — не то же, что отменить правку, и стоять рядом с «Сохранить»
+            // ему нельзя — промах стоит раздела. Кнопкой и с подтверждением красной плашкой (заказчик
+            // 2026-10-21): прежде строка-надпись убирала сразу.
+            var asking by remember { mutableStateOf(false) }
+            if (asking) {
+                ConfirmPlate(
+                    title = words.removeSectionAsk,
+                    text = removeAbout,
+                    cancel = Tima.words.common.cancel,
+                    action = words.removeSection,
+                    danger = true,
+                    onCancel = { asking = false },
+                    onAction = onRemove,
+                    modifier = Modifier.testTag(SECTION_REMOVE_CONFIRM_TAG),
+                )
+            } else {
+                Button(
+                    label = words.removeSection,
+                    onClick = { asking = true },
+                    kind = ButtonKind.Dangerous,
+                    modifier = Modifier.testTag(SECTION_REMOVE_TAG),
+                )
+                Tertiary(removeAbout, lineOne = true)
+            }
         }
     }
 }
@@ -280,3 +312,7 @@ private fun IconCell(index: Int, chosen: Boolean, onPick: (Int) -> Unit) {
         SectionGlyph(index = index, size = 24.dp, color = if (chosen) colors.onAccent else colors.text)
     }
 }
+
+/** Метки «Убрать раздел» и его подтверждения (СЦЕНАРИИ-ПО-ОКНАМ.md). */
+const val SECTION_REMOVE_TAG = "sections:remove"
+const val SECTION_REMOVE_CONFIRM_TAG = "sections:remove.confirm"

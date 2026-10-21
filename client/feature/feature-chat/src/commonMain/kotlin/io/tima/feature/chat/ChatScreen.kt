@@ -629,6 +629,37 @@ private fun Feed(
 /** Стандартный открытый уровень в группе — цифра у него не рисуется (В29). */
 private const val STANDARD_OPEN_LEVEL = 2
 
+/** Нажатие по самому сообщению — переход к нему (вкладка «Указатели», ПЛАН-(УК)); `null` — как в переписке. */
+internal val LocalBubbleOpen = androidx.compose.runtime.staticCompositionLocalOf<((ChatLine) -> Unit)?> { null }
+
+/**
+ * Указатели сущности — сами сообщения, пузырём ленты (ПЛАН-(УК) УК3): нажали по сообщению — переход;
+ * нажали рядом или долго — выделение ([chosen] — ключи строк).
+ */
+@Composable
+internal fun PointerFeed(
+    lines: List<ChatLine>,
+    authorOf: (ChatLine) -> String?,
+    chosen: Set<String>,
+    onOpen: (ChatLine) -> Unit,
+    onToggle: (ChatLine) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalBubbleOpen provides onOpen,
+        LocalChatSelection provides ChatSelection(chosen, onToggle),
+    ) {
+        Feed(
+            lines = lines,
+            authorName = authorOf,
+            authorLetter = { line -> authorOf(line)?.take(1)?.uppercase() ?: "+" },
+            modifier = modifier,
+            onMenu = onToggle,
+            onSelect = onToggle,
+        )
+    }
+}
+
 /** Сколько ждать сообщения, ради которого открыли переписку, прежде чем показать его одно (ПЛАН-(БП)). */
 private const val ARRIVE_WAIT_MS = 3_000L
 
@@ -734,9 +765,12 @@ private fun Reply(
     // по пузырю — выбор, как раньше. Неотправленное — целиком, как было.
     val longPress: (() -> Unit)? = if (canSelect) ({ selection!!.toggle(line) }) else onSelect?.let { { it(line) } }
     val quiet = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val bubbleOpen = LocalBubbleOpen.current
     val bubbleTap = when {
         failed -> Modifier
         choosing && canSelect -> Modifier.clickable(interactionSource = quiet, indication = null) { selection!!.toggle(line) }
+        // «Указатели» (ПЛАН-(УК)): нажатие по сообщению — переход к нему.
+        bubbleOpen != null -> Modifier.combinedClickable(interactionSource = quiet, indication = null, onClick = { bubbleOpen(line) }, onLongClick = longPress)
         else -> Modifier.combinedClickable(interactionSource = quiet, indication = null, onClick = {}, onLongClick = longPress)
     }
     val timeTap: (() -> Unit)? = if (menu && !choosing) ({ onMenu!!(line) }) else null

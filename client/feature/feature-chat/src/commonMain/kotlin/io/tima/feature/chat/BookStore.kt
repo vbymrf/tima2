@@ -355,6 +355,8 @@ data class BookView(
         const val BOOK = "book"
         /** Префикс вида набора сообществ — каталог Социума и «Группы» Страницы. */
         const val COMMUNITY = "community"
+        /** Префикс вида указателей — вкладка «Указатели» «Общения» (ПЛАН-(УК) УК2). */
+        const val POINTERS = "pointers"
         private const val VIEW = "view"
         private const val ICONS = "icons"
         private const val TILE_SIZE = "tile_size"

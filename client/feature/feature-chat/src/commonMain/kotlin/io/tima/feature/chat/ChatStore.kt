@@ -180,7 +180,7 @@ class ChatStore(
     /** Подборка сообщений (Решения §11.2). `null` — нечем. */
     private val picks: MessagePicks? = null,
     /** Чья подборка у этой переписки — `MessagePicks.levelOf`. */
-    private val pickLevel: String = MessagePicks.SELF,
+    private val pickLevel: String = MessagePicks.PERSONAL,
     /** Черновики (Решения §9): у переписки свой, зашифрованный, переживает перезапуск. `null` — не храним. */
     private val drafts: io.tima.domain.chat.Drafts? = null,
     /** Вложения (Решения §2, §3, §6). `null` — нечем: скрепки и галереи нет. */

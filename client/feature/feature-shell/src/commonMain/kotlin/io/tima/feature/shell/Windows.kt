@@ -166,7 +166,10 @@ fun MediaWindow(
     }
 }
 
-/** Окно 4 «Общение» — `§6`. Ряд фильтров есть только у «Реакций». */
+/**
+ * Окно 4 «Общение» — `§6`. Ряд фильтров есть только у «Реакций». [pointers] — вкладка «Указатели»
+ * (ПЛАН-(УК)): содержимое приходит снаружи, у него свои разделы.
+ */
 @Composable
 fun ActivityWindow(
     onSwitchWindows: () -> Unit,
@@ -174,6 +177,7 @@ fun ActivityWindow(
     onSettings: () -> Unit,
     onNeighbourWindow: (InSide) -> Unit,
     modifier: Modifier = Modifier,
+    pointers: @Composable () -> Unit = {},
 ) {
     var reactions by remember { mutableStateOf(REACTION_FILTERS.first()) }
     WindowWithTabs(
@@ -205,10 +209,7 @@ fun ActivityWindow(
                 },
             )
 
-            else -> TabStub(
-                "Здесь будет то, что вы собрали",
-                "Плитки коллекций. Коллекций нет ни в базе, ни на сервере.",
-            )
+            else -> pointers()
         }
     }
 }
@@ -341,7 +342,7 @@ internal val COMMON_TABS = listOf(WindowTab.Common, WindowTab.Friends, WindowTab
 internal val SOCIUM_TABS = listOf(WindowTab.Catalogue, WindowTab.Common, WindowTab.Friends)
 
 /** Вкладки окна 4 (`§6`). */
-internal val SOCIAL_TABS = listOf(WindowTab.Answers, WindowTab.Reactions, WindowTab.Collections)
+internal val SOCIAL_TABS = listOf(WindowTab.Answers, WindowTab.Reactions, WindowTab.Pointers)
 
 /** Вкладки окна 5 (`§7`). */
 internal val PAGE_TABS =

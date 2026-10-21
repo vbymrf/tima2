@@ -96,6 +96,7 @@ fun TabWords.label(tab: WindowTab): String = when (tab) {
     WindowTab.Answers -> answers
     WindowTab.Reactions -> reactions
     WindowTab.Collections -> collections
+    WindowTab.Pointers -> pointers
 
     WindowTab.Comments -> comments
     WindowTab.Marks -> marks
