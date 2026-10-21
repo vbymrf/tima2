@@ -774,8 +774,14 @@ private fun Reply(
         else -> Modifier.combinedClickable(interactionSource = quiet, indication = null, onClick = {}, onLongClick = longPress)
     }
     val timeTap: (() -> Unit)? = if (menu && !choosing) ({ onMenu!!(line) }) else null
-    Row(verticalAlignment = Alignment.CenterVertically) {
-    if (choosing && canSelect && line.outgoing) SelectMark(chosen)
+    // Идёт выбор — вся строка ставит и снимает галочку, и сама галочка тоже (заказчик 2026-10-21): прежде
+    // по галочке нажатие не доходило.
+    val toggleHere: (() -> Unit)? = if (choosing && canSelect) ({ selection!!.toggle(line) }) else null
+    Row(
+        (if (toggleHere != null) Modifier.clickable(interactionSource = quiet, indication = null, onClick = toggleHere) else Modifier),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+    if (choosing && canSelect && line.outgoing) SelectMark(chosen, toggleHere)
     Column(
         (
             if (choosing && canSelect) {
@@ -833,7 +839,7 @@ private fun Reply(
             }
         }
     }
-    if (choosing && canSelect && !line.outgoing) SelectMark(chosen)
+    if (choosing && canSelect && !line.outgoing) SelectMark(chosen, toggleHere)
     }
 }
 

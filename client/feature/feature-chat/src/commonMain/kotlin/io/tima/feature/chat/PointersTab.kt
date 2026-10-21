@@ -2,6 +2,10 @@ package io.tima.feature.chat
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import io.tima.core.ui.IconButton
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -55,9 +59,12 @@ object PointerTags {
     const val ENTITY = "pointers:entity"
     const val TO_SECTION = "pointers:to-section"
     const val REMOVE = "pointers:remove"
-    const val OPEN = "pointers:open"
+    const val CHOSEN = "pointers:chosen"
+    const val CHOSEN_CLOSE = "pointers:chosen.close"
+    const val CHOSEN_CANCEL = "pointers:chosen.cancel"
+    const val PREVIEW = "pointers:preview"
+    const val PREVIEW_CLOSE = "pointers:preview.close"
     const val REPEAT = "pointers:back"
-    const val VIEW = "pointers:view"
 }
 
 /**
@@ -104,10 +111,11 @@ fun Pointer.asLine(found: FoundMessage?, loading: String, unavailable: String): 
 }
 
 /**
- * Вкладка «Указатели» окна «Общение» (ПЛАН-(УК) УК3–УК4): разделы — тем же механизмом, что у «Телефона»;
- * сущности — строкой как в «Социуме», второй строкой — что это; зашли — сами сообщения, пузырём ленты:
- * нажали — переход, нажали рядом — выделение. [onRepeat] — кнопка «назад» вкладки: повторить последний
- * переход по указателю; `null` — переходов ещё не было.
+ * Вкладка «Указатели» окна «Общение» (ПЛАН-(УК) УК3–УК4): разделы и «Вид» — в рядах окна, как у «Телефона»
+ * и «Социума»; сущности — строкой как в «Социуме», второй строкой — что это; зашли — сами сообщения,
+ * пузырём ленты: нажали — переход, нажали рядом или долго — выделение. [onRepeat] — кнопка «назад»
+ * вкладки: повторить последний переход по указателю; `null` — переходов ещё не было. Кнопка стоит над
+ * подокном выделения, а не поверх него (заказчик 2026-10-21).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -115,9 +123,7 @@ fun PointersTab(
     entities: List<PointerEntity>,
     sections: List<Section>,
     common: Section?,
-    icons: Boolean,
     section: String,
-    onSection: (String) -> Unit,
     opened: String?,
     onOpenEntity: (String?) -> Unit,
     lineOf: (Pointer) -> ChatLine,
@@ -126,7 +132,6 @@ fun PointersTab(
     onRemove: (List<Pointer>) -> Unit,
     onRemoveEntity: (String) -> Unit,
     onMove: (List<Pointer>, String) -> Unit,
-    onView: () -> Unit,
     onRepeat: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
@@ -134,27 +139,17 @@ fun PointersTab(
     val colors = Tima.colors
     val shown = entities.inSection(section)
     val entity = shown.firstOrNull { it.level == opened } ?: entities.firstOrNull { it.level == opened }?.takeIf { section.isEmpty() }
-    Box(modifier.fillMaxSize().background(colors.surface).testTag(PointerTags.TAB)) {
-        Column(Modifier.fillMaxSize()) {
+    var chosen by remember(entity?.level) { mutableStateOf(emptySet<String>()) }
+    val byKey = entity?.pointers.orEmpty().associateBy { it.key() }
+    Column(modifier.fillMaxSize().background(colors.surface).testTag(PointerTags.TAB)) {
+        if (entity != null) SubwindowHeader(title = entity.title, onBack = { onOpenEntity(null) }, caption = entity.caption)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
             if (entity == null) {
-                Row(
-                    Modifier.fillMaxWidth().background(colors.functional).padding(start = TimaSpacing.about3),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Chip(words.view, modifier = Modifier.testTag(PointerTags.VIEW), onClick = onView)
-                    SectionsRow(
-                        tabs = sectionTabs(sections, common, words),
-                        chosen = section,
-                        icons = icons,
-                        onPick = onSection,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
                 if (shown.isEmpty()) {
                     Box(Modifier.padding(TimaSpacing.about4)) { EmptyArea(title = words.pointersEmpty, explanation = words.pointersEmptyAbout) }
                 }
                 var menuFor by remember { mutableStateOf<String?>(null) }
-                LazyColumn(Modifier.weight(1f)) {
+                LazyColumn(Modifier.fillMaxSize()) {
                     items(shown, key = { it.level }) { e ->
                         Column {
                             ListLine(
@@ -168,7 +163,8 @@ fun PointersTab(
                                         Tertiary(e.caption, lineOne = true)
                                     }
                                 },
-                                right = { Counter(e.pointers.size) },
+                                // Число указателей — зелёным (заказчик 2026-10-21): это не новое, а собранное.
+                                right = { Counter(e.pointers.size, green = true) },
                             )
                             if (menuFor == e.level) {
                                 EntityMenu(
@@ -183,41 +179,38 @@ fun PointersTab(
                     }
                 }
             } else {
-                SubwindowHeader(title = entity.title, onBack = { onOpenEntity(null) }, caption = entity.caption)
-                var chosen by remember(entity.level) { mutableStateOf(emptySet<String>()) }
-                val lines = entity.pointers.sortedByDescending { it.atMs }.map(lineOf)
-                val byKey = entity.pointers.associateBy { it.key() }
                 PointerFeed(
-                    lines = lines,
+                    lines = entity.pointers.sortedByDescending { it.atMs }.map(lineOf),
                     authorOf = authorOf,
                     chosen = chosen,
                     onOpen = { line -> byKey[line.dedupKey]?.let(onJump) },
                     onToggle = { line -> chosen = if (line.dedupKey in chosen) chosen - line.dedupKey else chosen + line.dedupKey },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxSize(),
                 )
-                if (chosen.isNotEmpty()) {
-                    val picked = chosen.mapNotNull { byKey[it] }
-                    ChosenBar(
-                        count = picked.size,
-                        sections = orderedSections(sections, common, words.commonSection),
-                        onMove = { to -> onMove(picked, to); chosen = emptySet() },
-                        onRemove = { onRemove(picked); chosen = emptySet() },
-                    )
+            }
+            // Возврат из переписки приводит в ту же сущность — кнопка видна и в ней; над подокном выделения.
+            if (onRepeat != null) {
+                Box(
+                    Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3).size(42.dp)
+                        .background(colors.surface, CircleShape)
+                        .background(colors.functional.copy(alpha = 0.6f), CircleShape)
+                        .combinedClickable(onClick = onRepeat)
+                        .testTag(PointerTags.REPEAT),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Caption("↩", fontSize = 20.sp, color = colors.text)
                 }
             }
         }
-        // Возврат из переписки приводит в ту же сущность — кнопка видна и в ней.
-        if (onRepeat != null) {
-            Box(
-                Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3).size(42.dp)
-                    .background(colors.surface, CircleShape)
-                    .background(colors.functional.copy(alpha = 0.6f), CircleShape)
-                    .combinedClickable(onClick = onRepeat)
-                    .testTag(PointerTags.REPEAT),
-                contentAlignment = Alignment.Center,
-            ) {
-                Caption("↩", fontSize = 20.sp, color = colors.text)
-            }
+        if (entity != null && chosen.isNotEmpty()) {
+            val picked = chosen.mapNotNull { byKey[it] }
+            ChosenSheet(
+                count = picked.size,
+                sections = orderedSections(sections, common, words.commonSection),
+                onMove = { to -> onMove(picked, to); chosen = emptySet() },
+                onRemove = { onRemove(picked); chosen = emptySet() },
+                onCancel = { chosen = emptySet() },
+            )
         }
     }
 }
@@ -255,20 +248,70 @@ private fun EntityMenu(
     }
 }
 
-/** Полоса выделенных: «В раздел», «Убрать». */
+/**
+ * Подокно выделенных (заказчик 2026-10-21): снизу, своей панелью — сколько выделено и ✕ справа сверху;
+ * «В раздел», «Убрать», «Отмена».
+ */
 @Composable
-private fun ChosenBar(count: Int, sections: List<Section>, onMove: (String) -> Unit, onRemove: () -> Unit) {
+private fun ChosenSheet(count: Int, sections: List<Section>, onMove: (String) -> Unit, onRemove: () -> Unit, onCancel: () -> Unit) {
     val words = Tima.words.book
+    val colors = Tima.colors
     var moving by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().background(Tima.colors.functional).padding(TimaSpacing.about3), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-        Tertiary(words.pointerChosen(count), lineOne = true)
+    Column(
+        Modifier.fillMaxWidth()
+            .background(colors.line, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .padding(top = 1.dp)
+            .background(colors.functional, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+            .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2)
+            .testTag(PointerTags.CHOSEN),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Name(words.pointerChosen(count), Modifier.weight(1f))
+            IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(PointerTags.CHOSEN_CLOSE))
+        }
         if (moving) {
             SectionChoice(sections) { onMove(it); moving = false }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
                 Button(words.pointerToSection, onClick = { moving = true }, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PointerTags.TO_SECTION))
                 Button(words.pointerRemove, onClick = onRemove, kind = ButtonKind.Dangerous, modifier = Modifier.testTag(PointerTags.REMOVE))
+                Button(Tima.words.common.cancel, onClick = onCancel, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PointerTags.CHOSEN_CANCEL))
             }
+        }
+    }
+}
+
+/**
+ * Сообщение указателя — подокном поверх журнала (заказчик 2026-10-21): пузырь ленты, ✕ справа сверху,
+ * нажатие вне — закрыть; нажатие по сообщению — переход.
+ */
+@Composable
+private fun PointerPreview(line: ChatLine, authorOf: (ChatLine) -> String?, onOpen: () -> Unit, onClose: () -> Unit) {
+    val colors = Tima.colors
+    Box(
+        Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onClose),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            Modifier.fillMaxWidth()
+                .background(colors.surface, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                .clickable(enabled = false, onClick = {})
+                .padding(bottom = TimaSpacing.about3)
+                .testTag(PointerTags.PREVIEW),
+        ) {
+            Row(Modifier.fillMaxWidth().padding(start = TimaSpacing.about4, end = TimaSpacing.about2, top = TimaSpacing.about2), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f))
+                IconButton(glyph = "✕", onClick = onClose, modifier = Modifier.testTag(PointerTags.PREVIEW_CLOSE))
+            }
+            PointerFeed(
+                lines = listOf(line),
+                authorOf = authorOf,
+                chosen = emptySet(),
+                onOpen = { onOpen() },
+                onToggle = {},
+                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+            )
         }
     }
 }
@@ -288,6 +331,7 @@ internal fun SectionChoice(sections: List<Section>, onPick: (String) -> Unit) {
  * Журнал указателей (ПЛАН-(УК) УК5) — как журнал контактов: фильтры по разделу и виду сущности, поиск
  * по тексту, галочки; «В раздел», «Убрать», «Перейти» (одному выделенному).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PointersLedgerPage(
     entities: List<PointerEntity>,
@@ -298,6 +342,7 @@ fun PointersLedgerPage(
     onRemove: (List<Pointer>) -> Unit,
     onJump: (Pointer) -> Unit,
     modifier: Modifier = Modifier,
+    authorOf: (ChatLine) -> String? = { null },
 ) {
     val words = Tima.words.book
     var section by remember { mutableStateOf("") }
@@ -305,6 +350,7 @@ fun PointersLedgerPage(
     var query by remember { mutableStateOf("") }
     var chosen by remember { mutableStateOf(emptySet<String>()) }
     var moving by remember { mutableStateOf(false) }
+    var preview by remember { mutableStateOf<Pointer?>(null) }
     val kinds = listOf("" to words.pointerAllKinds, "personal:" to words.pointerKindsChats, "group:" to words.pointerKindsGroups, "community:" to words.pointerKindsCommunities)
     val rows = entities.inSection(section)
         .filter { kind.isEmpty() || it.level.startsWith(kind) }
@@ -313,39 +359,53 @@ fun PointersLedgerPage(
         .filter { (_, _, line) -> query.isBlank() || line.text.orEmpty().contains(query.trim(), ignoreCase = true) }
         .sortedByDescending { it.second.atMs }
     val sectionNames = orderedSections(sections, common, words.commonSection).associate { it.id to it.name }
-    Column(modifier.fillMaxSize()) {
-        SectionsRow(tabs = sectionTabs(sections, common, words), chosen = section, icons = false, onPick = { section = it })
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = TimaSpacing.about3), horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-            for ((key, label) in kinds) Chip(label, kind = if (kind == key) ChipKind.Selected else ChipKind.Quiet, onClick = { kind = key })
-        }
-        Box(Modifier.padding(horizontal = TimaSpacing.about3)) { Field(value = query, onChange = { query = it }, hint = words.pointerSearch) }
-        LazyColumn(Modifier.weight(1f)) {
-            items(rows, key = { it.second.key() }) { (e, p, line) ->
-                val on = p.key() in chosen
-                ListLine(
-                    onClick = { chosen = if (on) chosen - p.key() else chosen + p.key() },
-                    middle = {
-                        Column {
-                            Caption(line.text.orEmpty(), maxLines = 2)
-                            Tertiary("${sectionNames[p.sectionKey()].orEmpty()} · ${e.title}", lineOne = true)
-                        }
-                    },
-                    right = { SelectMark(on) },
-                )
+    val toggle: (Pointer) -> Unit = { p -> chosen = if (p.key() in chosen) chosen - p.key() else chosen + p.key() }
+    Box(modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            SectionsRow(tabs = sectionTabs(sections, common, words), chosen = section, icons = false, onPick = { section = it })
+            // Вид сущности — своим рядом с зазорами сверху и снизу (заказчик 2026-10-21: «вплотную»).
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    .padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about3),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            ) {
+                for ((key, label) in kinds) Chip(label, kind = if (kind == key) ChipKind.Selected else ChipKind.Quiet, onClick = { kind = key })
             }
-        }
-        Column(Modifier.fillMaxWidth().background(Tima.colors.functional).padding(TimaSpacing.about3), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-            val picked = rows.map { it.second }.filter { it.key() in chosen }
-            Tertiary(words.pointerChosen(picked.size), lineOne = true)
-            if (moving) {
-                SectionChoice(orderedSections(sections, common, words.commonSection)) { to -> onMove(picked, to); moving = false; chosen = emptySet() }
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                    Button(words.pointerToSection, onClick = { if (picked.isNotEmpty()) moving = true }, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PointerTags.TO_SECTION))
-                    Button(words.pointerRemove, onClick = { if (picked.isNotEmpty()) { onRemove(picked); chosen = emptySet() } }, kind = ButtonKind.Dangerous, modifier = Modifier.testTag(PointerTags.REMOVE))
-                    Button(words.pointerOpen, onClick = { picked.singleOrNull()?.let(onJump) }, kind = if (picked.size == 1) ButtonKind.Action else ButtonKind.Quiet, modifier = Modifier.testTag(PointerTags.OPEN))
+            Box(Modifier.padding(start = TimaSpacing.about3, end = TimaSpacing.about3, bottom = TimaSpacing.about3)) {
+                Field(value = query, onChange = { query = it }, hint = words.pointerSearch)
+            }
+            LazyColumn(Modifier.weight(1f)) {
+                items(rows, key = { it.second.key() }) { (e, p, line) ->
+                    val on = p.key() in chosen
+                    ListLine(
+                        // Нажатие — сообщение подокном; долгое и галочка — выделение.
+                        modifier = Modifier.combinedClickable(onClick = { preview = p }, onLongClick = { toggle(p) }),
+                        middle = {
+                            Column {
+                                Caption(line.text.orEmpty(), maxLines = 2)
+                                Tertiary("${sectionNames[p.sectionKey()].orEmpty()} · ${e.title}", lineOne = true)
+                            }
+                        },
+                        right = { SelectMark(on) { toggle(p) } },
+                    )
                 }
             }
+            Column(Modifier.fillMaxWidth().background(Tima.colors.functional).padding(TimaSpacing.about3), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                val picked = rows.map { it.second }.filter { it.key() in chosen }
+                Tertiary(words.pointerChosen(picked.size), lineOne = true)
+                if (moving) {
+                    SectionChoice(orderedSections(sections, common, words.commonSection)) { to -> onMove(picked, to); moving = false; chosen = emptySet() }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                        Button(words.pointerToSection, onClick = { if (picked.isNotEmpty()) moving = true }, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PointerTags.TO_SECTION))
+                        Button(words.pointerRemove, onClick = { if (picked.isNotEmpty()) { onRemove(picked); chosen = emptySet() } }, kind = ButtonKind.Dangerous, modifier = Modifier.testTag(PointerTags.REMOVE))
+                        if (picked.isNotEmpty()) Button(Tima.words.common.cancel, onClick = { chosen = emptySet() }, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PointerTags.CHOSEN_CANCEL))
+                    }
+                }
+            }
+        }
+        preview?.let { p ->
+            PointerPreview(lineOf(p), authorOf, onOpen = { preview = null; onJump(p) }, onClose = { preview = null })
         }
     }
 }

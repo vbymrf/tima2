@@ -56,10 +56,12 @@ internal fun selectable(line: ChatLine): Boolean = !line.deleted && (line.text !
 
 /** Галочка выбора рядом с сообщением. */
 @Composable
-internal fun SelectMark(on: Boolean) {
+internal fun SelectMark(on: Boolean, onClick: (() -> Unit)? = null) {
     val colors = Tima.colors
     Box(
-        Modifier.padding(horizontal = 6.dp).size(26.dp)
+        // Галочка нажимается сама (заказчик 2026-10-21): по ней выбор ставят и снимают.
+        (if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 6.dp).size(26.dp)
             .background(if (on) colors.navigation else colors.surface, CircleShape)
             .border(2.dp, if (on) colors.navigation else colors.line, CircleShape)
             .testTag(SelectTags.MARK),

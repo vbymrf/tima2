@@ -178,6 +178,10 @@ fun ActivityWindow(
     onNeighbourWindow: (InSide) -> Unit,
     modifier: Modifier = Modifier,
     pointers: @Composable () -> Unit = {},
+    /** «Вид» «Указателей» — кнопкой в хвосте вкладок, как у «Телефона» и «Социума». `null` — кнопки нет. */
+    onPointersView: (() -> Unit)? = null,
+    /** Второй ряд «Указателей» — полоса разделов. `null` — ряда нет. */
+    pointersRow: (@Composable () -> Unit)? = null,
 ) {
     var reactions by remember { mutableStateOf(REACTION_FILTERS.first()) }
     WindowWithTabs(
@@ -188,10 +192,12 @@ fun ActivityWindow(
         onSettings = onSettings,
         onNeighbourWindow = onNeighbourWindow,
         modifier = modifier,
+        tabsTrailing = onPointersView?.let { view -> { tab -> if (tab == WindowTab.Pointers) CatalogViewButton(view) } },
         secondRow = { tab ->
             if (tab == WindowTab.Reactions) {
                 FilterRow(REACTION_FILTERS, reactions, { reactions = it })
             }
+            if (tab == WindowTab.Pointers) pointersRow?.invoke()
         },
     ) { tab ->
         when (tab) {

@@ -39,9 +39,9 @@ class PointersTabTest {
     fun вкладка_рисуется() {
         fun tab(list: List<PointerEntity>, opened: String?) = capture("указатели-${list.size}-${opened.orEmpty()}", 360, 640, dark = false) {
             PointersTab(
-                entities = list, sections = emptyList(), common = null, icons = false, section = "", onSection = {},
+                entities = list, sections = emptyList(), common = null, section = "",
                 opened = opened, onOpenEntity = {}, lineOf = { it.asLine(null, "загрузка", "нет") }, authorOf = { null },
-                onJump = {}, onRemove = {}, onRemoveEntity = {}, onMove = { _, _ -> }, onView = {}, onRepeat = {},
+                onJump = {}, onRemove = {}, onRemoveEntity = {}, onMove = { _, _ -> }, onRepeat = {},
             )
         }
         val empty = tab(emptyList(), null)

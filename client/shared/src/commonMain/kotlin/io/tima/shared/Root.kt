@@ -2310,6 +2310,12 @@ private fun App(
             }
         }
     }.sortedByDescending { e -> e.pointers.maxOf { it.atMs } }
+    // Подпись над сообщением указателя: автор; у сообщества — ещё и группа (ПЛАН-(УК) УК3).
+    val pointerAuthorOf: (ChatLine) -> String? = { line ->
+        val who = line.senderId?.let { peopleCards[it] }?.line(communityView.look(), PERSON_FIRST_LINE)
+        val group = socialState.mine.firstOrNull { it.groupId == line.chatId }?.takeIf { it.communityId != null }?.title
+        listOfNotNull(if (line.outgoing) null else who, group).joinToString(" · ").ifBlank { null }
+    }
     val pointerLoading = pointerWords.pointerLoading
     val pointerUnavailable = pointerWords.pointerUnavailable
     val pointerLineOf: (io.tima.domain.chat.Pointer) -> ChatLine = { p ->
@@ -2368,6 +2374,7 @@ private fun App(
                     onRemove = { list -> scope.launch { environment.picks.remove(list) } },
                     onJump = openPointer,
                     modifier = mod,
+                    authorOf = pointerAuthorOf,
                 )
             },
         )
@@ -3570,6 +3577,15 @@ private fun App(
                     onSearch = {},
                     onSettings = toSettings,
                     onNeighbourWindow = switchWindow,
+                    onPointersView = { pointerViewSheet = true },
+                    pointersRow = {
+                        SectionsRow(
+                            tabs = sectionTabs(pointerShelves, pointerCommon, Tima.words.book),
+                            chosen = pointerSection,
+                            icons = pointerView.icons,
+                            onPick = { pointerSection = it },
+                        )
+                    },
                     pointers = {
                         val opened = pointerEntities.firstOrNull { it.level == pointerOpened }
                         LaunchedEffect(opened?.level, opened?.pointers?.size) { opened?.let { lookUpPointers(it.pointers) } }
@@ -3577,23 +3593,15 @@ private fun App(
                             entities = pointerEntities,
                             sections = pointerShelves,
                             common = pointerCommon,
-                            icons = pointerView.icons,
                             section = pointerSection,
-                            onSection = { pointerSection = it },
                             opened = pointerOpened,
                             onOpenEntity = { pointerOpened = it },
                             lineOf = pointerLineOf,
-                            authorOf = { line ->
-                                val who = line.senderId?.let { peopleCards[it] }?.line(communityView.look(), PERSON_FIRST_LINE)
-                                val group = socialState.mine.firstOrNull { it.groupId == line.chatId }?.title
-                                // У сообщества — из какой группы сообщение (ПЛАН-(УК) УК3).
-                                listOfNotNull(if (line.outgoing) null else who, group?.takeIf { pointerOpened?.startsWith("community:") == true }).joinToString(" · ").ifBlank { null }
-                            },
+                            authorOf = pointerAuthorOf,
                             onJump = openPointer,
                             onRemove = { list -> scope.launch { environment.picks.remove(list) } },
                             onRemoveEntity = { level -> scope.launch { environment.picks.removeLevel(level) }; if (pointerOpened == level) pointerOpened = null },
                             onMove = { list, to -> scope.launch { environment.picks.moveTo(list, to) } },
-                            onView = { pointerViewSheet = true },
                             onRepeat = pointerLast?.let { last -> { openPointer(last) } },
                         )
                     },
