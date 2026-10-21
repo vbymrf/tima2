@@ -4134,6 +4134,8 @@ private fun App(
                         kind = socialState.mine.firstOrNull { it.groupId == current.chatId }?.kind,
                         // Подборка — сообщества, если группа в нём (Решения §11.2).
                         community = socialState.mine.firstOrNull { it.groupId == current.chatId }?.communityId,
+                        // Вид группы — из строки переписки (сверка групп пишет его в базу): сначала вид, потом ключ.
+                        groupKind = listState.chats.firstOrNull { it.chatId == current.chatId }?.groupKind,
                         // Буфер переходов — сообщества, если группа в нём; иначе своей переписки (ПЛАН-(БП)).
                         jumpPlace = jumpBuffers?.let { buffers ->
                             val mineGroup = socialState.mine.firstOrNull { it.groupId == current.chatId }
@@ -4612,6 +4614,8 @@ private fun Chat(
     finder: io.tima.domain.chat.MessageFinder? = null,
     /** Буфер переходов переписки (ПЛАН-(БП)); `null` — только в памяти. */
     jumpPlace: io.tima.feature.chat.JumpPlace? = null,
+    /** Вид группы из базы устройства; `null` — личная или ещё не сверялась. */
+    groupKind: GroupKind? = null,
     /** Открыть другую переписку — из сообщения, показанного одним. */
     onOpenChat: ((String) -> Unit)? = null,
     /** Куда переслать фото из просмотра: переписки, кроме этой — номер и название. */
@@ -4832,6 +4836,8 @@ private fun Chat(
             }
         }
     }
+    // Вид группы — первым: от него зависит, нужен ли ей ключ (заказчик 2026-10-21).
+    LaunchedEffect(store, groupKind) { store.groupKind(groupKind) }
     val state by store.state.collectAsState()
     LaunchedEffect(pinMay) { store.pinAllowed(pinMay) }
     // «Прочитано» — только пока переписку видят (2026-10-20). Строка в журнале — по ней проверяется,

@@ -51,7 +51,11 @@ CREATE TABLE chats (
     peer_id   TEXT,
     -- Раздел переписки из набора сообществ (миграция 9 → 10). Пустая строка — «Общий».
     -- У личной переписки не используется: её раздел — раздел собеседника в книге.
-    section_id TEXT NOT NULL DEFAULT ''
+    section_id TEXT NOT NULL DEFAULT '',
+    -- Вид группы с сервера (миграция 23 → 24): `public` — открытая, `private` — закрытая; NULL —
+    -- ещё не сверялась. По нему экран решает, нужен ли группе ключ: открытой ключ не положен
+    -- (заказчик 2026-10-21: «сначала поле, потом ключ»).
+    group_kind TEXT
 );
 
 -- Набор разделов сообществ: группы, каналы, сообщества, аудио. Строение — как у
@@ -70,13 +74,19 @@ CREATE TABLE community_section (
 -- и сообщил, отказавшись разбирать `ON CONFLICT`, — то есть ограничение проверяется, а
 -- не помнится. Здесь замена равнозначна: все столбцы задаются, и ссылок на строку нет.
 upsertChat:
-INSERT OR REPLACE INTO chats(chat_id, kind, title_enc, peer_id, section_id)
+INSERT OR REPLACE INTO chats(chat_id, kind, title_enc, peer_id, section_id, group_kind)
 VALUES (
     :chatId, :kind, :titleEnc, :peerId,
     -- REPLACE переписывает строку целиком, и раздел, поставленный человеком, пропал бы при
     -- каждом обновлении имени. Поэтому раздел берётся из прежней строки, если она есть.
-    COALESCE((SELECT section_id FROM chats WHERE chat_id = :chatId), '')
+    COALESCE((SELECT section_id FROM chats WHERE chat_id = :chatId), ''),
+    -- Вид группы — так же: имя обновляется чаще, чем сверяется вид.
+    (SELECT group_kind FROM chats WHERE chat_id = :chatId)
 );
+
+-- Вид группы — из сверки групп с сервером.
+setGroupKind:
+UPDATE chats SET group_kind = ? WHERE chat_id = ?;
 
 setChatSection:
 UPDATE chats SET section_id = ? WHERE chat_id = ?;
@@ -113,6 +123,7 @@ SELECT
     c.title_enc         AS title_enc,
     c.peer_id           AS peer_id,
     c.section_id        AS section_id,
+    c.group_kind        AS group_kind,
     (
         SELECT COUNT(*) FROM messages n
         WHERE n.chat_id = m.chat_id AND n.direction = 1 AND n.state != :readState AND n.edit_of = 0
@@ -150,7 +161,7 @@ LIMIT :limit;
 -- и лечилось это LEFT JOIN. Два запроса и склейка в Kotlin — то же решение, только без
 -- ловушки типов.
 emptyChats:
-SELECT chat_id, kind, title_enc, peer_id, section_id
+SELECT chat_id, kind, title_enc, peer_id, section_id, group_kind
 FROM chats
 WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = chats.chat_id);
 

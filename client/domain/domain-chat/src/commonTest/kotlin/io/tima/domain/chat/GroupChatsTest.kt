@@ -130,6 +130,22 @@ class GroupChatsTest {
         assertTrue(entries.all.all { it.kind == ChatKind.Group })
     }
 
+    /** Заказчик 2026-10-21: вид группы — на устройство при сверке; по нему решается, нужен ли ключ. */
+    @Test
+    fun сверка_запоминает_вид_группы() = runTest {
+        network.onList = {
+            GroupsStep.Groups(
+                listOf(
+                    GroupInfo("g-1", "Открытая", GroupRole.Owner, kind = GroupKind.Public),
+                    GroupInfo("g-2", "Закрытая", GroupRole.Member, kind = GroupKind.Personal),
+                    GroupInfo("g-3", "Без вида", GroupRole.Member),
+                ),
+            )
+        }
+        SyncGroupChats(network, entries).refresh()
+        assertEquals(mapOf("g-1" to GroupKind.Public, "g-2" to GroupKind.Personal), entries.kinds)
+    }
+
     /** Группа без названия на сервере всё равно получает имя: пустая строка в списке — поломка. */
     @Test
     fun группа_без_названия_получает_имя() = runTest {
@@ -190,9 +206,14 @@ class GroupChatsTest {
         class Entry(val chatId: String, val kind: ChatKind, val title: String?, val peerId: String?)
 
         val all = mutableListOf<Entry>()
+        val kinds = mutableMapOf<String, GroupKind>()
 
         override fun remember(chatId: String, kind: ChatKind, title: String?, peerId: String?) {
             all += Entry(chatId, kind, title, peerId)
+        }
+
+        override fun rememberGroupKind(chatId: String, kind: GroupKind) {
+            kinds[chatId] = kind
         }
     }
 }

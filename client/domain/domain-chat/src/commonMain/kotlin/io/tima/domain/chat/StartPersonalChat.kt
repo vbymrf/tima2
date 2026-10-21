@@ -123,6 +123,9 @@ sealed interface UserLookup {
  */
 fun interface ChatBook {
     fun remember(chatId: String, kind: ChatKind, title: String?, peerId: String?)
+
+    /** Вид группы с сервера — открытая или закрытая (заказчик 2026-10-21: сначала вид, потом ключ). */
+    fun rememberGroupKind(chatId: String, kind: GroupKind) {}
 }
 
 /**

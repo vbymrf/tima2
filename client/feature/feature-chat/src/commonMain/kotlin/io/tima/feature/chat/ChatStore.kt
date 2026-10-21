@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import io.tima.domain.chat.FoundMessage
+import io.tima.domain.chat.GroupKind
 import io.tima.domain.chat.MessageFinder
 import io.tima.domain.chat.references
 import io.tima.domain.chat.ChatPins
@@ -288,11 +289,7 @@ class ChatStore(
                 // отметка прочтения шли прямо здесь. Стек зависания с realme показал
                 // главный поток стоящим в `SQLiteConnectionPool.waitForConnection` внутри
                 // транзакции отметки — то есть рисование ждало базу.
-                val noKey = withContext(io) { anyKey?.invoke() == false } && !_state.value.openGroup
-                if (noKey && !healed) {
-                    healed = true
-                    heal?.let { launchHeal(it) }
-                }
+                val noKey = keyMissing()
                 known = lines
                 sendPendingMain(lines)
                 superSent(lines)
@@ -381,6 +378,45 @@ class ChatStore(
 
     /** Лечение запускалось: второй раз не надо — ответ придёт потоком из базы. */
     private var healed = false
+
+    /**
+     * Вид группы — открытая или закрытая (заказчик 2026-10-21: «Если у группы есть поле — она открытая. То
+     * достаточно запросить это поле»). `null` — личная переписка либо группа ещё не сверялась: тогда о
+     * ключе ничего не решается и ничего не показывается — ни полосы, ни лечения.
+     */
+    private var groupKind: GroupKind? = null
+
+    /**
+     * Ключа нет — по порядку: сначала вид, потом ключ. Ключ нужен только закрытой группе; у неё его нет —
+     * полоса и лечение (забрать обёртки, а если ключа не было ни у кого — выпустить первый).
+     */
+    private suspend fun keyMissing(): Boolean {
+        if (groupKind != GroupKind.Personal) return false
+        val noKey = withContext(io) { anyKey?.invoke() == false }
+        if (noKey && !healed) {
+            healed = true
+            heal?.let { launchHeal(it) }
+        }
+        return noKey
+    }
+
+    /**
+     * Вид группы стал известен — из строки переписки, которую пишет сверка групп. Открытая — ключ ей не
+     * положен, уровень по умолчанию открытый; закрытая — проверить ключ сейчас, не дожидаясь сообщения.
+     */
+    fun groupKind(kind: GroupKind?) {
+        if (kind == groupKind) return
+        groupKind = kind
+        when (kind) {
+            GroupKind.Public -> _state.value = _state.value.copy(
+                openGroup = true,
+                noGroupKey = false,
+                level = if (_state.value.level == MessageCircle.Secret.level) MessageCircle.Outside.level else _state.value.level,
+            )
+            GroupKind.Personal -> scope.launch { _state.value = _state.value.copy(noGroupKey = keyMissing()) }
+            null -> Unit
+        }
+    }
 
     private fun launchHeal(case: HealGroupKey) {
         scope.launch {

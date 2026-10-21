@@ -151,6 +151,8 @@ class SyncGroupChats(
                     title = group.title.ifBlank { "Группа" },
                     peerId = null,
                 )
+                // Вид — на устройство: по нему экран решает, нужен ли группе ключ, и без сети тоже.
+                group.kind?.let { chats.rememberGroupKind(group.groupId, it) }
             }
             SyncGroupsStep.Synced(
                 answer.groups.size,

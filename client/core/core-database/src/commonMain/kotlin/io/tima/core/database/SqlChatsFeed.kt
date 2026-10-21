@@ -6,6 +6,7 @@ import io.tima.core.outbox.FieldCipher
 import io.tima.core.outbox.Inbox
 import io.tima.core.outbox.IncomingState
 import io.tima.domain.chat.ChatKind
+import io.tima.domain.chat.GroupKind
 import io.tima.domain.chat.KIND_SYSTEM
 import io.tima.domain.chat.ChatBook
 import io.tima.domain.chat.ChatFacts
@@ -86,6 +87,7 @@ class SqlChatsFeed(
         kind = if (kind == GROUP) ChatKind.Group else ChatKind.Personal,
         peerId = peer_id,
         sectionId = section_id ?: "",
+        groupKind = group_kind?.let(GroupKind::fromWire),
         preview = preview(last_direction, last_state, last_body),
         // То же правило, что в переписке: входящее от себя же — своё.
         lastOutgoing = last_direction == OUTGOING ||
@@ -108,6 +110,7 @@ class SqlChatsFeed(
         kind = if (kind == GROUP) ChatKind.Group else ChatKind.Personal,
         peerId = peer_id,
         sectionId = section_id,
+        groupKind = group_kind?.let(GroupKind::fromWire),
         preview = null,
         lastOutgoing = false,
         lastDisplay = null,
@@ -154,6 +157,10 @@ class SqlChatBook(
             titleEnc = title?.let { cipher.seal(it.encodeToByteArray()) },
             peerId = peerId,
         )
+    }
+
+    override fun rememberGroupKind(chatId: String, kind: GroupKind) {
+        db.chatsQueries.setGroupKind(kind.wire, chatId)
     }
 
     /**
