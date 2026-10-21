@@ -311,6 +311,7 @@ private fun PointerPreview(line: ChatLine, authorOf: (ChatLine) -> String?, onOp
                 onOpen = { onOpen() },
                 onToggle = {},
                 modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                wrap = true,
             )
         }
     }

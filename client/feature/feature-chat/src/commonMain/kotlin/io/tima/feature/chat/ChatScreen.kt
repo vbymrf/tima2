@@ -506,6 +506,8 @@ private fun Feed(
     onSelect: ((ChatLine) -> Unit)? = null,
     invite: (ChatLine) -> CallInvite? = { null },
     onInvite: (ChatLine) -> Unit = {},
+    /** По содержимому, а не во всю высоту — сообщение подокном (журнал указателей). */
+    wrap: Boolean = false,
 ) =
     // Сообщения — своя группа размера (ПЛАН-(Ш)-ШРИФТОВ Ш3): её укрупняют чаще всего, и
     // от списка чатов она не зависит.
@@ -547,7 +549,7 @@ private fun Feed(
     Box(modifier.fillMaxWidth()) {
     androidx.compose.runtime.CompositionLocalProvider(LocalFeedNudge provides nudge) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = if (wrap) Modifier.fillMaxWidth() else Modifier.fillMaxSize(),
         state = listState,
         reverseLayout = true,
         contentPadding = PaddingValues(
@@ -644,6 +646,7 @@ internal fun PointerFeed(
     onOpen: (ChatLine) -> Unit,
     onToggle: (ChatLine) -> Unit,
     modifier: Modifier = Modifier,
+    wrap: Boolean = false,
 ) {
     androidx.compose.runtime.CompositionLocalProvider(
         LocalBubbleOpen provides onOpen,
@@ -656,6 +659,7 @@ internal fun PointerFeed(
             modifier = modifier,
             onMenu = onToggle,
             onSelect = onToggle,
+            wrap = wrap,
         )
     }
 }
