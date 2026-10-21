@@ -1849,6 +1849,15 @@ private fun App(
         runCatching { environment.settings.put(key, "1") }
     }
 
+    // Свои сообщения второй строкой (беда 2026-10-21, открытая группа «зашли, забрали») — убрать один раз.
+    LaunchedEffect(assembled.session.userId) {
+        val key = "repair.echo.v1"
+        if (runCatching { environment.settings.all().first()[key] }.getOrNull() != null) return@LaunchedEffect
+        val dropped = runCatching { io.tima.core.database.SqlMessageRepair(environment.db).dropOwnEchoes() }.getOrNull() ?: return@LaunchedEffect
+        Journal.note(LogCode.DEVICE_TRUST, "свои двойники убраны", "строк" to dropped)
+        runCatching { environment.settings.put(key, "1") }
+    }
+
     // История личных переписок (ИУ1, ИУ3): своё устройство передало — забрать; при первом
     // запуске — строки всех своих переписок и всё, что уже можно прочесть.
     LaunchedEffect(assembled.session.userId) {

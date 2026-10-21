@@ -1294,6 +1294,9 @@ class Receiver(
             if (newest == 0L) newest = page.maxOf { it.messageId }
             var fresh = 0
             for (item in page) {
+                // Уже есть у себя под этим номером — прежде всего своё отправленное: записать его
+                // снова значило бы показать своё сообщение дважды (беда 2026-10-21).
+                if (environment.localMessages.line(groupId, item.messageId) != null) continue
                 val frame = GroupFrame.parse(item.stored) ?: continue
                 captionKey(frame.senderId, frame.senderDevice)
                 if (environment.incoming.receive(groupId, item.messageId, item.stored, sentAtMs = item.sentAtMs)) fresh++
@@ -1303,7 +1306,9 @@ class Receiver(
             before = page.last().messageId
         }
         if (added > 0) drainIncoming()
-        Journal.note(LogCode.STATES, "открытая группа — забрали новое", "группа" to groupId.take(8), "новых" to added)
+        // Приём мог обогнать ответ сервера на свою отправку — номер у исходящей появился позже.
+        val echoes = runCatching { io.tima.core.database.SqlMessageRepair(environment.db).dropOwnEchoes(groupId) }.getOrDefault(0L)
+        Journal.note(LogCode.STATES, "открытая группа — забрали новое", "группа" to groupId.take(8), "новых" to added, "своих двойников убрано" to echoes)
         return newest
     }
 

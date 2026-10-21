@@ -18,4 +18,17 @@ class SqlMessageRepair(db: TimaDatabase) {
         messages.dropRoundedTwins()
         before - messages.countAll().executeAsOne()
     }
+
+    /**
+     * Убрать свои сообщения, записанные второй строкой — входящей копией рядом с исходящей того же
+     * номера (беда 2026-10-21: открытая группа приносила с сервера и собственные отправленные).
+     * [chatId] — только эту переписку; `null` — всю базу.
+     *
+     * @return сколько строк убрано.
+     */
+    fun dropOwnEchoes(chatId: String? = null): Long = messages.transactionWithResult {
+        val before = messages.countAll().executeAsOne()
+        if (chatId == null) messages.dropOwnEchoes() else messages.dropOwnEchoesIn(chatId)
+        before - messages.countAll().executeAsOne()
+    }
 }
