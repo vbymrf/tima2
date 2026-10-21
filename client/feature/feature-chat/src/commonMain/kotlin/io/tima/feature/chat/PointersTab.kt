@@ -206,7 +206,8 @@ fun PointersTab(
                 }
             }
         }
-        if (onRepeat != null && entity == null) {
+        // Возврат из переписки приводит в ту же сущность — кнопка видна и в ней.
+        if (onRepeat != null) {
             Box(
                 Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3).size(42.dp)
                     .background(colors.surface, CircleShape)

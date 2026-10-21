@@ -1,0 +1,56 @@
+# Переход по указателю и обратно (doc_mig/ПЛАН-(УК)-УКАЗАТЕЛЕЙ.md УК4, заказчик 2026-10-21): «Общение» →
+# «Указатели» → сущность → нажатие по сообщению — переписка, к нему; «назад» в переписке до точки
+# «из Указателей» — снова во вкладку, в ту же сущность; «назад» вкладки повторяет последний переход.
+#
+# Признаки — метки: `chat:jump.back` в переписке (переход состоялся), `pointers:back` во вкладке
+# (переход запомнен), `pointers:list` (вернулись во вкладку). В журнале телефона — `JUMP из указателей`
+# и `JUMP назад или вперёд … буфер=`.
+#
+# Телефон: Samsung, сущность ENTITY (группа) с указателем на сообщение MESSAGE. Переписку с черновиком
+# заказчика («redmi») не открывать — выбирать другую сущность.
+appId: io.tima.app.v2
+env:
+  ENTITY: "gruppa"
+  MESSAGE: "day"
+---
+- launchApp:
+    stopApp: false
+- tapOn:
+    id: "window:switcher"
+- tapOn:
+    id: "switcher:Activity"
+- tapOn:
+    id: "tab:Pointers"
+# Сущность уже открыта (вкладка помнит) — строк сущностей нет, заходить не нужно.
+- runFlow:
+    when:
+      visible:
+        id: "pointers:entity"
+    commands:
+      - tapOn: ${ENTITY}
+- tapOn: ${MESSAGE}
+- extendedWaitUntil:
+    visible:
+      id: "chat:jump.back"
+    timeout: 10000
+- takeScreenshot: pointers-1-chat
+- tapOn:
+    id: "chat:jump.back"
+- extendedWaitUntil:
+    visible:
+      id: "pointers:back"
+    timeout: 10000
+- takeScreenshot: pointers-2-tab
+- tapOn:
+    id: "pointers:back"
+- extendedWaitUntil:
+    visible:
+      id: "chat:jump.back"
+    timeout: 10000
+- takeScreenshot: pointers-3-again
+- tapOn:
+    id: "chat:jump.back"
+- extendedWaitUntil:
+    visible:
+      id: "pointers:list"
+    timeout: 10000
