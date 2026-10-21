@@ -27,6 +27,19 @@ class EditorScreenTest {
         )
     }
 
+    /**
+     * Картинка, выбранная в ячейке ряда, — с ручкой ширины, и окно не падает (Samsung 193, 2026-10-21:
+     * ручка была на BoxWithConstraints, а ячейка меряет высоту заранее — IllegalStateException).
+     */
+    @Test
+    fun выбранная_картинка_в_ячейке_ряда_не_роняет_редактор() {
+        val image = io.tima.domain.chat.ComposedWidget.Image(io.tima.domain.chat.OutMedia("m", ByteArray(32), "image/jpeg", 10, 10, 1), share = 60)
+        val doc = ComposedDoc(listOf(ComposedItem.Row(listOf(io.tima.domain.chat.ComposedCell(50, "a", listOf(image)), io.tima.domain.chat.ComposedCell(50, "b")))))
+        val model = EditorModel(doc)
+        model.select(io.tima.domain.chat.Spot(0, 0, 0))
+        capture("редактор-картинка-в-ячейке", 360, 640, dark = false) { screen(model)() }
+    }
+
     @Test
     fun окно_и_полоска_над_выделенным() {
         val plain = EditorModel(ComposedDoc(listOf(ComposedItem.Text("# Сбор\nв **9:00** у входа"))))

@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -244,8 +245,10 @@ private fun androidx.compose.foundation.layout.BoxScope.ImageHandle(widget: Comp
         is ComposedItem.Row -> item.cells.getOrNull(spot.cell)?.style?.get("align") ?: item.style["align"]
         else -> item?.style?.get("align")
     }
-    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.matchParentSize()) {
-        val full = constraints.maxWidth.toFloat()
+    // Ширина места — по факту, после раскладки: BoxWithConstraints здесь нельзя — ячейка ряда меряет
+    // высоту заранее (intrinsic), и он падал (Samsung 193, 2026-10-21: «картинка в ряд — вылетает»).
+    var full by remember { mutableStateOf(0f) }
+    Box(Modifier.matchParentSize().onSizeChanged { full = it.width.toFloat() }) {
         val w = full * current.share / 100f
         val (edge, scale) = when (align) {
             "center" -> (full + w) / 2f to 2f
@@ -254,7 +257,7 @@ private fun androidx.compose.foundation.layout.BoxScope.ImageHandle(widget: Comp
         }
         val half = with(androidx.compose.ui.platform.LocalDensity.current) { 9.dp.toPx() }
         var moved by remember { mutableStateOf(0f) }
-        Box(
+        if (full > 0f) Box(
             Modifier.offset { IntOffset((edge - half).roundToInt(), 0) }
                 .width(18.dp).fillMaxHeight()
                 .pointerInput(spot) {
