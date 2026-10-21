@@ -124,7 +124,8 @@ fun ManyChoiceSheet(
             }
             if (items.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                    Chip(asList, kind = if (list) ChipKind.Selected else ChipKind.Neutral, onClick = {
+                    // Пусто — выбора «Списком» нет (подборка: несколько и так встают списком).
+                    if (asList.isNotBlank()) Chip(asList, kind = if (list) ChipKind.Selected else ChipKind.Neutral, onClick = {
                         list = !list
                         // Без «Списком» — не больше [max]: лишние отметки снимаются с конца.
                         while (!list && chosen.size > max) chosen.removeAt(chosen.lastIndex)

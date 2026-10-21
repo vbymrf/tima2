@@ -1,5 +1,8 @@
 package io.tima.feature.chat
 
+import androidx.compose.runtime.remember
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -208,6 +211,7 @@ fun ReplyBlock(look: ReplyLook, onClick: (() -> Unit)? = null) {
  */
 @Composable
 private fun BulletList(items: List<Bullet>, depth: Int, closed: Boolean, flat: Boolean) {
+    val nudge = LocalFeedNudge.current
     val mark = when (depth) { 0 -> "•"; 1 -> "◦"; else -> "▪" }
     // В ячейке — её цвет и размер (ADR-0048 §4).
     val cell = LocalCellText.current
@@ -231,10 +235,27 @@ private fun BulletList(items: List<Bullet>, depth: Int, closed: Boolean, flat: B
             val bare = item.text.text.isEmpty() && item.blocks.isNotEmpty() && !refTitle
             val inside = (!bare && item.blocks.isNotEmpty()) || item.children.isNotEmpty()
             var open by androidx.compose.runtime.saveable.rememberSaveable(item.text.text, closed) { mutableStateOf(!closed) }
-            Row {
+            // Строка пункта держится на месте, когда пункт раскрывают и сворачивают (заказчик 2026-10-21):
+            // лента перевёрнута и растёт вверх — без поправки раскрытие толкало экран, а сворачивание
+            // уводило его к сообщению. [0] — где строка сейчас, [1] — где была до нажатия.
+            val place = remember { floatArrayOf(Float.NaN, Float.NaN) }
+            // Нажимается вся строка после точки, не только стрелка (заказчик 2026-10-21).
+            Row(
+                Modifier.fillMaxWidth()
+                    .onGloballyPositioned { c ->
+                        val y = c.positionInWindow().y
+                        val was = place[1]
+                        place[0] = y
+                        if (!was.isNaN()) {
+                            place[1] = Float.NaN
+                            if (y != was) nudge?.invoke(was - y)
+                        }
+                    }
+                    .then(if (inside) Modifier.clickable { place[1] = place[0]; open = !open } else Modifier),
+            ) {
                 if (arrows) {
-                    Box(Modifier.width(14.dp).then(if (inside) Modifier.clickable { open = !open }.testTag(BULLET_FOLD_TAG) else Modifier)) {
-                        if (inside) Caption(if (open) "▾" else "▸", fontSize = size, color = Tima.colors.text2)
+                    Box(Modifier.width(14.dp).then(if (inside) Modifier.testTag(BULLET_FOLD_TAG) else Modifier)) {
+                        if (inside) Caption(if (open) "▾" else "▸", fontSize = size, weight = FontWeight.Bold, color = Tima.colors.navigation)
                     }
                 }
                 if (!(flat && depth > 0)) Caption(mark, fontSize = itemSize, color = itemColor, modifier = Modifier.padding(end = if (flat) 2.dp else 6.dp))
@@ -262,6 +283,12 @@ private fun BulletList(items: List<Bullet>, depth: Int, closed: Boolean, flat: B
         }
     }
 }
+
+/**
+ * Сдвинуть ленту на столько пикселей (положительное — сообщения вниз): пункт списка раскрыли или
+ * свернули — его строка остаётся на месте. Ставит лента переписки; вне её — `null`.
+ */
+internal val LocalFeedNudge = androidx.compose.runtime.staticCompositionLocalOf<((Float) -> Unit)?> { null }
 
 /** Стрелка пункта списка — свернуть и развернуть (сценарии Maestro). */
 const val BULLET_FOLD_TAG = "bullet:fold"

@@ -147,6 +147,20 @@ class ComposedBodiesTest {
         assertEquals(1, assertIs<RichBlock.Quoted>(list.items[0].blocks.single()).lines)
     }
 
+    /** Заказчик 2026-10-21: подкладка — в середине и в пункте списка; разметка та же, v2. */
+    @Test
+    fun подкладка_в_середине_и_в_пункте_списка() {
+        val underlay = ComposedWidget.Underlay("group", "g-1", 7, lines = 1)
+        val list = ComposedItem.ItemList(listOf(io.tima.domain.chat.ComposedListItem(1, "Сообщение", widgets = listOf(underlay.copy(message = 8)))))
+        val doc = ComposedDoc(listOf(ComposedItem.Widget(underlay), ComposedItem.Text("после"), list))
+        val content = bodies.content(doc)
+        assertTrue(io.tima.crypto.MarkupRules.check(content, strict = true).isEmpty(), io.tima.crypto.MarkupRules.check(content, strict = true).toString())
+        assertTrue("\"v\":2" in io.tima.crypto.MarkupV2.encodeBody(content.markup!!, content.nodes))
+        val shown = RichMapper.from(content)!!.blocks
+        assertEquals(7L, assertIs<RichBlock.Underlay>(shown[0]).messageId)
+        assertEquals(8L, assertIs<RichBlock.Underlay>(assertIs<RichBlock.Bullets>(shown.last()).items.single().blocks.single()).messageId)
+    }
+
     /** ADR-0050 §3: адрес текстом в оформленном сообщении — ссылкой у получателя; в коде — нет. */
     @Test
     fun адрес_текстом_становится_ссылкой_при_показе() {

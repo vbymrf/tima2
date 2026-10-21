@@ -14,20 +14,34 @@ class RefCutTest {
     private val row = RichBlock.Row(listOf(RowCell(null, RichText("я"))))
     private fun list(vararg titles: String) = RichBlock.Bullets(titles.map { Bullet(RichText(it), blocks = listOf(p("под"))) }, closed = true)
 
+    /**
+     * Заказчик 2026-10-21: подборка — текст, первая картинка, эмоджи, списки без вложенных сообщений,
+     * ссылки (карточка — кнопкой); ряды, файлы, вложенные сообщения — нет.
+     */
     @Test
-    fun подборка_только_текст_и_первое_фото() {
-        val shown = RefCut.quoted(RichContent(listOf(p("раз"), row, list("а"), RichBlock.Album(listOf(0)), p("два")), listOf(photo)))
-        assertEquals(listOf("раз", "два"), shown.texts.map { it.text }, "ряды и списки не вставляются")
-        assertEquals("m-1", shown.photo?.mediaId)
+    fun подборка_текст_первая_картинка_эмоджи_списки_ссылки() {
+        val quoted = RichBlock.Quoted("group", "g", 1, author = false)
+        val withRef = RichBlock.Bullets(listOf(Bullet(RichText("а"), blocks = listOf(p("под"), quoted))))
+        val card = RichBlock.Link("https://tima.ru", "card", "Тима", "")
+        val shown = RefCut.quoted(
+            RichContent(
+                listOf(p("раз"), RichBlock.Album(listOf(0, 1)), row, withRef, RichBlock.Emoji("🙂"), card, RichBlock.Image(1), RichBlock.File(0)),
+                listOf(photo, photo),
+            ),
+        )
         assertEquals(false, shown.closed)
+        assertEquals(listOf("Paragraph", "Album", "Bullets", "Emoji", "Link"), shown.blocks.map { it::class.simpleName })
+        assertEquals(listOf(0), assertIs<RichBlock.Album>(shown.blocks[1]).media, "картинка — только первая")
+        assertEquals(listOf<RichBlock>(p("под")), assertIs<RichBlock.Bullets>(shown.blocks[2]).items.single().blocks, "вложенное сообщение из пункта убрано")
+        assertEquals("button", assertIs<RichBlock.Link>(shown.blocks[4]).mode, "карточка — кнопкой")
     }
 
     @Test
-    fun подборка_с_ряда_или_списка_первым_откройте_сообщение() {
+    fun подборка_с_ряда_первым_откройте_сообщение_список_первым_можно() {
         assertTrue(RefCut.quoted(RichContent(listOf(row, p("потом")))).closed, "первым ряд — фраза, даже если текст дальше есть")
-        val only = RefCut.quoted(RichContent(listOf(list("а", "б"))))
-        assertTrue(only.closed)
-        assertNull(only.photo)
+        val list = RefCut.quoted(RichContent(listOf(list("а", "б"))))
+        assertEquals(false, list.closed, "список первым — показывается")
+        assertNull(list.blocks.firstOrNull { it is RichBlock.Album })
     }
 
     @Test

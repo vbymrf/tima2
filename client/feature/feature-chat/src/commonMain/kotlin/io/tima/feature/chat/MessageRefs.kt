@@ -90,15 +90,29 @@ internal fun QuotedRef(quoted: RichBlock.Quoted) {
             depth > 0 -> RefLine(look)
             look.rich == null -> RefFallback(look, if (quoted.lines == 0) Int.MAX_VALUE else quoted.lines)
             else -> {
-                val shown = remember(look.rich) { RefCut.quoted(look.rich) }
-                if (!shown.closed) shown.photo?.let { RefPhoto(it) }
-                when {
-                    shown.closed || (shown.texts.isEmpty() && shown.photo == null) -> Caption(Tima.words.chat.refOpen, fontSize = TimaType.sz5, color = colors.text2)
-                    shown.texts.isNotEmpty() -> Caption(
-                        annotated(withoutLinks(joined(shown.texts))),
-                        fontSize = TimaType.sz5,
-                        maxLines = if (quoted.lines == 0) Int.MAX_VALUE else quoted.lines,
-                    )
+                // Текст, первая картинка, эмоджи, списки, ссылки — по [RefCut.quoted] (заказчик 2026-10-21);
+                // строк — как у подкладки: картинка строк не занимает, пункт списка — строка.
+                val rich = look.rich
+                val shown = remember(rich) { RefCut.quoted(rich) }
+                val blocks = remember(shown, quoted.lines) { RefCut.underlay(io.tima.domain.chat.RichContent(shown.blocks, rich.media), quoted.lines) }
+                if (shown.closed || blocks.isEmpty()) {
+                    Caption(Tima.words.chat.refOpen, fontSize = TimaType.sz5, color = colors.text2)
+                } else {
+                    CompositionLocalProvider(
+                        LocalRefDepth provides depth + 1,
+                        LocalUnderlayBleed provides false,
+                        LocalRefLines provides if (quoted.lines == 0) Int.MAX_VALUE else quoted.lines,
+                        LocalRichMedia provides rich.media,
+                    ) {
+                        for (b in blocks) {
+                            val picture = when (b) {
+                                is RichBlock.Album -> b.media.firstOrNull()?.let { rich.media.getOrNull(it) }
+                                is RichBlock.Image -> rich.media.getOrNull(b.media)
+                                else -> null
+                            }
+                            if (picture != null) RefPhoto(picture) else RichBlockViewOf(b)
+                        }
+                    }
                 }
             }
         }

@@ -1,37 +1,52 @@
 package io.tima.domain.chat
 
 /**
- * Что из вставленного сообщения показывается (заказчик 2026-10-20). Сама ссылка в теле не меняется:
- * содержимое собирает получатель из своей копии исходного.
+ * Что из вставленного сообщения показывается. Сама ссылка в теле не меняется: содержимое собирает
+ * получатель из своей копии исходного.
  *
- * - Подборка — в своём пузыре, поэтому только то, что не ломает разметку: текст (с оформлением
- *   строки) и первое фото. Ряды, списки, таблицы, файлы, виджеты не вставляются; начинается
- *   сообщение с них — «Откройте сообщение».
+ * - Подборка — в своём пузыре (фон без рамки; встаёт и в ряд), поэтому только то, что не ломает
+ *   разметку (заказчик 2026-10-21): текст, первая картинка, эмоджи, списки без вложенных сообщений,
+ *   ссылки — кнопкой или текстом, карточка — кнопкой. Ряды, таблицы, файлы, облако, место, контакт,
+ *   вложенные сообщения — нет; начинается с ряда или таблицы — «Откройте сообщение».
  * - Подкладка — без своего пузыря, во всю ширину основного: целиком, а с заданным числом строк — по
  *   [underlay].
  */
 object RefCut {
 
-    /** Подборка: текст по абзацам, первое фото; [closed] — начинается с ряда, списка или таблицы. */
-    data class Quoted(val texts: List<RichText>, val photo: RichMedia?, val closed: Boolean)
+    /** Подборка: что показать по порядку; [closed] — начинается с ряда или таблицы. */
+    data class Quoted(val blocks: List<RichBlock>, val closed: Boolean)
 
     fun quoted(rich: RichContent): Quoted {
-        val texts = mutableListOf<RichText>()
-        var photo: RichMedia? = null
-        // Начинается с ряда, списка или таблицы — «Откройте сообщение» вместо него (заказчик 2026-10-20).
         val first = rich.blocks.firstOrNull { it !is RichBlock.Reply && it !is RichBlock.Divider && !it.isPicture() }
-        val closed = first is RichBlock.Row || first is RichBlock.Table || first is RichBlock.Bullets
+        val closed = first is RichBlock.Row || first is RichBlock.Table
+        var picture = false
+        val out = mutableListOf<RichBlock>()
         for (block in rich.blocks) {
             when (block) {
-                is RichBlock.Paragraph -> texts += block.text
-                is RichBlock.Heading -> texts += block.text
-                is RichBlock.Quote -> texts += block.lines
-                is RichBlock.Album -> if (photo == null) photo = block.media.firstOrNull()?.let { rich.media.getOrNull(it) }
-                is RichBlock.Image -> if (photo == null) photo = rich.media.getOrNull(block.media)
+                is RichBlock.Paragraph, is RichBlock.Heading, is RichBlock.Quote, is RichBlock.CodeBlock, is RichBlock.Emoji -> out += block
+                is RichBlock.Bullets -> out += block.copy(items = withoutRefs(block.items))
+                is RichBlock.Link -> out += if (block.mode == "card") block.copy(mode = "button") else block
+                // Картинка — только первая.
+                is RichBlock.Album -> if (!picture) {
+                    picture = true
+                    block.media.firstOrNull()?.let { out += RichBlock.Album(listOf(it)) }
+                }
+                is RichBlock.Image -> if (!picture) {
+                    picture = true
+                    out += block
+                }
                 else -> Unit
             }
         }
-        return Quoted(texts.filter { it.text.isNotBlank() }, photo, closed)
+        return Quoted(out, closed)
+    }
+
+    /** Пункты без вложенных сообщений (подборки, подкладки, ответа) — в подборке их нет. */
+    private fun withoutRefs(items: List<Bullet>): List<Bullet> = items.map { item ->
+        item.copy(
+            blocks = item.blocks.filterNot { it is RichBlock.Quoted || it is RichBlock.Underlay || it is RichBlock.Reply },
+            children = withoutRefs(item.children),
+        )
     }
 
     /**
@@ -57,6 +72,11 @@ object RefCut {
                 is RichBlock.Heading -> block.text.firstLines(left).let { (text, n) -> out += block.copy(text = text); left -= n }
                 is RichBlock.Quote -> block.lines.take(left).let { out += block.copy(lines = it); left -= it.size }
                 is RichBlock.CodeBlock -> block.text.split('\n').take(left).let { out += block.copy(text = it.joinToString("\n")); left -= it.size }
+                // Эмоджи и ссылка — по строке (2026-10-21: подборка показывает их тоже).
+                is RichBlock.Emoji, is RichBlock.Link -> {
+                    out += block
+                    left -= 1
+                }
                 is RichBlock.Bullets -> {
                     val budget = intArrayOf(left)
                     val items = cutItems(block.items, budget)

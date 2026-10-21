@@ -60,6 +60,9 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
     /** Заголовок пункта, который встаёт над пунктом ступени без родителя (ADR-0049 §4) — из словаря. */
     var untitled: String = ""
 
+    /** Заголовок пункта, которым подборка или подкладка входит в готовый список (заказчик 2026-10-21). */
+    var refTitle: String = ""
+
     /**
      * Вид строки, где набирали последним (заказчик 2026-10-19: «Закрепляем тип Абзац при переходе на
      * новую строку, ячейку»): первая буква в пустом поле — этим видом. Пункт списка — не переносится.
@@ -644,7 +647,10 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
     fun move(index: Int, by: Int) = layout { d, _ -> ComposedLayout.shift(d, Spot(index), by) }
 
     /** Перенос пальцем или мышью (Решения §10.3). */
-    fun drop(from: Spot, to: Drop) = layout { d, _ -> ComposedLayout.move(d, from, to) }
+    fun drop(from: Spot, to: Drop) = layout { d, _ -> ComposedLayout.move(d, from, to, refTitle) }
+
+    /** «Выше» и «Ниже»: подборка и подкладка входят в готовый список и идут по нему (2026-10-21). */
+    fun shift(by: Int) = layout { d, s -> ComposedLayout.shift(d, s, by, refTitle) }
 
     fun undo() {
         typingIn = null

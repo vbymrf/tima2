@@ -5149,6 +5149,8 @@ private fun Chat(
         val cw = Tima.words.chat
         val editorModel = remember { io.tima.feature.chat.EditorModel(state.editDoc ?: state.composed ?: io.tima.domain.chat.ComposedDoc(), io.tima.core.encryption.TypedOverQuickMarkdown) }
         val ew = Tima.words.editor
+        // Заголовок пункта, которым подборка или подкладка встаёт в список (2026-10-21).
+        val refItemWord = Tima.words.chat.refItem
         var editorNotice by remember { mutableStateOf<String?>(null) }
         var editorAsk by remember { mutableStateOf<String?>(null) }
         var editorChoice by remember { mutableStateOf<String?>(null) }
@@ -5369,7 +5371,7 @@ private fun Chat(
                         // разметка не кладёт (MarkupRules, ADR-0050) — пока в пункте подборка.
                         val items = picked.map { pick ->
                             io.tima.domain.chat.ComposedListItem(
-                                1, "",
+                                1, refItemWord,
                                 widgets = listOf(io.tima.domain.chat.ComposedWidget.Quoted(refKind(pick), pick.chatId, pick.serverId, author = false, lines = maxOf(lines, 1))),
                             )
                         }
@@ -5384,21 +5386,38 @@ private fun Chat(
                     Journal.note(LogCode.PICKS, "подкладка", "сообщений" to picked.size, "списком" to asList)
                 },
             )
-            "picks" -> io.tima.feature.chat.ChoiceSheet(
+            // Подборка — одно или несколько сообщений (заказчик 2026-10-21: «вернуть возможность вставлять
+            // несколько Подборок»); несколько встают списком — пункт «Сообщение», под ним подборка.
+            "picks" -> io.tima.feature.chat.ManyChoiceSheet(
                 title = ew.picksTitle,
                 items = pickList.map { pick ->
                     val here = if (pick.chatId == chatId) state.lines.firstOrNull { it.serverId == pick.serverId } else null
                     io.tima.feature.chat.Choice(title = here?.text ?: ew.pickElsewhere(pick.serverId))
                 },
                 empty = ew.picksEmpty,
+                max = io.tima.domain.chat.MessagePicks.MAX,
+                maxList = io.tima.domain.chat.MessagePicks.MAX,
+                asList = "",
+                insert = ew.insertPicked,
+                picked = ew::pickedOf,
                 onCancel = { editorChoice = null },
-                onPick = { i ->
-                    val pick = pickList[i]
+                onPick = { indices, _ ->
                     editorChoice = null
                     // Вид ссылки — по переписке, где сообщение лежит: своя группа — `group`, иначе личная.
-                    val kind = if (pick.chatId == chatId && group) "group" else if (pick.chatId == chatId) "personal" else "group"
-                    put(io.tima.domain.chat.ComposedWidget.Quoted(kind, pick.chatId, pick.serverId))
-                    Journal.note(LogCode.PICKS, "вставлено", "уровень" to io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community).substringBefore(':'), "в подборке" to pickList.size)
+                    fun quotedOf(pick: io.tima.domain.chat.Pick): io.tima.domain.chat.ComposedWidget.Quoted {
+                        val kind = if (pick.chatId == chatId && group) "group" else if (pick.chatId == chatId) "personal" else "group"
+                        return io.tima.domain.chat.ComposedWidget.Quoted(kind, pick.chatId, pick.serverId)
+                    }
+                    val picked = indices.map { pickList[it] }
+                    if (picked.size == 1) {
+                        put(quotedOf(picked.single()))
+                    } else {
+                        val items = picked.map { pick ->
+                            io.tima.domain.chat.ComposedListItem(1, refItemWord, widgets = listOf(quotedOf(pick).copy(author = false, lines = 1)))
+                        }
+                        editorModel.insert(io.tima.domain.chat.ComposedItem.ItemList(items))
+                    }
+                    Journal.note(LogCode.PICKS, "вставлено", "сообщений" to picked.size, "уровень" to io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community).substringBefore(':'), "в подборке" to pickList.size)
                 },
             )
         }

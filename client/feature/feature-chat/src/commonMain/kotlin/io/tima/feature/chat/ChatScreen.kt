@@ -518,7 +518,10 @@ private fun Feed(
         }
     }
     val flashColor = Tima.colors.activity.copy(alpha = 0.22f)
+    // Список в сообщении раскрыли или свернули — лента сдвигается, строка пункта стоит на месте (2026-10-21).
+    val nudge: (Float) -> Unit = remember(listState) { { d -> listState.dispatchRawDelta(d) } }
     Box(modifier.fillMaxWidth()) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalFeedNudge provides nudge) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = listState,
@@ -586,6 +589,7 @@ private fun Feed(
             )
             }
         }
+    }
     }
     if (jumps != null) JumpButtons(jumps, lines, listState, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3))
     }

@@ -74,9 +74,13 @@ class EditorDrag {
     var origin = Offset.Zero
     private val cells = mutableStateMapOf<Pair<Int, Int>, Rect>()
     private val items = mutableStateMapOf<Int, Rect>()
+    private val listItems = mutableStateMapOf<Pair<Int, Int>, Rect>()
 
     fun cell(item: Int, cell: Int, r: Rect) { cells[item to cell] = r }
     fun item(item: Int, r: Rect) { items[item] = r }
+
+    /** Пункт [listItem] списка [item] — подборку и подкладку можно опустить между пунктами (2026-10-21). */
+    fun listItem(item: Int, listItem: Int, r: Rect) { listItems[item to listItem] = r }
 
     /** Низ последнего куска в координатах окна — ниже него пустое место. */
     fun bottom(): Float = items.values.maxOfOrNull { it.bottom } ?: 0f
@@ -85,15 +89,23 @@ class EditorDrag {
     fun forget(count: Int) {
         items.keys.filter { it >= count }.forEach(items::remove)
         cells.keys.filter { it.first >= count }.forEach(cells::remove)
+        listItems.keys.filter { it.first >= count }.forEach(listItems::remove)
     }
 
     fun start(spot: Spot, point: Offset) { from = spot; at = point }
     fun move(by: Offset) { at += by }
     fun cancel() { from = null }
 
-    /** Опустили: в ячейку под пальцем, иначе между кусками — выше или ниже середины ближайшего. */
-    fun target(count: Int): Drop {
-        cells.entries.firstOrNull { it.value.contains(at) }?.let { return Drop.IntoCell(it.key.first, it.key.second) }
+    /**
+     * Опустили: в ячейку под пальцем, иначе между кусками — выше или ниже середины ближайшего.
+     * [intoCells] — подкладка в ряд не встаёт: над рядом или под ним, по пальцу; [intoLists] — подборка
+     * и подкладка над пунктом списка встают пунктом перед ним или после него.
+     */
+    fun target(count: Int, intoCells: Boolean = true, intoLists: Boolean = false): Drop {
+        if (intoCells) cells.entries.firstOrNull { it.value.contains(at) }?.let { return Drop.IntoCell(it.key.first, it.key.second) }
+        if (intoLists) listItems.entries.firstOrNull { it.value.contains(at) }?.let { (key, r) ->
+            return Drop.IntoList(key.first, if (at.y < r.center.y) key.second else key.second + 1)
+        }
         val hit = items.entries.sortedBy { it.key }.firstOrNull { at.y < it.value.bottom }
             ?: return Drop.Between(count)
         return Drop.Between(if (at.y < hit.value.center.y) hit.key else hit.key + 1)
@@ -107,12 +119,21 @@ class EditorDrag {
 internal fun rememberEditorDrag() = remember { EditorDrag() }
 
 /** Жест переноса: долгое нажатие (палец) или ручка (мышь, сразу). */
-private fun Modifier.draggable(drag: EditorDrag, spot: Spot, corner: () -> Offset, onDrop: (Spot, Drop) -> Unit, count: () -> Int, longPress: Boolean): Modifier =
-    pointerInput(spot, longPress) {
+private fun Modifier.draggable(
+    drag: EditorDrag,
+    spot: Spot,
+    corner: () -> Offset,
+    onDrop: (Spot, Drop) -> Unit,
+    count: () -> Int,
+    longPress: Boolean,
+    intoCells: Boolean = true,
+    intoLists: Boolean = false,
+): Modifier =
+    pointerInput(spot, longPress, intoCells, intoLists) {
         val start: (Offset) -> Unit = { off -> drag.start(spot, corner() + off) }
         val end: () -> Unit = {
             val from = drag.from
-            if (from != null) onDrop(from, drag.target(count()))
+            if (from != null) onDrop(from, drag.target(count(), intoCells, intoLists))
             drag.cancel()
         }
         if (longPress) {
@@ -135,11 +156,14 @@ internal fun EditorWidget(
     val colors = Tima.colors
     var corner by remember { mutableStateOf(Offset.Zero) }
     val onDrop: (Spot, Drop) -> Unit = { from, to -> model.drop(from, to) }
+    // Подкладка — не в ряд; подборка и подкладка — по пунктам готового списка (заказчик 2026-10-21).
+    val intoCells = widget !is ComposedWidget.Underlay
+    val intoLists = widget is ComposedWidget.Quoted || widget is ComposedWidget.Underlay
     Row(
         Modifier.fillMaxWidth().padding(vertical = 2.dp)
             .then(if (chosen) Modifier.border(2.dp, colors.navigation, RoundedCornerShape(8.dp)) else Modifier)
             .onGloballyPositioned { corner = it.boundsInRoot().topLeft }
-            .draggable(drag, spot, { corner }, onDrop, { model.doc.items.size }, longPress = true)
+            .draggable(drag, spot, { corner }, onDrop, { model.doc.items.size }, longPress = true, intoCells, intoLists)
             .clickable { model.select(spot) }
             .padding(4.dp)
             .testTag(EditorTags.spot(spot)),
@@ -162,7 +186,7 @@ internal fun EditorWidget(
             fontSize = 18.sp,
             color = colors.text3,
             modifier = Modifier.padding(start = 4.dp)
-                .draggable(drag, spot, { corner }, onDrop, { model.doc.items.size }, longPress = false)
+                .draggable(drag, spot, { corner }, onDrop, { model.doc.items.size }, longPress = false, intoCells, intoLists)
                 .testTag(EditorTags.spot(spot) + ".handle"),
         )
     }

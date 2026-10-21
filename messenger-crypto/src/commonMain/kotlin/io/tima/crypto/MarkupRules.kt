@@ -100,11 +100,10 @@ object MarkupRules {
         val ctx = Ctx(ids, content.media.size, strict, out)
 
         var rows = 0
-        var underlaySeen = false
+        // Подкладка — где угодно на верхнем уровне и в пункте списка, только не в ячейке ряда
+        // (заказчик 2026-10-21; прежде — только в конце, правило `underlay-last`). Разметка та же — v2.
         for (block in markup.blocks) {
             if (block.type == BlockType.FLEX || block.type == BlockType.TABLE) rows++
-            if (block.type == BlockType.UNDERLAY) underlaySeen = true
-            else if (underlaySeen) out += Problem("underlay-last", "после подкладки идёт «${block.type.wire}»: подкладка только в конце")
             if (block.type == BlockType.UNKNOWN) {
                 if (strict) out += Problem("unknown-type", "незнакомый тип блока")
                 continue
@@ -170,10 +169,12 @@ object MarkupRules {
                         BlockType.LIST_ITEM -> {
                             for (id in child.nodeIds) if (id !in ctx.ids) out += Problem("node-ref", "пункт ссылается на узел $id, его нет")
                             if (child.nodeIds.size > 1) out += Problem("list-item", "у пункта больше одного узла-заголовка")
-                            // Пункт — контейнер, как ячейка (ADR-0049 §2): блоки текста, виджеты ячейки, вложенный список.
+                            // Пункт — контейнер, как ячейка (ADR-0049 §2): блоки текста, виджеты ячейки, вложенный список;
+                            // и подкладка (заказчик 2026-10-21) — в ячейке ряда её по-прежнему нет.
                             for (inner in child.children) when {
                                 inner.type == BlockType.UNKNOWN -> if (ctx.strict) out += Problem("unknown-type", "незнакомый блок в пункте")
                                 inner.type in TEXT_BLOCKS || inner.type in CELL_WIDGETS -> checkBlock(inner, ctx, depth + 1)
+                                inner.type == BlockType.UNDERLAY -> checkWidget(inner, ctx)
                                 else -> out += Problem("list-item", "«${inner.type.wire}» не кладётся в пункт списка")
                             }
                         }

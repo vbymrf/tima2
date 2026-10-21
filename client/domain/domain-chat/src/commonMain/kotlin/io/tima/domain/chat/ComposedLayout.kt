@@ -19,7 +19,16 @@ sealed interface Drop {
     data class IntoCell(val item: Int, val cell: Int) : Drop
     /** Перед куском [before]; `items.size` — в самый низ. */
     data class Between(val before: Int) : Drop
+
+    /**
+     * В готовый список [item] новым пунктом перед пунктом [before] (`items.size` — в конец): подборка
+     * и подкладка идут по списку (заказчик 2026-10-21).
+     */
+    data class IntoList(val item: Int, val before: Int) : Drop
 }
+
+/** Подборка и подкладка — их можно вести по готовому списку; подкладку — не в ряд. */
+val ComposedWidget.isRef: Boolean get() = this is ComposedWidget.Quoted || this is ComposedWidget.Underlay
 
 /**
  * Раздел «Разметка» (Решения §10.2–§10.3): ряд строк × столбцов, столбцы и строки, слияние с левой и
@@ -296,11 +305,32 @@ object ComposedLayout {
      * «Выше» и «Ниже» (−1, +1): виджет внутри ячейки — среди соседей по ячейке; кусок — среди
      * кусков. Ячейки ряда местами не меняются: у них строки и столбцы.
      */
-    fun shift(doc: ComposedDoc, at: Spot, by: Int): Pair<ComposedDoc, Spot> {
+    fun shift(doc: ComposedDoc, at: Spot, by: Int, refTitle: String = ""): Pair<ComposedDoc, Spot> {
         // Список (ADR-0049): виджет — внутри пункта, пункт — внутри списка, со своей ступенью.
         val list = doc.items.getOrNull(at.item) as? ComposedItem.ItemList
         if (list != null && at.cell in list.items.indices) {
             val item = list.items[at.cell]
+            // Подборка или подкладка своим пунктом (заказчик 2026-10-21): идёт по списку пунктом, на
+            // краю — выходит из списка куском во всю ширину.
+            val own = at.widget >= 0 && item.widgets.size == 1 && item.widgets[0].isRef && item.text.isBlank()
+            if (own) {
+                val to = at.cell + by
+                if (to in list.items.indices) {
+                    val items = list.items.toMutableList().apply { add(to, removeAt(at.cell)) }
+                    return doc.setItem(at.item, list.copy(items = ComposedLists.normalized(items, ""))) to at.copy(cell = to, widget = 0)
+                }
+                val rest = list.items.filterIndexed { i, _ -> i != at.cell }
+                val piece = ComposedItem.Widget(item.widgets[0])
+                val items = doc.items.toMutableList()
+                if (rest.isEmpty()) {
+                    items[at.item] = piece
+                    return doc.copy(items = items) to Spot(at.item)
+                }
+                items[at.item] = list.copy(items = ComposedLists.normalized(rest, ""))
+                val place = if (by < 0) at.item else at.item + 1
+                items.add(place, piece)
+                return doc.copy(items = items) to Spot(place)
+            }
             if (at.widget >= 0) {
                 val to = at.widget + by
                 if (to !in item.widgets.indices) return doc to at
@@ -324,6 +354,17 @@ object ComposedLayout {
         if (row != null && at.cell in row.cells.indices) return doc to at
         val to = at.item + by
         if (at.item !in doc.items.indices || to !in doc.items.indices) return doc to at
+        // Подборка или подкладка рядом с готовым списком — входит в него крайним пунктом (2026-10-21).
+        val piece = doc.items[at.item]
+        val next = doc.items[to] as? ComposedItem.ItemList
+        if (piece is ComposedItem.Widget && piece.widget.isRef && next != null) {
+            val entry = ComposedListItem(1, refTitle, widgets = listOf(piece.widget))
+            val items = if (by < 0) next.items + entry else listOf(entry) + next.items
+            val without = doc.items.toMutableList().apply { removeAt(at.item) }
+            val listAt = if (by < 0) to else to - 1
+            without[listAt] = next.copy(items = ComposedLists.normalized(items, ""))
+            return doc.copy(items = without) to Spot(listAt, if (by < 0) items.lastIndex else 0, 0)
+        }
         return doc.copy(items = doc.items.toMutableList().apply { add(to, removeAt(at.item)) }) to Spot(to)
     }
 
@@ -401,12 +442,22 @@ object ComposedLayout {
      * ячейку (в конец её), между кусками (виджетом во всю ширину) или на место внутри своей
      * ячейки — «Выше», «Ниже». Опустевшая ячейка остаётся.
      */
-    fun move(doc: ComposedDoc, from: Spot, to: Drop): Pair<ComposedDoc, Spot> {
+    fun move(doc: ComposedDoc, from: Spot, to: Drop, refTitle: String = ""): Pair<ComposedDoc, Spot> {
         val carried = take(doc, from) ?: return doc to from
-        val target = (to as? Drop.IntoCell)?.let { d -> doc.row(d.item)?.let { Drop.IntoCell(d.item, ownerOf(it, d.cell)) } } ?: to
+        // Подкладка в ряд не встаёт (заказчик 2026-10-21): опущенная на ряд — ложится над ним.
+        val underlay = carried is Carried.W && carried.widget is ComposedWidget.Underlay
+        val asked = if (underlay && to is Drop.IntoCell) Drop.Between(to.item) else to
+        // В список — только подборка и подкладка; прочее — над списком, как прежде.
+        val ref = carried is Carried.W && carried.widget.isRef
+        val placed = if (!ref && asked is Drop.IntoList) Drop.Between(asked.item) else asked
+        val target = (placed as? Drop.IntoCell)?.let { d -> doc.row(d.item)?.let { Drop.IntoCell(d.item, ownerOf(it, d.cell)) } } ?: placed
         if (target is Drop.IntoCell && target.item == from.item && target.cell == from.cell) return doc to from
-        // Сначала убрать с прежнего места — номера кусков после этого могут сдвинуться.
-        val (without, _) = removeAt(doc, from)
+        // Сначала убрать с прежнего места — номера кусков после этого могут сдвинуться. Подборка или
+        // подкладка своим пунктом списка уходит вместе с пунктом: пустой пункт «Сообщение» не нужен.
+        val fromList = doc.items.getOrNull(from.item) as? ComposedItem.ItemList
+        val fromItem = fromList?.items?.getOrNull(from.cell)
+        val ownItem = ref && from.widget >= 0 && fromItem != null && fromItem.widgets.size == 1 && fromItem.text.isBlank()
+        val (without, _) = removeAt(doc, if (ownItem) Spot(from.item, from.cell, Spot.TITLE) else from)
         val removedTopLevel = from.cell == -1
         fun shifted(i: Int) = if (removedTopLevel && from.item < i && doc.items.size == without.items.size + 1) i - 1 else i
         return when (target) {
@@ -429,6 +480,17 @@ object ComposedLayout {
                     is Carried.T -> ComposedItem.Text(carried.text)
                 }
                 without.copy(items = without.items.toMutableList().apply { add(at, piece) }) to Spot(at)
+            }
+            is Drop.IntoList -> {
+                val item = shifted(target.item)
+                val list = without.items.getOrNull(item) as? ComposedItem.ItemList ?: return doc to from
+                val widget = (carried as Carried.W).widget
+                // Перенос внутри того же списка: номер пункта после изъятия мог сдвинуться.
+                val sameList = from.item == target.item && from.cell >= 0 && list.items.size < (doc.items[from.item] as ComposedItem.ItemList).items.size
+                val before = (if (sameList && from.cell < target.before) target.before - 1 else target.before).coerceIn(0, list.items.size)
+                val depth = list.items.getOrNull(before)?.depth ?: list.items.lastOrNull()?.depth ?: 1
+                val items = list.items.toMutableList().apply { add(before, ComposedListItem(depth, refTitle, widgets = listOf(widget))) }
+                without.setItem(item, list.copy(items = ComposedLists.normalized(items, ""))) to Spot(item, before, 0)
             }
         }
     }

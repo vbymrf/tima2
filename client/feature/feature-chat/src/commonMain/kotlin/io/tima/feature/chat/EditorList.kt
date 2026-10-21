@@ -24,6 +24,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -88,7 +90,9 @@ internal fun EditorList(
                 textAlign = alignOf(own.align),
             )
             Column(
-                Modifier.fillMaxWidth().padding(start = (ListFit.STEP_DP * (item.depth - 1)).dp)
+                Modifier.fillMaxWidth()
+                    .onGloballyPositioned { drag.listItem(index, i, it.boundsInRoot()) }
+                    .padding(start = (ListFit.STEP_DP * (item.depth - 1)).dp)
                     .then(if (here) Modifier.background(colors.functional, RoundedCornerShape(4.dp)) else Modifier)
                     .styled(blockStyleOf(item.style)),
             ) {

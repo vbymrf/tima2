@@ -97,13 +97,28 @@ class MarkupRulesTest {
         assertTrue("cell-node" in rules(c))
     }
 
+    /** Заказчик 2026-10-21: подкладка — где угодно на верхнем уровне и в пункте списка; в ячейке ряда — нет. */
     @Test
-    fun подкладка_только_в_конце() {
+    fun подкладка_в_середине_и_в_пункте_списка_но_не_в_ряду() {
         val s = sample()
         val blocks = s.markup!!.blocks
-        val moved = blocks.last() // подкладка
-        val c = s.copy(markup = s.markup.copy(blocks = listOf(moved) + blocks.dropLast(1)))
-        assertTrue("underlay-last" in rules(c))
+        val underlay = blocks.last()
+        val first = s.copy(markup = s.markup.copy(blocks = listOf(underlay) + blocks.dropLast(1)))
+        assertTrue(rules(first).isEmpty(), "подкладка первой — можно: ${rules(first)}")
+
+        val inItem = MessageContent(nodes = listOf("a"), markup = Markup(n = listOf(1), blocks = listOf(
+            MarkupBlock(type = BlockType.LIST, children = listOf(
+                MarkupBlock(type = BlockType.LIST_ITEM, nodeIds = listOf(1), children = listOf(underlay)),
+            )),
+        )))
+        assertTrue(rules(inItem).isEmpty(), "подкладка в пункте — можно: ${rules(inItem)}")
+
+        val inCell = MessageContent(nodes = emptyList(), markup = Markup(blocks = listOf(
+            MarkupBlock(type = BlockType.FLEX, children = listOf(
+                MarkupBlock(type = BlockType.CELL, style = mapOf("width" to "100"), children = listOf(underlay)),
+            )),
+        )))
+        assertTrue(rules(inCell).isNotEmpty(), "подкладка в ячейке ряда — нельзя")
     }
 
     @Test

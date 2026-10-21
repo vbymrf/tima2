@@ -315,6 +315,7 @@ fun EditorScreen(
     val typing: TypingMarks = model.source
     // Пункт ступени без родителя получает заголовок из словаря (ADR-0049 §4).
     model.untitled = w.untitled
+    model.refTitle = Tima.words.chat.refItem
     val active = model.activeInline().map { it.name.lowercase() }.toSet()
 
     // Черновик — через полсекунды после последней правки и при закрытии окна.
@@ -376,8 +377,8 @@ fun EditorScreen(
             "joinLeft" -> if (!model.join("left")) hint = w.joinRefused
             "joinUp" -> if (!model.join("up")) hint = w.joinRefused
             "split" -> model.layout(io.tima.domain.chat.ComposedLayout::split)
-            "up" -> model.layout { d, s -> io.tima.domain.chat.ComposedLayout.shift(d, s, -1) }
-            "down" -> model.layout { d, s -> io.tima.domain.chat.ComposedLayout.shift(d, s, 1) }
+            "up" -> model.shift(-1)
+            "down" -> model.shift(1)
             "delete" -> model.layout(io.tima.domain.chat.ComposedLayout::removeAt)
             // Раздел «Стиль» (§10.2): на выбранное.
             // «Вставка → Виджет» (ПЛАН-(ВД)): опрос, мероприятие, видеоклипы, аудио.

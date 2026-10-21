@@ -182,6 +182,45 @@ class ComposedLayoutTest {
         assertEquals("", text.row(1).cells[0].text)
     }
 
+    /** Заказчик 2026-10-21: подкладка в ряд не встаёт — опущенная на ряд, ложится над ним. */
+    @Test
+    fun подкладка_в_ряд_не_встаёт() {
+        val underlay = ComposedWidget.Underlay("group", "g", 7)
+        val doc = ComposedDoc(listOf(ComposedItem.Text("a"), ComposedItem.Row(listOf(ComposedCell(50, "x"), ComposedCell(50, "y"))), ComposedItem.Widget(underlay)))
+        val (moved, spot) = ComposedLayout.move(doc, Spot(2), Drop.IntoCell(1, 0))
+        assertEquals(underlay, (moved.items[1] as ComposedItem.Widget).widget, "над рядом")
+        assertTrue(moved.row(2).cells.all { it.widgets.isEmpty() }, "в ячейку не попала")
+        assertEquals(Spot(1), spot)
+    }
+
+    /** Заказчик 2026-10-21: подборка и подкладка идут по готовому списку пунктом «Сообщение» и выходят из него. */
+    @Test
+    fun подкладка_идёт_по_списку_и_выходит() {
+        val underlay = ComposedWidget.Underlay("group", "g", 7)
+        val list = ComposedItem.ItemList(listOf(ComposedListItem(1, "один"), ComposedListItem(1, "два")))
+        val doc = ComposedDoc(listOf(list, ComposedItem.Widget(underlay)))
+        // «Выше» — входит последним пунктом.
+        val (inList, s1) = ComposedLayout.shift(doc, Spot(1), -1, "Сообщение")
+        val items = (inList.items.single() as ComposedItem.ItemList).items
+        assertEquals(listOf("один", "два", "Сообщение"), items.map { it.title })
+        assertEquals(listOf<ComposedWidget>(underlay), items[2].widgets)
+        assertEquals(Spot(0, 2, 0), s1)
+        // Ещё «Выше» — меняется местами с пунктом.
+        val (up, s2) = ComposedLayout.shift(inList, s1, -1, "Сообщение")
+        assertEquals(listOf("один", "Сообщение", "два"), (up.items.single() as ComposedItem.ItemList).items.map { it.title })
+        assertEquals(Spot(0, 1, 0), s2)
+        // Дважды «Выше» — выходит над списком куском во всю ширину, пункт уходит с ним.
+        val (top, s3) = ComposedLayout.shift(up, s2, -1, "Сообщение")
+        val (out, s4) = ComposedLayout.shift(top, s3, -1, "Сообщение")
+        assertEquals(underlay, (out.items[0] as ComposedItem.Widget).widget)
+        assertEquals(listOf("один", "два"), (out.items[1] as ComposedItem.ItemList).items.map { it.title })
+        assertEquals(Spot(0), s4)
+        // Перенос пальцем — между пунктами.
+        val (dropped, s5) = ComposedLayout.move(doc, Spot(1), Drop.IntoList(0, 1), "Сообщение")
+        assertEquals(listOf("один", "Сообщение", "два"), (dropped.items.single() as ComposedItem.ItemList).items.map { it.title })
+        assertEquals(Spot(0, 1, 0), s5)
+    }
+
     @Test
     fun перенос_в_слитое_попадает_в_первую_ячейку() {
         var doc = grid(1, 2)
