@@ -1,5 +1,7 @@
 package io.tima.feature.chat
 
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -137,7 +139,38 @@ private fun Modifier.draggable(
             drag.cancel()
         }
         if (longPress) {
-            detectDragGesturesAfterLongPress(onDragStart = start, onDrag = { c, d -> c.consume(); drag.move(d) }, onDragEnd = end, onDragCancel = drag::cancel)
+            // Долгое нажатие ловится раньше того, что внутри виджета (проход Initial): кнопка ссылки,
+            // подборка, фото сами забирают нажатие — и перенос пальцем у них не начинался (2026-10-21).
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                val early = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                    while (true) {
+                        val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        val c = e.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!c.pressed || (c.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+                    }
+                    true
+                }
+                // Отпустили или повели до срока — это не перенос: нажатие уходит виджету как было.
+                if (early != null) return@awaitEachGesture
+                start(down.position)
+                while (true) {
+                    val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    val c = e.changes.firstOrNull { it.id == down.id }
+                    if (c == null) {
+                        drag.cancel()
+                        break
+                    }
+                    if (!c.pressed) {
+                        c.consume()
+                        end()
+                        break
+                    }
+                    val d = c.position - c.previousPosition
+                    c.consume()
+                    drag.move(d)
+                }
+            }
         } else {
             detectDragGestures(onDragStart = start, onDrag = { c, d -> c.consume(); drag.move(d) }, onDragEnd = end, onDragCancel = drag::cancel)
         }
@@ -169,16 +202,19 @@ internal fun EditorWidget(
             .testTag(EditorTags.spot(spot)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // В редакторе нажатие на ссылку и на сообщение-ссылку выбирает виджет и показывает то же окно
-        // перехода, но переход в нём заблокирован (заказчик 2026-10-20).
+        // В редакторе внутри виджета ничего не нажимается (заказчик 2026-10-21: «кликабельность убери —
+        // ссылки и другого в редакторе, если не в режиме Показать сообщение»): нажатие выбирает виджет,
+        // долгое — переносит. Прежде нажатие на ссылку открывало окно перехода с запретом.
         Box(Modifier.weight(1f)) {
-            val gate = LocalGate.current
-            androidx.compose.runtime.CompositionLocalProvider(
-                LocalGateBlocked provides true,
-                LocalGate provides { ask -> model.select(spot); gate?.invoke(ask) },
-            ) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalGateBlocked provides true) {
                 preview(ComposedDoc(listOf(ComposedItem.Widget(widget)), marks = model.doc.marks))?.let { RichBody(it) }
             }
+            Box(
+                Modifier.matchParentSize().clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                ) { model.select(spot) },
+            )
         }
         // Ручка — для мыши: тянуть сразу, без долгого нажатия.
         Caption(

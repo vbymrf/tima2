@@ -31,6 +31,12 @@ sealed interface Drop {
 val ComposedWidget.isRef: Boolean get() = this is ComposedWidget.Quoted || this is ComposedWidget.Underlay
 
 /**
+ * Встаёт ли виджет в ячейку ряда. Подкладка — нет (заказчик 2026-10-21), ответ — тоже: он блок верхнего
+ * уровня. «Выше» и «Ниже» перепрыгивают ряд с такими целиком.
+ */
+val ComposedWidget.fitsCell: Boolean get() = this !is ComposedWidget.Underlay && this !is ComposedWidget.Reply
+
+/**
  * Раздел «Разметка» (Решения §10.2–§10.3): ряд строк × столбцов, столбцы и строки, слияние с левой и
  * с верхней, ширина рамкой, выше и ниже, удаление, перенос. Чистые функции над документом — их
  * проверяют тесты, а экран только зовёт.
@@ -346,16 +352,49 @@ object ComposedLayout {
         if (row != null && at.cell in row.cells.indices && at.widget >= 0) {
             val cell = row.cells[at.cell]
             val to = at.widget + by
-            if (to !in cell.widgets.indices) return doc to at
-            val widgets = cell.widgets.toMutableList().apply { add(to, removeAt(at.widget)) }
-            val cells = row.cells.toMutableList().apply { set(at.cell, cell.copy(widgets = widgets)) }
-            return doc.setRow(at.item, row.copy(cells = cells)) to at.copy(widget = to)
+            if (to in cell.widgets.indices) {
+                val widgets = cell.widgets.toMutableList().apply { add(to, removeAt(at.widget)) }
+                val cells = row.cells.toMutableList().apply { set(at.cell, cell.copy(widgets = widgets)) }
+                return doc.setRow(at.item, row.copy(cells = cells)) to at.copy(widget = to)
+            }
+            // На краю ячейки — в соседнюю по порядку чтения (заказчик 2026-10-21): вниз — строка за
+            // строкой, ячейка за ячейкой, в начало следующей; вверх — обратно, в конец предыдущей.
+            // Слитые места пропускаются. На краю ряда — вон из ряда, куском во всю ширину.
+            val widget = cell.widgets[at.widget]
+            val owners = row.cells.indices.filter { ownerOf(row, it) == it }
+            val next = owners.getOrNull(owners.indexOf(at.cell) + by)
+            val emptied = row.cells.toMutableList().apply { set(at.cell, cell.copy(widgets = cell.widgets.filterIndexed { i, _ -> i != at.widget })) }
+            if (next != null) {
+                val target = emptied[next]
+                val widgets = if (by > 0) listOf(widget) + target.widgets else target.widgets + widget
+                emptied[next] = target.copy(widgets = widgets)
+                return doc.setRow(at.item, row.copy(cells = emptied)) to Spot(at.item, next, if (by > 0) 0 else widgets.lastIndex)
+            }
+            val items = doc.items.toMutableList()
+            items[at.item] = row.copy(cells = emptied)
+            val place = if (by < 0) at.item else at.item + 1
+            items.add(place, ComposedItem.Widget(widget))
+            return doc.copy(items = items) to Spot(place)
         }
         if (row != null && at.cell in row.cells.indices) return doc to at
         val to = at.item + by
         if (at.item !in doc.items.indices || to !in doc.items.indices) return doc to at
-        // Подборка или подкладка рядом с готовым списком — входит в него крайним пунктом (2026-10-21).
         val piece = doc.items[at.item]
+        // Виджет рядом с рядом — входит в него (заказчик 2026-10-21): сверху — в первую ячейку первой
+        // строки, снизу — в последнюю ячейку последней. Подкладка и ответ ряд перепрыгивают.
+        val nextRow = doc.items[to] as? ComposedItem.Row
+        if (piece is ComposedItem.Widget && piece.widget.fitsCell && nextRow != null && nextRow.cells.isNotEmpty()) {
+            val owners = nextRow.cells.indices.filter { ownerOf(nextRow, it) == it }
+            val enter = if (by > 0) owners.first() else owners.last()
+            val target = nextRow.cells[enter]
+            val widgets = if (by > 0) listOf(piece.widget) + target.widgets else target.widgets + piece.widget
+            val cells = nextRow.cells.toMutableList().apply { set(enter, target.copy(widgets = widgets)) }
+            val without = doc.items.toMutableList().apply { removeAt(at.item) }
+            val rowAt = if (by < 0) to else to - 1
+            without[rowAt] = nextRow.copy(cells = cells)
+            return doc.copy(items = without) to Spot(rowAt, enter, if (by > 0) 0 else widgets.lastIndex)
+        }
+        // Подборка или подкладка рядом с готовым списком — входит в него крайним пунктом (2026-10-21).
         val next = doc.items[to] as? ComposedItem.ItemList
         if (piece is ComposedItem.Widget && piece.widget.isRef && next != null) {
             val entry = ComposedListItem(1, refTitle, widgets = listOf(piece.widget))

@@ -1,5 +1,6 @@
 package io.tima.feature.chat
 
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -122,8 +123,12 @@ internal fun RichRow(row: RichBlock.Row) {
     val named = first.all { it.width != null } && first.sumOf { it.width ?: 0 } == 100
     val widths = first.map { if (named) it.width!! else 1 }
     val spans = remember(row) { io.tima.domain.chat.GridSpans.of(row.cells.map { it.merge }, columns) }
+    // Одна ячейка на всю ширину — это виджет во всю ширину, а не ряд: ему можно на поля пузыря.
+    val whole = row.cells.size == 1 && (row.cells[0].width ?: 100) == 100
     SpanGrid(columns, widths, spans, CELL_GAP.dp, Modifier.fillMaxWidth().styled(row.style)) { i ->
-        RowCellView(row.cells[i], Modifier, row.style)
+        androidx.compose.runtime.CompositionLocalProvider(LocalInCell provides (!whole || LocalInCell.current)) {
+            RowCellView(row.cells[i], Modifier, row.style)
+        }
     }
     DividerAfter(row.style)
 }
@@ -207,25 +212,49 @@ private fun LinkWidget(link: RichBlock.Link) {
             if (link.description.isNotBlank()) Caption(link.description, fontSize = TimaType.sz5, color = Tima.colors.text2)
             Caption(hostOf(link.url), fontSize = TimaType.sz5, weight = FontWeight.SemiBold, color = color, lineOne = true)
         }
-        // Текстом с названием — название цветом ссылки.
-        link.mode == "plain" && link.title.isNotBlank() -> Caption(
-            link.title,
-            fontSize = TimaType.sz4,
-            weight = FontWeight.SemiBold,
-            color = color,
-            modifier = Modifier.clickable { go() },
-        )
-        // Кнопкой, и текстом без названия — пузырь «Перейти · домен» (заказчик 2026-10-19): есть
-        // название — оно вместо «Перейти»; полный адрес — только в окне перехода.
-        else -> Caption(
-            linkLabel(link.title.ifBlank { Tima.words.chat.linkGo }, link.url),
-            fontSize = TimaType.sz5,
-            weight = FontWeight.Bold,
-            color = Tima.colors.onAccent,
-            lineOne = true,
-            modifier = Modifier.background(color, RoundedCornerShape(12.dp)).clickable { go() }
-                .padding(horizontal = 12.dp, vertical = 6.dp).testTag(LinkTags.GO),
-        )
+        // Текстом с названием — название цветом ссылки; синяя полоса справа на рамке пузыря, как у
+        // нажимаемого вставленного (заказчик 2026-10-21).
+        link.mode == "plain" && link.title.isNotBlank() -> Box(Modifier.fillMaxWidth().edgeStripe(color)) {
+            Caption(
+                link.title,
+                fontSize = TimaType.sz4,
+                weight = FontWeight.SemiBold,
+                color = color,
+                modifier = Modifier.clickable { go() },
+            )
+        }
+        // Кнопкой — пузырь «Перейти · домен» (заказчик 2026-10-19); с названием — только название,
+        // без домена (заказчик 2026-10-21). Текстом без названия — тот же пузырь. Полный адрес — только
+        // в окне перехода.
+        else -> Box(if (link.mode == "plain") Modifier.fillMaxWidth().edgeStripe(color) else Modifier) {
+            Caption(
+                if (link.mode == "button" && link.title.isNotBlank()) link.title else linkLabel(link.title.ifBlank { Tima.words.chat.linkGo }, link.url),
+                fontSize = TimaType.sz5,
+                weight = FontWeight.Bold,
+                color = Tima.colors.onAccent,
+                lineOne = true,
+                modifier = Modifier.background(color, RoundedCornerShape(12.dp)).clickable { go() }
+                    .padding(horizontal = 12.dp, vertical = 6.dp).testTag(LinkTags.GO),
+            )
+        }
+    }
+}
+
+/** В ячейке ряда (не во всю ширину пузыря) — полосе на рамке пузыря там не место. */
+internal val LocalInCell = staticCompositionLocalOf { false }
+
+/**
+ * Полоса справа на рамке пузыря цветом [color] (ссылка «Текстом», заказчик 2026-10-21) — на высоту
+ * того, что рядом с ней. Вне пузыря и в ячейке ряда — у правого края самого места.
+ */
+@Composable
+private fun Modifier.edgeStripe(color: androidx.compose.ui.graphics.Color): Modifier {
+    val inset = io.tima.core.ui.LocalBubbleInset.current
+    val out = if (LocalInCell.current) 0.dp else inset.end
+    return this.drawBehind {
+        val w = 4.dp.toPx()
+        val x = size.width + out.toPx() - w - 1.dp.toPx().coerceAtMost(out.toPx())
+        drawRect(color, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Size(w, size.height))
     }
 }
 

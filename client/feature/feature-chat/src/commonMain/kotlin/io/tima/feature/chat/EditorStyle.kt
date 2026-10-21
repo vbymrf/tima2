@@ -43,6 +43,12 @@ import io.tima.domain.chat.ComposedWidget
 import io.tima.domain.chat.Spot
 
 /** Порядок цветов в образцах: яркий, затем мягкий того же цвета. */
+/**
+ * Цвета ссылки — только яркие, что не сольются с фоном (заказчик 2026-10-21): без белого, чёрного,
+ * серых и подложек — среди них и цвет своих сообщений.
+ */
+private val LINK_COLORS = listOf("accent", "amber", "green", "blue", "red")
+
 private val PALETTE_ORDER = listOf("text", "surface", "accent", "accent-soft", "amber", "amber-soft", "green", "green-soft", "blue", "blue-soft", "red", "red-soft", "grey", "grey-soft")
 
 /**
@@ -51,13 +57,13 @@ private val PALETTE_ORDER = listOf("text", "surface", "accent", "accent-soft", "
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PaletteRow(selected: String?, tag: String, onPick: (String?) -> Unit) {
+fun PaletteRow(selected: String?, tag: String, only: List<String>? = null, onPick: (String?) -> Unit) {
     val colors = Tima.colors
     val w = Tima.words.editor
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Chip(w.none, kind = if (selected.isNullOrEmpty()) ChipKind.Selected else ChipKind.Quiet, onClick = { onPick(null) },
             modifier = Modifier.testTag("$tag.none"))
-        for (name in PALETTE_ORDER.filter { it in MessagePalette.names }) {
+        for (name in (only ?: PALETTE_ORDER).filter { it in MessagePalette.names }) {
             Box(
                 Modifier.size(30.dp)
                     .background(paletteColor(name) ?: colors.functional, CircleShape)
@@ -235,7 +241,23 @@ private fun WidgetOptions(model: EditorModel, spot: Spot) {
                         modifier = Modifier.testTag("editor:style.link.$mode"))
                 }
             }
-            PaletteRow(widget.color.ifEmpty { null }, "editor:style.link.color") { c -> put(widget.copy(color = c.orEmpty())) }
+            // Название — правится здесь (заказчик 2026-10-21): у кнопки и текста им и показывается ссылка.
+            BasicTextField(
+                value = widget.title,
+                onValueChange = { put(widget.copy(title = it.take(LINK_TITLE_MAX))) },
+                textStyle = TextStyle(fontSize = TimaType.sz5, color = Tima.colors.text),
+                cursorBrush = SolidColor(Tima.colors.navigation),
+                singleLine = true,
+                decorationBox = { inner ->
+                    Box {
+                        if (widget.title.isEmpty()) Caption(w.linkTitle, fontSize = TimaType.sz5, color = Tima.colors.text3)
+                        inner()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().background(Tima.colors.functional, RoundedCornerShape(8.dp)).padding(8.dp)
+                    .testTag("editor:style.link.title"),
+            )
+            PaletteRow(widget.color.ifEmpty { null }, "editor:style.link.color", only = LINK_COLORS) { c -> put(widget.copy(color = c.orEmpty())) }
         }
         is ComposedWidget.Quoted -> RefOptions("quoted", widget.author, widget.lines, widget.more, widget.moreText, widget.tap) { au, li, mo, mt, ta ->
             put(widget.copy(author = au, lines = li, more = mo, moreText = mt, tap = ta))
@@ -307,6 +329,9 @@ private fun RefOptions(
         }
     }
 }
+
+/** Название ссылки — строкой, не длиннее этого. */
+private const val LINK_TITLE_MAX = 80
 
 /** Свой текст «Продолжить» — не длиннее, чем принимает проверка разметки. */
 private const val MORE_TEXT_MAX = 40

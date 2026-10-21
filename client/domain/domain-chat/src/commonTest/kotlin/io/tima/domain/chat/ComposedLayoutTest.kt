@@ -221,6 +221,43 @@ class ComposedLayoutTest {
         assertEquals(Spot(0, 1, 0), s5)
     }
 
+    /**
+     * Заказчик 2026-10-21: «Выше»/«Ниже» ведут виджет в ряд, по нему и вон: сверху — первая строка,
+     * первая ячейка, дальше по ячейкам; снизу — обратно. Подкладка ряд перепрыгивает.
+     */
+    @Test
+    fun виджет_идёт_по_ряду_кнопками() {
+        val row = ComposedItem.Row(listOf(ComposedCell(50, "a"), ComposedCell(50, "b"), ComposedCell(50, "c"), ComposedCell(50, "d")), columns = 2)
+        val doc = ComposedDoc(listOf(ComposedItem.Widget(emoji), row, ComposedItem.Text("end")))
+        // «Ниже» — в первую ячейку.
+        var (d, s) = ComposedLayout.shift(doc, Spot(0), 1)
+        assertEquals(Spot(0, 0, 0), s)
+        assertEquals(listOf(emoji), d.row(0).cells[0].widgets)
+        // Дальше — по ячейкам 1, 2, 3.
+        for (cell in 1..3) {
+            val r = ComposedLayout.shift(d, s, 1)
+            d = r.first; s = r.second
+            assertEquals(Spot(0, cell, 0), s)
+            assertEquals(listOf(emoji), d.row(0).cells[cell].widgets)
+            assertTrue(d.row(0).cells[cell - 1].widgets.isEmpty())
+        }
+        // С последней — вон из ряда, под ним.
+        val (out, outSpot) = ComposedLayout.shift(d, s, 1)
+        assertEquals(Spot(1), outSpot)
+        assertEquals(emoji, (out.items[1] as ComposedItem.Widget).widget)
+        assertTrue(out.row(0).cells.all { it.widgets.isEmpty() })
+        // «Выше» снизу — в последнюю ячейку.
+        val (back, backSpot) = ComposedLayout.shift(out, outSpot, -1)
+        assertEquals(Spot(0, 3, 0), backSpot)
+        assertEquals(listOf(emoji), back.row(0).cells[3].widgets)
+
+        val underlay = ComposedWidget.Underlay("group", "g", 7)
+        val u = ComposedDoc(listOf(ComposedItem.Widget(underlay), row))
+        val (jumped, js) = ComposedLayout.shift(u, Spot(0), 1)
+        assertEquals(Spot(1), js, "подкладка перепрыгнула ряд")
+        assertEquals(underlay, (jumped.items[1] as ComposedItem.Widget).widget)
+    }
+
     @Test
     fun перенос_в_слитое_попадает_в_первую_ячейку() {
         var doc = grid(1, 2)
