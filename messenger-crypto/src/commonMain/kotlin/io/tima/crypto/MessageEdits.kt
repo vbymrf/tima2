@@ -1,5 +1,7 @@
 package io.tima.crypto
 
+import io.tima.crypto.proto.MediaEdit
+import io.tima.crypto.proto.MediaRef
 import io.tima.crypto.proto.MessageBody
 import io.tima.crypto.proto.NodeEdit
 import kotlinx.serialization.builtins.ListSerializer
@@ -13,6 +15,12 @@ import kotlinx.serialization.json.Json
  * @param entities инлайн-оформление узла целиком; прежние сущности узла им заменяются.
  */
 data class NodeChange(val index: Int, val text: String, val entities: List<MarkupEntity> = emptyList())
+
+/**
+ * Новый файл на месте файла исходного (ADR-0052): фото, изменённое в просмотре, — целиком новый
+ * номер, ключ и размеры. [index] — позиция в `media` исходного.
+ */
+data class MediaChange(val index: Int, val media: MediaRef)
 
 /**
  * Правка сообщения — тело записи правки и её наложение на исходное (ADR-0045; Решения §8
@@ -44,6 +52,27 @@ object MessageEdits {
             )
         },
     )
+
+    /** Тело правки, заменяющей файлы исходного (ADR-0052): узлы и строение не трогаются. */
+    fun encodeMedia(changes: List<MediaChange>): ByteArray = MessageSerializer.encodeBody(
+        MessageBody(media_edits = changes.map { MediaEdit(index = it.index, media = it.media) }),
+    )
+
+    /** Замены файлов из тела правки; без файла — пропускается. */
+    fun mediaFrom(body: MessageBody): List<MediaChange> =
+        body.media_edits.mapNotNull { e -> e.media?.let { MediaChange(e.index, it) } }
+
+    /**
+     * Исходное с заменёнными файлами, по порядку: вторая замена того же файла перекрывает первую.
+     * Позиция вне исходного пропускается.
+     */
+    fun applyMedia(original: MessageContent, edits: List<List<MediaChange>>): MessageContent {
+        val all = edits.flatten()
+        if (all.isEmpty()) return original
+        val media = original.media.toMutableList()
+        for (change in all) if (change.index in media.indices) media[change.index] = change.media
+        return original.copy(media = media)
+    }
 
     /** Обратный ход. Испорченное оформление узла не губит правку: текст важнее. */
     fun decode(payload: ByteArray): Result<List<NodeChange>> = MessageSerializer.decodeBody(payload).map(::from)

@@ -114,6 +114,9 @@ fun StorageScreen(
     /** Карточки ссылок (Решения §4); `null` — выключателя нет. */
     linkCards: Boolean? = null,
     onLinkCards: (Boolean) -> Unit = {},
+    /** Качать файлы по мобильной сети (заказчик 2026-10-22); `null` — выключателя нет. */
+    mobileFiles: Boolean? = null,
+    onMobileFiles: (Boolean) -> Unit = {},
 ) = Column(
     modifier.fillMaxSize().padding(TimaSpacing.about4).verticalScroll(rememberScrollState()),
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
@@ -123,6 +126,14 @@ fun StorageScreen(
     Tertiary(
         words.mediaAndFilesAbout,
     )
+    mobileFiles?.let { on ->
+        ListLine(
+            modifier = Modifier.testTag(MOBILE_FILES_TAG),
+            onClick = { onMobileFiles(!on) },
+            middle = { Column { Name(words.mobileFiles); Tertiary(words.mobileFilesAbout) } },
+            right = { Chip(if (on) words.linkCardsOn else words.linkCardsOff, kind = if (on) ChipKind.Selected else ChipKind.Quiet, onClick = { onMobileFiles(!on) }) },
+        )
+    }
     for (m in media) MediaKindSection(m, words, onMediaLimits, onMediaClear)
     if (media.isNotEmpty()) {
         ListLine(middle = { Name(words.mediaInline) }, right = { Secondary(words.mediaInlineAbout) })
@@ -319,3 +330,6 @@ private fun megabytes(bytes: Long, words: StorageWords = RussianWords.storage): 
 
 /** Метка выключателя карточек ссылок (СЦЕНАРИИ-ПО-ОКНАМ.md). */
 const val LINK_CARDS_TAG = "storage:link.cards"
+
+/** Выключатель «Качать файлы по мобильной сети» (СЦЕНАРИИ-ПО-ОКНАМ). */
+const val MOBILE_FILES_TAG = "storage:mobile-files"

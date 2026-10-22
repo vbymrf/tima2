@@ -4019,6 +4019,7 @@ private fun App(
                         callsState = callsState,
                         deviceSettings = environment.settings,
                         mediaFolder = environment.media,
+                        postman = assembled.receiver.postman,
                         callDevices = callEngine as? io.tima.core.call.CallDevices,
                         loginStart = loginStart,
                         // Снимок считается ЗДЕСЬ и в момент открытия экрана: человек
@@ -4884,6 +4885,8 @@ private fun Chat(
     var menuFor by remember { mutableStateOf<ChatLine?>(null) }
     // Забранные получателем файлы почтальона — галочки у своих (Решения §6).
     val fetchedFiles by (postman?.fetched ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
+    val goneFiles by (postman?.gone ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
+    val wifiFiles by (postman?.waitingWifi ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
     // Долгое нажатие — выделить часть и скопировать (Решения §11.1).
     var selectFor by remember { mutableStateOf<ChatLine?>(null) }
     // ── Вложения (Решения §2, §3, §6; ВЫБОР-РЕАЛИЗАЦИИ §11.2а) ─────────────────────
@@ -5123,6 +5126,8 @@ private fun Chat(
             },
                 saveFile = { file -> saveFromChat(file) },
                 fetched = { id -> id in fetchedFiles },
+                gone = { id -> id in goneFiles },
+                waitsWifi = { id -> id in wifiFiles },
                 fileMenu = { file ->
                     // Идёт выбор — нажатие отмечает сообщение с файлом, как у фото.
                     val owner = state.lines.firstOrNull { l -> l.rich?.media?.any { it.mediaId == file.mediaId } == true }
@@ -5942,6 +5947,8 @@ private fun Settings(
     deviceSettings: io.tima.domain.chat.Settings,
     /** Своя папка медиа аккаунта — раздел «Медиа и другие файлы» (Решения §6). */
     mediaFolder: io.tima.core.media.MediaFolder = io.tima.core.media.MediaFolder.NONE,
+    /** Файлы почтальона — «Качать по мобильной сети» забирает отложенное сразу. */
+    postman: PostmanFiles? = null,
     /** Микрофон, колонки, камера — есть только у ПК; `null` — пункта нет. */
     callDevices: io.tima.core.call.CallDevices? = null,
     /** Запуск вместе с системой — есть только у ПК; `null` — раздела в «Разрешениях» нет. */
@@ -6185,7 +6192,7 @@ private fun Settings(
             // Предложение — та же отправка с очередью, но без журнала (заказчик 2026-10-07).
             SettingsItem.SUGGEST -> Suggest(problemFacts, reporting, scope, platform)
 
-            SettingsItem.STORAGE -> Storage(diaryPolicy, callsLog, callsState, deviceSettings, mediaFolder)
+            SettingsItem.STORAGE -> Storage(diaryPolicy, callsLog, callsState, deviceSettings, mediaFolder, postman)
 
             // Испытательный режим звонков. Пункт временный и уйдёт вместе со стендом —
             // держать его «на всякий случай» после испытаний незачем (С-В1).
@@ -6418,6 +6425,7 @@ private fun Storage(
     callsState: CallsState,
     settings: io.tima.domain.chat.Settings? = null,
     media: io.tima.core.media.MediaFolder = io.tima.core.media.MediaFolder.NONE,
+    postman: PostmanFiles? = null,
 ) {
     // ── Медиа и другие файлы (Решения §6): срок и предел по разделу, в настройках базы аккаунта ──
     val saved by (settings?.all() ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, String>()) })
@@ -6503,6 +6511,14 @@ private fun Storage(
         // Карточки ссылок (Решения §4): выключены — запросов к сайтам с телефона нет вовсе.
         linkCards = settings?.let { saved[LINK_CARDS_KEY] != "0" },
         onLinkCards = { on -> mediaScope.launch { settings?.put(LINK_CARDS_KEY, if (on) "1" else "0") } },
+        // Файлы по мобильной сети (заказчик 2026-10-22): включили — отложенное забирается сразу.
+        mobileFiles = settings?.let { saved[PostmanFiles.MOBILE_KEY] != "0" },
+        onMobileFiles = { on ->
+            mediaScope.launch {
+                settings?.put(PostmanFiles.MOBILE_KEY, if (on) "1" else "0")
+                if (on) postman?.resume()
+            }
+        },
     )
 }
 

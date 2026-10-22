@@ -32,11 +32,10 @@ class AttachmentPrepTest {
     }
 
     @Test
-    fun фото_ужимается_до_1280_и_превью_до_20_кб() {
+    fun фото_ужимается_до_1280() {
         val prepared = assertNotNull(PhotoPrep.prepare(noisy(2000, 1500)))
         assertEquals(1280, prepared.width)
         assertEquals(960, prepared.height)
-        assertTrue(prepared.preview.size <= PhotoPrep.PREVIEW_LIMIT, "превью ${prepared.preview.size} байт")
         assertNotNull(decodeImage(prepared.full))
         assertNull(PhotoPrep.prepare("не картинка".encodeToByteArray()))
     }
@@ -65,7 +64,6 @@ class AttachmentPrepTest {
         val wide = assertNotNull(PhotoPrep.inline(noisy(1600, 400)))
         assertEquals(720, wide.width)
         assertEquals(180, wide.height)
-        assertEquals(0, wide.preview.size, "превью у картинки внутри сообщения нет")
         val tall = assertNotNull(PhotoPrep.inline(noisy(600, 2000), width = 238))
         assertEquals(238, tall.width, "ячейка 33 % — 238")
         val small = assertNotNull(PhotoPrep.inline(noisy(200, 100)))

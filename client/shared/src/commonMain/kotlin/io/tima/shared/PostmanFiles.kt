@@ -22,16 +22,35 @@ import kotlinx.coroutines.launch
  *   устройство, у которого он есть, — по событию `media.wanted`.
  * - **Галочки**: получатель забрал — событие `media.fetched` отправителю; отметка лежит в той же
  *   папке пустым файлом, чтобы пережить перезапуск.
+ * - **Фото целиком, превью нет** (ADR-0052): забранное фото лента ужимает сама. У почтальона файла
+ *   нет и попросить снова не у кого — отметка «нет» (раздел [GONE]): лента такого фото не показывает.
+ * - **Мобильная сеть** («Память и трафик», заказчик 2026-10-22): [mayDownload] говорит, можно ли
+ *   забирать сейчас; нельзя — файл ждёт смены сети ([resume]).
  */
 class PostmanFiles(
     private val media: () -> Media,
     private val folder: MediaFolder,
     private val scope: CoroutineScope,
+    private val mayDownload: suspend () -> Boolean = { true },
 ) {
     private val _fetched = MutableStateFlow(folder.entries(FETCHED).map { it.name }.toSet())
 
     /** Файлы, которые получатель уже забрал, — галочки у своих сообщений. */
     val fetched: StateFlow<Set<String>> = _fetched.asStateFlow()
+
+    private val _gone = MutableStateFlow(folder.entries(GONE).map { it.name }.toSet())
+
+    /** Файлы, которых нет и уже не будет: у почтальона их нет, попросить снова не у кого. */
+    val gone: StateFlow<Set<String>> = _gone.asStateFlow()
+
+    private val _waitingWifi = MutableStateFlow(folder.entries(WAIT).map { it.name }.toSet())
+
+    /**
+     * Ждут сети без счёта трафика: мобильная, а забирать по ней человек не велел. Отметка — в папке
+     * (раздел [WAIT], внутри — раздел файла), чтобы пережить перезапуск; лента говорит это на месте
+     * фото (заказчик 2026-10-22): иначе фото просто нет, и непонятно почему.
+     */
+    val waitingWifi: StateFlow<Set<String>> = _waitingWifi.asStateFlow()
 
     /** Свой раздел папки: фото без имени — «Фото», остальное — «Файлы» («Память и трафик»). */
     fun kindOf(m: RichMedia): String = if (m.name.isEmpty() && m.mime.startsWith("image/")) MediaFolder.PHOTO else MediaFolder.FILE
@@ -52,17 +71,32 @@ class PostmanFiles(
     }
 
     /** Взять файл: из папки, иначе у почтальона; нет у него — попросить снова. */
-    suspend fun obtain(m: RichMedia): Obtained {
-        local(m.mediaId)?.let { return Obtained.Got(it) }
-        return when (val got = media().fetch(m.mediaId)) {
+    suspend fun obtain(m: RichMedia): Obtained = obtain(m.mediaId, kindOf(m))
+
+    private suspend fun obtain(mediaId: String, kind: String): Obtained {
+        local(mediaId)?.let { return Obtained.Got(it) }
+        return when (val got = media().fetch(mediaId)) {
             is Media.MediaFetch.Got -> {
-                runCatching { folder.put(kindOf(m), m.mediaId, got.bytes) }
-                Journal.note(LogCode.FILE_GET, "забран", "файл" to m.mediaId.take(8), "размер" to got.bytes.size)
+                runCatching { folder.put(kind, mediaId, got.bytes) }
+                if (mediaId in _gone.value) {
+                    runCatching { folder.delete(GONE, mediaId) }
+                    _gone.value = _gone.value - mediaId
+                }
+                if (mediaId in _waitingWifi.value) {
+                    runCatching { folder.delete(WAIT, mediaId) }
+                    _waitingWifi.value = _waitingWifi.value - mediaId
+                }
+                Journal.note(LogCode.FILE_GET, "забран", "файл" to mediaId.take(8), "размер" to got.bytes.size)
                 Obtained.Got(got.bytes)
             }
             Media.MediaFetch.Gone -> {
-                val asked = media().requestAgain(m.mediaId)
-                Journal.note(LogCode.FILE_GET, "у почтальона нет — попросили снова", "файл" to m.mediaId.take(8), "ушло" to asked.toString())
+                val asked = media().requestAgain(mediaId)
+                Journal.note(LogCode.FILE_GET, "у почтальона нет — попросили снова", "файл" to mediaId.take(8), "ушло" to asked.toString())
+                if (!asked) {
+                    // Попросить не у кого — файла не будет: лента его не показывает (ADR-0052).
+                    runCatching { folder.put(GONE, mediaId, ByteArray(0)) }
+                    _gone.value = _gone.value + mediaId
+                }
                 if (asked) Obtained.Asked else Obtained.Failed
             }
             Media.MediaFetch.Failed -> Obtained.Failed
@@ -71,9 +105,36 @@ class PostmanFiles(
 
     /** Пришло сообщение: файлы вне пузыря — забрать сразу, не дожидаясь нажатия. */
     fun received(content: RichContent?) {
-        val outside = outsideOf(content ?: return)
-        if (outside.isEmpty()) return
-        scope.launch { for (m in outside) runCatching { obtain(m) } }
+        receivedMedia(outsideOf(content ?: return))
+    }
+
+    /** Пришли файлы — сообщения или правки, заменившей фото (ADR-0052): забрать сразу. */
+    fun receivedMedia(files: List<RichMedia>) {
+        if (files.isEmpty()) return
+        scope.launch {
+            if (!mayDownload()) {
+                val files = files.filter { local(it.mediaId) == null }
+                if (files.isEmpty()) return@launch
+                for (m in files) runCatching { folder.put(WAIT, m.mediaId, kindOf(m).encodeToByteArray()) }
+                _waitingWifi.value = _waitingWifi.value + files.map { it.mediaId }
+                Journal.note(LogCode.FILE_GET, "ждёт сети без счёта трафика", "файлов" to files.size)
+                return@launch
+            }
+            for (m in files) runCatching { obtain(m) }
+        }
+    }
+
+    /** Сеть сменилась или человек разрешил мобильную — забрать отложенное. */
+    fun resume() {
+        scope.launch {
+            if (_waitingWifi.value.isEmpty() || !mayDownload()) return@launch
+            val ids = _waitingWifi.value
+            Journal.note(LogCode.FILE_GET, "забираем отложенное", "файлов" to ids.size)
+            for (id in ids) {
+                val kind = folder.get(WAIT, id)?.decodeToString()?.takeIf { it == MediaFolder.PHOTO || it == MediaFolder.FILE } ?: MediaFolder.PHOTO
+                runCatching { obtain(id, kind) }
+            }
+        }
     }
 
     /** Событие канала: просьба загрузить снова или «получатель забрал». */
@@ -92,6 +153,15 @@ class PostmanFiles(
     companion object {
         /** Раздел отметок «получатель забрал» — пустые файлы по номеру файла. */
         const val FETCHED = "fetched"
+
+        /** Раздел отметок «файла нет и не будет» — пустые файлы по номеру (ADR-0052). */
+        const val GONE = "gone"
+
+        /** Раздел отметок «ждёт Wi-Fi» — внутри раздел файла (`photo`, `file`). */
+        const val WAIT = "wait"
+
+        /** Настройка «Качать файлы по мобильной сети»: `0` — нет; иначе — да (по умолчанию). */
+        const val MOBILE_KEY = "media.mobile"
 
         /** Фото без текста и файлы — вне пузыря: их держит почтальон (Решения §2, §6). */
         fun outsideOf(content: RichContent): List<RichMedia> {

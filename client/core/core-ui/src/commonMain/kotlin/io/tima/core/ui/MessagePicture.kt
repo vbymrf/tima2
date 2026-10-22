@@ -58,3 +58,22 @@ fun MessagePicture(uri: String, aspect: Float?, missing: String, modifier: Modif
 
 /** Наименьшая высота картинки в сообщении — её видно, даже если она узкая и длинная. */
 private val MIN_PICTURE = 64.dp
+
+/**
+ * Фото вне пузыря в ленте (ADR-0052): само фото, не превью — загрузчик ужимает его под место, это и
+ * есть превью получателя. Пока едет — пустое место, размер задаёт [modifier]. Подписи нет: фото,
+ * которого уже не будет, лента не показывает вовсе.
+ */
+@Composable
+fun PhotoTile(uri: String, modifier: Modifier = Modifier) {
+    Box(modifier) {
+        val sketch = LocalSketch.current ?: return@Box
+        AsyncImage(
+            uri = uri,
+            sketch = sketch,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
+    }
+}

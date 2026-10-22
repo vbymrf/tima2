@@ -16,16 +16,16 @@ class AttachmentBodiesTest {
     private val bodies = AttachmentBodiesOverKodium
     private val key = ByteArray(32) { 3 }
 
-    private fun photo(id: String) = OutMedia(id, key, "image/jpeg", 1280, 960, 1000, preview = ByteArray(5) { 1 })
+    private fun photo(id: String) = OutMedia(id, key, "image/jpeg", 1280, 960, 1000)
 
     @Test
-    fun альбом_доходит_альбомом_с_превью_и_ключом() {
+    fun альбом_доходит_альбомом_с_размерами_и_ключом() {
         val body = bodies.album(listOf(photo("a"), photo("b")))
         val rich = TextBodyCodec.decodeLine(body)!!.rich!!
         assertEquals(RichBlock.Album(listOf(0, 1)), rich.blocks.single())
         assertEquals(listOf("a", "b"), rich.media.map { it.mediaId })
         assertEquals(key.toList(), rich.media[0].key.toList())
-        assertEquals(5, rich.media[0].preview.size)
+        assertEquals(1280 to 960, rich.media[0].width to rich.media[0].height)
         assertEquals(MediaSummary.of(MediaSummary.Kind.PHOTO, 2), TextBodyCodec.decodeText(body))
     }
 

@@ -283,17 +283,12 @@ private fun RefFallback(look: QuoteLook, lines: Int) {
     }
 }
 
-/** Первое фото подборки — уменьшенным во всю ширину области. */
+/** Первое фото подборки — уменьшенным во всю ширину области: само фото, превью в теле нет (ADR-0052). */
 @Composable
 private fun RefPhoto(m: RichMedia) {
-    val bitmap = remember(m.mediaId) { if (m.preview.isNotEmpty()) decodeImage(m.preview) else null }
     val shape = RoundedCornerShape(6.dp)
-    if (bitmap != null) {
-        Image(bitmap, contentDescription = null, modifier = Modifier.fillMaxWidth().height(REF_PHOTO).clip(shape), contentScale = ContentScale.Crop)
-    } else {
-        Box(Modifier.fillMaxWidth().heightIn(max = REF_PHOTO).clip(shape)) {
-            MessagePicture(mediaUri(m.mediaId, m.key), if (m.width > 0 && m.height > 0) m.width.toFloat() / m.height else null, Tima.words.chat.pictureMissing)
-        }
+    Box(Modifier.fillMaxWidth().heightIn(max = REF_PHOTO).clip(shape)) {
+        MessagePicture(mediaUri(m.mediaId, m.key), if (m.width > 0 && m.height > 0) m.width.toFloat() / m.height else null, Tima.words.chat.pictureMissing)
     }
 }
 

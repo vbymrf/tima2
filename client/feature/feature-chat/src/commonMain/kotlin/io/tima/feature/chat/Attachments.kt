@@ -45,6 +45,7 @@ import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
 import io.tima.core.ui.MessagePicture
+import io.tima.core.ui.PhotoTile
 import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaType
@@ -63,7 +64,24 @@ class AttachmentActions(
     val selectPhoto: (RichMedia) -> Unit = {},
     /** Нажатие на файл — меню: открыть, сохранить, поделиться, переслать, удалить (заказчик 2026-10-20); `null` — сразу «Сохранить как». */
     val fileMenu: ((RichMedia) -> Unit)? = null,
+    /** Фото, которого нет и уже не будет (срок почтальона вышел, прислать некому) — ADR-0052. */
+    val gone: (mediaId: String) -> Boolean = { false },
+    /** Фото ждёт Wi-Fi: качать по мобильной сети выключено (заказчик 2026-10-22) — сказать на месте. */
+    val waitsWifi: (mediaId: String) -> Boolean = { false },
 )
+
+/**
+ * Сообщение только из фото, которых нет и уже не будет (заказчик 2026-10-22): не показывается, как
+ * нечитаемое. Файл рядом или текст — сообщение остаётся.
+ */
+fun AttachmentActions.photosGone(rich: RichContent?): Boolean {
+    if (rich == null || !rich.isOutside() || rich.blocks.any { it is RichBlock.File }) return false
+    val ids = rich.blocks.filterIsInstance<RichBlock.Album>().flatMap { it.media }.mapNotNull { rich.media.getOrNull(it)?.mediaId }
+    return ids.isNotEmpty() && ids.all(gone)
+}
+
+/** Место фото, которое ждёт Wi-Fi (заказчик 2026-10-22). */
+const val PHOTO_WAITS_WIFI_TAG = "msg:photo.wifi"
 
 /** Галочки «получатель забрал» у своего фото или файла вне пузыря (Решения §6). */
 const val FETCHED_TAG = "msg:fetched"
@@ -86,13 +104,17 @@ internal fun AttachmentsView(rich: RichContent) {
 }
 
 /**
- * Фото без текста (Решения §3): превью из тела, полное — по нажатию. Превью нет или не читается —
- * заглушка с крестиком размером с фото: место известно до загрузки, лента не прыгает.
+ * Фото без текста (Решения §3, ADR-0052): само фото, забранное у почтальона сразу, — загрузчик
+ * ужимает его под место. Одно — во всю ширину места, в своём качестве; несколько — квадратами. Пока
+ * едет — пустое место размером с фото: размеры в теле, лента не прыгает. Фото, которого уже не
+ * будет, не показывается.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AlbumView(photos: List<RichMedia>) {
+private fun AlbumView(all: List<RichMedia>) {
     val actions = LocalAttachmentActions.current
+    val photos = all.filterNot { actions.gone(it.mediaId) }
+    if (photos.isEmpty()) return
     if (photos.size == 1) {
         val p = photos.single()
         Thumb(p, Modifier.widthIn(max = 260.dp).fillMaxWidth().aspectRatio(aspectOf(p)), { actions.selectPhoto(p) }) { actions.openPhoto(p) }
@@ -108,21 +130,15 @@ private fun aspectOf(m: RichMedia): Float = if (m.width > 0 && m.height > 0) (m.
 @Composable
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun Thumb(m: RichMedia, modifier: Modifier, onLongClick: () -> Unit, onClick: () -> Unit) {
-    val bitmap = remember(m.mediaId) { if (m.preview.isNotEmpty()) decodeImage(m.preview) else null }
-    Box(
-        modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(Tima.colors.functional)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .testTag("msg:photo"),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (bitmap != null) {
-            Image(bitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        } else {
-            Caption("✕", fontSize = 28.sp, color = Tima.colors.text3)
+    val shape = RoundedCornerShape(10.dp)
+    val base = modifier.clip(shape).background(Tima.colors.functional).combinedClickable(onClick = onClick, onLongClick = onLongClick)
+    if (LocalAttachmentActions.current.waitsWifi(m.mediaId)) {
+        Box(base.padding(8.dp).testTag(PHOTO_WAITS_WIFI_TAG), contentAlignment = Alignment.Center) {
+            Tertiary(Tima.words.chat.photoWaitsWifi)
         }
+        return
     }
+    PhotoTile(mediaUri(m.mediaId, m.key), base.testTag("msg:photo"))
 }
 
 /** Файл вне пузыря (Решения §6): знак вида, имя, размер; «Сохранить как». */

@@ -137,7 +137,10 @@ type MessageBody struct {
 	// пусты. Строение сообщения правка не трогает: блоки разметки исходного остаются на месте.
 	//
 	// Номер 7, а не 6: поле 6 обещано `StickerRef` (doc_mig/СТИКЕР-В-ТЕЛЕ-СООБЩЕНИЯ.md).
-	Edits         []*NodeEdit `protobuf:"bytes,7,rep,name=edits,proto3" json:"edits,omitempty"`
+	Edits []*NodeEdit `protobuf:"bytes,7,rep,name=edits,proto3" json:"edits,omitempty"`
+	// Правка фото (ADR-0052): файл исходного заменяется целиком — новый номер, ключ, размеры. Тело
+	// такой записи — только это поле; узлы и строение исходного не трогаются.
+	MediaEdits    []*MediaEdit `protobuf:"bytes,8,rep,name=media_edits,json=mediaEdits,proto3" json:"media_edits,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -214,6 +217,67 @@ func (x *MessageBody) GetEdits() []*NodeEdit {
 	return nil
 }
 
+func (x *MessageBody) GetMediaEdits() []*MediaEdit {
+	if x != nil {
+		return x.MediaEdits
+	}
+	return nil
+}
+
+// Новый файл на месте одного файла исходного сообщения.
+type MediaEdit struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Позиция файла в media исходного.
+	Index         uint32    `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	Media         *MediaRef `protobuf:"bytes,2,opt,name=media,proto3" json:"media,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MediaEdit) Reset() {
+	*x = MediaEdit{}
+	mi := &file_message_body_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MediaEdit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MediaEdit) ProtoMessage() {}
+
+func (x *MediaEdit) ProtoReflect() protoreflect.Message {
+	mi := &file_message_body_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MediaEdit.ProtoReflect.Descriptor instead.
+func (*MediaEdit) Descriptor() ([]byte, []int) {
+	return file_message_body_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *MediaEdit) GetIndex() uint32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *MediaEdit) GetMedia() *MediaRef {
+	if x != nil {
+		return x.Media
+	}
+	return nil
+}
+
 // Новый текст одного узла исходного сообщения.
 type NodeEdit struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -231,7 +295,7 @@ type NodeEdit struct {
 
 func (x *NodeEdit) Reset() {
 	*x = NodeEdit{}
-	mi := &file_message_body_proto_msgTypes[1]
+	mi := &file_message_body_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -243,7 +307,7 @@ func (x *NodeEdit) String() string {
 func (*NodeEdit) ProtoMessage() {}
 
 func (x *NodeEdit) ProtoReflect() protoreflect.Message {
-	mi := &file_message_body_proto_msgTypes[1]
+	mi := &file_message_body_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -256,7 +320,7 @@ func (x *NodeEdit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeEdit.ProtoReflect.Descriptor instead.
 func (*NodeEdit) Descriptor() ([]byte, []int) {
-	return file_message_body_proto_rawDescGZIP(), []int{1}
+	return file_message_body_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *NodeEdit) GetIndex() uint32 {
@@ -295,7 +359,7 @@ type Entity struct {
 
 func (x *Entity) Reset() {
 	*x = Entity{}
-	mi := &file_message_body_proto_msgTypes[2]
+	mi := &file_message_body_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -307,7 +371,7 @@ func (x *Entity) String() string {
 func (*Entity) ProtoMessage() {}
 
 func (x *Entity) ProtoReflect() protoreflect.Message {
-	mi := &file_message_body_proto_msgTypes[2]
+	mi := &file_message_body_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -320,7 +384,7 @@ func (x *Entity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Entity.ProtoReflect.Descriptor instead.
 func (*Entity) Descriptor() ([]byte, []int) {
-	return file_message_body_proto_rawDescGZIP(), []int{2}
+	return file_message_body_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Entity) GetType() EntityType {
@@ -383,9 +447,6 @@ type MediaRef struct {
 	DurationMs uint32                 `protobuf:"varint,7,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	Blurhash   string                 `protobuf:"bytes,8,opt,name=blurhash,proto3" json:"blurhash,omitempty"`                        // плейсхолдер до загрузки
 	ChunkCount uint32                 `protobuf:"varint,9,opt,name=chunk_count,json=chunkCount,proto3" json:"chunk_count,omitempty"` // >1 → chunked (§10.3)
-	// Превью фото от отправителя (doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §3): JPEG по большей стороне 320,
-	// качество 0,7, до 20 КБ — едет внутри зашифрованного тела, полное — по нажатию. Пусто — нет.
-	Preview []byte `protobuf:"bytes,10,opt,name=preview,proto3" json:"preview,omitempty"`
 	// Имя файла вне пузыря (Решения §6): на диске файл лежит по номеру сообщения, имя — здесь, в
 	// зашифрованном теле. Пусто у фото.
 	Name          string `protobuf:"bytes,11,opt,name=name,proto3" json:"name,omitempty"`
@@ -395,7 +456,7 @@ type MediaRef struct {
 
 func (x *MediaRef) Reset() {
 	*x = MediaRef{}
-	mi := &file_message_body_proto_msgTypes[3]
+	mi := &file_message_body_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +468,7 @@ func (x *MediaRef) String() string {
 func (*MediaRef) ProtoMessage() {}
 
 func (x *MediaRef) ProtoReflect() protoreflect.Message {
-	mi := &file_message_body_proto_msgTypes[3]
+	mi := &file_message_body_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +481,7 @@ func (x *MediaRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaRef.ProtoReflect.Descriptor instead.
 func (*MediaRef) Descriptor() ([]byte, []int) {
-	return file_message_body_proto_rawDescGZIP(), []int{3}
+	return file_message_body_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *MediaRef) GetMediaId() string {
@@ -486,13 +547,6 @@ func (x *MediaRef) GetChunkCount() uint32 {
 	return 0
 }
 
-func (x *MediaRef) GetPreview() []byte {
-	if x != nil {
-		return x.Preview
-	}
-	return nil
-}
-
 func (x *MediaRef) GetName() string {
 	if x != nil {
 		return x.Name
@@ -504,14 +558,19 @@ var File_message_body_proto protoreflect.FileDescriptor
 
 const file_message_body_proto_rawDesc = "" +
 	"\n" +
-	"\x12message_body.proto\x12\x0etima.crypto.v1\"\xe3\x01\n" +
+	"\x12message_body.proto\x12\x0etima.crypto.v1\"\x9f\x02\n" +
 	"\vMessageBody\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x122\n" +
 	"\bentities\x18\x02 \x03(\v2\x16.tima.crypto.v1.EntityR\bentities\x12.\n" +
 	"\x05media\x18\x03 \x03(\v2\x18.tima.crypto.v1.MediaRefR\x05media\x12\x14\n" +
 	"\x05nodes\x18\x04 \x03(\tR\x05nodes\x12\x16\n" +
 	"\x06markup\x18\x05 \x01(\tR\x06markup\x12.\n" +
-	"\x05edits\x18\a \x03(\v2\x18.tima.crypto.v1.NodeEditR\x05edits\"P\n" +
+	"\x05edits\x18\a \x03(\v2\x18.tima.crypto.v1.NodeEditR\x05edits\x12:\n" +
+	"\vmedia_edits\x18\b \x03(\v2\x19.tima.crypto.v1.MediaEditR\n" +
+	"mediaEdits\"Q\n" +
+	"\tMediaEdit\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\rR\x05index\x12.\n" +
+	"\x05media\x18\x02 \x01(\v2\x18.tima.crypto.v1.MediaRefR\x05media\"P\n" +
 	"\bNodeEdit\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\rR\x05index\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x1a\n" +
@@ -523,7 +582,7 @@ const file_message_body_proto_rawDesc = "" +
 	"\x03url\x18\x04 \x01(\tR\x03url\x12\x17\n" +
 	"\auser_id\x18\x05 \x01(\tR\x06userId\x12\x1c\n" +
 	"\tattribute\x18\x06 \x01(\tR\tattribute\x12\x19\n" +
-	"\bmedia_id\x18\a \x01(\tR\amediaId\"\xaf\x02\n" +
+	"\bmedia_id\x18\a \x01(\tR\amediaId\"\xa4\x02\n" +
 	"\bMediaRef\x12\x19\n" +
 	"\bmedia_id\x18\x01 \x01(\tR\amediaId\x12\x1b\n" +
 	"\tmedia_key\x18\x02 \x01(\fR\bmediaKey\x12\x12\n" +
@@ -536,10 +595,9 @@ const file_message_body_proto_rawDesc = "" +
 	"durationMs\x12\x1a\n" +
 	"\bblurhash\x18\b \x01(\tR\bblurhash\x12\x1f\n" +
 	"\vchunk_count\x18\t \x01(\rR\n" +
-	"chunkCount\x12\x18\n" +
-	"\apreview\x18\n" +
-	" \x01(\fR\apreview\x12\x12\n" +
-	"\x04name\x18\v \x01(\tR\x04name*\xdc\x01\n" +
+	"chunkCount\x12\x12\n" +
+	"\x04name\x18\v \x01(\tR\x04nameJ\x04\b\n" +
+	"\x10\vR\apreview*\xdc\x01\n" +
 	"\n" +
 	"EntityType\x12\x12\n" +
 	"\x0eET_UNSPECIFIED\x10\x00\x12\v\n" +
@@ -574,24 +632,27 @@ func file_message_body_proto_rawDescGZIP() []byte {
 }
 
 var file_message_body_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_message_body_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_message_body_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_message_body_proto_goTypes = []any{
 	(EntityType)(0),     // 0: tima.crypto.v1.EntityType
 	(*MessageBody)(nil), // 1: tima.crypto.v1.MessageBody
-	(*NodeEdit)(nil),    // 2: tima.crypto.v1.NodeEdit
-	(*Entity)(nil),      // 3: tima.crypto.v1.Entity
-	(*MediaRef)(nil),    // 4: tima.crypto.v1.MediaRef
+	(*MediaEdit)(nil),   // 2: tima.crypto.v1.MediaEdit
+	(*NodeEdit)(nil),    // 3: tima.crypto.v1.NodeEdit
+	(*Entity)(nil),      // 4: tima.crypto.v1.Entity
+	(*MediaRef)(nil),    // 5: tima.crypto.v1.MediaRef
 }
 var file_message_body_proto_depIdxs = []int32{
-	3, // 0: tima.crypto.v1.MessageBody.entities:type_name -> tima.crypto.v1.Entity
-	4, // 1: tima.crypto.v1.MessageBody.media:type_name -> tima.crypto.v1.MediaRef
-	2, // 2: tima.crypto.v1.MessageBody.edits:type_name -> tima.crypto.v1.NodeEdit
-	0, // 3: tima.crypto.v1.Entity.type:type_name -> tima.crypto.v1.EntityType
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	4, // 0: tima.crypto.v1.MessageBody.entities:type_name -> tima.crypto.v1.Entity
+	5, // 1: tima.crypto.v1.MessageBody.media:type_name -> tima.crypto.v1.MediaRef
+	3, // 2: tima.crypto.v1.MessageBody.edits:type_name -> tima.crypto.v1.NodeEdit
+	2, // 3: tima.crypto.v1.MessageBody.media_edits:type_name -> tima.crypto.v1.MediaEdit
+	5, // 4: tima.crypto.v1.MediaEdit.media:type_name -> tima.crypto.v1.MediaRef
+	0, // 5: tima.crypto.v1.Entity.type:type_name -> tima.crypto.v1.EntityType
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_message_body_proto_init() }
@@ -605,7 +666,7 @@ func file_message_body_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_message_body_proto_rawDesc), len(file_message_body_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

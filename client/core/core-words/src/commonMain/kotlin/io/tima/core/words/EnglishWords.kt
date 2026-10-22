@@ -758,6 +758,9 @@ object EnglishWords : Words {
         override val linkCardsAbout = "Your phone fetches the title and picture for a card from the site itself — the site sees your address. Off: the link goes as a button"
         override val linkCardsOn = "On"
         override val linkCardsOff = "Off"
+        override val mobileFiles = "Download files over mobile data"
+        override val mobileFilesAbout = "Photos and files from personal chats download by themselves as soon as they arrive — no need to open the chat. " +
+            "Off: on mobile data they wait for Wi-Fi; if the postman period ends first, they are lost"
         override val always = "Always"
         override val clearNow = "Clear now"
         override val messages = "Messages"
@@ -1336,6 +1339,7 @@ object EnglishWords : Words {
         override val photoInfo = "Info"
         override val photoName = "Name"
         override val photoNoName = "not set"
+        override val photoWaitsWifi = "Waiting for Wi-Fi: files do not download over mobile data — see «Storage and data»"
         override val photoSize = "Size"
         override val photoPixels = "Pixels"
         override val photoFrom = "Sent by"

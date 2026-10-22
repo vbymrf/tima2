@@ -21,14 +21,14 @@ import okio.ByteString.Companion.toByteString
  */
 object AttachmentBodiesOverKodium : AttachmentBodies {
 
-    private fun ref(m: OutMedia) = MediaRef(
+    /** Файл для тела: сообщения и правки, заменяющей фото (ADR-0052). */
+    internal fun ref(m: OutMedia) = MediaRef(
         media_id = m.mediaId,
         media_key = m.key.toByteString(),
         mime = m.mime,
         size_bytes = m.size,
         width = m.width,
         height = m.height,
-        preview = m.preview.toByteString(),
         name = m.name,
     )
 

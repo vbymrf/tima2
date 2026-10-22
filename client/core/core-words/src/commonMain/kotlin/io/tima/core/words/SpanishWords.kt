@@ -757,6 +757,9 @@ object SpanishWords : Words {
         override val linkCardsAbout = "Su teléfono toma el título y la imagen de la tarjeta del propio sitio: el sitio ve su dirección. Desactivado: el enlace va como botón"
         override val linkCardsOn = "Activadas"
         override val linkCardsOff = "Desactivadas"
+        override val mobileFiles = "Descargar archivos con datos móviles"
+        override val mobileFilesAbout = "Las fotos y archivos de chats personales se descargan solos en cuanto llegan, sin abrir el chat. " +
+            "Desactivado: con datos móviles esperan al Wi-Fi; si antes vence el plazo del cartero, se pierden"
         override val always = "Siempre"
         override val clearNow = "Vaciar ahora"
         override val messages = "Mensajes"
@@ -1336,6 +1339,7 @@ object SpanishWords : Words {
         override val photoInfo = "Información"
         override val photoName = "Nombre"
         override val photoNoName = "sin nombre"
+        override val photoWaitsWifi = "Espera Wi-Fi: los archivos no se descargan con datos móviles — «Memoria y datos»"
         override val photoSize = "Tamaño"
         override val photoPixels = "Píxeles"
         override val photoFrom = "Enviada por"

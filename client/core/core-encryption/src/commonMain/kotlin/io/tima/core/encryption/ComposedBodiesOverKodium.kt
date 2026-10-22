@@ -269,7 +269,6 @@ object ComposedBodiesOverKodium : ComposedBodies {
             size_bytes = m.size,
             width = m.width,
             height = m.height,
-            preview = m.preview.toByteString(),
             name = m.name,
         )
     }
@@ -401,7 +400,6 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val width: Int = 0,
         val height: Int = 0,
         val size: Long = 0,
-        val preview: String = "",
         val author: Boolean = false,
         val cut: String = "",
         val description: String = "",
@@ -416,7 +414,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val share: Int = 0,
     ) {
         private fun media(): OutMedia? = if (mediaId.isEmpty()) null else
-            OutMedia(mediaId, Base64.decode(key), mime, width, height, size, Base64.decode(preview), name)
+            OutMedia(mediaId, Base64.decode(key), mime, width, height, size, name)
 
         fun toWidget(): ComposedWidget? = when (type) {
             "image" -> media()?.let { ComposedWidget.Image(it, share.takeIf { s -> s in 20..100 } ?: 100) }
@@ -436,7 +434,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
                 is ComposedWidget.Image -> SavedWidget(
                     "image", mediaId = w.media.mediaId, key = Base64.encode(w.media.key), mime = w.media.mime,
                     width = w.media.width, height = w.media.height, size = w.media.size,
-                    preview = Base64.encode(w.media.preview), name = w.media.name, share = w.share,
+                    name = w.media.name, share = w.share,
                 )
                 is ComposedWidget.Link -> SavedWidget(
                     "link", url = w.url, title = w.title, mode = w.mode, description = w.description, color = w.color,

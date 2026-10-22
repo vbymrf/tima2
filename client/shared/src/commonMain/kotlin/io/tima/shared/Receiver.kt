@@ -163,7 +163,18 @@ class Receiver(
         media = { network.media },
         folder = environment.media,
         scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default),
-    )
+        // «Качать файлы по мобильной сети» («Память и трафик», заказчик 2026-10-22): по умолчанию да.
+        mayDownload = {
+            io.tima.core.network.NetworkWatches.current.kind() != "mobile" ||
+                environment.settings.all().first()[PostmanFiles.MOBILE_KEY] != "0"
+        },
+    ).also { files ->
+        // Сеть сменилась или появилась после потери — отложенное до сети без счёта трафика забирается.
+        val watch = io.tima.core.network.NetworkWatches.current
+        val around = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+        around.launch { watch.switched.collect { files.resume() } }
+        around.launch { watch.state.collect { if (it == io.tima.core.network.NetworkState.AVAILABLE) files.resume() } }
+    }
 
     /**
      * Кого человек заблокировал — по `user_id` (Л8, Л9, Л17).
@@ -1425,6 +1436,8 @@ class Receiver(
                 if (!io.tima.core.encryption.HistoryFrame.isHistory(entry.envelope)) keyCopy?.feedMessage(entry.chatId, entry.envelope)
                 // Фото и файлы вне пузыря — забрать сразу, «приди и получи» (Решения §6).
                 postman.received(io.tima.core.encryption.TextBodyCodec.decodeLine(it.body)?.rich)
+                // Правка, заменившая фото (ADR-0052), — новое фото забирается так же сразу.
+                if (it.meta.editOf > 0u) postman.receivedMedia(io.tima.core.encryption.TextBodyCodec.editedMedia(it.body))
                 OpenOutcome.Opened(it.body, it.meta.senderId, kind = it.meta.kind, editOf = it.meta.editOf.toLong())
             },
             // Подпись не сошлась или обёртки для нас нет — разные беды, и причина

@@ -213,6 +213,12 @@ interface MessageBodyCodec {
     /** Тело правки из редактора: меняются только тексты, строение то же (Решения §8). */
     fun encodeEditDoc(body: ByteArray, edits: List<ByteArray>, doc: ComposedDoc): EditBody = EditBody.Unsupported
 
+    /**
+     * Тело правки, заменяющей файл исходного на позиции [index] (ADR-0052): фото, изменённое в
+     * просмотре. По умолчанию не умеет — заглушки тестов.
+     */
+    fun encodeMediaEdit(index: Int, media: OutMedia): EditBody = EditBody.Unsupported
+
     /** Набранное с ответом на сообщение. По умолчанию ответ не знает — уходит как набранное. */
     fun encodeReply(text: String, marks: Boolean, reply: ReplyTarget): ByteArray =
         if (marks) encodeTyped(text) else encodeText(text)

@@ -26,8 +26,6 @@ class RichMedia(
     val mime: String,
     val width: Int,
     val height: Int,
-    /** Превью фото от отправителя — JPEG до 20 КБ внутри тела (Решения §3); пусто — нет. */
-    val preview: ByteArray = ByteArray(0),
     /** Имя файла вне пузыря (Решения §6); пусто у фото. */
     val name: String = "",
     val size: Long = 0,

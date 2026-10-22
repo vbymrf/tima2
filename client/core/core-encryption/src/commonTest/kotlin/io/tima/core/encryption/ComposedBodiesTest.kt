@@ -150,7 +150,7 @@ class ComposedBodiesTest {
     /** Заказчик 2026-10-21: доля ширины картинки — в теле, у получателя и в черновике; 100 — не пишется. */
     @Test
     fun доля_ширины_картинки() {
-        val media = OutMedia("m-1", ByteArray(32) { 5 }, "image/jpeg", 10, 20, 300, ByteArray(3) { 1 })
+        val media = OutMedia("m-1", ByteArray(32) { 5 }, "image/jpeg", 10, 20, 300)
         val doc = ComposedDoc(listOf(ComposedItem.Widget(ComposedWidget.Image(media, share = 60)), ComposedItem.Widget(ComposedWidget.Image(media))))
         val content = bodies.content(doc)
         assertTrue(io.tima.crypto.MarkupRules.check(content, strict = true).isEmpty(), io.tima.crypto.MarkupRules.check(content, strict = true).toString())
@@ -252,7 +252,7 @@ class ComposedBodiesTest {
         val doc = ComposedDoc(
             listOf(
                 ComposedItem.Text("# a", mapOf("background" to "amber-soft")),
-                ComposedItem.Widget(ComposedWidget.Image(OutMedia("m-1", ByteArray(32) { 5 }, "image/jpeg", 10, 20, 300, ByteArray(3) { 1 }))),
+                ComposedItem.Widget(ComposedWidget.Image(OutMedia("m-1", ByteArray(32) { 5 }, "image/jpeg", 10, 20, 300))),
                 ComposedItem.Row(listOf(ComposedCell(100, "x", listOf(ComposedWidget.Contact("Аня", "+7"))))),
                 ComposedItem.Widget(ComposedWidget.Reply(ReplyTarget("group", "g", 3, "u"))),
             ),
@@ -267,7 +267,7 @@ class ComposedBodiesTest {
         assertEquals(doc.items[3], back.items[3])
         val image = assertIs<ComposedWidget.Image>(assertIs<ComposedItem.Widget>(back.items[1]).widget).media
         assertEquals((ByteArray(32) { 5 }).toList(), image.key.toList())
-        assertEquals(3, image.preview.size)
+        assertEquals(300L, image.size)
         assertNull(bodies.load("не json"))
     }
 }

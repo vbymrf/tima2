@@ -187,6 +187,22 @@ func (s *Store) TakeExpiredPostman(ctx context.Context, limit int) ([]Media, err
 	return out, rows.Err()
 }
 
+// DropPostman — отправитель убирает свой файл почтальона (фото заменено правкой, ПЛАН-(ИФ) ИФ-В2):
+// срок — сейчас, объекты удалит уборщик почтальона. Незавершённый — тоже: он уже никому не нужен.
+func (s *Store) DropPostman(ctx context.Context, mediaID, ownerID string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE media_objects SET expires_at = now(), status = 'complete'
+		WHERE media_id = $1 AND owner_id = $2 AND postman_chat IS NOT NULL AND status IN ('complete', 'pending')`,
+		mediaID, ownerID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrMediaNotFound
+	}
+	return nil
+}
+
 // ReopenMedia — повторная загрузка удалённого по сроку файла почтальона (Решения §6: «опоздавшее
 // устройство просит повторно — файл снова загружает устройство, у которого он есть»). Загружать
 // может отправитель или получатель; файл снова pending под тем же ключом.

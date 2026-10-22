@@ -58,6 +58,17 @@ class EditMessage(
         return queued(chatId, serverId) { original -> codec.encodeEditDoc(original.body, original.edits, doc) }
     }
 
+    /**
+     * Фото на месте [index] заменено (ADR-0052; заказчик 2026-10-22): одна правка на сеанс
+     * просмотра — повороты и сохранения редактора копятся и уходят здесь одной записью. Предел тот
+     * же — три; считается досылка, а не нажатия.
+     */
+    fun replaceMedia(chatId: String, serverId: Long, index: Int, media: OutMedia): EditResult =
+        queued(chatId, serverId) { codec.encodeMediaEdit(index, media) }
+
+    /** Можно ли ещё править: своё, отправлено, правок меньше трёх. Смену ключа знает сервер. */
+    fun editable(chatId: String, serverId: Long): Boolean = serverId > 0 && checked(chatId, serverId) == null
+
     /** Отказ до тела правки: не отправлено, нет, не своё, правок уже три. `null` — можно. */
     private fun checked(chatId: String, serverId: Long): EditResult? {
         require(chatId.isNotBlank()) { "chatId пустой" }

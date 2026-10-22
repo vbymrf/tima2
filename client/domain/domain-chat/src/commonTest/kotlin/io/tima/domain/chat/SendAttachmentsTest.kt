@@ -25,9 +25,9 @@ class SendAttachmentsTest {
 
     /** Тело-подделка: вид и что в нём — строкой, чтобы видеть выбор пути. */
     private val bodies = object : AttachmentBodies {
-        override fun album(photos: List<OutMedia>) = ("album:" + photos.joinToString(",") { "${it.mediaId}/${it.preview.size}" }).encodeToByteArray()
+        override fun album(photos: List<OutMedia>) = ("album:" + photos.joinToString(",") { "${it.mediaId}/${it.width}" }).encodeToByteArray()
         override fun file(file: OutMedia) = "file:${file.mediaId}/${file.name}/${file.size}".encodeToByteArray()
-        override fun inlineImages(images: List<OutMedia>) = ("inline:" + images.joinToString(",") { "${it.mediaId}/${it.preview.size}" }).encodeToByteArray()
+        override fun inlineImages(images: List<OutMedia>) = ("inline:" + images.joinToString(",") { "${it.mediaId}/${it.width}" }).encodeToByteArray()
         override fun contact(name: String, phone: String, userId: String) = "contact:$name/$phone".encodeToByteArray()
         override fun place(lat: Double, lon: Double, label: String) = "place:$lat/$lon/$label".encodeToByteArray()
         override fun link(url: String, title: String, cloudKind: String) = "link:$url/$cloudKind".encodeToByteArray()
@@ -40,20 +40,20 @@ class SendAttachmentsTest {
         keys = { "k-${queued.size}" },
     )
 
-    private fun photo() = SendAttachments.Photo(ByteArray(100), ByteArray(7), 1280, 960)
+    private fun photo() = SendAttachments.Photo(ByteArray(100), 1280, 960)
 
     @Test
     fun фото_в_личной_почтальоном_с_превью_в_теле() = runTest {
         assertIs<AttachResult.Queued>(send.photos("chat", -1, "peer", listOf(photo(), photo())))
         assertEquals(listOf("chat" to "peer", "chat" to "peer"), uploads.map { it.postmanChat to it.postmanPeer })
-        assertEquals("album:m-1/7,m-2/7", queued.single())
+        assertEquals("album:m-1/1280,m-2/1280", queued.single())
     }
 
     @Test
     fun фото_в_группе_картинками_без_почтальона_и_превью() = runTest {
         send.photos("g-1", 2, null, listOf(photo()))
         assertEquals(null, uploads.single().postmanChat)
-        assertEquals("inline:m-1/0", queued.single())
+        assertEquals("inline:m-1/1280", queued.single())
     }
 
     @Test

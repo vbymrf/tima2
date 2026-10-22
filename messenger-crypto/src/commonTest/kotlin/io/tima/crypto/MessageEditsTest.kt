@@ -31,6 +31,20 @@ class MessageEditsTest {
     }
 
     @Test
+    fun замена_фото_проходит_круг_и_ложится_на_своё_место() {
+        fun ref(id: String, w: Int) = io.tima.crypto.proto.MediaRef(media_id = id, mime = "image/jpeg", width = w, height = 100)
+        val original = MessageContent(nodes = listOf(""), media = listOf(ref("a", 10), ref("b", 20)))
+        val body = MessageEdits.encodeMedia(listOf(MediaChange(1, ref("b2", 30))))
+        val decoded = MessageSerializer.decodeBody(body).getOrThrow()
+        assertTrue(MessageEdits.from(decoded).isEmpty(), "узлов замена фото не трогает")
+        val second = MessageSerializer.decodeBody(MessageEdits.encodeMedia(listOf(MediaChange(1, ref("b3", 40)), MediaChange(7, ref("x", 1))))).getOrThrow()
+        val applied = MessageEdits.applyMedia(original, listOf(MessageEdits.mediaFrom(decoded), MessageEdits.mediaFrom(second)))
+        assertEquals(listOf("a", "b3"), applied.media.map { it.media_id }, "поздняя замена перекрывает раннюю, чужая позиция пропущена")
+        assertEquals(40, applied.media[1].width)
+        assertEquals(original.nodes, applied.nodes)
+    }
+
+    @Test
     fun поздняя_правка_того_же_узла_перекрывает_раннюю() {
         val original = MessageContent.text("было")
         val applied = MessageEdits.apply(original, listOf(listOf(NodeChange(0, "стало")), listOf(NodeChange(0, "стало окончательно"))))

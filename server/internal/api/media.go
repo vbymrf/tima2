@@ -12,6 +12,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"tima/server/internal/auth"
@@ -28,6 +30,7 @@ type MediaStore interface {
 	MediaMany(ctx context.Context, ids []string) ([]store.Media, error)
 	FetchPostman(ctx context.Context, mediaID string, byPeer bool, after time.Duration) (bool, error)
 	ReopenMedia(ctx context.Context, mediaID, userID string) (store.Media, error)
+	DropPostman(ctx context.Context, mediaID, ownerID string) error
 }
 
 var _ MediaStore = (*store.Store)(nil)
@@ -41,35 +44,103 @@ type mediaDeps struct {
 	store    MediaStore
 	blobs    func() *blob.Client
 	notifier *Notifier
+	rules    MediaRules
 }
 
 // RegisterMedia — маршруты медиа: инициация загрузки, подтверждение, ссылка, ссылки пачкой; у
 // почтальона ещё просьба прислать снова и повторная загрузка (Решения §6).
 func RegisterMedia(mux *http.ServeMux, st MediaStore, blobs func() *blob.Client, n *Notifier, requireDevice Middleware) {
-	deps := mediaDeps{store: st, blobs: blobs, notifier: n}
+	deps := mediaDeps{store: st, blobs: blobs, notifier: n, rules: MediaRulesFromEnv()}
+	mux.HandleFunc("GET /api/v1/media/rules", requireDevice(mediaRules(deps)))
 	mux.HandleFunc("POST /api/v1/media/init", requireDevice(mediaInit(deps)))
 	mux.HandleFunc("POST /api/v1/media/complete", requireDevice(mediaComplete(deps)))
 	mux.HandleFunc("GET /api/v1/media/{mediaID}/url", requireDevice(mediaURL(deps)))
 	mux.HandleFunc("POST /api/v1/media/urls", requireDevice(mediaURLs(deps)))
 	mux.HandleFunc("POST /api/v1/media/{mediaID}/request", requireDevice(mediaRequest(deps)))
 	mux.HandleFunc("POST /api/v1/media/{mediaID}/reupload", requireDevice(mediaReupload(deps)))
+	mux.HandleFunc("POST /api/v1/media/{mediaID}/drop", requireDevice(mediaDrop(deps)))
 }
 
+// MediaRules — что сервер принимает (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ1): сервер задаёт, клиент
+// спрашивает не чаще раза в сутки и соблюдает до отправки. Файл зашифрован — сервер видит только
+// размер и заявленный вид; сторону фото и запреты по имени держит клиент по этому ответу. Подписка
+// позже будет менять ответ человеку, а не клиент.
+type MediaRules struct {
+	FileBytes  int64 // файл другому человеку
+	SelfBytes  int64 // файл себе — верхняя граница загрузки вообще
+	DailyBytes int64 // квота загрузок за сутки (Решения §14)
+	PhotoSide  int   // большая сторона фото (ПЛАН-(ПФ))
+	MaxPhotos  int   // фото в одном сообщении (Решения §3)
+}
+
+// MediaRulesFromEnv — правила из переменных сервера; пусто — числа решений (Решения §3, §6, §14).
+// Ошибка в настройке — отказ запуска: молча взятое число по умолчанию разошлось бы со словом
+// владельца стенда.
+func MediaRulesFromEnv() MediaRules {
+	return MediaRules{
+		FileBytes:  envInt("TIMA_MEDIA_FILE_MB", 10) << 20,
+		SelfBytes:  envInt("TIMA_MEDIA_SELF_MB", 50) << 20,
+		DailyBytes: envInt("TIMA_MEDIA_DAILY_MB", 1024) << 20,
+		PhotoSide:  int(envInt("TIMA_MEDIA_PHOTO_SIDE", 1280)),
+		MaxPhotos:  int(envInt("TIMA_MEDIA_MAX_PHOTOS", 10)),
+	}
+}
+
+func envInt(name string, def int64) int64 {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n <= 0 {
+		log.Fatalf("%s: целое больше нуля, получено %q", name, v)
+	}
+	return n
+}
+
+// blockedNames — окончания имён, которые клиент не отправляет вовсе (Решения §5, §6).
+var blockedNames = []string{".html", ".htm", ".svg", ".exe", ".msi", ".bat", ".cmd", ".com", ".scr", ".ps1", ".vbs", ".js", ".jar"}
+
+// mediaRules — GET /media/rules: что сервер примет от этого человека.
+func mediaRules(deps mediaDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rl := deps.rules
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"file_bytes": rl.FileBytes, "self_bytes": rl.SelfBytes, "daily_bytes": rl.DailyBytes,
+			"photo_side": rl.PhotoSide, "max_photos": rl.MaxPhotos,
+			"postman_hour_sec": int64(store.PostmanHour.Seconds()), "postman_week_sec": int64(store.PostmanWeek.Seconds()),
+			"blocked_names": blockedNames,
+		})
+	}
+}
+
+// mediaDrop — POST /media/{id}/drop: отправитель убирает свой файл почтальона, который больше не
+// нужен — фото заменено правкой (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ-В2). Срок ставится на сейчас,
+// удаляет уборщик почтальона, как всё по сроку.
+func mediaDrop(deps mediaDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		err := deps.store.DropPostman(r.Context(), r.PathValue("mediaID"), id.UserID)
+		if errors.Is(err, store.ErrMediaNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "своего файла почтальона с таким номером нет")
+			return
+		} else if err != nil {
+			log.Printf("mediaDrop: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// Пределы файла, себе и за сутки — в [MediaRules], из переменных сервера (ПЛАН-(ИФ) ИФ1). Верхняя
+// граница загрузки — предел «себе»: кому файл, ручка загрузки узнаёт только у почтальона, там же
+// проверяется предел другому. У Caddy перед s3 остаётся max_size 2GB — предел держит эта ручка.
 const (
-	// Предел файла: 10 МБ, себе — 50 МБ (заказчик 2026-10-16…18, doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §6);
-	// прежние 2 ГБ сняты. Здесь — верхняя граница, 50 МБ: кому файл, ручка загрузки пока не знает.
-	// Предел 10 МБ для чужого получателя проверяется там, где получатель известен, — у почтальона
-	// (ПЛАН-(ПФ) ПФ4, ПЛАН-(РС) РС3). У Caddy перед s3 остаётся max_size 2GB — предел
-	// держит эта ручка: больше 50 МБ ссылка на загрузку не выдаётся.
-	maxMediaBytes = 50 << 20
-	// Квота загрузок на человека (Решения §14): заявлено за последние сутки, вместе с новым файлом.
-	// Числа решения не назвали — 1 ГБ: двадцать файлов по 50 МБ себе и запас на картинки.
-	uploadQuotaBytes = 1 << 30
 	// Ссылок пачкой — до 100 (Решения §14).
 	maxURLBatch = 100
-	// Почтальон: файл другому человеку — до 10 МБ, себе — до 50 МБ (Решения §6).
-	maxPostmanBytes = 10 << 20
-	maxChunks       = 1024
+	maxChunks   = 1024
 	uploadURLTTL    = 15 * time.Minute
 	downloadURLTTL  = 10 * time.Minute // media-storage.md §2
 )
@@ -102,8 +173,8 @@ func mediaInit(deps mediaDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
 			return
 		}
-		if req.SizeBytes <= 0 || req.SizeBytes > maxMediaBytes {
-			writeErr(w, http.StatusBadRequest, "bad_size", "size_bytes должен быть в (0, 50 МБ]")
+		if req.SizeBytes <= 0 || req.SizeBytes > deps.rules.SelfBytes {
+			writeErr(w, http.StatusBadRequest, "bad_size", fmt.Sprintf("size_bytes должен быть в (0, %d МБ]", deps.rules.SelfBytes>>20))
 			return
 		}
 		if req.ChunkCount < 0 || req.ChunkCount > maxChunks {
@@ -142,7 +213,7 @@ func mediaInit(deps mediaDeps) http.HandlerFunc {
 		id, _ := auth.FromContext(r.Context())
 		media := store.Media{
 			OwnerID: id.UserID, Mime: req.Mime, SizeBytes: req.SizeBytes,
-			IsEncrypted: req.IsEncrypted, ChunkCount: req.ChunkCount, QuotaBytes: uploadQuotaBytes,
+			IsEncrypted: req.IsEncrypted, ChunkCount: req.ChunkCount, QuotaBytes: deps.rules.DailyBytes,
 		}
 		if p := req.Postman; p != nil {
 			// Личная переписка — только своя: chat_id выводится из пары, как у сообщения.
@@ -150,8 +221,8 @@ func mediaInit(deps mediaDeps) http.HandlerFunc {
 				writeErr(w, http.StatusBadRequest, "bad_postman", "файл почтальона — зашифрованный, в своей личной переписке")
 				return
 			}
-			if p.PeerID != id.UserID && req.SizeBytes > maxPostmanBytes {
-				writeErr(w, http.StatusBadRequest, "postman_too_large", "файл другому человеку — до 10 МБ (себе — до 50 МБ)")
+			if p.PeerID != id.UserID && req.SizeBytes > deps.rules.FileBytes {
+				writeErr(w, http.StatusBadRequest, "postman_too_large", fmt.Sprintf("файл другому человеку — до %d МБ (себе — до %d МБ)", deps.rules.FileBytes>>20, deps.rules.SelfBytes>>20))
 				return
 			}
 			media.PostmanChat, media.PostmanPeer, media.OwnerDevice = p.ChatID, p.PeerID, id.DeviceID
@@ -159,7 +230,7 @@ func mediaInit(deps mediaDeps) http.HandlerFunc {
 		m, err := deps.store.CreateMedia(r.Context(), media, contentHash)
 		if errors.Is(err, store.ErrUploadQuota) {
 			w.Header().Set("Retry-After", "3600")
-			writeErr(w, http.StatusTooManyRequests, "upload_quota", "за сутки загружено больше 1 ГБ — попробуйте позже")
+			writeErr(w, http.StatusTooManyRequests, "upload_quota", fmt.Sprintf("за сутки загружено больше %d МБ — попробуйте позже", deps.rules.DailyBytes>>20))
 			return
 		}
 		if err != nil {

@@ -483,6 +483,9 @@ interface StorageWords {
     val linkCardsAbout: String
     val linkCardsOn: String
     val linkCardsOff: String
+    /** Файлы по мобильной сети (заказчик 2026-10-22): фото и файлы забираются сами, без входа в переписку. */
+    val mobileFiles: String
+    val mobileFilesAbout: String
     val always: String
     val clearNow: String
     val messages: String
@@ -1519,6 +1522,8 @@ interface ChatWords {
     val photoInfo: String
     val photoName: String
     val photoNoName: String
+    /** Фото не забрано: мобильная сеть, а качать по ней выключено («Память и трафик»), заказчик 2026-10-22. */
+    val photoWaitsWifi: String
     val photoSize: String
     val photoPixels: String
     val photoFrom: String
@@ -3115,6 +3120,9 @@ object RussianWords : Words {
         override val linkCardsAbout = "Название и картинку для карточки телефон берёт с сайта сам — сайт видит ваш адрес. Выключено — ссылка уходит кнопкой"
         override val linkCardsOn = "Включены"
         override val linkCardsOff = "Выключены"
+        override val mobileFiles = "Качать файлы по мобильной сети"
+        override val mobileFilesAbout = "Фото и файлы личных переписок скачиваются сами, сразу как пришли, — без входа в переписку. " +
+            "Выключено — по мобильной сети ждут Wi-Fi; не дождались срока почтальона — пропадут"
         override val always = "Всегда"
         override val clearNow = "Очистить сейчас"
         override val messages = "Сообщения"
@@ -3708,6 +3716,7 @@ object RussianWords : Words {
         override val photoInfo = "Информация"
         override val photoName = "Имя"
         override val photoNoName = "не указано"
+        override val photoWaitsWifi = "Ждёт Wi-Fi: по мобильной сети файлы не скачиваются — «Память и трафик»"
         override val photoSize = "Размер"
         override val photoPixels = "Точек"
         override val photoFrom = "Прислал(а)"

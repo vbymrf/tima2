@@ -101,9 +101,27 @@ object TextBodyCodec : MessageBodyCodec {
         return EditBody.Changes(MessageEdits.encode(changes))
     }
 
+    /** Тело правки, заменяющей файл исходного (ADR-0052): узлы и строение не трогаются. */
+    override fun encodeMediaEdit(index: Int, media: io.tima.domain.chat.OutMedia): EditBody =
+        EditBody.Changes(MessageEdits.encodeMedia(listOf(io.tima.crypto.MediaChange(index, AttachmentBodiesOverKodium.ref(media)))))
+
+    /**
+     * Новые файлы из тела правки — их забирают у почтальона сразу, как файлы нового сообщения
+     * (ПЛАН-(ИФ) ИФ7). Не правка или без файлов — пусто.
+     */
+    fun editedMedia(editBody: ByteArray): List<io.tima.domain.chat.RichMedia> =
+        MessageSerializer.decodeBody(editBody).getOrNull()?.let(MessageEdits::mediaFrom).orEmpty().map {
+            io.tima.domain.chat.RichMedia(
+                it.media.media_id, it.media.media_key.toByteArray(), it.media.mime, it.media.width, it.media.height,
+                name = it.media.name, size = it.media.size_bytes,
+            )
+        }
+
+    /** Исходное с правками по порядку: узлы (ADR-0045) и заменённые файлы (ADR-0052). */
     private fun edited(body: ByteArray, edits: List<ByteArray>): MessageContent? {
         val original = decode(body).getOrNull() ?: return null
-        return MessageEdits.apply(original, edits.mapNotNull { MessageEdits.decode(it).getOrNull() })
+        val records = edits.mapNotNull { MessageSerializer.decodeBody(it).getOrNull() }
+        return MessageEdits.applyMedia(MessageEdits.apply(original, records.map(MessageEdits::from)), records.map(MessageEdits::mediaFrom))
     }
 
     /**

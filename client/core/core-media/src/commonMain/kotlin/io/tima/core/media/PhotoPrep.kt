@@ -13,24 +13,27 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * Фото к отправке (ПЛАН-(ПФ) ПФ3, Решения §3): полное — большая сторона 1280, превью — 320 и
- * качество 0,7; не влезло в 20 КБ — качество 0,6, затем сторона 280 и 240, пока не влезет.
+ * Фото к отправке (ПЛАН-(ПФ) ПФ3, Решения §3): большая сторона 1280 — или сколько назвал сервер
+ * (ПЛАН-(ИФ) ИФ2). Превью нет (ADR-0052): фото уходит целиком, превью делает получатель.
  */
 object PhotoPrep {
     const val FULL_SIDE = 1280
-    const val PREVIEW_LIMIT = 20 * 1024
 
     /** Под место внутри сообщения: ряд целиком — 720 (Решения §3). */
     const val INLINE_SIDE = 720
 
-    class Prepared(val full: ByteArray, val preview: ByteArray, val width: Int, val height: Int)
+    class Prepared(val full: ByteArray, val width: Int, val height: Int)
 
-    /** Полное и превью; не картинка — `null`. */
+    /** Фото по большей стороне [side]; не картинка — `null`. */
     fun prepare(bytes: ByteArray, side: Int = FULL_SIDE): Prepared? {
         val source = decodeImage(bytes, atLeast = side) ?: return null
-        val full = scaled(source, side)
-        val jpeg = encodeJpeg(full, 85)
-        return Prepared(jpeg, preview(source), full.width, full.height)
+        return fit(source, side)
+    }
+
+    /** Готовая картинка (после редактора фото) — по большей стороне [side], JPEG 85. */
+    fun fit(image: ImageBitmap, side: Int = FULL_SIDE): Prepared {
+        val full = scaled(image, side)
+        return Prepared(encodeJpeg(full, 85), full.width, full.height)
     }
 
     /**
@@ -40,17 +43,7 @@ object PhotoPrep {
     fun inline(bytes: ByteArray, width: Int = INLINE_SIDE): Prepared? {
         val source = decodeImage(bytes, atLeast = width) ?: return null
         val fitted = if (source.width <= width) source else scaled(source, (maxOf(source.width, source.height) * width.toFloat() / source.width).roundToInt())
-        return Prepared(encodeJpeg(fitted, 85), ByteArray(0), fitted.width, fitted.height)
-    }
-
-    /** Превью до 20 КБ: ступени стороны и качества по замеру Решений §3. */
-    fun preview(source: ImageBitmap): ByteArray {
-        var last = ByteArray(0)
-        for ((side, quality) in listOf(320 to 70, 320 to 60, 280 to 60, 240 to 60, 200 to 50)) {
-            last = encodeJpeg(scaled(source, side), quality)
-            if (last.size <= PREVIEW_LIMIT) return last
-        }
-        return last
+        return Prepared(encodeJpeg(fitted, 85), fitted.width, fitted.height)
     }
 
     /** Большая сторона не больше [side]; меньшее не растягивается. */

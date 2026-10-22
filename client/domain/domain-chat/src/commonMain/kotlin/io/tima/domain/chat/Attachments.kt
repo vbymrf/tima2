@@ -2,7 +2,8 @@ package io.tima.domain.chat
 
 /**
  * Файл, уже загруженный и закрытый своим ключом, — для тела сообщения (Решения §3, §6).
- * [preview] — превью фото от отправителя (до 20 КБ), [name] — имя файла вне пузыря.
+ * [name] — имя файла вне пузыря. Превью в теле нет (ADR-0052): фото забирается целиком, превью
+ * делает получатель.
  */
 class OutMedia(
     val mediaId: String,
@@ -11,7 +12,6 @@ class OutMedia(
     val width: Int = 0,
     val height: Int = 0,
     val size: Long = 0,
-    val preview: ByteArray = ByteArray(0),
     val name: String = "",
 )
 
@@ -20,7 +20,7 @@ class OutMedia(
  * и текст. Порт, потому что разметка и `MessageBody` выше `core-encryption` не поднимаются.
  */
 interface AttachmentBodies {
-    /** Фото без текста — вне пузыря, превью внутри тела (личная переписка). */
+    /** Фото без текста — вне пузыря, целиком у почтальона (личная переписка). */
     fun album(photos: List<OutMedia>): ByteArray
 
     /** Файл вне пузыря (личная переписка). */
@@ -53,8 +53,8 @@ sealed interface AttachResult {
 }
 
 /**
- * Отправка вложений (Решения §2, §3, §6): фото — в личной без текста вне пузыря (полное у
- * почтальона, превью в теле), в группе — картинками внутри сообщения; файлы — в личной почтальоном
+ * Отправка вложений (Решения §2, §3, §6): фото — в личной без текста вне пузыря (целиком у
+ * почтальона, превью делает получатель), в группе — картинками внутри сообщения; файлы — в личной почтальоном
  * (до 10 МБ, себе 50), в группе — только ссылкой на облако; контакт, место, ссылка — карточками.
  *
  * Загрузка — до очереди: сообщение без загруженного файла некуда отправлять. Нет сети — отказ
@@ -66,8 +66,8 @@ class SendAttachments(
     private val bodies: AttachmentBodies,
     private val keys: DedupKeys,
 ) {
-    /** Подготовленное фото: полное (1280) и превью. */
-    class Photo(val full: ByteArray, val preview: ByteArray, val width: Int, val height: Int)
+    /** Подготовленное фото: большая сторона — по правилам сервера (1280). */
+    class Photo(val full: ByteArray, val width: Int, val height: Int)
 
     suspend fun photos(chatId: String, level: Int, peerId: String?, photos: List<Photo>): AttachResult {
         if (photos.isEmpty()) return AttachResult.Refused("nothing")
@@ -75,7 +75,7 @@ class SendAttachments(
         val personal = peerId != null
         val uploaded = photos.map { p ->
             val (id, key) = uploads.upload(p.full, "image/jpeg", if (personal) chatId else null, peerId) ?: return AttachResult.Offline
-            OutMedia(id, key, "image/jpeg", p.width, p.height, p.full.size.toLong(), if (personal) p.preview else ByteArray(0))
+            OutMedia(id, key, "image/jpeg", p.width, p.height, p.full.size.toLong())
         }
         return enqueue(chatId, level, if (personal) bodies.album(uploaded) else bodies.inlineImages(uploaded))
     }

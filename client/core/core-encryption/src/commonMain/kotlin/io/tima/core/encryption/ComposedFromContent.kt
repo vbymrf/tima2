@@ -162,7 +162,6 @@ internal object ComposedFromContent {
         width = m.width,
         height = m.height,
         size = m.size_bytes,
-        preview = m.preview.toByteArray(),
         name = m.name,
     )
 }

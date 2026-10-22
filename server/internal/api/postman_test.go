@@ -134,3 +134,64 @@ func TestPostman(t *testing.T) {
 		t.Fatalf("скачивание позже часа — уходит со ссылкой, а срок через %s", time.Until(exp))
 	}
 }
+
+// Правила приёма и уборка заменённого фото (ПЛАН-(ИФ) ИФ1, ИФ-В2): сервер называет пределы; свой
+// файл почтальона отправитель убирает, чужой — нет; убранный уходит уборщиком, как по сроку.
+func TestMediaRulesAndDrop(t *testing.T) {
+	ts, srv := setupWithBlob(t)
+	a := registerDevice(t, ts, "+79991110511")
+	b := registerDevice(t, ts, "+79991110512")
+	db := testDB(t)
+
+	var rules struct {
+		FileBytes  int64    `json:"file_bytes"`
+		SelfBytes  int64    `json:"self_bytes"`
+		DailyBytes int64    `json:"daily_bytes"`
+		PhotoSide  int      `json:"photo_side"`
+		MaxPhotos  int      `json:"max_photos"`
+		Week       int64    `json:"postman_week_sec"`
+		Blocked    []string `json:"blocked_names"`
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/media/rules", a.token, nil, &rules); code != http.StatusOK {
+		t.Fatalf("правила: %d", code)
+	}
+	if rules.FileBytes != 10<<20 || rules.SelfBytes != 50<<20 || rules.DailyBytes != 1<<30 || rules.PhotoSide != 1280 || rules.MaxPhotos != 10 {
+		t.Fatalf("правила по умолчанию — числа решений, получено %+v", rules)
+	}
+	if rules.Week != int64((7 * 24 * time.Hour).Seconds()) || len(rules.Blocked) == 0 {
+		t.Fatalf("срок почтальона и запреты: %+v", rules)
+	}
+
+	file := []byte("фото до правки")
+	var init struct {
+		MediaID    string   `json:"media_id"`
+		UploadURLs []string `json:"upload_urls"`
+	}
+	if code := authedJSON(t, ts, "POST", "/api/v1/media/init", a.token, map[string]any{
+		"size_bytes": len(file), "mime": "image/jpeg", "is_encrypted": true,
+		"postman": map[string]string{"chat_id": personalChatID(a.userID, b.userID), "peer_id": b.userID},
+	}, &init); code != http.StatusCreated {
+		t.Fatalf("init: %d", code)
+	}
+	httpPut(t, init.UploadURLs[0], file)
+	if code := authedJSON(t, ts, "POST", "/api/v1/media/complete", a.token, map[string]string{"media_id": init.MediaID}, nil); code != http.StatusOK {
+		t.Fatalf("complete: %d", code)
+	}
+	if code := authedJSON(t, ts, "POST", "/api/v1/media/"+init.MediaID+"/drop", b.token, nil, nil); code != http.StatusNotFound {
+		t.Fatalf("получатель не убирает чужой файл: %d", code)
+	}
+	if code := authedJSON(t, ts, "POST", "/api/v1/media/"+init.MediaID+"/drop", a.token, nil, nil); code != http.StatusNoContent {
+		t.Fatalf("отправитель убирает свой: %d", code)
+	}
+	var exp time.Time
+	if err := db.QueryRow(context.Background(), `SELECT expires_at FROM media_objects WHERE media_id = $1`, init.MediaID).Scan(&exp); err != nil || time.Until(exp) > time.Second {
+		t.Fatalf("срок убранного — сейчас: %v, %v", exp, err)
+	}
+	w := &worker.Worker{Store: srv.Store, Blobs: srv.Blob}
+	if n, err := w.SweepPostman(context.Background()); err != nil || n < 1 {
+		t.Fatalf("уборка убранного: %d, %v", n, err)
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/media/"+init.MediaID+"/url", b.token, nil, nil); code != http.StatusGone {
+		t.Fatalf("убранный — 410, получен %d", code)
+	}
+}

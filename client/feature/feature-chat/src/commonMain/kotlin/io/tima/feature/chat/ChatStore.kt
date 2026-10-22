@@ -812,7 +812,7 @@ class ChatStore(
         _state.value = _state.value.copy(notice = said?.let { ChatNotice.Said(it) })
     }
 
-    /** Фото: полное 1280 и превью до 20 КБ готовятся здесь же, на фоне (ПЛАН-(ПФ) ПФ3). */
+    /** Фото: 1280 готовится здесь же, на фоне (ПЛАН-(ПФ) ПФ3); превью в теле нет (ADR-0052). */
     fun sendPhotos(images: List<Pair<ByteArray, String>>) {
         val port = attach ?: return
         if (images.size > SendAttachments.MAX_PHOTOS) {
@@ -824,7 +824,7 @@ class ChatStore(
         scope.launch {
             val result = withContext(io) {
                 val photos = images.mapNotNull { (bytes, _) ->
-                    PhotoPrep.prepare(bytes)?.let { SendAttachments.Photo(it.full, it.preview, it.width, it.height) }
+                    PhotoPrep.prepare(bytes)?.let { SendAttachments.Photo(it.full, it.width, it.height) }
                 }
                 port.photos(chatId, _state.value.level, peerId, photos)
             }

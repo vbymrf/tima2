@@ -105,7 +105,7 @@ internal object RichMapper {
     private fun media(content: MessageContent): List<RichMedia> = content.media.map {
         RichMedia(
             it.media_id, it.media_key.toByteArray(), it.mime, it.width, it.height,
-            preview = it.preview.toByteArray(), name = it.name, size = it.size_bytes,
+            name = it.name, size = it.size_bytes,
         )
     }
 
