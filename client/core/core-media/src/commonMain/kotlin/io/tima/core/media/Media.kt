@@ -33,6 +33,15 @@ interface Media {
     /** Загрузить файл почтальона снова — тот же номер и ключ: у этого устройства он есть. */
     suspend fun reupload(mediaId: String, sealed: ByteArray): Boolean = false
 
+    /**
+     * Что сервер принимает (ПЛАН-(ИФ) ИФ1): поля ответа `GET /media/rules` строками; `null` — не
+     * ответил. Разбор — выше, где живут правила.
+     */
+    suspend fun rules(): Map<String, String>? = null
+
+    /** Убрать свой файл почтальона — фото заменено правкой (ПЛАН-(ИФ) ИФ-В2). */
+    suspend fun drop(mediaId: String): Boolean = false
+
     /** Исход забора файла почтальона. */
     sealed interface MediaFetch {
         class Got(val bytes: ByteArray) : MediaFetch

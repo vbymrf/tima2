@@ -1524,6 +1524,22 @@ interface ChatWords {
     val photoNoName: String
     /** Фото не забрано: мобильная сеть, а качать по ней выключено («Память и трафик»), заказчик 2026-10-22. */
     val photoWaitsWifi: String
+    /** Просмотр и редактор фото (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ5–ИФ7). */
+    val photoRotate: String
+    val photoEdit: String
+    val photoCrop: String
+    val photoBrush: String
+    val photoArrow: String
+    val photoUndo: String
+    val photoSave: String
+    val photoCancel: String
+    val photoThin: String
+    val photoThick: String
+    val photoEditOnClose: String
+    val photoEditForeign: String
+    val photoEditSent: String
+    val photoEditRefused: String
+    val photoLoadFailed: String
     val photoSize: String
     val photoPixels: String
     val photoFrom: String
@@ -3717,6 +3733,21 @@ object RussianWords : Words {
         override val photoName = "Имя"
         override val photoNoName = "не указано"
         override val photoWaitsWifi = "Ждёт Wi-Fi: по мобильной сети файлы не скачиваются — «Память и трафик»"
+        override val photoRotate = "Повернуть"
+        override val photoEdit = "Изменить"
+        override val photoCrop = "Обрезать"
+        override val photoBrush = "Кисть"
+        override val photoArrow = "Стрелка"
+        override val photoUndo = "Отменить"
+        override val photoSave = "Сохранить"
+        override val photoCancel = "Отмена"
+        override val photoThin = "Тонко"
+        override val photoThick = "Толсто"
+        override val photoEditOnClose = "Изменённое фото уйдёт, когда закроете просмотр: одна правка на все изменения"
+        override val photoEditForeign = "Изменённое здесь — только у вас: «Сохранить как» или «Переслать» новым фото"
+        override val photoEditSent = "Изменённое фото отправлено — у получателя на том же месте, с пометкой «изменено»"
+        override val photoEditRefused = "Изменённое фото не ушло: правка больше не принимается (три правки или ключ сменился)"
+        override val photoLoadFailed = "Фото не загрузилось — изменить не из чего"
         override val photoSize = "Размер"
         override val photoPixels = "Точек"
         override val photoFrom = "Прислал(а)"

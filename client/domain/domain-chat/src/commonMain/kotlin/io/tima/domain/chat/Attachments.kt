@@ -37,6 +37,27 @@ interface AttachmentBodies {
     fun link(url: String, title: String, cloudKind: String = ""): ByteArray
 }
 
+/**
+ * Что сервер принимает (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ2): пределы, сторона фото, запреты по
+ * имени. Клиент соблюдает их до отправки — файл зашифрован, и сервер видит только размер. Числа
+ * по умолчанию — решения (Решения §3, §6), пока сервер не ответил ни разу.
+ */
+data class MediaRules(
+    val fileBytes: Long = 10L * 1024 * 1024,
+    val selfBytes: Long = 50L * 1024 * 1024,
+    val photoSide: Int = 1280,
+    val maxPhotos: Int = 10,
+    val blockedNames: List<String> = emptyList(),
+) {
+    /** Имя под запретом сервера — по окончанию, без учёта регистра. */
+    fun blocked(name: String): Boolean = blockedNames.any { name.lowercase().endsWith(it.lowercase()) }
+}
+
+/** Откуда правила: спросить сервер не чаще раза в сутки, иначе — запомненные (реализует `shared`). */
+fun interface MediaRulesSource {
+    suspend fun rules(): MediaRules
+}
+
 /** Порт загрузки: закрыть ключом и отдать в хранилище; почтальон — для личной переписки. */
 interface AttachmentUploads {
     /** @return загруженный файл или `null` — нет сети, предел, квота. */
@@ -65,13 +86,17 @@ class SendAttachments(
     private val uploads: AttachmentUploads,
     private val bodies: AttachmentBodies,
     private val keys: DedupKeys,
+    private val source: MediaRulesSource = MediaRulesSource { MediaRules() },
 ) {
+    /** Правила сервера — на этот раз (ПЛАН-(ИФ) ИФ2). */
+    suspend fun rules(): MediaRules = source.rules()
+
     /** Подготовленное фото: большая сторона — по правилам сервера (1280). */
     class Photo(val full: ByteArray, val width: Int, val height: Int)
 
     suspend fun photos(chatId: String, level: Int, peerId: String?, photos: List<Photo>): AttachResult {
         if (photos.isEmpty()) return AttachResult.Refused("nothing")
-        if (photos.size > MAX_PHOTOS) return AttachResult.TooMany
+        if (photos.size > rules().maxPhotos) return AttachResult.TooMany
         val personal = peerId != null
         val uploaded = photos.map { p ->
             val (id, key) = uploads.upload(p.full, "image/jpeg", if (personal) chatId else null, peerId) ?: return AttachResult.Offline
@@ -83,7 +108,9 @@ class SendAttachments(
     /** Файл: в личной — почтальоном; в группе файлов нет — только ссылкой (Решения §2). */
     suspend fun file(chatId: String, level: Int, peerId: String, self: Boolean, bytes: ByteArray, mime: String, name: String): AttachResult {
         if (bytes.isEmpty()) return AttachResult.Refused("nothing")
-        if (bytes.size > if (self) MAX_SELF_BYTES else MAX_FILE_BYTES) return AttachResult.Refused("large")
+        val rules = rules()
+        if (rules.blocked(name)) return AttachResult.Refused("type")
+        if (bytes.size > if (self) rules.selfBytes else rules.fileBytes) return AttachResult.Refused("large")
         val (id, key) = uploads.upload(bytes, mime, chatId, peerId) ?: return AttachResult.Offline
         return enqueue(chatId, level, bodies.file(OutMedia(id, key, mime, size = bytes.size.toLong(), name = name)))
     }
@@ -104,11 +131,7 @@ class SendAttachments(
     }
 
     companion object {
-        /** До 10 фото в одном сообщении (Решения §3). */
+        /** До 10 фото в одном сообщении (Решения §3) — выбор в системном окне; дальше решает сервер. */
         const val MAX_PHOTOS = 10
-
-        /** Файл другому — до 10 МБ, себе — до 50 МБ (Решения §6). */
-        const val MAX_FILE_BYTES = 10 * 1024 * 1024
-        const val MAX_SELF_BYTES = 50 * 1024 * 1024
     }
 }

@@ -815,16 +815,18 @@ class ChatStore(
     /** Фото: 1280 готовится здесь же, на фоне (ПЛАН-(ПФ) ПФ3); превью в теле нет (ADR-0052). */
     fun sendPhotos(images: List<Pair<ByteArray, String>>) {
         val port = attach ?: return
-        if (images.size > SendAttachments.MAX_PHOTOS) {
-            attachLog?.invoke("too_many")
-            _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.photoTooMany))
-            return
-        }
         _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.sending))
         scope.launch {
+            // Сторона фото и сколько их за раз — по правилам сервера (ПЛАН-(ИФ) ИФ2).
+            val rules = withContext(io) { port.rules() }
+            if (images.size > rules.maxPhotos) {
+                attachLog?.invoke("too_many")
+                _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.photoTooMany))
+                return@launch
+            }
             val result = withContext(io) {
                 val photos = images.mapNotNull { (bytes, _) ->
-                    PhotoPrep.prepare(bytes)?.let { SendAttachments.Photo(it.full, it.width, it.height) }
+                    PhotoPrep.prepare(bytes, side = rules.photoSide)?.let { SendAttachments.Photo(it.full, it.width, it.height) }
                 }
                 port.photos(chatId, _state.value.level, peerId, photos)
             }

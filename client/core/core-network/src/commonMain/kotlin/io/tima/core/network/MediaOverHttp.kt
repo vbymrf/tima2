@@ -186,5 +186,26 @@ class MediaOverHttp(
         false
     }
 
+    override suspend fun rules(): Map<String, String>? = try {
+        val resp = client.get(route.api("/api/v1/media/rules")) {
+            header("Authorization", "Bearer ${token()}")
+        }
+        if (resp.status != HttpStatusCode.OK) null
+        else Json.parseToJsonElement(resp.bodyAsText()).jsonObject.mapValues { (_, v) ->
+            // Список запретов — через запятую: разбор правил выше не знает JSON.
+            runCatching { v.jsonArray.joinToString(",") { it.jsonPrimitive.content } }.getOrElse { v.jsonPrimitive.content }
+        }
+    } catch (_: Throwable) {
+        null
+    }
+
+    override suspend fun drop(mediaId: String): Boolean = try {
+        client.post(route.api("/api/v1/media/$mediaId/drop")) {
+            header("Authorization", "Bearer ${token()}")
+        }.status == HttpStatusCode.NoContent
+    } catch (_: Throwable) {
+        false
+    }
+
     private fun HttpStatusCode.isSuccess() = value in 200..299
 }

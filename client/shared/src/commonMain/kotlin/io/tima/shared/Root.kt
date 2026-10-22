@@ -1,5 +1,6 @@
 package io.tima.shared
 
+import kotlinx.datetime.toLocalDateTime
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
@@ -4800,6 +4801,8 @@ private fun Chat(
                 },
                 bodies = io.tima.core.encryption.AttachmentBodiesOverKodium,
                 keys = io.tima.core.outbox.UuidDedupKeys,
+                // Правила приёма — от сервера, не чаще раза в сутки (ПЛАН-(ИФ) ИФ2).
+                source = io.tima.domain.chat.CachedMediaRules(environment.settings, { network.media.rules() }, ::msNow),
             ),
             peerId = if (group) null else (peerUser ?: myUserId.takeIf { it.isNotEmpty() }),
             selfChat = !group && (peerUser == null || peerUser == myUserId),
@@ -4893,7 +4896,9 @@ private fun Chat(
     var photoOpen by remember { mutableStateOf<io.tima.domain.chat.RichMedia?>(null) }
     // Просмотр фото: что сказать поверх фото, какое пересылается, «Поделиться» платформы.
     var photoNotice by remember { mutableStateOf<String?>(null) }
-    var forwardOf by remember { mutableStateOf<io.tima.feature.chat.PhotoAt?>(null) }
+    var forwardOf by remember { mutableStateOf<Pair<io.tima.feature.chat.PhotoAt, androidx.compose.ui.graphics.ImageBitmap?>?>(null) }
+    // Правка фото уходит, когда просмотр закрыт, — и может пережить сам экран переписки (ADR-0052).
+    val photoEditScope = remember { kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default) }
     val shareImage = io.tima.core.media.rememberShareImage()
     // Меню файла (заказчик 2026-10-20): на какой файл нажали; какой пересылается.
     var fileFor by remember { mutableStateOf<io.tima.domain.chat.RichMedia?>(null) }
@@ -5289,22 +5294,62 @@ private fun Chat(
             notice = photoNotice,
             onClose = { photoOpen = null; photoNotice = null },
             actions = io.tima.feature.chat.PhotoActions(
-                save = { p -> scope.launch { plainOf(p.media, say)?.let { plain -> saver(p.media.name.ifBlank { "photo.jpg" }, p.media.mime, plain) } } },
+                save = { p, changed ->
+                    scope.launch {
+                        val plain = changed?.let { jpegOf(it) } ?: plainOf(p.media, say)
+                        plain?.let { saver(p.media.name.ifBlank { "photo.jpg" }, if (changed != null) "image/jpeg" else p.media.mime, it) }
+                    }
+                },
                 // Удалить — сообщение, в котором фото пришло; у всех — своё и отправленное.
                 deleteForMe = { p -> photoOpen = null; store.deleteForMe(p.line) },
                 deleteForAll = { p -> photoOpen = null; store.deleteForAllAsked(p.line) },
-                forward = if (onForward != null && forwardTargets.isNotEmpty()) { p -> forwardOf = p } else null,
-                share = { p ->
+                forward = if (onForward != null && forwardTargets.isNotEmpty()) { p, changed -> forwardOf = p to changed } else null,
+                share = { p, changed ->
                     if (shareImage == null) {
                         say(photoWords.photoShareNone)
                     } else {
-                        scope.launch { plainOf(p.media, say)?.let { plain -> if (!shareImage(plain, p.media.mime)) say(photoWords.photoShareNone) } }
+                        scope.launch {
+                            val plain = changed?.let { jpegOf(it) } ?: plainOf(p.media, say)
+                            plain?.let { if (!shareImage(it, if (changed != null) "image/jpeg" else p.media.mime)) say(photoWords.photoShareNone) }
+                        }
+                    }
+                },
+                // Поворот и редактор (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ5–ИФ7).
+                load = { p -> plainOf(p.media, say)?.let { io.tima.core.media.decodeImage(it) } },
+                editable = { p -> !group && photoEditable(p.line, environment.edit, chatId) },
+                commit = { changed ->
+                    val peer = peerUser ?: myUserId.takeIf { it.isNotEmpty() }
+                    val uploads = SealedUploads({ network.media }) { id, sealed, mime -> postman?.keepSent(id, sealed, photo = mime.startsWith("image/")) }
+                    val rules = io.tima.domain.chat.CachedMediaRules(environment.settings, { network.media.rules() }, ::msNow)
+                    photoEditScope.launch {
+                        for ((p, bmp) in changed) {
+                            val index = p.line.rich?.media?.indexOfFirst { it.mediaId == p.media.mediaId } ?: -1
+                            if (index < 0) continue
+                            val ready = io.tima.core.media.PhotoPrep.fit(bmp, rules.rules().photoSide)
+                            val up = uploads.upload(ready.full, "image/jpeg", chatId, peer)
+                            if (up == null) {
+                                Journal.trouble(LogCode.FILE_SEND, "изменённое фото не загрузилось", "файл" to p.media.mediaId.take(8))
+                                store.said(photoWords.sendFailed)
+                                continue
+                            }
+                            val media = io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", ready.width, ready.height, ready.full.size.toLong())
+                            val result = environment.edit.replaceMedia(chatId, p.line.serverId, index, media)
+                            Journal.note(LogCode.FILE_SEND, "фото изменено — правка", "итог" to result::class.simpleName, "место" to index)
+                            if (result is io.tima.domain.chat.EditResult.Queued) {
+                                // Прежний файл у почтальона больше не нужен (ПЛАН-(ИФ) ИФ-В2).
+                                network.media.drop(p.media.mediaId)
+                                store.said(photoWords.photoEditSent)
+                            } else {
+                                network.media.drop(up.first)
+                                store.said(photoWords.photoEditRefused)
+                            }
+                        }
                     }
                 },
             ),
         )
     }
-    forwardOf?.let { p ->
+    forwardOf?.let { (p, changed) ->
         io.tima.feature.chat.ChoiceSheet(
             title = photoWords.photoForwardTitle,
             items = forwardTargets.map { io.tima.feature.chat.Choice(title = it.second) },
@@ -5314,10 +5359,10 @@ private fun Chat(
                 val (target, title) = forwardTargets[i]
                 forwardOf = null
                 scope.launch {
-                    val plain = plainOf(p.media) { photoNotice = it } ?: return@launch
+                    val plain = changed?.let { jpegOf(it) } ?: plainOf(p.media) { photoNotice = it } ?: return@launch
                     photoOpen = null
-                    Journal.note(LogCode.FILE_SEND, "переслать", "вид" to "фото")
-                    onForward?.invoke(target, title, listOf(io.tima.feature.chat.Forwarded.Photo(plain, p.media.mime)))
+                    Journal.note(LogCode.FILE_SEND, "переслать", "вид" to "фото", "изменено" to (changed != null))
+                    onForward?.invoke(target, title, listOf(io.tima.feature.chat.Forwarded.Photo(plain, if (changed != null) "image/jpeg" else p.media.mime)))
                 }
             },
         )
@@ -7744,4 +7789,18 @@ private fun composedFacts(doc: io.tima.domain.chat.ComposedDoc): Array<Pair<Stri
     val widgets = doc.items.filterIsInstance<io.tima.domain.chat.ComposedItem.Widget>().map { it.widget } + rows.flatMap { r -> r.cells.flatMap { it.widgets } }
     val kinds = widgets.groupingBy { it::class.simpleName.orEmpty().lowercase() }.eachCount().entries.joinToString(",") { "${it.key}:${it.value}" }
     return arrayOf("рядов" to doc.rows, "ячеек" to rows.sumOf { it.cells.size }, "виджеты" to kinds.ifEmpty { "нет" })
+}
+
+/** Изменённое в просмотре фото — JPEG для «Сохранить как», «Переслать», «Поделиться». */
+private fun jpegOf(image: androidx.compose.ui.graphics.ImageBitmap): ByteArray = io.tima.core.media.PhotoPrep.fit(image).full
+
+/**
+ * Можно ли досылать правку фото (ADR-0045 §5, ADR-0052): своё, отправлено, правок меньше трёх и тот же
+ * месяц UTC, что у исходного, — в личной переписке ключ меняется с месяцем, и правку после смены
+ * сервер не примет. Проверка здесь, а не только у сервера: после отказа прежний файл уже убран бы.
+ */
+internal fun photoEditable(line: ChatLine, edit: io.tima.domain.chat.EditMessage, chatId: String, now: Long = msNow()): Boolean {
+    if (!line.outgoing || line.serverId <= 0 || line.atMs <= 0) return false
+    fun month(ms: Long) = kotlinx.datetime.Instant.fromEpochMilliseconds(ms).toLocalDateTime(kotlinx.datetime.TimeZone.UTC).let { it.year * 12 + it.monthNumber }
+    return month(line.atMs) == month(now) && edit.editable(chatId, line.serverId)
 }

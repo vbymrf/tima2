@@ -76,6 +76,37 @@ class PostmanFilesTest {
     }
 
     @Test
+    fun мобильная_без_разрешения_ждёт_wifi_и_переживает_перезапуск() = runTest {
+        val folder = MemoryFolder()
+        val media = FakeMedia(mutableMapOf("p-1" to byteArrayOf(1)))
+        var allowed = false
+        val postman = PostmanFiles({ media }, folder, this, mayDownload = { allowed })
+        postman.received(RichContent(listOf(RichBlock.Album(listOf(0))), listOf(photo("p-1"))))
+        testScheduler.advanceUntilIdle()
+        assertEquals(setOf("p-1"), postman.waitingWifi.value, "на месте фото — «Ждёт Wi-Fi»")
+        assertEquals(null, folder.get(MediaFolder.PHOTO, "p-1"))
+        val restarted = PostmanFiles({ media }, folder, this, mayDownload = { allowed })
+        assertEquals(setOf("p-1"), restarted.waitingWifi.value, "отметка ожидания — в папке")
+        allowed = true
+        restarted.resume()
+        testScheduler.advanceUntilIdle()
+        assertContentEquals(byteArrayOf(1), folder.get(MediaFolder.PHOTO, "p-1"), "сеть есть — забрано в «Фото»")
+        assertTrue(restarted.waitingWifi.value.isEmpty())
+    }
+
+    @Test
+    fun нет_у_почтальона_и_просить_некого_фото_нет() = runTest {
+        val folder = MemoryFolder()
+        val media = object : Media by FakeMedia(mutableMapOf("gone" to null)) {
+            override suspend fun requestAgain(mediaId: String): Boolean = false
+        }
+        val postman = PostmanFiles({ media }, folder, this)
+        assertIs<PostmanFiles.Obtained.Failed>(postman.obtain(photo("gone")))
+        assertEquals(setOf("gone"), postman.gone.value)
+        assertEquals(setOf("gone"), PostmanFiles({ media }, folder, this).gone.value, "отметка «нет» — в папке")
+    }
+
+    @Test
     fun получатель_забрал_галочки_переживают_перезапуск() = runTest {
         val folder = MemoryFolder()
         val postman = PostmanFiles({ FakeMedia(mutableMapOf()) }, folder, this)

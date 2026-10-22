@@ -43,7 +43,7 @@ class SendAttachmentsTest {
     private fun photo() = SendAttachments.Photo(ByteArray(100), 1280, 960)
 
     @Test
-    fun фото_в_личной_почтальоном_с_превью_в_теле() = runTest {
+    fun фото_в_личной_почтальоном_целиком() = runTest {
         assertIs<AttachResult.Queued>(send.photos("chat", -1, "peer", listOf(photo(), photo())))
         assertEquals(listOf("chat" to "peer", "chat" to "peer"), uploads.map { it.postmanChat to it.postmanPeer })
         assertEquals("album:m-1/1280,m-2/1280", queued.single())
@@ -67,11 +67,25 @@ class SendAttachmentsTest {
 
     @Test
     fun файл_до_10_мб_другому_и_до_50_себе() = runTest {
-        val big = ByteArray(SendAttachments.MAX_FILE_BYTES + 1)
+        val big = ByteArray(MediaRules().fileBytes.toInt() + 1)
         assertEquals(AttachResult.Refused("large"), send.file("chat", -1, "peer", false, big, "application/pdf", "a.pdf"))
         assertIs<AttachResult.Queued>(send.file("chat", -1, "me", true, big, "application/pdf", "a.pdf"))
         assertEquals("file:m-1/a.pdf/${big.size}", queued.single())
         assertEquals(AttachResult.Refused("nothing"), send.file("chat", -1, "peer", false, ByteArray(0), "text/plain", "e.txt"))
+    }
+
+    @Test
+    fun пределы_и_запреты_от_сервера() = runTest {
+        val strict = SendAttachments(
+            queue = { _, _, body, _, _, _ -> queued += body.decodeToString(); true },
+            uploads = uploader,
+            bodies = bodies,
+            keys = { "k-${queued.size}" },
+            source = { MediaRules(fileBytes = 100, maxPhotos = 2, blockedNames = listOf(".exe")) },
+        )
+        assertIs<AttachResult.TooMany>(strict.photos("chat", -1, "peer", List(3) { photo() }))
+        assertEquals(AttachResult.Refused("large"), strict.file("chat", -1, "peer", false, ByteArray(101), "application/pdf", "a.pdf"))
+        assertEquals(AttachResult.Refused("type"), strict.file("chat", -1, "peer", false, ByteArray(5), "application/octet-stream", "Setup.EXE"))
     }
 
     @Test
