@@ -21,7 +21,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -38,6 +43,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
@@ -111,6 +117,11 @@ private const val MAX_SCALE = 5f
 private const val DOUBLE_TAP_SCALE = 2.5f
 private const val WHEEL_STEP = 1.15f
 
+/** Лента фото: доводка до соседнего, мс; сопротивление у края; скорость «быстрого» движения, dp/с. */
+private const val SLIDE_MS = 220
+private const val EDGE_RESIST = 0.3f
+private const val FLING_DP_S = 800
+
 /** Нажатие — не дольше этого; второе нажатие двойного — не позже этого после первого. */
 private const val TAP_MS = 300L
 private const val DOUBLE_TAP_MS = 400L
@@ -119,7 +130,8 @@ private const val DOUBLE_TAP_MS = 400L
  * Просмотр фото переписки (заказчик 2026-10-18, 2026-10-22): полное фото — от почтальона, ключом из
  * тела. Слева сверху «≡» — Сохранить как, Удалить у себя, у всех, Переслать, Поделиться,
  * Информация; справа «✕»; посередине — когда отправлено. «‹» и «›» по краям и смахивание вбок — соседние
- * фото; закрытия смахиванием вниз нет (заказчик 2026-10-22).
+ * фото **лентой**: текущее уезжает за пальцем, соседнее приезжает; за последним и до первого — пружина
+ * (заказчик 2026-10-22). Закрытия смахиванием вниз нет.
  *
  * - **Масштаб**: щипок двумя пальцами, двойное нажатие (увеличенное — к исходному), колесо мыши на ПК.
  *   Увеличенное двигается пальцем, а не листается, и край фото не уходит за край экрана.
@@ -150,7 +162,10 @@ fun PhotoViewer(
     val photo = photos[i]
     var menu by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf(false) }
-    var drag by remember { mutableStateOf(Offset.Zero) }
+    // Лента фото (заказчик 2026-10-22: «чтобы оно уезжало, новое приезжало»): [dragX] — пока ведёт палец,
+    // [slide] — доводка после отпускания и листание кнопками.
+    var dragX by remember { mutableStateOf(0f) }
+    val slide = remember { Animatable(0f) }
     var scale by remember(i) { mutableStateOf(1f) }
     var pan by remember(i) { mutableStateOf(Offset.Zero) }
     var area by remember { mutableStateOf(IntSize.Zero) }
@@ -172,7 +187,8 @@ fun PhotoViewer(
     var said by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val turn = with(density) { 80.dp.toPx() }
+    // Быстрое движение — к соседнему фото, даже если сдвиг короче трети ширины.
+    val flingSpeed = with(density) { FLING_DP_S.dp.toPx() }
     val pad = with(density) { 12.dp.toPx() }
     // Короткий сдвиг — ещё нажатие, а не движение (заказчик 2026-10-22: «два быстрых движения короткого
     // сдвига или короткий сдвиг и клик — двойной клик»).
@@ -193,6 +209,25 @@ fun PhotoViewer(
         index = to.coerceIn(0, photos.lastIndex)
         menu = false
         info = false
+    }
+
+    /**
+     * Доехать лентой до соседнего фото ([to] — его номер) или вернуться на место ([to] = текущий) — с
+     * того сдвига, где отпустили палец. Соседнего нет — пружина назад.
+     */
+    fun settle(to: Int) {
+        val from = dragX
+        dragX = 0f
+        scope.launch {
+            slide.snapTo(from)
+            if (to == i || to !in photos.indices || area.width == 0) {
+                slide.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow))
+            } else {
+                slide.animateTo(if (to > i) -area.width.toFloat() else area.width.toFloat(), tween(SLIDE_MS))
+                go(to)
+                slide.snapTo(0f)
+            }
+        }
     }
 
     /** Картинка, с которой правим: уже изменённая или пришедшая. */
@@ -270,7 +305,6 @@ fun PhotoViewer(
             Modifier.fillMaxSize()
                 .onSizeChanged { area = it }
                 .onGloballyPositioned { areaTop = it.positionInRoot().y }
-                .offset { IntOffset(drag.x.roundToInt(), 0) }
                 .pointerInput(i, photos.size) {
                     // Одно касание разбирается целиком: короткое и быстрое — нажатие, два нажатия рядом и
                     // подряд — двойное; длиннее — листание (обычный размер) или сдвиг (увеличенное).
@@ -279,6 +313,8 @@ fun PhotoViewer(
                     var lastTapAt = Offset.Zero
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
+                        val velocity = VelocityTracker()
+                        velocity.addPosition(down.uptimeMillis, down.position)
                         var moved = Offset.Zero
                         var path = 0f
                         var zoomed = false
@@ -300,12 +336,17 @@ fun PhotoViewer(
                                 if (zoom != 1f || by != Offset.Zero) event.changes.forEach { it.consume() }
                             } else if (by != Offset.Zero) {
                                 moved += by
-                                if (path > tapSlop) drag = Offset(moved.x, 0f)
+                                event.changes.firstOrNull { it.id == down.id }?.let { velocity.addPosition(it.uptimeMillis, it.position) }
+                                // Лента за пальцем; за последним и до первого — с сопротивлением (пружина).
+                                if (path > tapSlop) {
+                                    val edge = (moved.x > 0 && i == 0) || (moved.x < 0 && i == photos.lastIndex)
+                                    dragX = if (edge) moved.x * EDGE_RESIST else moved.x
+                                }
                                 event.changes.forEach { it.consume() }
                             }
                         } while (event.changes.any { it.pressed })
-                        val d = drag
-                        drag = Offset.Zero
+                        val d = moved.x
+                        val fling = runCatching { velocity.calculateVelocity().x }.getOrDefault(0f)
                         val tap = fingers == 1 && !zoomed && path <= tapSlop && upAt - down.uptimeMillis <= TAP_MS
                         if (tap) {
                             if (down.uptimeMillis - lastTapUp <= DOUBLE_TAP_MS && (down.position - lastTapAt).getDistance() <= tapNear) {
@@ -320,10 +361,17 @@ fun PhotoViewer(
                         } else {
                             lastTapUp = 0L
                             if (!zoomed && scale <= 1f && fingers == 1) {
-                                when {
-                                    d.x < -turn && i < photos.lastIndex -> go(i + 1)
-                                    d.x > turn && i > 0 -> go(i - 1)
-                                }
+                                // Дальше трети ширины или быстрым движением — к соседнему; иначе — на место.
+                                val far = area.width / 3f
+                                settle(
+                                    when {
+                                        (d < -far || fling < -flingSpeed) && i < photos.lastIndex -> i + 1
+                                        (d > far || fling > flingSpeed) && i > 0 -> i - 1
+                                        else -> i
+                                    },
+                                )
+                            } else {
+                                dragX = 0f
                             }
                         }
                     }
@@ -344,18 +392,37 @@ fun PhotoViewer(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            val shown = Modifier.padding(12.dp).graphicsLayer(scaleX = scale, scaleY = scale, translationX = pan.x, translationY = pan.y)
-                .testTag(PhotoTags.IMAGE)
-            val changedBmp = edited[photo.media.mediaId]
-            if (changedBmp != null) {
-                Image(changedBmp, contentDescription = null, modifier = shown.fillMaxWidth().aspectRatio(changedBmp.width.toFloat() / changedBmp.height))
-            } else {
-                MessagePicture(
-                    mediaUri(photo.media.mediaId, photo.media.key),
-                    if (photo.media.width > 0 && photo.media.height > 0) photo.media.width.toFloat() / photo.media.height else null,
-                    w.fileGone,
-                    shown,
-                )
+            // Лента: текущее и соседние по краям, на ширину экрана. Соседние уже загружены — при въезде не
+            // мелькает пустое место. Масштаб и сдвиг — только у текущего.
+            for (k in -1..1) {
+                val at = i + k
+                if (at !in photos.indices) continue
+                val p = photos[at]
+                key(p.media.mediaId) {
+                    Box(
+                        Modifier.fillMaxSize().offset { IntOffset((k * area.width + dragX + slide.value).roundToInt(), 0) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val shown = Modifier.padding(12.dp).then(
+                            if (k == 0) {
+                                Modifier.graphicsLayer(scaleX = scale, scaleY = scale, translationX = pan.x, translationY = pan.y).testTag(PhotoTags.IMAGE)
+                            } else {
+                                Modifier
+                            },
+                        )
+                        val changedBmp = edited[p.media.mediaId]
+                        if (changedBmp != null) {
+                            Image(changedBmp, contentDescription = null, modifier = shown.fillMaxWidth().aspectRatio(changedBmp.width.toFloat() / changedBmp.height))
+                        } else {
+                            MessagePicture(
+                                mediaUri(p.media.mediaId, p.media.key),
+                                if (p.media.width > 0 && p.media.height > 0) p.media.width.toFloat() / p.media.height else null,
+                                w.fileGone,
+                                shown,
+                            )
+                        }
+                    }
+                }
             }
         }
         Row(
@@ -380,10 +447,10 @@ fun PhotoViewer(
             SolidButton("✕", PhotoTags.CLOSE, onClose)
         }
         if (i > 0 && scale <= 1f) {
-            Box(Modifier.align(Alignment.CenterStart).padding(12.dp)) { SolidButton("‹", PhotoTags.PREV) { go(i - 1) } }
+            Box(Modifier.align(Alignment.CenterStart).padding(12.dp)) { SolidButton("‹", PhotoTags.PREV) { settle(i - 1) } }
         }
         if (i < photos.lastIndex && scale <= 1f) {
-            Box(Modifier.align(Alignment.CenterEnd).padding(12.dp)) { SolidButton("›", PhotoTags.NEXT) { go(i + 1) } }
+            Box(Modifier.align(Alignment.CenterEnd).padding(12.dp)) { SolidButton("›", PhotoTags.NEXT) { settle(i + 1) } }
         }
         if (menu) {
             // Нажатие мимо меню — закрыть его (заказчик 2026-10-22).
