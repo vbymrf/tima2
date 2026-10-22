@@ -254,7 +254,10 @@ const (
 	// суперсообщение — прочитать и поставить (ShowcaseSuper, SetShowcaseSuper), выдача группы и канала
 	// (GroupShowcase, ChannelShowcase; у сообщества — прежний CommunityMessages). Потребитель — узкий
 	// ShowcaseStore рядом с ручками.
-	storeMethodBudget = 305
+	// 305 → 306: прежний файл почтальона после правки, заменившей фото (DropPostman; ПЛАН-(ИФ) ИФ-В2,
+	// ADR-0052; заказчик 2026-10-22 «2. да» — прежний файл убирается). Потребитель — тот же узкий
+	// MediaStore рядом с ручками медиа.
+	storeMethodBudget = 306
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )
