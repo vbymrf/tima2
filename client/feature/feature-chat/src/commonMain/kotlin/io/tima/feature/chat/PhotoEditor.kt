@@ -423,10 +423,11 @@ fun PhotoEditor(
                     backInk = t.background?.let { PhotoLayers.INKS.indexOf(it) } ?: -1
                     face = t.face
                 } else {
-                    // Новая рамка: угол — в точке нажатия, ширина 60 % видимого, высота — на две строки; у
-                    // края — внутрь.
-                    val wq = NEW_TEXT_WIDTH
-                    val hq = (NEW_TEXT_WIDTH * shownW * NEW_TEXT_ASPECT / shownH).coerceAtMost(1f)
+                    // Новая рамка: угол — в точке нажатия, ширина 60 % **видимого на экране** (с учётом
+                    // увеличения — заказчик 2026-10-22: «клик не учитывает выбранный масштаб»), высота — на две
+                    // строки; у края — внутрь.
+                    val wq = (NEW_TEXT_WIDTH / scale).coerceAtMost(1f)
+                    val hq = (NEW_TEXT_WIDTH * shownW * NEW_TEXT_ASPECT / shownH / scale).coerceAtMost(1f)
                     val l = q.x.coerceIn(0f, 1f - wq)
                     val t = q.y.coerceIn(0f, 1f - hq)
                     draftId = nextTextId++
@@ -792,8 +793,8 @@ fun PhotoEditor(
                     // ✓ — выполнить: нарисованное остаётся, окно закрывается. У «Текста» — две галочки: набор →
                     // положение и размер → сохранено.
                     if (tool == Tool.Text) {
-                        val ready = phase != TextPhase.None
-                        IconCircle(Glyph.Apply, PhotoEditorTags.APPLY, selected = ready, enabled = ready, size = 40) {
+                        // Рамки нет — галочки нет: нажимать нечего (заказчик 2026-10-22).
+                        if (phase != TextPhase.None) IconCircle(Glyph.Apply, PhotoEditorTags.APPLY, selected = true, size = 40) {
                             when (phase) {
                                 TextPhase.Typing -> {
                                     val text = typed.text.trimEnd()
