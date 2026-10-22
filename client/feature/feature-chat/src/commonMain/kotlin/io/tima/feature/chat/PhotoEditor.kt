@@ -167,7 +167,14 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
     var scale by remember(source) { mutableStateOf(1f) }
     var pan by remember(source) { mutableStateOf(Offset.Zero) }
 
-    Column(Modifier.fillMaxSize().background(colors.viewer).testTag(PhotoEditorTags.WINDOW)) {
+    // Редактор забирает все касания своего экрана: касание в пустом месте (между кнопками, в зазорах ряда
+    // значков) проходило в окно просмотра под ним, и то листало на соседнее фото — после «Отмена» или
+    // «Сохранить» было открыто другое (заказчик 2026-10-22). Ничего не гасит: кнопкам касания достаются.
+    Column(
+        Modifier.fillMaxSize().background(colors.viewer)
+            .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
+            .testTag(PhotoEditorTags.WINDOW),
+    ) {
         // ── Сверху: отмена всего, шаг назад и вперёд, сохранить ─────────────
         Row(
             Modifier.fillMaxWidth().padding(12.dp),
