@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -108,8 +109,9 @@ private const val MIN_CROP = 0.05f
  * - **Масштаб**: двумя пальцами — увеличить и сдвинуть; одним без инструмента — сдвинуть увеличенное;
  *   двойное нажатие — при любом инструменте. Увеличенное не заходит на кнопки сверху и значки снизу.
  * - Сверху — «Отмена», «Отменить», «Повторить», «Сохранить».
- * - Кисть и стрелку можно начинать **за краем фото**: след идёт по фото, палец — где угодно. Рамку
- *   обрезки рисуют, а потом тянут за любой угол.
+ * - Кисть и стрелку можно начинать **за краем фото**: при выбранном инструменте вокруг фото поле в
+ *   36 dp, входящее в область рисования, — палец ложится туда, след идёт по фото. Рамку обрезки рисуют,
+ *   а потом тянут за любой угол; за угол у края фото удобно браться с того же поля.
  * - Закрытия смахиванием нет.
  *
  * Отправляет не редактор, а просмотр, когда его закроют. Прежних состояний после «Сохранить» нет.
@@ -198,7 +200,11 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
             val density = LocalDensity.current
             val boxW = constraints.maxWidth.toFloat()
             val boxH = constraints.maxHeight.toFloat()
-            val k = min(boxW / drawn.width, boxH / drawn.height)
+            // Кисть, стрелка, обрезка — вокруг фото поле для пальца (заказчик 2026-10-22): след и рамку можно
+            // начать за краем фото, но внутри области рисования — без спора с жестом «Назад» у края экрана.
+            // Поле входит в область рисования; без инструмента фото прежнего размера.
+            val margin = if (tool == Tool.None) 0f else with(density) { EDGE_ROOM.toPx() }
+            val k = min((boxW - 2 * margin) / drawn.width, (boxH - 2 * margin) / drawn.height)
             val shownW = drawn.width * k
             val shownH = drawn.height * k
             val left = (boxW - shownW) / 2
@@ -207,12 +213,14 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
             val handle = with(density) { 28.dp.toPx() }
             val tapSlop = with(density) { 24.dp.toPx() }
             val tapNear = with(density) { 80.dp.toPx() }
-            /** Сдвиг увеличенного — не дальше края области. */
+            /** Сдвиг увеличенного — не дальше поля у края: полоса для начала следа остаётся и при увеличении. */
             fun limited(p: Offset, s: Float): Offset {
-                val mx = max(0f, (s * shownW - boxW) / 2)
-                val my = max(0f, (s * shownH - boxH) / 2)
+                val mx = max(0f, (s * shownW - (boxW - 2 * margin)) / 2)
+                val my = max(0f, (s * shownH - (boxH - 2 * margin)) / 2)
                 return Offset(p.x.coerceIn(-mx, mx), p.y.coerceIn(-my, my))
             }
+            // Поле появилось или пропало — сдвиг в новых границах.
+            LaunchedEffect(margin) { pan = if (scale > 1f) limited(pan, scale) else Offset.Zero }
             /** Точка экрана → место на неувеличенной картинке → доли картинки. */
             fun share(p: Offset): Offset {
                 val base = (p - center - pan) / scale + center
@@ -410,6 +418,9 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
         }
     }
 }
+
+/** Поле вокруг фото при кисти, стрелке, обрезке — шире пальца. */
+private val EDGE_ROOM = 36.dp
 
 /** Наибольшее увеличение в редакторе; двойное нажатие; нажатие — не дольше, второе — не позже. */
 private const val EDIT_MAX_SCALE = 5f
