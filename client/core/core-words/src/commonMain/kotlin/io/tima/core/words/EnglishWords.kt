@@ -1280,6 +1280,7 @@ object EnglishWords : Words {
         override val fileOpen = "Open"
         override val fileOpenNone = "Nothing can open it — save the file"
         override fun savedFiles(count: Int) = if (count == 0) "Nothing saved" else "Files saved: $count"
+        override val copyUnavailable = "[message unavailable]"
         override fun selected(count: Int) = "Selected: $count"
         override val selectPick = "To pointers"
         override val selectCopy = "Copy"

@@ -1481,6 +1481,8 @@ interface ChatWords {
     fun selected(count: Int): String
     /** Сохранено группой — сколько файлов (заказчик 2026-10-22). */
     fun savedFiles(count: Int): String
+    /** В копии на месте вставки, которой нет: сервер не отдал или не получена (заказчик 2026-10-22). */
+    val copyUnavailable: String
     val selectPick: String
     val selectCopy: String
     val selectForward: String
@@ -3684,6 +3686,7 @@ object RussianWords : Words {
         override val fileOpen = "Открыть"
         override val fileOpenNone = "Открыть нечем — сохраните файл"
         override fun selected(count: Int) = "Выбрано: $count"
+        override val copyUnavailable = "[сообщение недоступно]"
         override fun savedFiles(count: Int) = if (count == 0) "Ничего не сохранено" else "Сохранено файлов: $count"
         override val selectPick = "В указатели"
         override val selectCopy = "Скопировать"

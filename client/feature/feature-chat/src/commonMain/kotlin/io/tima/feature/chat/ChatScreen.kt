@@ -1431,3 +1431,25 @@ private fun Modifier.secondaryClick(onClick: () -> Unit): Modifier = pointerInpu
         }
     }
 }
+
+/**
+ * Текст сообщения целиком для копии (заказчик 2026-10-22): со ссылками и с вставленным из подборки и
+ * подкладкой — по той же переписке, что и показ ([quoteLook] из [chatLooks]). Без разметки — как было.
+ */
+fun copyText(
+    line: ChatLine,
+    quoteLook: (String, String, Long) -> QuoteLook,
+    unavailable: String,
+    deleted: String,
+): String {
+    val rich = line.rich ?: return line.text.orEmpty()
+    return io.tima.domain.chat.RichCopy.text(rich, { kind, chat, number ->
+        val q = quoteLook(kind, chat, number)
+        when {
+            q.deleted -> io.tima.domain.chat.CopiedRef(q.name, null, deleted)
+            q.rich == null && q.text == null -> null
+            else -> io.tima.domain.chat.CopiedRef(q.name, q.rich, q.text)
+        }
+    }, unavailable).ifBlank { line.text.orEmpty() }
+}
+

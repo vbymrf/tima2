@@ -5010,6 +5010,12 @@ private fun Chat(
         chosenLines = if (chosenLines.any { it.dedupKey == line.dedupKey }) chosenLines.filterNot { it.dedupKey == line.dedupKey } else chosenLines + line
     }
     var chosenDelete by remember { mutableStateOf(false) }
+    // Копия целиком (заказчик 2026-10-22): вставленное и подкладка — по этой переписке, как на экране.
+    val copyWords = Tima.words.chat
+    val fullText: (ChatLine) -> String = { line ->
+        val quoteLook = io.tima.feature.chat.chatLooks(state, name ?: copyWords.someone, authorLook, copyWords.someone).second
+        io.tima.feature.chat.copyText(line, quoteLook, copyWords.copyUnavailable, copyWords.deleted)
+    }
     var chosenForward by remember { mutableStateOf(false) }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val shareOut = remember { io.tima.core.contacts.platformInvite() }
@@ -5223,7 +5229,7 @@ private fun Chat(
                 // Копируем сообщения с текстом, сохраняем только файлы и фото (заказчик 2026-10-22).
                 onCopy = chosenLines.filter { filesOf(it).isEmpty() && !it.text.isNullOrBlank() }.takeIf { it.isNotEmpty() }?.let { texts ->
                     {
-                        val text = texts.sortedBy { it.atMs }.mapNotNull { it.text?.takeIf(String::isNotBlank) }.joinToString("\n\n")
+                        val text = texts.sortedBy { it.atMs }.map(fullText).filter(String::isNotBlank).joinToString("\n\n")
                         clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
                         store.said(copiedWord)
                         chosenLines = emptyList()
@@ -5486,7 +5492,8 @@ private fun Chat(
         )
     }
     selectFor?.let { line ->
-        val text = line.text.orEmpty()
+        // Целиком — со ссылками, вставленным и подкладкой (заказчик 2026-10-22).
+        val text = fullText(line)
         io.tima.feature.chat.SelectSheet(
             text = text,
             onCopyAll = {
