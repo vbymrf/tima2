@@ -849,7 +849,7 @@ private const val LONG_PRESS_MS = 450L
 private const val TEXT_PAD = 0.08f
 private const val TEXT_CORNER = 0.18f
 
-/** Начертание надписи — буква «А» в круге: обычная, жирная, курсив. */
+/** Начертание надписи — первая буква слова в круге: «А» — абзац, «Ж» — жирный, «К» — курсив; буква и написана так. */
 @Composable
 private fun FaceChip(f: TextFace, on: Boolean, onClick: () -> Unit) {
     val colors = Tima.colors
@@ -859,7 +859,11 @@ private fun FaceChip(f: TextFace, on: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.foundation.text.BasicText(
-            Tima.words.chat.photoFaceLetter,
+            when (f) {
+                TextFace.Normal -> Tima.words.chat.photoFaceNormal
+                TextFace.Bold -> Tima.words.chat.photoFaceBold
+                TextFace.Italic -> Tima.words.chat.photoFaceItalic
+            },
             style = TextStyle(
                 color = if (on) colors.surface else colors.text,
                 fontSize = 14.sp,

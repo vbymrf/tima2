@@ -1549,8 +1549,13 @@ interface ChatWords {
     val photoText: String
     val photoTextInk: String
     val photoTextBack: String
-    /** Буква на кнопках начертания надписи. */
-    val photoFaceLetter: String
+    /**
+     * Кнопки начертания надписи — первая буква слова (заказчик 2026-10-22: «Абзац, Жирный, Курсив — букву
+     * на первую букву слова, что значат»).
+     */
+    val photoFaceNormal: String
+    val photoFaceBold: String
+    val photoFaceItalic: String
     /** Поворот в просмотре — только у себя; почему правку не отправить (заказчик 2026-10-22). */
     val photoTurnLocal: String
     val photoTurnLocalOnly: String
@@ -3776,7 +3781,9 @@ object RussianWords : Words {
         override val photoText = "Текст"
         override val photoTextInk = "Текст"
         override val photoTextBack = "Фон"
-        override val photoFaceLetter = "А"
+        override val photoFaceNormal = "А"
+        override val photoFaceBold = "Ж"
+        override val photoFaceItalic = "К"
         override val photoTurnLocal = "Изменённая здесь — только у вас. Измените через редактор — отправим собеседнику (кнопка «Изменить»)."
         override val photoTurnLocalOnly = "Изменённая здесь — только у вас: «Сохранить как» или «Переслать»."
         override val photoEditNotMine = "Изменить и отправить можно только своё фото."
