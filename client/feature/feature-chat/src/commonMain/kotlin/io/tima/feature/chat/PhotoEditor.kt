@@ -844,7 +844,8 @@ private fun DrawScope.textFrame(r: Rect, frame: Color, handle: Float) {
 
 /** Захват рамки надписи: углы 0…3, перенос целиком; долгое нажатие внутрь — к набору. */
 private const val GRAB_MOVE = 4
-private const val LONG_PRESS_MS = 450L
+// 0,9 с — вдвое дольше прежних 0,45 (заказчик 2026-10-22: «долгое нажатие — увеличь в два раза»).
+private const val LONG_PRESS_MS = 900L
 
 /** Отступ текста и скругление фона — те же доли, что при сведении (PhotoLayers). */
 private const val TEXT_PAD = 0.08f
