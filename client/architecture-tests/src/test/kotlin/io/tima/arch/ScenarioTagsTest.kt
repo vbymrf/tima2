@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 /**
  * **Сценарии на телефонах опираются на то, что есть в коде** — ПЛАН-(МС), этап МС4 (2026-10-09).
  *
- * Сценарии (потоки Maestro в `maestro/` и скрипты Python в `maestro/phone`) нажимают кнопки по меткам (`testTag`) и
+ * Сценарии (потоки Maestro в `maestro/` и в навыке `.cursor/skills/phone-scenario-runner/flows`, скрипты Python в `maestro/phone`) нажимают кнопки по меткам (`testTag`) и
  * проверяют звонок по строкам журнала. 2026-10-09 вид панели звонка сменился, «🎤», по которой
  * сценарий узнавал окно звонка, пропал — и это выяснилось посреди живого звонка, а не при сборке.
  * Этот тест ловит то же на компьютере:
@@ -34,13 +34,18 @@ class ScenarioTagsTest {
     })
     private val root = client.parentFile
     private val maestro = File(root, "maestro")
+
+    /** Сценарии в навыке телефонов (заказчик 2026-10-22: «сценарии в навык, в git») — учёт тот же. */
+    private val skillFlows = File(root, ".cursor/skills/phone-scenario-runner/flows")
     private val ledger = File(root, "doc_mig/ФУНКЦИОНАЛ/АВТОТЕСТЫ/СЦЕНАРИИ-ПО-ОКНАМ.md")
 
     private val scenarios: List<File> by lazy {
-        maestro.walkTopDown()
-            .onEnter { it.name != "__pycache__" && it.name != "node_modules" }
-            .filter { it.isFile && (it.extension == "yaml" || it.extension == "py") }
-            .toList()
+        listOf(maestro, skillFlows).filter { it.isDirectory }.flatMap { dir ->
+            dir.walkTopDown()
+                .onEnter { it.name != "__pycache__" && it.name != "node_modules" }
+                .filter { it.isFile && (it.extension == "yaml" || it.extension == "py") }
+                .toList()
+        }
     }
 
     /** Код клиента без сборок и тестов: метка, которая живёт только в тесте, сценарию не поможет. */

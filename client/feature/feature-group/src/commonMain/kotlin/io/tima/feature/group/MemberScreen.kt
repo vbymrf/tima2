@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.Trouble
@@ -98,8 +99,8 @@ fun MemberScreen(
             modifier = Modifier.fillMaxSize().padding(TimaSpacing.about4),
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         ) {
-            state.trouble?.let { Trouble(it) }
-            state.warning?.let { Trouble(it) }
+            state.trouble?.let { Trouble(it, Modifier.testTag(MembersTags.TROUBLE)) }
+            state.warning?.let { Trouble(it, Modifier.testTag(MembersTags.TROUBLE)) }
 
             // Заявки новых личностей — первыми: решение за модератором, и ждать оно не должно.
             if (claims.isNotEmpty()) {
@@ -128,9 +129,10 @@ fun MemberScreen(
                             number = state.number,
                             onCountryCode = onCountryCode,
                             onNumber = onNumber,
+                            numberModifier = Modifier.testTag(MembersTags.PHONE),
                         )
                     }
-                    Button(label = if (state.expect) "…" else words.invite, onClick = onInvite)
+                    Button(label = if (state.expect) "…" else words.invite, onClick = onInvite, modifier = Modifier.testTag(MembersTags.INVITE_PHONE))
                 }
                 // По нику — вторым полем: ник публичен, и звать по нему можно того, чьего
                 // номера нет (заказчик 2026-09-18).
@@ -141,13 +143,13 @@ fun MemberScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.weight(1f)) {
-                            Field(value = state.nick, onChange = onNick, hint = "@" + words.nickField.lowercase())
+                            Field(value = state.nick, onChange = onNick, modifier = Modifier.testTag(MembersTags.NICK), hint = "@" + words.nickField.lowercase())
                         }
-                        Button(label = if (state.expect) "…" else words.invite, onClick = onInviteNick)
+                        Button(label = if (state.expect) "…" else words.invite, onClick = onInviteNick, modifier = Modifier.testTag(MembersTags.INVITE_NICK))
                     }
                 }
                 if (contacts != null) {
-                    Button(label = words.fromContacts, onClick = { onContacts(true) })
+                    Button(label = words.fromContacts, onClick = { onContacts(true) }, modifier = Modifier.testTag(MembersTags.CONTACTS))
                 }
             }
 
@@ -271,10 +273,11 @@ private fun MemberLine(
 ) {
     val words = Tima.words.social
     ListLine(
+        modifier = Modifier.testTag(MembersTags.ROW),
         left = { Avatar(letters = person.letter()) },
         right = {
             if (removeMay) {
-                Button(label = words.exclude, onClick = onRemove)
+                Button(label = words.exclude, onClick = onRemove, modifier = Modifier.testTag(MembersTags.REMOVE))
             } else {
                 Tertiary(roleCaption(member.role, words))
             }
@@ -302,3 +305,23 @@ private fun roleCaption(role: GroupRole, words: SocialWords): String = when (rol
 
 /** Заявка новой личности для экрана: кто начал заново и вместо кого (ДУ6). */
 data class IdentityClaimLine(val userId: String, val newName: String, val oldName: String)
+
+/**
+ * Метки экрана «Участники» — для сценариев состава группы (2026-10-22: «Метки ставь в коде, где нет»).
+ *
+ * Подсказки полей («999 000 00 00», «@ник») лежат под самими полями и в дерево экрана не попадают,
+ * у двух «Позвать» одна надпись — без меток сценарий жал точки и номер по счёту. Строка участника
+ * и её «Исключить» помечены одинаково у всех строк: нужная строка выбирается по имени внутри неё.
+ */
+object MembersTags {
+    const val PHONE = "members:phone"
+    const val INVITE_PHONE = "members:invite-phone"
+    const val NICK = "members:nick"
+    const val INVITE_NICK = "members:invite-nick"
+    const val CONTACTS = "members:contacts"
+    const val ROW = "members:row"
+    const val REMOVE = "members:remove"
+
+    /** Беда или предупреждение над полями: «Не получилось…», «Состав изменён, но…». */
+    const val TROUBLE = "members:trouble"
+}

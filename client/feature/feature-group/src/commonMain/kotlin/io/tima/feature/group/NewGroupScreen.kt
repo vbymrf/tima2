@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -137,13 +138,13 @@ fun NewGroupScreen(
                         Button(
                             label = words.goToCreated,
                             onClick = onOpenCreated,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().testTag(WizardTags.OPEN_CREATED),
                         )
                     } else {
                         Button(
                             label = if (state.expect) words.creating else words.create,
                             onClick = onCreate,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().testTag(WizardTags.CREATE),
                         )
                     }
                     // Появляется только после создания: до него говорить о непозванных нечего.
@@ -158,7 +159,7 @@ fun NewGroupScreen(
                         for (title in state.notLinked) Name(title)
                     }
                 } else {
-                    Button(label = words.next, onClick = onForward, modifier = Modifier.fillMaxWidth())
+                    Button(label = words.next, onClick = onForward, modifier = Modifier.fillMaxWidth().testTag(WizardTags.NEXT))
                 }
 
                 state.explaining?.let { Explanation(it, onClose = { onExplain(null) }) }
@@ -192,6 +193,7 @@ private fun SectionStep(
             note = if (available) null else words.waitsImplementation,
             onChoose = { onSection(section) },
             onExplain = { onExplain(title + ". " + about) },
+            tag = WizardTags.section(section),
         )
     }
 }
@@ -235,6 +237,7 @@ private fun CatalogueStep(
         chosen = state.inCatalogue,
         onChoose = { onCatalogue(true) },
         onExplain = { onExplain(words.inCatalogueExplain) },
+        tag = WizardTags.IN_CATALOGUE,
     )
     ChoiceLine(
         title = words.byLink,
@@ -242,6 +245,7 @@ private fun CatalogueStep(
         chosen = !state.inCatalogue,
         onChoose = { onCatalogue(false) },
         onExplain = { onExplain(words.byLinkExplain) },
+        tag = WizardTags.BY_LINK,
     )
 }
 
@@ -260,6 +264,7 @@ private fun CommentsStep(
         chosen = state.comments,
         onChoose = { onComments(true) },
         onExplain = { onExplain(words.commentsAllowedExplain) },
+        tag = WizardTags.COMMENTS_ON,
     )
     ChoiceLine(
         title = words.commentsForbidden,
@@ -267,6 +272,7 @@ private fun CommentsStep(
         chosen = !state.comments,
         onChoose = { onComments(false) },
         onExplain = { onExplain(words.commentsForbiddenExplain) },
+        tag = WizardTags.COMMENTS_OFF,
     )
 }
 
@@ -297,6 +303,7 @@ private fun BringingStep(state: NewGroupState, onItem: (CommunityItem) -> Unit) 
             chosen = state.bringing.any { it.id == item.id },
             onChoose = { onItem(item) },
             onExplain = {},
+            tag = WizardTags.BRING,
         )
     }
 }
@@ -317,6 +324,7 @@ private fun KindStep(
         note = "E2E",
         onChoose = { onKind(GroupKind.Personal) },
         onExplain = { onExplain(words.personalExplain) },
+        tag = WizardTags.PRIVATE,
     )
     ChoiceLine(
         title = words.public,
@@ -325,6 +333,7 @@ private fun KindStep(
         available = true,
         onChoose = { onKind(GroupKind.Public) },
         onExplain = { onExplain(words.publicExplain) },
+        tag = WizardTags.PUBLIC,
     )
     // Говорится до выбора, а не после: перешифровать «на месте» нельзя, и человек
     // должен знать это раньше, чем нажмёт.
@@ -347,6 +356,7 @@ private fun JoiningStep(
         note = if (state.openJoiningAllowed) null else words.noneForPersonal,
         onChoose = { onJoining(Joining.Open) },
         onExplain = { onExplain(words.openExplain) },
+        tag = WizardTags.JOIN_OPEN,
     )
     ChoiceLine(
         title = words.closedJoining,
@@ -355,6 +365,7 @@ private fun JoiningStep(
         available = true,
         onChoose = { onJoining(Joining.Closed) },
         onExplain = { onExplain(words.closedExplain) },
+        tag = WizardTags.JOIN_CLOSED,
     )
     if (!state.openJoiningAllowed) {
         // Причина, а не запрет: личную группу не находят поиском, поэтому «вступить
@@ -378,8 +389,8 @@ private fun NamingStep(
 ) {
     val words = Tima.words.wizard
     Caption(words.naming, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Field(value = state.title, onChange = onTitle, hint = words.groupName)
-    Field(value = state.description, onChange = onDescription, hint = words.descriptionAbout)
+    Field(value = state.title, onChange = onTitle, modifier = Modifier.testTag(WizardTags.TITLE), hint = words.groupName)
+    Field(value = state.description, onChange = onDescription, modifier = Modifier.testTag(WizardTags.DESCRIPTION), hint = words.descriptionAbout)
 
     // Раздел — здесь же, на шаге имени (Р5): человек называет вещь и говорит, куда её
     // положить, одним движением. «Общий» первым; заведённые разделы; поле для нового.
@@ -430,12 +441,14 @@ private fun NamingStep(
                 number = state.number,
                 onCountryCode = onCountryCode,
                 onNumber = onNumber,
+                numberModifier = Modifier.testTag(WizardTags.NUMBER),
             )
         }
-        Button(label = words.add, onClick = onAddNumber)
+        Button(label = words.add, onClick = onAddNumber, modifier = Modifier.testTag(WizardTags.ADD_NUMBER))
     }
     for (number in state.numbers) {
         ListLine(
+            modifier = Modifier.testTag(WizardTags.INVITED),
             left = { Avatar(letters = "№") },
             right = { Secondary(words.remove, Modifier.padding(start = TimaSpacing.about2)) },
             onClick = { onRemoveNumber(number) },
@@ -463,10 +476,12 @@ private fun ChoiceLine(
     available: Boolean = true,
     onExplain: () -> Unit,
     note: String? = null,
+    /** Метка строки для сценариев: строку выбирают по ней, а не по надписи. */
+    tag: String,
 ) {
     val colors = Tima.colors
     ListLine(
-        modifier = if (available) Modifier else Modifier.alphaOfUnavailable(),
+        modifier = (if (available) Modifier else Modifier.alphaOfUnavailable()).testTag(tag),
         onClick = if (available) onChoose else null,
         left = {
             Box(
@@ -547,3 +562,42 @@ private fun stepTitle(step: Step): String = with(Tima.words.wizard) {
 
 /** Приглушение недоступной строки. Отдельной функцией, чтобы не плодить магию в разметке. */
 private fun Modifier.alphaOfUnavailable(): Modifier = this.background(Color.Transparent)
+
+/**
+ * Метки мастера создания — для сценария «создать группу» (2026-10-22: «Метки ставь в коде, где нет»).
+ * Строкой, а не из имени перечня: учёт сценариев (`ScenarioTagsTest`) ищет метку в коде дословно.
+ */
+object WizardTags {
+    const val GROUP = "wizard:group"
+    const val CHANNEL = "wizard:channel"
+    const val COMMUNITY = "wizard:community"
+    const val VOICE_ROOM = "wizard:voice-room"
+    const val PRIVATE = "wizard:private"
+    const val PUBLIC = "wizard:public"
+    const val JOIN_OPEN = "wizard:join-open"
+    const val JOIN_CLOSED = "wizard:join-closed"
+    const val IN_CATALOGUE = "wizard:in-catalogue"
+    const val BY_LINK = "wizard:by-link"
+    const val COMMENTS_ON = "wizard:comments-on"
+    const val COMMENTS_OFF = "wizard:comments-off"
+
+    /** Строка группы или канала, вносимых в сообщество; нужная — по названию внутри. */
+    const val BRING = "wizard:bring"
+    const val TITLE = "wizard:title"
+    const val DESCRIPTION = "wizard:description"
+    const val NUMBER = "wizard:number"
+    const val ADD_NUMBER = "wizard:add-number"
+
+    /** Строка позванного номера; нажатие убирает номер. */
+    const val INVITED = "wizard:invited"
+    const val NEXT = "wizard:next"
+    const val CREATE = "wizard:create"
+    const val OPEN_CREATED = "wizard:open-created"
+
+    fun section(section: Section): String = when (section) {
+        Section.Group -> GROUP
+        Section.Channel -> CHANNEL
+        Section.Community -> COMMUNITY
+        Section.VoiceRoom -> VOICE_ROOM
+    }
+}

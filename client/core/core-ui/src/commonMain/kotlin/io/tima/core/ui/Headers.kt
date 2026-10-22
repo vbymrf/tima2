@@ -230,7 +230,7 @@ fun SubwindowHeader(
     ) {
         // «Назад» рисуется, а не набирается глифом: «‹» есть не во всяком шрифте, а
         // пропавший знак навигации — это кнопка без надписи. См. Знаки.kt.
-        ButtonCircle(onClick = onBack, live = true) {
+        ButtonCircle(onClick = onBack, live = true, modifier = Modifier.testTag(HEADER_BACK_TAG)) {
             Arrow(Side.Left, color = colors.onAccent)
         }
         // Аватар стоит СРАЗУ за «назад» и до имени — так в макете
@@ -261,7 +261,7 @@ fun SubwindowHeader(
             caption?.let { Tertiary(it, lineOne = true) }
         }
         right?.invoke()
-        onMore?.let { IconButton(glyph = "•••", onClick = it) }
+        onMore?.let { IconButton(glyph = "•••", onClick = it, modifier = Modifier.testTag(HEADER_MORE_TAG)) }
     }
     }
 }
@@ -277,3 +277,12 @@ private val TITLE_MIN = 96.dp
 
 /** Шапка окна, открывающая переключатель окон, — для сценариев на телефонах (ПЛАН-(МС)). */
 const val WINDOW_SWITCHER_TAG: String = "window:switcher"
+
+/**
+ * «•••» шапки подокна — меню переписки и группы. Без метки сценарий жал точку в углу экрана
+ * (2026-10-21), а угол у разных телефонов разный.
+ */
+const val HEADER_MORE_TAG: String = "header:more"
+
+/** Стрелка «назад» шапки подокна: у неё нет надписи, а «Назад» телефона при открытой клавиатуре её только прячет (PH-45). */
+const val HEADER_BACK_TAG: String = "header:back"

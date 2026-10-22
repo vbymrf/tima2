@@ -115,7 +115,7 @@ fun CatalogTab(
         // Плюс — вход в мастер создания. Стоит в каталоге, как и решено: прежний вход в
         // окне 1 был придуманным и убран.
         Box(Modifier.fillMaxWidth().padding(TimaSpacing.about4), contentAlignment = Alignment.CenterEnd) {
-            Button(label = words.create, onClick = onNew)
+            Button(label = words.create, onClick = onNew, modifier = Modifier.testTag(SOCIAL_CREATE_TAG))
         }
     }
 }
@@ -242,6 +242,9 @@ private fun roleWord(group: GroupInfo, words: SocialWords): String =
 
 /** Метка аватара, открывающего «Описание» (СЦЕНАРИИ-ПО-ОКНАМ.md). */
 const val SHOWCASE_AVATAR_TAG = "social:showcase"
+
+/** «Создать» каталога — вход в мастер создания, для сценариев (2026-10-22). */
+const val SOCIAL_CREATE_TAG = "social:create"
 
 /** Аватар открывает «Описание»; нет обработчика — обычный аватар. */
 private fun showcaseClick(

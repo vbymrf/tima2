@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.CheckMark
 import io.tima.core.ui.IconButton
@@ -30,6 +31,9 @@ import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.words
 import io.tima.domain.chat.Section
+
+/** «Участники» в меню группы — для сценариев состава (2026-10-22). */
+const val CHAT_MEMBERS_TAG: String = "chat:members"
 
 /**
  * Меню «•••» групповой переписки — подокно снизу, тем же приёмом, что «Вид».
@@ -180,6 +184,7 @@ fun ChatMenuSheet(
             }
             if (onMembers != null) {
                 ListLine(
+                    modifier = Modifier.testTag(CHAT_MEMBERS_TAG),
                     onClick = { onMembers(); onClose() },
                     middle = { Name(words.members) },
                     right = { Tertiary("›", lineOne = true) },

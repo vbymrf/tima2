@@ -1,0 +1,37 @@
+# Позвать в группу по нику и проверить: человек в составе, плашки «Не получилось…» нет.
+#
+# Переменные: MAESTRO_GROUP — группа; MAESTRO_NICK — ник без «@»; MAESTRO_MEMBER — как человек
+# виден в составе (начало строки, регулярное выражение: `redmi.*`).
+# Звать может владелец или админ: у участника полей нет. Проверено на открытой группе — до 204
+# здесь выходило «Не получилось… not_e2e» (журнал работ, строки 92–93).
+#
+# Клавиатура (PH-59): строки состава лежат в столбце без прокрутки, при открытой клавиатуре
+# нижние за краем окна и в дереве их нет. Закрываем сразу после ввода (PH-60), потом ищем строку.
+appId: io.tima.app.v2
+---
+- runFlow: group-open.yaml
+- tapOn:
+    id: "header:more"
+- tapOn:
+    id: "chat:members"
+- extendedWaitUntil:
+    visible:
+      id: "members:nick"
+    timeout: 10000
+- tapOn:
+    id: "members:nick"
+- inputText: "${MAESTRO_NICK}"
+- hideKeyboard
+- tapOn:
+    id: "members:invite-nick"
+- extendedWaitUntil:
+    visible: "${MAESTRO_MEMBER}"
+    timeout: 10000
+- runFlow:
+    when:
+      visible:
+        id: "members:trouble"
+    commands:
+      - takeScreenshot: group-invite-trouble
+      - assertVisible: "ПЛАШКА на экране участников после «Позвать»"
+- takeScreenshot: group-invite

@@ -1,0 +1,80 @@
+# Создать группу мастером и войти в неё.
+#
+# Переменные: MAESTRO_GROUP — название (латиницей, PH-41); MAESTRO_KIND — `public` или `private`;
+# MAESTRO_NUMBER — номер приглашённого без кода страны (10 цифр), пусто — никого.
+# Путь: «Социум» → «Создать» → «Группа» → вид → вступление по умолчанию → название и номер →
+# «Создать» → «Перейти в группу».
+#
+# Клавиатура (PH-59): после ввода «Создать» может оказаться за краем сжатого окна — его нет в
+# дереве, ни по метке, ни по надписи. Поэтому клавиатуру закрываем сразу после ввода, когда она
+# заведомо открыта (PH-60), и докручиваем до «Создать».
+appId: io.tima.app.v2
+---
+- runFlow: to-main.yaml
+- tapOn:
+    id: "window:switcher"
+- tapOn:
+    id: "switcher:Social"
+- tapOn:
+    id: "social:create"
+- tapOn:
+    id: "wizard:group"
+- tapOn:
+    id: "wizard:next"
+- runFlow:
+    when:
+      true: ${MAESTRO_KIND == 'private'}
+    commands:
+      - tapOn:
+          id: "wizard:private"
+- runFlow:
+    when:
+      true: ${MAESTRO_KIND != 'private'}
+    commands:
+      - tapOn:
+          id: "wizard:public"
+- tapOn:
+    id: "wizard:next"
+- extendedWaitUntil:
+    visible:
+      id: "wizard:join-closed"
+    timeout: 5000
+- tapOn:
+    id: "wizard:next"
+- tapOn:
+    id: "wizard:title"
+- inputText: "${MAESTRO_GROUP}"
+- hideKeyboard
+- runFlow:
+    when:
+      true: ${MAESTRO_NUMBER != ''}
+    commands:
+      - tapOn:
+          id: "wizard:number"
+      - inputText: "${MAESTRO_NUMBER}"
+      - hideKeyboard
+      - tapOn:
+          id: "wizard:add-number"
+      - extendedWaitUntil:
+          visible:
+            id: "wizard:invited"
+          timeout: 5000
+- scrollUntilVisible:
+    element:
+      id: "wizard:create"
+    direction: DOWN
+    timeout: 10000
+- takeScreenshot: group-create-1
+- tapOn:
+    id: "wizard:create"
+- extendedWaitUntil:
+    visible:
+      id: "wizard:open-created"
+    timeout: 20000
+- tapOn:
+    id: "wizard:open-created"
+- extendedWaitUntil:
+    visible:
+      id: "chat:send"
+    timeout: 15000
+- takeScreenshot: group-create-2

@@ -1,0 +1,40 @@
+# Исключить из группы и проверить: строки человека нет, плашки «Не получилось…» нет.
+#
+# Переменные: MAESTRO_GROUP — группа; MAESTRO_MEMBER — как человек виден в составе (`redmi.*`).
+# «Исключить» стоит у каждой строки с одной меткой — нужная берётся внутри строки с именем
+# (`childOf`), а не правее надписи: `rightOf` брал кнопку из чужой строки (PH-19, PH-42).
+appId: io.tima.app.v2
+---
+- runFlow: group-open.yaml
+- tapOn:
+    id: "header:more"
+- tapOn:
+    id: "chat:members"
+- extendedWaitUntil:
+    visible: "${MAESTRO_MEMBER}"
+    timeout: 10000
+- tapOn:
+    id: "members:remove"
+    childOf:
+      id: "members:row"
+      containsDescendants:
+        - text: "${MAESTRO_MEMBER}"
+- extendedWaitUntil:
+    visible:
+      id: "never-there"
+    timeout: 3000
+    optional: true
+- runFlow:
+    when:
+      visible:
+        id: "members:trouble"
+    commands:
+      - takeScreenshot: group-remove-trouble
+      - assertVisible: "ПЛАШКА на экране участников после «Исключить»"
+# Строка осталась — исключение не прошло. «Видно» с понятным провалом, а не «не видно» (PH-36).
+- runFlow:
+    when:
+      visible: "${MAESTRO_MEMBER}"
+    commands:
+      - assertVisible: "НЕ ИСКЛЮЧЁН: ${MAESTRO_MEMBER}"
+- takeScreenshot: group-remove

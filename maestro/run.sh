@@ -35,12 +35,16 @@
 #                 sh maestro/run.sh update.yaml 192.168.3.226:35273 — один
 #                 KEEP_AWAKE=1 sh maestro/run.sh update.yaml        — не возвращать
 #                                                                     (серия прогонов)
+#                 sh maestro/run.sh .cursor/skills/phone-scenario-runner/flows/group-send.yaml
+#                   — сценарий вне maestro/: путь как есть (сценарии навыка, 2026-10-22)
 set -u
 
 FLOW="${1:?нужен сценарий, например: sh maestro/run.sh update.yaml}"
 shift
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# Сценарий по пути, если такой файл есть, иначе — имя внутри maestro/.
+if [ -f "$FLOW" ]; then FLOW_PATH="$FLOW"; else FLOW_PATH="$HERE/$FLOW"; fi
 ADB="${ADB:-$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe}"
 export ADB
 STATE="$HOME/.maestro/tima-stand"
@@ -142,7 +146,7 @@ DEVICES=$(echo "$LIST" | tr ' ' ',')
 export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-240000}"
 
 echo "── ЗАДАЧА: $FLOW, телефонов $SHARDS: $DEVICES"
-maestro --device "$DEVICES" test --shard-all="$SHARDS" --no-reinstall-driver "$HERE/$FLOW"
+maestro --device "$DEVICES" test --shard-all="$SHARDS" --no-reinstall-driver "$FLOW_PATH"
 CODE=$?
 
 echo "── Артефакты: $(ls -dt "$HOME"/.maestro/tests/*/ 2>/dev/null | head -1)"

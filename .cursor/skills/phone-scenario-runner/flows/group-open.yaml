@@ -1,0 +1,21 @@
+# Открыть группу по названию: главное окно → «Социум» → строка группы → переписка.
+#
+# Переменная: MAESTRO_GROUP — название группы, как в каталоге (PH-15: без своих умолчаний в `env:`).
+# «Социум» — только через переключатель окон: стрелка внизу «Телефона» открывает «Новую
+# переписку», а нажатие на заголовок группы — её «Описание» (PH-63).
+# Группу ищем надписью: название — данные, а не элемент экрана.
+appId: io.tima.app.v2
+---
+- runFlow: to-main.yaml
+- tapOn:
+    id: "window:switcher"
+- tapOn:
+    id: "switcher:Social"
+- extendedWaitUntil:
+    visible: "${MAESTRO_GROUP}"
+    timeout: 20000
+- tapOn: "${MAESTRO_GROUP}"
+- extendedWaitUntil:
+    visible:
+      id: "chat:send"
+    timeout: 15000

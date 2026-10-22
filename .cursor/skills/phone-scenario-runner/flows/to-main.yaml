@@ -1,0 +1,22 @@
+# Выйти из подокон в главное окно: пока есть «назад» шапки — нажимать его.
+#
+# Стрелка шапки (`header:back`), а не «Назад» телефона: при открытой клавиатуре «Назад» только
+# прячет её, а при закрытой из главного окна — сворачивает приложение (PH-45, PH-60). Кнопка в
+# шапке — элемент приложения, клавиатура на неё не влияет.
+# Вызывается из других сценариев: `- runFlow: to-main.yaml`.
+appId: io.tima.app.v2
+---
+- launchApp:
+    stopApp: false
+- repeat:
+    while:
+      visible:
+        id: "header:back"
+    times: 5
+    commands:
+      - tapOn:
+          id: "header:back"
+- extendedWaitUntil:
+    visible:
+      id: "window:switcher"
+    timeout: 15000

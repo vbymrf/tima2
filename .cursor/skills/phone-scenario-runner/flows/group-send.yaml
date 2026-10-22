@@ -1,0 +1,41 @@
+# Отправить сообщение в группу и проверить, что оно одно — сразу и после выхода и входа.
+#
+# Переменные: MAESTRO_GROUP — группа; MAESTRO_TEXT — текст, латиницей (PH-41) и новый каждый раз:
+# двойник ищется по тексту.
+# Открытая группа «зашли, забрали» раньше клала своё отправленное вторым рядом (беда 2026-10-21) —
+# повторный вход здесь ровно для неё.
+#
+# Клавиатура (PH-59…PH-62): поле и кнопка — по меткам `chat:input`, `chat:send`; клавиатура
+# сдвигает кнопку вверх, метка едет вместе с ней, точка — нет. Клавиатуру не закрываем: «назад»
+# шапки выводит из переписки и при открытой.
+appId: io.tima.app.v2
+---
+- runFlow: group-open.yaml
+- tapOn:
+    id: "chat:input"
+- inputText: "${MAESTRO_TEXT}"
+- tapOn:
+    id: "chat:send"
+- extendedWaitUntil:
+    visible: "${MAESTRO_TEXT}"
+    timeout: 10000
+- takeScreenshot: group-send-1
+# Выйти и войти: при входе открытая группа забирает новое с сервера.
+- runFlow: group-open.yaml
+- extendedWaitUntil:
+    visible: "${MAESTRO_TEXT}"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "never-there"
+    timeout: 3000
+    optional: true
+# Двойник — вторая строка с тем же текстом. Проверка «видно» с понятным провалом, а не «не видно» (PH-36).
+- runFlow:
+    when:
+      visible:
+        text: "${MAESTRO_TEXT}"
+        index: 1
+    commands:
+      - assertVisible: "ДВОЙНИК в ленте: ${MAESTRO_TEXT}"
+- takeScreenshot: group-send-2

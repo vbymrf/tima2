@@ -50,6 +50,8 @@ fun PhoneFields(
      * считается. Нужен сверке номера: спросить, когда человек закончил набирать.
      */
     onLeave: () -> Unit = {},
+    /** Поле номера отдельно от пары — для метки сценария: вводят в номер, а не в код страны. */
+    numberModifier: Modifier = Modifier,
 ) {
     var inside by remember { mutableStateOf(false) }
     Row(
@@ -71,7 +73,7 @@ fun PhoneFields(
             )
         }
         Box(Modifier.weight(1f)) {
-            Field(value = number, onChange = onNumber, hint = hint, numeric = true)
+            Field(value = number, onChange = onNumber, modifier = numberModifier, hint = hint, numeric = true)
         }
     }
 }
