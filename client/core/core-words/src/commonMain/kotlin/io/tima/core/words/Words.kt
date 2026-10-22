@@ -1479,6 +1479,8 @@ interface ChatWords {
     val fileOpenNone: String
     /** Выбор нескольких сообщений долгим нажатием (заказчик 2026-10-19). */
     fun selected(count: Int): String
+    /** Сохранено группой — сколько файлов (заказчик 2026-10-22). */
+    fun savedFiles(count: Int): String
     val selectPick: String
     val selectCopy: String
     val selectForward: String
@@ -3682,6 +3684,7 @@ object RussianWords : Words {
         override val fileOpen = "Открыть"
         override val fileOpenNone = "Открыть нечем — сохраните файл"
         override fun selected(count: Int) = "Выбрано: $count"
+        override fun savedFiles(count: Int) = if (count == 0) "Ничего не сохранено" else "Сохранено файлов: $count"
         override val selectPick = "В указатели"
         override val selectCopy = "Скопировать"
         override val selectForward = "Переслать"

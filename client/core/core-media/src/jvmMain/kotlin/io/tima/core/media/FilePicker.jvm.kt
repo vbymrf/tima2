@@ -70,3 +70,32 @@ actual fun rememberFileSaver(onDone: (Boolean) -> Unit): (name: String, mime: St
         }
     }
 }
+
+@Composable
+actual fun rememberFolderSaver(onDone: (Int) -> Unit): (List<SavedFile>) -> Unit {
+    val scope = rememberCoroutineScope()
+    return { files ->
+        scope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                val chooser = javax.swing.JFileChooser().apply {
+                    dialogTitle = "Сохранить в папку"
+                    fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
+                }
+                if (chooser.showSaveDialog(null) != javax.swing.JFileChooser.APPROVE_OPTION) return@withContext 0
+                val dir = chooser.selectedFile ?: return@withContext 0
+                files.count { f -> runCatching { free(dir, f.name).writeBytes(f.bytes); true }.getOrDefault(false) }
+            }
+            onDone(saved)
+        }
+    }
+}
+
+/** Имя, которого в папке ещё нет: «фото.jpg», «фото (2).jpg»… */
+private fun free(dir: File, name: String): File {
+    var file = File(dir, name)
+    var n = 2
+    val base = name.substringBeforeLast('.')
+    val ext = name.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" }
+    while (file.exists()) file = File(dir, "$base ($n)$ext").also { n++ }
+    return file
+}

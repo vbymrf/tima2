@@ -4976,7 +4976,23 @@ private fun Chat(
     }
     val saveFromChat: (io.tima.domain.chat.RichMedia) -> Unit = { file ->
         scope.launch {
-            plainOf(file, store::said)?.let { plain -> saver(file.name.ifBlank { "file" }, file.mime, plain) }
+            plainOf(file, store::said)?.let { plain -> saver(savedName(file, 0), file.mime, plain) }
+        }
+    }
+    // «Сохранить как» группой — в выбранную папку (заказчик 2026-10-22).
+    val folderSaver = io.tima.core.media.rememberFolderSaver { count ->
+        Journal.note(LogCode.FILE_STORE, "сохранено группой", "файлов" to count)
+        store.said(saved.savedFiles(count))
+    }
+    /** Файлы и фото сообщений: один — «Сохранить как», несколько — группой в папку. */
+    val saveFiles: (List<io.tima.domain.chat.RichMedia>) -> Unit = { files ->
+        if (files.size == 1) {
+            saveFromChat(files.single())
+        } else if (files.isNotEmpty()) {
+            scope.launch {
+                val items = files.mapIndexedNotNull { i, m -> plainOf(m, store::said)?.let { io.tima.core.media.SavedFile(savedName(m, i + 1), m.mime, it) } }
+                if (items.isNotEmpty()) folderSaver(items)
+            }
         }
     }
     // Пересланное сюда фото — уходит, как только переписка готова (у группы — известен её вид:
@@ -5204,11 +5220,20 @@ private fun Chat(
                     Journal.note(LogCode.PICKS, "добавить выбранные", "сколько" to chosenLines.size)
                     chosenLines = emptyList()
                 }) else null,
-                onCopy = {
-                    val text = chosenLines.sortedBy { it.atMs }.mapNotNull { it.text?.takeIf(String::isNotBlank) }.joinToString("\n\n")
-                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
-                    store.said(copiedWord)
-                    chosenLines = emptyList()
+                // Копируем сообщения с текстом, сохраняем только файлы и фото (заказчик 2026-10-22).
+                onCopy = chosenLines.filter { filesOf(it).isEmpty() && !it.text.isNullOrBlank() }.takeIf { it.isNotEmpty() }?.let { texts ->
+                    {
+                        val text = texts.sortedBy { it.atMs }.mapNotNull { it.text?.takeIf(String::isNotBlank) }.joinToString("\n\n")
+                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
+                        store.said(copiedWord)
+                        chosenLines = emptyList()
+                    }
+                },
+                onSave = chosenLines.sortedBy { it.atMs }.flatMap(::filesOf).takeIf { it.isNotEmpty() }?.let { files ->
+                    {
+                        saveFiles(files)
+                        chosenLines = emptyList()
+                    }
                 },
                 onForward = if (onForward != null && forwardTargets.isNotEmpty()) ({ chosenForward = true }) else null,
                 onDelete = { chosenDelete = true },
@@ -5843,7 +5868,9 @@ private fun Chat(
             },
             // «Скопировать текст» — окно: выделить часть или скопировать всё (заказчик 2026-10-19:
             // прежнее долгое нажатие переехало сюда).
-            onCopy = text?.let { { selectFor = line; close() } },
+            // У файлов и фото — «Сохранить как» вместо «Скопировать текст» (заказчик 2026-10-22).
+            onCopy = text?.takeIf { filesOf(line).isEmpty() }?.let { { selectFor = line; close() } },
+            onSave = filesOf(line).takeIf { it.isNotEmpty() }?.let { files -> { saveFiles(files); close() } },
             onPick = {
                 store.picked(line)
                 Journal.note(LogCode.PICKS, "добавить", "уровень" to io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community).substringBefore(':'))
@@ -7891,4 +7918,14 @@ internal fun madePhoto(draft: SendDraft, marks: io.tima.core.media.PhotoMarks, s
 
 /** Потолок стороны исходника при сведении: 4096×3072 — около 50 МБ в памяти, один раз. */
 private const val MADE_MAX_SIDE = 4096
+
+/** Файлы и фото сообщения вне пузыря — то, что сохраняется «Сохранить как». */
+private fun filesOf(line: ChatLine): List<io.tima.domain.chat.RichMedia> =
+    line.rich?.takeIf { !line.deleted }?.let { PostmanFiles.outsideOf(it) }.orEmpty()
+
+/** Имя сохраняемого: своё, у фото — «photo.jpg», в группе — с номером. */
+private fun savedName(m: io.tima.domain.chat.RichMedia, n: Int): String = m.name.ifBlank {
+    val ext = if (m.mime.startsWith("image/")) "jpg" else "bin"
+    if (n > 0) "photo-$n.$ext" else "photo.$ext"
+}
 

@@ -1279,6 +1279,7 @@ object SpanishWords : Words {
         override val gateBlocked = "No disponible en el editor"
         override val fileOpen = "Abrir"
         override val fileOpenNone = "No hay con qué abrirlo: guarda el archivo"
+        override fun savedFiles(count: Int) = if (count == 0) "No se guardó nada" else "Archivos guardados: $count"
         override fun selected(count: Int) = "Seleccionados: $count"
         override val selectPick = "A los marcadores"
         override val selectCopy = "Copiar"

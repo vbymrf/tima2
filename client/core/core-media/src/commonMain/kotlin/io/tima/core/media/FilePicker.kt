@@ -26,6 +26,17 @@ expect fun rememberPhotosPicker(max: Int, onPicked: (List<PickedImage>) -> Unit)
 @Composable
 expect fun rememberFileSaver(onDone: (Boolean) -> Unit): (name: String, mime: String, bytes: ByteArray) -> Unit
 
+/** Файл для сохранения группой: имя, вид, байты. */
+class SavedFile(val name: String, val mime: String, val bytes: ByteArray)
+
+/**
+ * «Сохранить как» группой (заказчик 2026-10-22: «если несколько файлов — сохранит группу»): человек
+ * выбирает папку, файлы ложатся в неё; совпало имя — к нему дописывается номер. [onDone] — сколько
+ * сохранено, 0 — передумал или не вышло.
+ */
+@Composable
+expect fun rememberFolderSaver(onDone: (Int) -> Unit): (List<SavedFile>) -> Unit
+
 /**
  * Запрет и предупреждение по имени файла (Решения §6): исполняемые, `.html`, `.svg` — нельзя;
  * архивы и `.apk` — можно, с предупреждением.

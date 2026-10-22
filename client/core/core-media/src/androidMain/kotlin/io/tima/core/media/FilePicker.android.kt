@@ -1,6 +1,7 @@
 package io.tima.core.media
 
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -72,5 +73,34 @@ actual fun rememberFileSaver(onDone: (Boolean) -> Unit): (name: String, mime: St
         pending.value = bytes
         mime.value = type
         launcher.launch(name)
+    }
+}
+
+@Composable
+actual fun rememberFolderSaver(onDone: (Int) -> Unit): (List<SavedFile>) -> Unit {
+    val context = LocalContext.current
+    val pending = remember { mutableStateOf<List<SavedFile>>(emptyList()) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree: Uri? ->
+        val files = pending.value
+        pending.value = emptyList()
+        if (tree == null) {
+            onDone(0)
+            return@rememberLauncherForActivityResult
+        }
+        // Папка выбрана — файлы создаёт в ней система: одинаковые имена она сама разводит номером.
+        val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        var saved = 0
+        for (f in files) {
+            val ok = runCatching {
+                val uri = DocumentsContract.createDocument(context.contentResolver, parent, f.mime, f.name) ?: return@runCatching false
+                context.contentResolver.openOutputStream(uri)?.use { it.write(f.bytes) } != null
+            }.getOrDefault(false)
+            if (ok) saved++
+        }
+        onDone(saved)
+    }
+    return { files ->
+        pending.value = files
+        launcher.launch(null)
     }
 }

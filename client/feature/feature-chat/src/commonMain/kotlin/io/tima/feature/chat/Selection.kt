@@ -73,13 +73,15 @@ internal fun SelectMark(on: Boolean, onClick: (() -> Unit)? = null) {
 
 /**
  * Полоса выбора на месте строки ввода: сколько выбрано и что с ними сделать — в Подборку,
- * скопировать, переслать, удалить; «✕» — выйти из выбора.
+ * скопировать, сохранить, переслать, удалить; «✕» — выйти из выбора. «Скопировать» — только когда среди
+ * выбранного есть сообщения с текстом, «Сохранить» — когда есть файлы и фото (заказчик 2026-10-22).
  */
 @Composable
 fun SelectionBar(
     count: Int,
     onPick: (() -> Unit)?,
-    onCopy: () -> Unit,
+    onCopy: (() -> Unit)?,
+    onSave: (() -> Unit)? = null,
     onForward: (() -> Unit)?,
     onDelete: () -> Unit,
     onClose: () -> Unit,
@@ -100,7 +102,8 @@ fun SelectionBar(
         Caption(w.selected(count), fontSize = TimaType.sz5, weight = FontWeight.Bold, lineOne = true)
         Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             onPick?.let { Chip(w.selectPick, kind = ChipKind.Quiet, onClick = it, modifier = Modifier.testTag(SelectTags.action("pick"))) }
-            Chip(w.selectCopy, kind = ChipKind.Quiet, onClick = onCopy, modifier = Modifier.testTag(SelectTags.action("copy")))
+            onCopy?.let { Chip(w.selectCopy, kind = ChipKind.Quiet, onClick = it, modifier = Modifier.testTag(SelectTags.action("copy"))) }
+            onSave?.let { Chip(w.fileSaveAs, kind = ChipKind.Quiet, onClick = it, modifier = Modifier.testTag(SelectTags.action("save"))) }
             onForward?.let { Chip(w.selectForward, kind = ChipKind.Quiet, onClick = it, modifier = Modifier.testTag(SelectTags.action("forward"))) }
             Chip(w.selectDelete, kind = ChipKind.Selected, onClick = onDelete, modifier = Modifier.testTag(SelectTags.action("delete")))
         }

@@ -11,3 +11,6 @@ actual fun rememberPhotosPicker(max: Int, onPicked: (List<PickedImage>) -> Unit)
 
 @Composable
 actual fun rememberFileSaver(onDone: (Boolean) -> Unit): (name: String, mime: String, bytes: ByteArray) -> Unit = { _, _, _ -> onDone(false) }
+
+@Composable
+actual fun rememberFolderSaver(onDone: (Int) -> Unit): (List<SavedFile>) -> Unit = { onDone(0) }

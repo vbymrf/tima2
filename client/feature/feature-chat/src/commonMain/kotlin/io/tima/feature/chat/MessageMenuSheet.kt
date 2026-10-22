@@ -38,6 +38,7 @@ object MessageMenuTags {
     const val DELETE_ALL = "msg:delete.all"
     const val SHARE = "msg:share"
     const val COPY = "msg:copy"
+    const val SAVE = "msg:save"
     const val PICK = "msg:pick"
     const val CARRY = "msg:carry"
     const val CLOSE = "msg:close"
@@ -64,6 +65,11 @@ fun MessageMenuSheet(
     onDeleteForAll: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
     onCopy: (() -> Unit)? = null,
+    /**
+     * «Сохранить как» — у сообщения с файлами и фото вместо «Скопировать текст» (заказчик 2026-10-22);
+     * несколько файлов — группой в папку.
+     */
+    onSave: (() -> Unit)? = null,
     onPick: (() -> Unit)? = null,
     onCarry: (() -> Unit)? = null,
     /** «Закрепить» (ПЛАН-(ЗО) ЗО3); `null` — права нет. */
@@ -125,6 +131,7 @@ fun MessageMenuSheet(
             }
             onShare?.let { Item(words.menuShare, MessageMenuTags.SHARE, onClick = it) }
             onCopy?.let { Item(words.menuCopy, MessageMenuTags.COPY, onClick = it) }
+            onSave?.let { Item(words.fileSaveAs, MessageMenuTags.SAVE, onClick = it) }
             onPick?.let { Item(words.menuPick, MessageMenuTags.PICK, onClick = it) }
             onCarry?.let { Item(words.menuCarry, MessageMenuTags.CARRY, onClick = it) }
         }
