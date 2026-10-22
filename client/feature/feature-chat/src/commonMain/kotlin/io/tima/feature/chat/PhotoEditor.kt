@@ -469,7 +469,7 @@ fun PhotoEditor(
                                 if (grab < 0 && vr.contains(start)) grab = GRAB_MOVE
                             }
                             if (grab == GRAB_MOVE) {
-                                // Держит на месте дольше LONG_PRESS_MS — к набору; сдвинул — перенос; отпустил — ничего.
+                                // Держит на месте дольше LONG_PRESS_MS — к набору; сдвинул — перенос; два коротких — к набору.
                                 val moving = withTimeoutOrNull(LONG_PRESS_MS) {
                                     var result = false
                                     while (true) {
@@ -488,7 +488,19 @@ fun PhotoEditor(
                                     while (awaitPointerEvent().changes.any { it.pressed }) Unit
                                     return@awaitEachGesture
                                 }
-                                if (!moving) return@awaitEachGesture
+                                if (!moving) {
+                                    // Короткое нажатие внутри рамки: второе подряд рядом — двойное, снова набор
+                                    // (заказчик 2026-10-22: «двойной клик внутри рамки — редактируем текст»).
+                                    val now = currentEvent.changes.maxOfOrNull { it.uptimeMillis } ?: down.uptimeMillis
+                                    if (down.uptimeMillis - lastTapUp <= EDIT_DOUBLE_TAP_MS && (down.position - lastTapAt).getDistance() <= tapNear) {
+                                        phase = TextPhase.Typing
+                                        lastTapUp = 0L
+                                    } else {
+                                        lastTapUp = now
+                                        lastTapAt = down.position
+                                    }
+                                    return@awaitEachGesture
+                                }
                             }
                             if (grab >= 0 && vr != null) {
                                 // Рамка ведётся отдельно от стопки: тяжёлый слой не перерисовывается, текст едет
