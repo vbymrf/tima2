@@ -3,7 +3,7 @@
 # Переменные: MAESTRO_GROUP — название (латиницей, PH-41); MAESTRO_KIND — `public` или `private`;
 # MAESTRO_NUMBER — номер приглашённого без кода страны (10 цифр), пусто — никого.
 # Путь: «Социум» → «Создать» → «Группа» → вид → вступление по умолчанию → название и номер →
-# «Создать» → «Перейти в группу».
+# «Создать» → переписка группы («Перейти в группу» — только если кого-то не позвали).
 #
 # Клавиатура (PH-59): после ввода «Создать» может оказаться за краем сжатого окна — его нет в
 # дереве, ни по метке, ни по надписи. Поэтому клавиатуру закрываем сразу после ввода, когда она
@@ -67,12 +67,21 @@ appId: io.tima.app.v2
 - takeScreenshot: group-create-1
 - tapOn:
     id: "wizard:create"
+# Позваны все — мастер сам открывает переписку. «Перейти в группу» остаётся, только если кого-то
+# позвать не удалось: тогда мастер задерживается и называет непозванных (снимок — для отчёта).
 - extendedWaitUntil:
     visible:
-      id: "wizard:open-created"
+      id: "chat:send"
     timeout: 20000
-- tapOn:
-    id: "wizard:open-created"
+    optional: true
+- runFlow:
+    when:
+      visible:
+        id: "wizard:open-created"
+    commands:
+      - takeScreenshot: group-create-not-invited
+      - tapOn:
+          id: "wizard:open-created"
 - extendedWaitUntil:
     visible:
       id: "chat:send"
