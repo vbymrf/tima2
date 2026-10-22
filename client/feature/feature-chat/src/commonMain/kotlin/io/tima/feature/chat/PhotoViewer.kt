@@ -73,11 +73,14 @@ class PhotoActions(
     val share: ((PhotoAt, ImageBitmap?) -> Unit)? = null,
     /** Пришедшее фото картинкой — с него начинаются поворот и редактор; `null` — не загрузилось. */
     val load: (suspend (PhotoAt) -> ImageBitmap?)? = null,
-    /** Можно ли досылать правку этого фото: своё, отправлено, правок меньше трёх, ключ тот же. */
-    val editable: (PhotoAt) -> Boolean = { false },
     /**
-     * Просмотр закрыт — изменённое уходит: одна правка на фото за весь просмотр (ADR-0052). Только
-     * [editable]; остальное изменённое остаётся у человека до закрытия.
+     * Почему правку этого фото уже не отправить — словами человека; `null` — можно: своё, отправлено,
+     * правок меньше трёх, ключ тот же. Нельзя — «Изменить» заблокирована и по нажатию говорит это.
+     */
+    val refusal: (PhotoAt) -> String? = { "" },
+    /**
+     * Просмотр закрыт — сохранённое в редакторе уходит: одна правка на фото за весь просмотр (ADR-0052).
+     * Поворот в просмотре остаётся только у человека (заказчик 2026-10-22).
      */
     val commit: (List<Pair<PhotoAt, ImageBitmap>>) -> Unit = {},
 )
@@ -96,6 +99,8 @@ object PhotoTags {
     const val IMAGE = "msg:photo.image"
     const val WHEN = "msg:photo.when"
     const val MENU_OUTSIDE = "msg:photo.menu.outside"
+    const val BUBBLE = "msg:photo.bubble"
+    const val BUBBLE_OUTSIDE = "msg:photo.bubble.outside"
     fun item(key: String) = "msg:photo.menu.$key"
 }
 
@@ -153,6 +158,11 @@ fun PhotoViewer(
     // Изменённое в этом просмотре — по номеру файла; уходит при закрытии.
     val edited = remember { mutableStateMapOf<String, ImageBitmap>() }
     var editing by remember { mutableStateOf<Pair<PhotoAt, ImageBitmap>?>(null) }
+    // Сохранённое в редакторе — оно и уходит собеседнику; поворот в просмотре — только у себя.
+    val toSend = remember { mutableStateMapOf<String, ImageBitmap>() }
+    // Подсказка над кнопкой — как меню «≡», закрывается нажатием мимо: слева (поворот) или справа (изменить).
+    var bubble by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var turnTold by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -168,7 +178,7 @@ fun PhotoViewer(
     val all by rememberUpdatedState(photos)
     DisposableEffect(Unit) {
         onDispose {
-            val mine = edited.mapNotNull { (id, bmp) -> all.firstOrNull { it.media.mediaId == id }?.takeIf(now.editable)?.let { it to bmp } }
+            val mine = toSend.mapNotNull { (id, bmp) -> all.firstOrNull { it.media.mediaId == id }?.takeIf { now.refusal(it) == null }?.let { it to bmp } }
             if (mine.isNotEmpty()) now.commit(mine)
         }
     }
@@ -216,10 +226,21 @@ fun PhotoViewer(
         return Offset(p.x.coerceIn(-mx, mx), y)
     }
 
-    fun changed(p: PhotoAt, bmp: ImageBitmap) {
-        val first = edited.isEmpty()
+    /** Сохранено в редакторе: показать и отправить при закрытии просмотра. */
+    fun saved(p: PhotoAt, bmp: ImageBitmap) {
+        val first = toSend.isEmpty()
         edited[p.media.mediaId] = bmp
-        if (first || !actions.editable(p)) said = if (actions.editable(p)) w.photoEditOnClose else w.photoEditForeign
+        toSend[p.media.mediaId] = bmp
+        if (first) said = w.photoEditOnClose
+    }
+
+    /** Поворот в просмотре — только у себя (заказчик 2026-10-22); в первый раз — подсказка над кнопкой. */
+    fun turned(p: PhotoAt, bmp: ImageBitmap) {
+        edited[p.media.mediaId] = bmp
+        if (!turnTold) {
+            turnTold = true
+            bubble = true to if (actions.refusal(p) == null) w.photoTurnLocal else w.photoTurnLocalOnly
+        }
     }
 
     Box(Modifier.fillMaxSize().background(colors.viewer).testTag(PhotoTags.WINDOW)) {
@@ -381,7 +402,7 @@ fun PhotoViewer(
             // Внизу: слева «Повернуть», справа «Изменить», между ними — «3 из 12» (заказчик 2026-10-22).
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 if (actions.load != null) {
-                    SolidLabel(w.photoRotate, PhotoTags.ROTATE) { withCurrent(photo) { changed(photo, PhotoSteps.turn(it)) } }
+                    SolidLabel(w.photoRotate, PhotoTags.ROTATE) { withCurrent(photo) { turned(photo, PhotoSteps.turn(it)) } }
                 }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     if (photos.size > 1) {
@@ -396,7 +417,11 @@ fun PhotoViewer(
                     }
                 }
                 if (actions.load != null) {
-                    SolidLabel(w.photoEdit, PhotoTags.EDIT) { withCurrent(photo) { editing = photo to it } }
+                    // Отправить правку уже нельзя — кнопка погашена, по нажатию — почему и что делать.
+                    val no = actions.refusal(photo)
+                    SolidLabel(w.photoEdit, PhotoTags.EDIT, dim = no != null) {
+                        if (no != null) bubble = false to (no + " " + w.photoEditAdvice) else withCurrent(photo) { editing = photo to it }
+                    }
                 }
             }
             if (bottom.isNotEmpty()) {
@@ -409,10 +434,26 @@ fun PhotoViewer(
                 }
             }
         }
+        bubble?.let { (left, text) ->
+            Box(
+                Modifier.fillMaxSize()
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { bubble = null }
+                    .testTag(PhotoTags.BUBBLE_OUTSIDE),
+            )
+            val above = with(density) { bottomBar.toDp() }
+            Caption(
+                text,
+                fontSize = TimaType.sz4,
+                color = colors.text,
+                modifier = Modifier.align(if (left) Alignment.BottomStart else Alignment.BottomEnd)
+                    .padding(start = 12.dp, end = 12.dp, bottom = above + 4.dp).widthIn(max = 300.dp)
+                    .background(colors.surface, RoundedCornerShape(12.dp)).padding(14.dp).testTag(PhotoTags.BUBBLE),
+            )
+        }
         editing?.let { (p, source) ->
             PhotoEditor(
                 source = source,
-                onSave = { result -> editing = null; changed(p, result) },
+                onSave = { result -> editing = null; saved(p, result) },
                 onCancel = { editing = null },
             )
         }
@@ -433,13 +474,13 @@ private fun SolidButton(glyph: String, tag: String, onClick: () -> Unit) {
 
 /** Кнопка-слово поверх фото — так же на сплошном фоне. */
 @Composable
-private fun SolidLabel(label: String, tag: String, onClick: () -> Unit) {
+private fun SolidLabel(label: String, tag: String, dim: Boolean = false, onClick: () -> Unit) {
     val colors = Tima.colors
     Caption(
         label,
         fontSize = TimaType.sz4,
         weight = FontWeight.Bold,
-        color = colors.text,
+        color = if (dim) colors.text3 else colors.text,
         modifier = Modifier.background(colors.surface, RoundedCornerShape(24.dp)).clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp).testTag(tag),
     )

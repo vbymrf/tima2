@@ -67,7 +67,10 @@ class EditMessage(
         queued(chatId, serverId) { codec.encodeMediaEdit(index, media) }
 
     /** Можно ли ещё править: своё, отправлено, правок меньше трёх. Смену ключа знает сервер. */
-    fun editable(chatId: String, serverId: Long): Boolean = serverId > 0 && checked(chatId, serverId) == null
+    fun editable(chatId: String, serverId: Long): Boolean = refusal(chatId, serverId) == null
+
+    /** Почему править уже нельзя: не отправлено, нет, не своё, правок три; `null` — можно. Смену ключа знает сервер. */
+    fun refusal(chatId: String, serverId: Long): EditResult? = if (serverId <= 0) EditResult.NotSent else checked(chatId, serverId)
 
     /** Отказ до тела правки: не отправлено, нет, не своё, правок уже три. `null` — можно. */
     private fun checked(chatId: String, serverId: Long): EditResult? {

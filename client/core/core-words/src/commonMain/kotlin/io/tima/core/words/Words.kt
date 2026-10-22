@@ -1536,10 +1536,18 @@ interface ChatWords {
     val photoThin: String
     val photoThick: String
     val photoEditOnClose: String
-    val photoEditForeign: String
     val photoEditSent: String
     val photoEditRefused: String
     val photoLoadFailed: String
+    /** Поворот в просмотре — только у себя; почему правку не отправить (заказчик 2026-10-22). */
+    val photoTurnLocal: String
+    val photoTurnLocalOnly: String
+    val photoEditNotMine: String
+    val photoEditNotSent: String
+    val photoEditLimit: String
+    val photoEditKeyChanged: String
+    val photoEditGroup: String
+    val photoEditAdvice: String
     val photoRedo: String
     val photoApply: String
     val photoCropAbout: String
@@ -3747,10 +3755,17 @@ object RussianWords : Words {
         override val photoThin = "Тонко"
         override val photoThick = "Толсто"
         override val photoEditOnClose = "Изменённое фото уйдёт, когда закроете просмотр: одна правка на все изменения"
-        override val photoEditForeign = "Изменённое здесь — только у вас: «Сохранить как» или «Переслать» новым фото"
         override val photoEditSent = "Изменённое фото отправлено — у получателя на том же месте, с пометкой «изменено»"
         override val photoEditRefused = "Изменённое фото не ушло: правка больше не принимается (три правки или ключ сменился)"
         override val photoLoadFailed = "Фото не загрузилось — изменить не из чего"
+        override val photoTurnLocal = "Изменённая здесь — только у вас. Измените через редактор — отправим собеседнику (кнопка «Изменить»)."
+        override val photoTurnLocalOnly = "Изменённая здесь — только у вас: «Сохранить как» или «Переслать»."
+        override val photoEditNotMine = "Изменить и отправить можно только своё фото."
+        override val photoEditNotSent = "Фото ещё не отправлено — изменить можно после отправки."
+        override val photoEditLimit = "Это фото уже изменяли три раза — больше нельзя."
+        override val photoEditKeyChanged = "Ключ переписки сменился с новым месяцем — прежнее фото больше не изменить."
+        override val photoEditGroup = "В группе изменять фото пока нельзя."
+        override val photoEditAdvice = "Отправьте фото заново или нажмите «Переслать»."
         override val photoRedo = "Повторить"
         override val photoApply = "Выполнить"
         override val photoCropAbout = "Растяните рамку пальцем, потом тяните любой угол. Галочка — обрезать"

@@ -5316,7 +5316,16 @@ private fun Chat(
                 },
                 // Поворот и редактор (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ5–ИФ7).
                 load = { p -> plainOf(p.media, say)?.let { io.tima.core.media.decodeImage(it) } },
-                editable = { p -> !group && photoEditable(p.line, environment.edit, chatId) },
+                refusal = { p ->
+                    when (val no = if (group) PhotoRefusal.Group else photoRefusal(p.line, environment.edit, chatId)) {
+                        null -> null
+                        PhotoRefusal.Group -> photoWords.photoEditGroup
+                        PhotoRefusal.NotMine -> photoWords.photoEditNotMine
+                        PhotoRefusal.NotSent -> photoWords.photoEditNotSent
+                        PhotoRefusal.Limit -> photoWords.photoEditLimit
+                        PhotoRefusal.KeyChanged -> photoWords.photoEditKeyChanged
+                    }
+                },
                 commit = { changed ->
                     val peer = peerUser ?: myUserId.takeIf { it.isNotEmpty() }
                     val uploads = SealedUploads({ network.media }) { id, sealed, mime -> postman?.keepSent(id, sealed, photo = mime.startsWith("image/")) }
@@ -7794,13 +7803,24 @@ private fun composedFacts(doc: io.tima.domain.chat.ComposedDoc): Array<Pair<Stri
 /** Изменённое в просмотре фото — JPEG для «Сохранить как», «Переслать», «Поделиться». */
 private fun jpegOf(image: androidx.compose.ui.graphics.ImageBitmap): ByteArray = io.tima.core.media.PhotoPrep.fit(image).full
 
+/** Почему правку фото уже не отправить (заказчик 2026-10-22: «нажали — сообщение почему»). */
+internal enum class PhotoRefusal { Group, NotMine, NotSent, Limit, KeyChanged }
+
 /**
  * Можно ли досылать правку фото (ADR-0045 §5, ADR-0052): своё, отправлено, правок меньше трёх и тот же
  * месяц UTC, что у исходного, — в личной переписке ключ меняется с месяцем, и правку после смены
  * сервер не примет. Проверка здесь, а не только у сервера: после отказа прежний файл уже убран бы.
+ * `null` — можно.
  */
-internal fun photoEditable(line: ChatLine, edit: io.tima.domain.chat.EditMessage, chatId: String, now: Long = msNow()): Boolean {
-    if (!line.outgoing || line.serverId <= 0 || line.atMs <= 0) return false
+internal fun photoRefusal(line: ChatLine, edit: io.tima.domain.chat.EditMessage, chatId: String, now: Long = msNow()): PhotoRefusal? {
+    if (!line.outgoing) return PhotoRefusal.NotMine
+    if (line.serverId <= 0 || line.atMs <= 0) return PhotoRefusal.NotSent
     fun month(ms: Long) = kotlinx.datetime.Instant.fromEpochMilliseconds(ms).toLocalDateTime(kotlinx.datetime.TimeZone.UTC).let { it.year * 12 + it.monthNumber }
-    return month(line.atMs) == month(now) && edit.editable(chatId, line.serverId)
+    if (month(line.atMs) != month(now)) return PhotoRefusal.KeyChanged
+    return when (edit.refusal(chatId, line.serverId)) {
+        null -> null
+        io.tima.domain.chat.EditResult.Limit -> PhotoRefusal.Limit
+        io.tima.domain.chat.EditResult.NotMine -> PhotoRefusal.NotMine
+        else -> PhotoRefusal.NotSent
+    }
 }
