@@ -186,6 +186,8 @@ fun PhotoViewer(
     var turnTold by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    // Надписи редактора сводятся этим же набором текста.
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
     val density = LocalDensity.current
     // Быстрое движение — к соседнему фото, даже если сдвиг короче трети ширины.
     val flingSpeed = with(density) { FLING_DP_S.dp.toPx() }
@@ -540,7 +542,7 @@ fun PhotoViewer(
             PhotoEditor(
                 source = source,
                 // Правка отправленного сводится на том, что есть, — пришедшем фото (исходника здесь нет).
-                onSave = { marks -> editing = null; saved(p, PhotoLayers.render(source, marks)) },
+                onSave = { marks -> editing = null; saved(p, PhotoLayers.render(source, marks, measurer)) },
                 onCancel = { editing = null },
             )
         }

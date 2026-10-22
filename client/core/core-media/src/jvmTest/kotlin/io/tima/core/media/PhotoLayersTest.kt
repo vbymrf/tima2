@@ -118,4 +118,27 @@ class PhotoLayersTest {
         val after = PhotoLayers.render(halves(), PhotoMarks(marks = listOf(erase, line)))
         assertEquals(green, after.at(10, 10), "нарисованное после ластика он не трогает")
     }
+
+    private val measurer = androidx.compose.ui.text.TextMeasurer(
+        androidx.compose.ui.text.font.createFontFamilyResolver(), Density(1f), LayoutDirection.Ltr,
+    )
+
+    @Test
+    fun надпись_своим_слоем_с_фоном_ластик_её_не_трогает() {
+        val label = PhotoMark.Text(Rect(0.05f, 0.1f, 0.95f, 0.9f), "ЖЖЖ", Color.Green, Color.Black, TextFace.Bold, 0)
+        val erase = PhotoMark.Erase(listOf(Offset(0f, 0.5f), Offset(1f, 0.5f)), 1f)
+        val img = PhotoLayers.render(halves(80, 40), PhotoMarks(marks = listOf(label, erase)), measurer)
+        var green = 0
+        var black = 0
+        for (x in 0 until img.width) for (y in 0 until img.height) {
+            val c = img.at(x, y)
+            if (c == Color.Green.toArgb()) green++
+            if (c == Color.Black.toArgb()) black++
+        }
+        assertTrue(green > 20, "буквы видны и после ластика: $green точек")
+        assertTrue(black > 100, "фон рамки залит: $black точек")
+        assertEquals(red, img.at(1, 1), "вне рамки — фото")
+        val none = PhotoLayers.render(halves(80, 40), PhotoMarks(marks = listOf(label)))
+        assertEquals(red, none.at(20, 20), "без набора текста надпись не рисуется")
+    }
 }

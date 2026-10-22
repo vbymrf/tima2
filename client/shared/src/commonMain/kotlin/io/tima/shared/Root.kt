@@ -4911,6 +4911,8 @@ private fun Chat(
     // Одно фото — сначала в редактор фото, его «Отправить» и шлёт; «Отмена» — не отправлять (заказчик
     // 2026-10-22). Несколько — уходят сразу, как прежде. Не раскодировалось — уходит как есть: решает отправка.
     var sendDraft by remember { mutableStateOf<SendDraft?>(null) }
+    // Надписи редактора при сведении — тем же набором текста, что и на экране.
+    val photoMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
     fun sendOne(bytes: ByteArray, mime: String) {
         scope.launch {
             val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
@@ -5332,7 +5334,7 @@ private fun Chat(
                     Journal.note(LogCode.FILE_SEND, "одно фото через редактор — без изменений")
                     store.sendPhotos(listOf(draft.bytes to draft.mime))
                 } else {
-                    store.sendPhotoMade { side -> madePhoto(draft, marks, side) }
+                    store.sendPhotoMade { side -> madePhoto(draft, marks, side, photoMeasurer) }
                 }
             },
             onCancel = {
@@ -7903,7 +7905,12 @@ internal class SendDraft(val bytes: ByteArray, val mime: String, val preview: an
  * рамки было не меньше [side], но не больше 4096 по стороне — потолок памяти; не прочиталось или не
  * хватило памяти — сводится на копии редактора.
  */
-internal fun madePhoto(draft: SendDraft, marks: io.tima.core.media.PhotoMarks, side: Int): io.tima.core.media.PhotoPrep.Prepared? {
+internal fun madePhoto(
+    draft: SendDraft,
+    marks: io.tima.core.media.PhotoMarks,
+    side: Int,
+    measurer: androidx.compose.ui.text.TextMeasurer? = null,
+): io.tima.core.media.PhotoPrep.Prepared? {
     val preview = draft.preview
     val visible = io.tima.core.media.PhotoLayers.outSize(preview.width, preview.height, marks)
     val need = side.toFloat() / maxOf(visible.width, visible.height)
@@ -7913,8 +7920,8 @@ internal fun madePhoto(draft: SendDraft, marks: io.tima.core.media.PhotoMarks, s
         val atLeast = kotlin.math.ceil(minOf(preview.width, preview.height) * need).toInt()
         runCatching { io.tima.core.media.decodeImage(draft.bytes, atLeast = atLeast, maxSide = MADE_MAX_SIDE) }.getOrNull() ?: preview
     }
-    val made = runCatching { io.tima.core.media.PhotoLayers.render(source, marks) }.getOrNull()
-        ?: runCatching { io.tima.core.media.PhotoLayers.render(preview, marks) }.getOrNull()
+    val made = runCatching { io.tima.core.media.PhotoLayers.render(source, marks, measurer) }.getOrNull()
+        ?: runCatching { io.tima.core.media.PhotoLayers.render(preview, marks, measurer) }.getOrNull()
         ?: return null
     Journal.note(
         LogCode.FILE_SEND, "одно фото через редактор — сведено",

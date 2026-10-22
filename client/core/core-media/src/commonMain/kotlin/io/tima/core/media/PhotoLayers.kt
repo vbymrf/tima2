@@ -1,5 +1,6 @@
 package io.tima.core.media
 
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -15,10 +16,20 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.sp
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -41,7 +52,26 @@ sealed interface PhotoMark {
 
     /** Ластик (заказчик 2026-10-22): стирает нарисованное до него — кисть, стрелку, маркер; фото не трогает. */
     data class Erase(val points: List<Offset>, val width: Float) : PhotoMark
+
+    /**
+     * Надпись (заказчик 2026-10-22). [rect] — рамка в долях исходного фото; [turn] — четверти поворота
+     * стопки, при которых её поставили: в том виде она стоит прямо, дальше поворачивается вместе с фото.
+     * [background] — заливка рамки со скруглёнными углами, как у пузыря; `null` — без фона. Текст — по левому
+     * краю, размер букв — самый крупный, при котором он помещается в рамку. Своим слоем, выше рисунков:
+     * ластик надписи не трогает.
+     */
+    data class Text(
+        val rect: Rect,
+        val text: String,
+        val color: Color,
+        val background: Color?,
+        val face: TextFace,
+        val turn: Int,
+    ) : PhotoMark
 }
+
+/** Начертание надписи. */
+enum class TextFace { Normal, Bold, Italic }
 
 /**
  * Правка фото слоями (заказчик 2026-10-22: «наложить сверху наши рисования, как в фотошопе слои… и далее
@@ -77,6 +107,12 @@ object PhotoLayers {
     /** Прозрачность полупрозрачного слоя: фото под ним видно. */
     const val GLASS_ALPHA = 0.4f
 
+    /**
+     * Подложка области набора надписи без своего фона: серый средней яркости — на нём читается любой цвет
+     * палитры, и белый, и чёрный (заказчик 2026-10-22).
+     */
+    val TYPING_BACK: Color = Color(0xFF808080)
+
     private val FULL = Rect(0f, 0f, 1f, 1f)
 
     /** Размер итога в точках фото [w]×[h]: рамка, а при нечётном повороте стороны меняются местами. */
@@ -87,12 +123,15 @@ object PhotoLayers {
         return if (m.quarter % 2 == 1) IntSize(ch, cw) else IntSize(cw, ch)
     }
 
-    /** Свести: фото, рамка, поворот, отметки — в одну картинку размером [outSize]. */
-    fun render(source: ImageBitmap, m: PhotoMarks): ImageBitmap {
+    /**
+     * Свести: фото, рамка, поворот, отметки — в одну картинку размером [outSize]. [measurer] — для надписей;
+     * без него надписи не рисуются.
+     */
+    fun render(source: ImageBitmap, m: PhotoMarks, measurer: TextMeasurer? = null): ImageBitmap {
         val size = outSize(source.width, source.height, m)
         val out = ImageBitmap(size.width, size.height)
         CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(out), Size(size.width.toFloat(), size.height.toFloat())) {
-            drawPhotoLayers(source, m)
+            drawPhotoLayers(source, m, measurer = measurer)
         }
         return out
     }
@@ -128,6 +167,72 @@ object PhotoLayers {
         return unrotate(Offset(c.left + q.x * c.width, c.top + q.y * c.height), quarter)
     }
 
+    /** Обратно: доля фото → доля видимого. */
+    fun toVisible(p: Offset, quarter: Int, crop: Rect?): Offset {
+        val c = rotate(crop ?: FULL, quarter)
+        val r = rotate(p, quarter)
+        return Offset((r.x - c.left) / c.width, (r.y - c.top) / c.height)
+    }
+
+    /** Рамка надписи: видимое ↔ фото. */
+    fun rectToVisible(r: Rect, quarter: Int, crop: Rect?): Rect = corners(r).map { toVisible(it, quarter, crop) }.bounds()
+
+    fun rectToPhoto(r: Rect, quarter: Int, crop: Rect?): Rect = corners(r).map { toPhoto(it, quarter, crop) }.bounds()
+
+    /**
+     * Надпись в рамке: самый крупный размер букв, при котором текст целиком помещается в [maxW]×[maxH]
+     * точек (переносы — по ширине). Пустой текст — `null`.
+     */
+    fun fitText(measurer: TextMeasurer, t: PhotoMark.Text, maxW: Float, maxH: Float): TextLayoutResult? {
+        if (t.text.isBlank() || maxW < 1f || maxH < 1f) return null
+        fun measure(size: Float) = measurer.measure(
+            AnnotatedString(t.text),
+            style = TextStyle(
+                color = t.color,
+                fontSize = size.sp,
+                lineHeight = (size * 1.2f).sp,
+                fontWeight = if (t.face == TextFace.Bold) FontWeight.Bold else FontWeight.Normal,
+                fontStyle = if (t.face == TextFace.Italic) FontStyle.Italic else FontStyle.Normal,
+            ),
+            constraints = Constraints(maxWidth = maxW.toInt().coerceAtLeast(1)),
+            density = Density(1f),
+        )
+        var lo = 1f
+        var hi = maxH
+        var best: TextLayoutResult? = null
+        repeat(FIT_STEPS) {
+            val mid = (lo + hi) / 2
+            val l = measure(mid)
+            if (l.size.height <= maxH && !l.didOverflowWidth) {
+                best = l
+                lo = mid
+            } else {
+                hi = mid
+            }
+        }
+        return best ?: measure(lo)
+    }
+
+    /** Надпись: рамка с заливкой и текст — в системе точек фото, прямо в виде, где её ставили. */
+    internal fun DrawScope.text(t: PhotoMark.Text, w: Float, h: Float, measurer: TextMeasurer) {
+        val r = Rect(t.rect.left * w, t.rect.top * h, t.rect.right * w, t.rect.bottom * h)
+        val q = ((t.turn % 4) + 4) % 4
+        val bw = if (q % 2 == 1) r.height else r.width
+        val bh = if (q % 2 == 1) r.width else r.height
+        val box = Rect(r.center.x - bw / 2, r.center.y - bh / 2, r.center.x + bw / 2, r.center.y + bh / 2)
+        // Фото в виде надписи повёрнуто на turn четвертей по часовой — в системе фото надпись повёрнута обратно.
+        rotate(-90f * q, pivot = r.center) {
+            t.background?.let { drawRoundRect(it, box.topLeft, box.size, CornerRadius(kotlin.math.min(bw, bh) * CORNER)) }
+            val pad = kotlin.math.min(bw, bh) * PAD
+            val layout = fitText(measurer, t, bw - 2 * pad, bh - 2 * pad) ?: return@rotate
+            drawText(layout, topLeft = Offset(box.left + pad, box.top + pad))
+        }
+    }
+
+    private const val FIT_STEPS = 14
+    private const val CORNER = 0.18f
+    private const val PAD = 0.08f
+
     private fun corners(r: Rect) = listOf(r.topLeft, r.topRight, r.bottomRight, r.bottomLeft)
 
     private fun List<Offset>.bounds() = Rect(minOf { it.x }, minOf { it.y }, maxOf { it.x }, maxOf { it.y })
@@ -137,11 +242,14 @@ object PhotoLayers {
             is PhotoMark.Brush -> mark.width
             is PhotoMark.Arrow -> mark.width
             is PhotoMark.Erase -> mark.width
+            is PhotoMark.Text -> 0f
         } * max(w, h)).coerceAtLeast(1f)
         when (mark) {
             // Внутри полупрозрачного слоя цвет сплошной: прозрачность — у слоя целиком.
             is PhotoMark.Brush -> trail(mark.points, if (mark.glass) mark.color.copy(alpha = 1f) else mark.color, px, w, h, BlendMode.SrcOver)
             is PhotoMark.Erase -> trail(mark.points, Color.Black, px, w, h, BlendMode.Clear)
+            // Надписи — своим слоем выше рисунков (drawPhotoLayers), здесь не рисуются.
+            is PhotoMark.Text -> Unit
             is PhotoMark.Arrow -> {
                 val from = Offset(mark.from.x * w, mark.from.y * h)
                 val to = Offset(mark.to.x * w, mark.to.y * h)
@@ -182,7 +290,7 @@ private inline fun DrawScope.layer(bounds: Rect, alpha: Float, block: DrawScope.
  * отметки рисуются под ними; [extra] — ещё не выполненные отметки (редактор показывает их поверх).
  * Масштаб под экран — снаружи (`scale`), здесь его нет: на экране и при сведении рисуется одно и то же.
  */
-fun DrawScope.drawPhotoLayers(source: ImageBitmap, m: PhotoMarks, extra: List<PhotoMark> = emptyList()) {
+fun DrawScope.drawPhotoLayers(source: ImageBitmap, m: PhotoMarks, extra: List<PhotoMark> = emptyList(), measurer: TextMeasurer? = null) {
     val w = source.width.toFloat()
     val h = source.height.toFloat()
     val c = m.crop ?: Rect(0f, 0f, 1f, 1f)
@@ -211,8 +319,10 @@ fun DrawScope.drawPhotoLayers(source: ImageBitmap, m: PhotoMarks, extra: List<Ph
                     }
                 }
                 layer(bounds, 1f) {
-                    for (mk in all) if (!(mk is PhotoMark.Brush && mk.glass)) mark(mk, w, h)
+                    for (mk in all) if (!(mk is PhotoMark.Brush && mk.glass) && mk !is PhotoMark.Text) mark(mk, w, h)
                 }
+                // Надписи — верхним слоем: ластик до них не достаёт.
+                if (measurer != null) for (mk in all) if (mk is PhotoMark.Text) text(mk, w, h, measurer)
             }
         }
     }

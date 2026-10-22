@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,7 +37,10 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -50,12 +54,19 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.tima.core.media.PhotoLayers
 import io.tima.core.media.PhotoMark
 import io.tima.core.media.PhotoMarks
+import io.tima.core.media.TextFace
 import io.tima.core.media.drawPhotoLayers
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Tima
@@ -78,7 +89,12 @@ object PhotoEditorTags {
     const val TURN = "photo.edit.turn"
     const val CROP = "photo.edit.crop"
     const val BRUSH = "photo.edit.brush"
-    const val ARROW = "photo.edit.arrow"
+    const val TEXT = "photo.edit.text"
+    const val TEXT_FIELD = "photo.edit.text.field"
+    const val TEXT_INK = "photo.edit.text.ink"
+    const val TEXT_BACK = "photo.edit.text.back"
+    const val NO_COLOR = "photo.edit.color.none"
+    fun face(f: TextFace) = "photo.edit.face.${f.name.lowercase()}"
     const val UNDO = "photo.edit.undo"
     const val REDO = "photo.edit.redo"
     const val APPLY = "photo.edit.apply"
@@ -95,7 +111,13 @@ object PhotoEditorTags {
     fun color(i: Int) = "photo.edit.color.$i"
 }
 
-private enum class Tool { None, Crop, Brush, Arrow }
+private enum class Tool { None, Crop, Brush, Text }
+
+/**
+ * Надпись (заказчик 2026-10-22): нет выбранной рамки; рамка выбрана — набор текста в своей области над
+ * клавиатурой; рамка выбрана — положение и размер на фото.
+ */
+private enum class TextPhase { None, Typing, Placing }
 
 /** Толщина — доля большей стороны того, что видно (повёрнутого и обрезанного фото). */
 private const val THIN = 0.006f
@@ -106,8 +128,7 @@ private enum class NibKind { Solid, Glass, Erase }
 
 /**
  * Перо кисти (заказчик 2026-10-22): тонкая и толстая полоса — сплошные; два полупрозрачных — размером с
- * толстую и пошире, как маркер; два ластика — малый и большой, стирают нарисованное. Стрелка берёт
- * только сплошные.
+ * толстую и пошире, как маркер; два ластика — малый и большой, стирают нарисованное (надписи — нет).
  */
 private enum class Nib(val width: Float, val kind: NibKind) {
     Thin(THIN, NibKind.Solid),
@@ -130,12 +151,23 @@ private sealed interface Act {
     /** Новая рамка в долях исходного фото; `null` — без рамки. */
     data class Cut(val rect: Rect?) : Act
     data class Mark(val mark: PhotoMark) : Act
+    /** Надпись [id] стала [text]; `null` — убрана (стёрли весь текст). */
+    data class Write(val id: Long, val text: PhotoMark.Text?) : Act
 }
 
-private fun marksOf(acts: List<Act>): PhotoMarks = PhotoMarks(
+/** Надписи по номерам — последнее состояние каждой. */
+private fun textsOf(acts: List<Act>): Map<Long, PhotoMark.Text> {
+    val out = LinkedHashMap<Long, PhotoMark.Text?>()
+    for (a in acts) if (a is Act.Write) out[a.id] = a.text
+    @Suppress("UNCHECKED_CAST")
+    return out.filterValues { it != null } as Map<Long, PhotoMark.Text>
+}
+
+/** Стопка из действий; надпись [hide] не берётся — её правят и показывают отдельно. */
+private fun marksOf(acts: List<Act>, hide: Long = -1L): PhotoMarks = PhotoMarks(
     turns = acts.count { it == Act.Turn },
     crop = acts.filterIsInstance<Act.Cut>().lastOrNull()?.rect,
-    marks = acts.filterIsInstance<Act.Mark>().map { it.mark },
+    marks = acts.filterIsInstance<Act.Mark>().map { it.mark } + textsOf(acts).filterKeys { it != hide }.values,
 )
 
 /**
@@ -179,8 +211,27 @@ fun PhotoEditor(
     var tool by remember { mutableStateOf(Tool.None) }
     var ink by remember { mutableStateOf(0) }
     var nib by remember { mutableStateOf(Nib.Thin) }
-    /** Перо инструмента: стрелка полупрозрачной не бывает — берёт сплошное той же толщины. */
-    fun nibOf(t: Tool) = if (t == Tool.Arrow && nib.kind != NibKind.Solid) Nib.Thick else nib
+    fun nibOf(@Suppress("UNUSED_PARAMETER") t: Tool) = nib
+    val measurer = rememberTextMeasurer()
+    // Надпись (заказчик 2026-10-22): выбранная рамка, её состояние, набранное и настройки.
+    var phase by remember { mutableStateOf(TextPhase.None) }
+    var draft by remember { mutableStateOf<PhotoMark.Text?>(null) }
+    var draftId by remember { mutableStateOf(-1L) }
+    var draftNew by remember { mutableStateOf(false) }
+    var nextTextId by remember { mutableStateOf(1L) }
+    var typed by remember { mutableStateOf(TextFieldValue("")) }
+    // Переключатель «Текст / Фон»: что задаёт выбранный цвет. Фон по умолчанию — без цвета (-1).
+    var paintBack by remember { mutableStateOf(false) }
+    var textInk by remember { mutableStateOf(DEFAULT_TEXT_INK) }
+    var backInk by remember { mutableStateOf(-1) }
+    var face by remember { mutableStateOf(TextFace.Normal) }
+    fun restyle() {
+        draft = draft?.copy(
+            color = PhotoLayers.INKS[textInk],
+            background = backInk.takeIf { it >= 0 }?.let { PhotoLayers.INKS[it] },
+            face = face,
+        )
+    }
     /** Цвет следа на экране, пока ведётся: полупрозрачный — как ляжет. */
     fun brushInk() = PhotoLayers.INKS[ink].let { if (nib.kind == NibKind.Glass) it.copy(alpha = PhotoLayers.GLASS_ALPHA) else it }
     // Нарисованное, но не выполненное: следы кисти и стрелки — в долях фото; рамка обрезки — в долях
@@ -190,8 +241,11 @@ fun PhotoEditor(
     // Ведомое пальцем прямо сейчас — в долях видимого.
     val live = remember { mutableStateListOf<Offset>() }
     val marks = marksOf(acts)
-    // При обрезке видно всё (повёрнутое) фото: рамку ставят заново или правят прежнюю.
-    val shownMarks = if (tool == Tool.Crop) marks.copy(crop = null) else marks
+    // При обрезке видно всё (повёрнутое) фото: рамку ставят заново или правят прежнюю. Правимая надпись —
+    // из черновика, а не сохранённая.
+    val shownMarks = (if (tool == Tool.Crop) marks.copy(crop = null) else marks).let { m ->
+        if (draftId < 0) m else m.copy(marks = marksOf(acts, hide = draftId).marks + listOfNotNull(draft?.takeIf { it.text.isNotBlank() && phase == TextPhase.Placing }))
+    }
     val out = PhotoLayers.outSize(source.width, source.height, shownMarks)
 
     fun commit(act: Act) {
@@ -204,15 +258,31 @@ fun PhotoEditor(
                 val rect = PhotoLayers.unrotate(r, marks.quarter)
                 if (rect != marks.crop) commit(Act.Cut(rect))
             }
-            Tool.Brush, Tool.Arrow -> pending.toList().forEach { commit(Act.Mark(it)) }
-            Tool.None -> Unit
+            Tool.Brush -> pending.toList().forEach { commit(Act.Mark(it)) }
+            Tool.Text, Tool.None -> Unit
         }
         pending.clear()
         crop = null
     }
+    /** Снять выбор рамки: новая несохранённая надпись пропадает, сохранённая остаётся как была. */
+    fun dropText() {
+        phase = TextPhase.None
+        draft = null
+        draftId = -1L
+        draftNew = false
+    }
+    /** Сохранить надпись: пустая — убирается вместе с рамкой. */
+    fun saveText() {
+        val d = draft?.copy(text = typed.text.trimEnd())
+        if (d != null) {
+            if (d.text.isNotBlank()) commit(Act.Write(draftId, d)) else if (!draftNew) commit(Act.Write(draftId, null))
+        }
+        dropText()
+    }
     fun choose(next: Tool) {
         // Не выполненное пропадает: «нарисовал, нажал „Выполнить“ — осталось».
         pending.clear()
+        dropText()
         tool = if (tool == next) Tool.None else next
         // Обрезка начинается с прежней рамки — её можно поправить.
         crop = if (tool == Tool.Crop) marks.crop?.let { PhotoLayers.rotate(it, marks.quarter) } else null
@@ -254,10 +324,37 @@ fun PhotoEditor(
             Box(Modifier.weight(1f))
             Pill(saveLabel ?: w.photoSave, PhotoEditorTags.SAVE, strong = true) {
                 apply()
+                // Выбранная надпись — как обе галочки сразу.
+                if (phase != TextPhase.None) saveText()
                 onSave(marksOf(acts))
             }
         }
 
+        // ── Набор надписи — своя область между кнопками сверху и окном «Текста» над клавиатурой ──
+        // (заказчик 2026-10-22: «лучше скроемся за своей новой областью набора текста» — клавиатура ничего
+        // не закрывает). Фото на это время за ней не видно.
+        if (phase == TextPhase.Typing) {
+            val focus = remember { FocusRequester() }
+            val back = backInk.takeIf { it >= 0 }?.let { PhotoLayers.INKS[it] } ?: PhotoLayers.TYPING_BACK
+            Box(
+                Modifier.weight(1f).fillMaxWidth().padding(12.dp)
+                    .background(back, RoundedCornerShape(TYPING_CORNER)).padding(14.dp),
+            ) {
+                BasicTextField(
+                    value = typed,
+                    onValueChange = { typed = it },
+                    textStyle = TextStyle(
+                        color = PhotoLayers.INKS[textInk],
+                        fontSize = TYPING_SIZE,
+                        fontWeight = if (face == TextFace.Bold) FontWeight.Bold else FontWeight.Normal,
+                        fontStyle = if (face == TextFace.Italic) FontStyle.Italic else FontStyle.Normal,
+                    ),
+                    cursorBrush = SolidColor(PhotoLayers.INKS[textInk]),
+                    modifier = Modifier.fillMaxSize().focusRequester(focus).testTag(PhotoEditorTags.TEXT_FIELD),
+                )
+            }
+            LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+        } else
         // ── Картинка: рисовать можно и за её краем; двумя пальцами — масштаб ──
         // Увеличенная картинка обрезается своей областью: верхние кнопки и значки видны всегда.
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds().padding(12.dp)) {
@@ -295,6 +392,42 @@ fun PhotoEditor(
             fun photo(q: Offset) = PhotoLayers.toPhoto(q, shownMarks.quarter, shownMarks.crop)
             /** Толщина пера в долях фото: перо выбрано по видимому, хранится по фото. */
             fun widthOnPhoto(t: Tool) = nibOf(t).width * max(out.width, out.height) / max(source.width, source.height)
+            /** Рамка надписи: фото → видимое и обратно. */
+            fun textVisible(t: PhotoMark.Text) = PhotoLayers.rectToVisible(t.rect, shownMarks.quarter, shownMarks.crop)
+            fun textOnPhoto(r: Rect) = PhotoLayers.rectToPhoto(r, shownMarks.quarter, shownMarks.crop)
+            /** Нажатие без выбранной рамки: в сохранённую — правка, мимо — новая (заказчик 2026-10-22). */
+            fun textTap(q: Offset) {
+                val hit = textsOf(acts).entries.lastOrNull { textVisible(it.value).contains(q) }
+                if (hit != null) {
+                    val t = hit.value
+                    draftId = hit.key
+                    draftNew = false
+                    draft = t
+                    typed = TextFieldValue(t.text, TextRange(t.text.length))
+                    textInk = PhotoLayers.INKS.indexOf(t.color).takeIf { it >= 0 } ?: DEFAULT_TEXT_INK
+                    backInk = t.background?.let { PhotoLayers.INKS.indexOf(it) } ?: -1
+                    face = t.face
+                } else {
+                    // Новая рамка: угол — в точке нажатия, ширина 60 % видимого, высота — на две строки; у
+                    // края — внутрь.
+                    val wq = NEW_TEXT_WIDTH
+                    val hq = (NEW_TEXT_WIDTH * shownW * NEW_TEXT_ASPECT / shownH).coerceAtMost(1f)
+                    val l = q.x.coerceIn(0f, 1f - wq)
+                    val t = q.y.coerceIn(0f, 1f - hq)
+                    draftId = nextTextId++
+                    draftNew = true
+                    draft = PhotoMark.Text(
+                        rect = textOnPhoto(Rect(l, t, l + wq, t + hq)),
+                        text = "",
+                        color = PhotoLayers.INKS[textInk],
+                        background = backInk.takeIf { it >= 0 }?.let { PhotoLayers.INKS[it] },
+                        face = face,
+                        turn = shownMarks.quarter,
+                    )
+                    typed = TextFieldValue("")
+                }
+                phase = TextPhase.Typing
+            }
             Box(
                 Modifier.fillMaxSize().pointerInput(tool, ink, nib, shownW, shownH, shownMarks) {
                     // Двойное нажатие — при любом инструменте (заказчик 2026-10-22): увеличенное — к исходному,
@@ -307,6 +440,71 @@ fun PhotoEditor(
                         var path = 0f
                         var upAt = down.uptimeMillis
                         val start = share(down.position)
+                        if (tool == Tool.Text) {
+                            // «Текст»: при выбранной рамке (положение и размер) — тянуть угол или маркер в
+                            // центре; нажатие внутрь — снова набор; нажатия мимо, пока рамка выбрана, — ничего.
+                            val vr = draft?.takeIf { phase == TextPhase.Placing }?.let(::textVisible)
+                            var grab = -1
+                            if (vr != null) {
+                                val points = listOf(vr.topLeft, vr.topRight, vr.bottomRight, vr.bottomLeft, vr.center)
+                                grab = points.indexOfFirst { c ->
+                                    abs((c.x - start.x) * shownW * scale) < handle && abs((c.y - start.y) * shownH * scale) < handle
+                                }
+                            }
+                            var twoFingers = false
+                            var last = start
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                upAt = event.changes.maxOf { it.uptimeMillis }
+                                event.changes.firstOrNull { it.id == down.id }?.let { path += it.positionChange().getDistance() }
+                                if (event.changes.none { it.pressed }) break
+                                if (event.changes.count { it.pressed } > 1) twoFingers = true
+                                if (twoFingers || grab < 0) {
+                                    if (twoFingers) {
+                                        scale = (scale * event.calculateZoom()).coerceIn(1f, EDIT_MAX_SCALE)
+                                        pan = if (scale > 1f) limited(pan + event.calculatePan(), scale) else Offset.Zero
+                                        event.changes.forEach { if (it.positionChange() != Offset.Zero) it.consume() }
+                                    }
+                                    continue
+                                }
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (change.positionChange() != Offset.Zero) change.consume()
+                                val at = share(change.position)
+                                val d = draft ?: break
+                                val r = textVisible(d)
+                                val p = clamped(at)
+                                val moved = when (grab) {
+                                    0 -> Rect(min(p.x, r.right - MIN_CROP), min(p.y, r.bottom - MIN_CROP), r.right, r.bottom)
+                                    1 -> Rect(r.left, min(p.y, r.bottom - MIN_CROP), max(p.x, r.left + MIN_CROP), r.bottom)
+                                    2 -> Rect(r.left, r.top, max(p.x, r.left + MIN_CROP), max(p.y, r.top + MIN_CROP))
+                                    3 -> Rect(min(p.x, r.right - MIN_CROP), r.top, r.right, max(p.y, r.top + MIN_CROP))
+                                    else -> {
+                                        // Маркер в центре — перенос целиком, в пределах фото.
+                                        val dx = (at.x - last.x).coerceIn(-r.left, 1f - r.right)
+                                        val dy = (at.y - last.y).coerceIn(-r.top, 1f - r.bottom)
+                                        r.translate(dx, dy)
+                                    }
+                                }
+                                last = at
+                                draft = d.copy(rect = textOnPhoto(moved))
+                            }
+                            val tap = !twoFingers && grab < 0 && path <= tapSlop && upAt - down.uptimeMillis <= EDIT_TAP_MS
+                            if (tap) {
+                                if (down.uptimeMillis - lastTapUp <= EDIT_DOUBLE_TAP_MS && (down.position - lastTapAt).getDistance() <= tapNear) {
+                                    scale = if (scale > 1f) 1f else EDIT_DOUBLE_TAP_SCALE
+                                    pan = if (scale > 1f) limited((center - down.position) * (EDIT_DOUBLE_TAP_SCALE - 1f), scale) else Offset.Zero
+                                    lastTapUp = 0L
+                                } else {
+                                    lastTapUp = upAt
+                                    lastTapAt = down.position
+                                    when {
+                                        phase == TextPhase.None -> textTap(start)
+                                        phase == TextPhase.Placing && vr != null && vr.contains(start) -> phase = TextPhase.Typing
+                                    }
+                                }
+                            }
+                            return@awaitEachGesture
+                        }
                         // Рамка: за угол — тянуть угол; иначе — новая рамка.
                         var corner = -1
                         crop?.takeIf { tool == Tool.Crop }?.let { r ->
@@ -387,8 +585,7 @@ fun PhotoEditor(
                                     else -> PhotoMark.Brush(pts.map(::photo), PhotoLayers.INKS[ink], width, glass = nib.kind == NibKind.Glass)
                                 },
                             )
-                            Tool.Arrow -> if (pts.size > 1) pending.add(PhotoMark.Arrow(photo(pts.first()), photo(pts.last()), PhotoLayers.INKS[ink], width))
-                            Tool.None -> Unit
+                            Tool.Text, Tool.None -> Unit
                         }
                     }
                 },
@@ -401,14 +598,26 @@ fun PhotoEditor(
                             .size(with(density) { shownW.toDp() }, with(density) { shownH.toDp() })
                             .testTag(PhotoEditorTags.IMAGE),
                     ) {
-                        scale(k, k, pivot = Offset.Zero) { drawPhotoLayers(source, shownMarks, pending.toList()) }
+                        scale(k, k, pivot = Offset.Zero) { drawPhotoLayers(source, shownMarks, pending.toList(), measurer) }
                     }
                     val frame = colors.navigation
                     val shade = colors.viewer.copy(alpha = 0.6f)
                     val eraseTrail = colors.surface.copy(alpha = 0.5f)
+                    val idle = colors.text3
                     Canvas(Modifier.fillMaxSize()) {
                         fun px(p: Offset) = Offset(left + p.x * shownW, top + p.y * shownH)
                         crop?.let { r -> cropFrame(Rect(px(r.topLeft), px(r.bottomRight)), Rect(left, top, left + shownW, top + shownH), frame, shade, handle / scale) }
+                        // «Текст»: сохранённые надписи — серые рамки, выбранная — своя, с углами и маркером.
+                        if (tool == Tool.Text) {
+                            for ((id, t) in textsOf(acts)) if (id != draftId) {
+                                val r = textVisible(t)
+                                drawRect(idle, px(r.topLeft), Size(r.width * shownW, r.height * shownH), style = Stroke(1.5.dp.toPx() / scale))
+                            }
+                            draft?.takeIf { phase == TextPhase.Placing }?.let { d ->
+                                val r = textVisible(d)
+                                textFrame(Rect(px(r.topLeft), px(r.bottomRight)), frame, handle / scale)
+                            }
+                        }
                         val pts = live.map(::px)
                         if (pts.isEmpty()) return@Canvas
                         val stroke = (nibOf(tool).width * max(shownW, shownH)).coerceAtLeast(2f)
@@ -424,8 +633,7 @@ fun PhotoEditor(
                                 // Ластик, пока ведётся, — бледный след: что сотрётся, видно после отпускания.
                                 drawPath(path, if (nib.kind == NibKind.Erase) eraseTrail else brushInk(), style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
                             }
-                            Tool.Arrow -> if (pts.size > 1) drawLine(PhotoLayers.INKS[ink], pts.first(), pts.last(), stroke, StrokeCap.Round)
-                            Tool.None -> Unit
+                            Tool.Text, Tool.None -> Unit
                         }
                     }
                 }
@@ -448,7 +656,7 @@ fun PhotoEditor(
                 }
                 ToolIcon(Glyph.Crop, w.photoCrop, PhotoEditorTags.CROP, selected = tool == Tool.Crop, enabled = iconsOn) { choose(Tool.Crop) }
                 ToolIcon(Glyph.Brush, w.photoBrush, PhotoEditorTags.BRUSH, selected = tool == Tool.Brush, enabled = iconsOn) { choose(Tool.Brush) }
-                ToolIcon(Glyph.Arrow, w.photoArrow, PhotoEditorTags.ARROW, selected = tool == Tool.Arrow, enabled = iconsOn) { choose(Tool.Arrow) }
+                ToolIcon(Glyph.Letter, w.photoText, PhotoEditorTags.TEXT, selected = tool == Tool.Text, enabled = iconsOn) { choose(Tool.Text) }
             }
             if (tool != Tool.None) {
                 // Поверх всего ряда — со значками и подписями: компактно, полоса та же (заказчик 2026-10-22).
@@ -462,10 +670,39 @@ fun PhotoEditor(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // ✕ — закрыть окно: невыполненное пропадает.
-                    IconCircle(Glyph.Close, PhotoEditorTags.CLOSE, size = 40) { choose(tool) }
+                    // ✕ — закрыть окно: невыполненное пропадает. У «Текста» с выбранной рамкой — зелёный: снять выбор.
+                    val chosen = tool == Tool.Text && phase != TextPhase.None
+                    IconCircle(Glyph.Close, PhotoEditorTags.CLOSE, selected = chosen, size = 40) { if (chosen) dropText() else choose(tool) }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (tool == Tool.Brush || tool == Tool.Arrow) {
+                        if (tool == Tool.Text) {
+                            // Цвета: «Текст» — цвет букв; «Фон» — заливка рамки, первым — без цвета.
+                            val noColorMark = colors.text3
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (paintBack) {
+                                    Box(
+                                        Modifier.size(24.dp).border(if (backInk < 0) 3.dp else 1.dp, if (backInk < 0) colors.navigation else colors.text3, CircleShape)
+                                            .clickable { backInk = -1; restyle() }.testTag(PhotoEditorTags.NO_COLOR),
+                                        contentAlignment = Alignment.Center,
+                                    ) { Canvas(Modifier.size(14.dp)) { drawLine(noColorMark, Offset(0f, size.height), Offset(size.width, 0f), 2.dp.toPx()) } }
+                                }
+                                PhotoLayers.INKS.forEachIndexed { i, c ->
+                                    val on = if (paintBack) i == backInk else i == textInk
+                                    Box(
+                                        Modifier.size(24.dp).background(c, CircleShape)
+                                            .border(if (on) 3.dp else 1.dp, if (on) colors.navigation else colors.text3, CircleShape)
+                                            .clickable { if (paintBack) backInk = i else textInk = i; restyle() }.testTag(PhotoEditorTags.color(i)),
+                                    )
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                TextFace.entries.forEach { f ->
+                                    FaceChip(f, f == face) { face = f; restyle() }
+                                }
+                                Box(Modifier.size(6.dp))
+                                SmallPill(w.photoTextInk, PhotoEditorTags.TEXT_INK, on = !paintBack) { paintBack = false }
+                                SmallPill(w.photoTextBack, PhotoEditorTags.TEXT_BACK, on = paintBack) { paintBack = true }
+                            }
+                        } else if (tool == Tool.Brush) {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 PhotoLayers.INKS.forEachIndexed { i, c ->
                                     Box(
@@ -490,16 +727,93 @@ fun PhotoEditor(
                             Caption(w.photoCropAbout, fontSize = TimaType.sz5, color = colors.text, maxLines = 3, modifier = Modifier.testTag(PhotoEditorTags.ABOUT))
                         }
                     }
-                    // ✓ — выполнить: нарисованное остаётся, окно закрывается.
-                    val ready = if (tool == Tool.Crop) crop != null else pending.isNotEmpty()
-                    IconCircle(Glyph.Apply, PhotoEditorTags.APPLY, selected = ready, enabled = ready, size = 40) {
-                        apply()
-                        tool = Tool.None
+                    // ✓ — выполнить: нарисованное остаётся, окно закрывается. У «Текста» — две галочки: набор →
+                    // положение и размер → сохранено.
+                    if (tool == Tool.Text) {
+                        val ready = phase != TextPhase.None
+                        IconCircle(Glyph.Apply, PhotoEditorTags.APPLY, selected = ready, enabled = ready, size = 40) {
+                            when (phase) {
+                                TextPhase.Typing -> {
+                                    val text = typed.text.trimEnd()
+                                    if (text.isBlank()) {
+                                        // Стёрли весь текст — надпись убирается вместе с рамкой.
+                                        if (!draftNew) commit(Act.Write(draftId, null))
+                                        dropText()
+                                    } else {
+                                        draft = draft?.copy(text = text)
+                                        phase = TextPhase.Placing
+                                    }
+                                }
+                                TextPhase.Placing -> saveText()
+                                TextPhase.None -> Unit
+                            }
+                        }
+                    } else {
+                        val ready = if (tool == Tool.Crop) crop != null else pending.isNotEmpty()
+                        IconCircle(Glyph.Apply, PhotoEditorTags.APPLY, selected = ready, enabled = ready, size = 40) {
+                            apply()
+                            tool = Tool.None
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/** Надпись: новая рамка — 60 % ширины видимого, высота — 0,3 её ширины (две строки); цвет букв — белый. */
+private const val NEW_TEXT_WIDTH = 0.6f
+private const val NEW_TEXT_ASPECT = 0.3f
+private const val DEFAULT_TEXT_INK = 4
+private val TYPING_SIZE = 22.sp
+private val TYPING_CORNER = 16.dp
+
+/** Рамка выбранной надписи: углы — ручки размера, в центре — маркер переноса. */
+private fun DrawScope.textFrame(r: Rect, frame: Color, handle: Float) {
+    drawRect(frame, r.topLeft, r.size, style = Stroke(2.dp.toPx()))
+    val arm = handle * 0.7f
+    val sw = 4.dp.toPx()
+    for ((c, dx, dy) in listOf(Triple(r.topLeft, 1f, 1f), Triple(r.topRight, -1f, 1f), Triple(r.bottomRight, -1f, -1f), Triple(r.bottomLeft, 1f, -1f))) {
+        drawLine(frame, c, Offset(c.x + dx * arm, c.y), sw, StrokeCap.Round)
+        drawLine(frame, c, Offset(c.x, c.y + dy * arm), sw, StrokeCap.Round)
+    }
+    drawCircle(frame, handle * 0.35f, r.center)
+    drawCircle(frame, handle * 0.35f, r.center, style = Stroke(sw / 2))
+}
+
+/** Начертание надписи — буква «А» в круге: обычная, жирная, курсив. */
+@Composable
+private fun FaceChip(f: TextFace, on: Boolean, onClick: () -> Unit) {
+    val colors = Tima.colors
+    Box(
+        Modifier.size(28.dp).background(if (on) colors.navigation else colors.surface, CircleShape)
+            .border(1.dp, colors.text3, CircleShape).clickable(onClick = onClick).testTag(PhotoEditorTags.face(f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.foundation.text.BasicText(
+            Tima.words.chat.photoFaceLetter,
+            style = TextStyle(
+                color = if (on) colors.surface else colors.text,
+                fontSize = 14.sp,
+                fontWeight = if (f == TextFace.Bold) FontWeight.Black else FontWeight.Normal,
+                fontStyle = if (f == TextFace.Italic) FontStyle.Italic else FontStyle.Normal,
+            ),
+        )
+    }
+}
+
+/** Маленький переключатель-слово на сплошном фоне. */
+@Composable
+private fun SmallPill(label: String, tag: String, on: Boolean, onClick: () -> Unit) {
+    val colors = Tima.colors
+    Caption(
+        label,
+        fontSize = TimaType.sz6,
+        weight = FontWeight.Bold,
+        color = if (on) colors.surface else colors.text,
+        modifier = Modifier.background(if (on) colors.navigation else colors.functional, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp).testTag(tag),
+    )
 }
 
 /** Поле вокруг фото при кисти, стрелке, обрезке — шире пальца. */
@@ -527,7 +841,7 @@ private fun DrawScope.cropFrame(r: Rect, image: Rect, frame: Color, shade: Color
 }
 
 /** Значки редактора и просмотра — рисуются, а не шрифтом: знаков вроде «⟳» в шрифте может не быть. */
-internal enum class Glyph { Turn, Crop, Brush, Arrow, Undo, Redo, Thin, Thick, Edit, Apply, Close, GlassThick, GlassWide, EraseSmall, EraseLarge }
+internal enum class Glyph { Turn, Crop, Brush, Arrow, Undo, Redo, Thin, Thick, Edit, Apply, Close, GlassThick, GlassWide, EraseSmall, EraseLarge, Letter }
 
 @Composable
 private fun ToolIcon(glyph: Glyph, label: String, tag: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
@@ -642,6 +956,12 @@ private fun DrawScope.glyph(g: Glyph, c: Color) {
         // Ластик — пустой квадрат: малый и большой.
         Glyph.EraseSmall -> drawRect(c, p(0.3f, 0.3f), Size(s * 0.4f, s * 0.4f), style = Stroke(s * 0.1f))
         Glyph.EraseLarge -> drawRect(c, p(0.08f, 0.08f), Size(s * 0.84f, s * 0.84f), style = Stroke(s * 0.1f))
+        // «А» — надпись.
+        Glyph.Letter -> {
+            line(p(0.12f, 0.95f), p(0.5f, 0.05f))
+            line(p(0.5f, 0.05f), p(0.88f, 0.95f))
+            line(p(0.3f, 0.62f), p(0.7f, 0.62f))
+        }
         Glyph.Apply -> {
             line(p(0.1f, 0.55f), p(0.4f, 0.85f))
             line(p(0.4f, 0.85f), p(0.92f, 0.2f))

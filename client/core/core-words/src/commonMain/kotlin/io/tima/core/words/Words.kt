@@ -1545,6 +1545,12 @@ interface ChatWords {
     val photoLoadFailed: String
     /** Главная кнопка редактора, когда одно фото открыто перед отправкой. */
     val photoSend: String
+    /** «Текст» в редакторе фото и переключатель «Текст / Фон» (заказчик 2026-10-22). */
+    val photoText: String
+    val photoTextInk: String
+    val photoTextBack: String
+    /** Буква на кнопках начертания надписи. */
+    val photoFaceLetter: String
     /** Поворот в просмотре — только у себя; почему правку не отправить (заказчик 2026-10-22). */
     val photoTurnLocal: String
     val photoTurnLocalOnly: String
@@ -3767,6 +3773,10 @@ object RussianWords : Words {
         override val photoEditRefused = "Изменённое фото не ушло: правка больше не принимается (три правки или ключ сменился)"
         override val photoLoadFailed = "Фото не загрузилось — изменить не из чего"
         override val photoSend = "Отправить"
+        override val photoText = "Текст"
+        override val photoTextInk = "Текст"
+        override val photoTextBack = "Фон"
+        override val photoFaceLetter = "А"
         override val photoTurnLocal = "Изменённая здесь — только у вас. Измените через редактор — отправим собеседнику (кнопка «Изменить»)."
         override val photoTurnLocalOnly = "Изменённая здесь — только у вас: «Сохранить как» или «Переслать»."
         override val photoEditNotMine = "Изменить и отправить можно только своё фото."
