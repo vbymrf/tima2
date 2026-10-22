@@ -133,7 +133,16 @@ private const val MIN_CROP = 0.05f
  * Отправляет не редактор, а просмотр, когда его закроют. Прежних состояний после «Сохранить» нет.
  */
 @Composable
-fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: () -> Unit) {
+fun PhotoEditor(
+    source: ImageBitmap,
+    onSave: (ImageBitmap) -> Unit,
+    onCancel: () -> Unit,
+    /**
+     * Надпись главной кнопки: «Сохранить» у правки отправленного, «Отправить» — у одного фото перед
+     * отправкой (заказчик 2026-10-22); «Отмена» тогда отменяет отправку.
+     */
+    saveLabel: String? = null,
+) {
     val colors = Tima.colors
     val w = Tima.words.chat
     val steps = remember(source) { mutableStateListOf<PhotoStep>() }
@@ -207,7 +216,7 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
             IconCircle(Glyph.Undo, PhotoEditorTags.UNDO, enabled = canUndo, onClick = ::undo)
             IconCircle(Glyph.Redo, PhotoEditorTags.REDO, enabled = undone.isNotEmpty(), onClick = ::redo)
             Box(Modifier.weight(1f))
-            Pill(w.photoSave, PhotoEditorTags.SAVE, strong = true) {
+            Pill(saveLabel ?: w.photoSave, PhotoEditorTags.SAVE, strong = true) {
                 apply()
                 onSave(PhotoSteps.apply(source, steps.toList()))
             }

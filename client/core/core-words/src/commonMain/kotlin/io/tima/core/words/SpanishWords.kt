@@ -1354,6 +1354,7 @@ object SpanishWords : Words {
         override val photoEditSent = "Foto editada enviada: en el mismo lugar para el destinatario, marcada «editado»"
         override val photoEditRefused = "La foto editada no se envió: ya no se aceptan ediciones (tres ediciones o cambió la clave)"
         override val photoLoadFailed = "La foto no se cargó: no hay nada que editar"
+        override val photoSend = "Enviar"
         override val photoTurnLocal = "Editada aquí — solo para usted. Edítela en el editor y la enviamos al interlocutor (botón «Editar»)."
         override val photoTurnLocalOnly = "Editada aquí — solo para usted: «Guardar como» o «Reenviar»."
         override val photoEditNotMine = "Solo puede editar y enviar su propia foto."

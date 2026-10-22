@@ -4908,10 +4908,25 @@ private fun Chat(
     val photoWords = Tima.words.chat
     var asking by remember { mutableStateOf<AttachAsk?>(null) }
     var askTrouble by remember { mutableStateOf<String?>(null) }
-    val photosPicker = io.tima.core.media.rememberPhotosPicker(io.tima.domain.chat.SendAttachments.MAX_PHOTOS) { list ->
-        if (list.isNotEmpty()) store.sendPhotos(list.map { it.bytes to it.mime })
+    // Одно фото — сначала в редактор фото, его «Отправить» и шлёт; «Отмена» — не отправлять (заказчик
+    // 2026-10-22). Несколько — уходят сразу, как прежде. Не раскодировалось — уходит как есть: решает отправка.
+    var sendDraft by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    fun sendOne(bytes: ByteArray, mime: String) {
+        scope.launch {
+            val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                io.tima.core.media.decodeImage(bytes, atLeast = io.tima.core.media.PhotoPrep.FULL_SIDE)
+            }
+            if (bmp != null) sendDraft = bmp else store.sendPhotos(listOf(bytes to mime))
+        }
     }
-    val camera = io.tima.core.media.rememberCameraShot { shot -> shot?.let { store.sendPhotos(listOf(it.bytes to it.mime)) } }
+    val photosPicker = io.tima.core.media.rememberPhotosPicker(io.tima.domain.chat.SendAttachments.MAX_PHOTOS) { list ->
+        when (list.size) {
+            0 -> Unit
+            1 -> sendOne(list.single().bytes, list.single().mime)
+            else -> store.sendPhotos(list.map { it.bytes to it.mime })
+        }
+    }
+    val camera = io.tima.core.media.rememberCameraShot { shot -> shot?.let { sendOne(it.bytes, it.mime) } }
     val onFile: (io.tima.core.media.PickedFile?) -> Unit = { f -> f?.let { store.sendFile(it.bytes, it.mime, it.name) } }
     val anyFile = io.tima.core.media.rememberFilePicker(io.tima.core.media.FileKind.ANY, onFile)
     val documentFile = io.tima.core.media.rememberFilePicker(io.tima.core.media.FileKind.DOCUMENT, onFile)
@@ -5275,6 +5290,24 @@ private fun Chat(
         )
     }
     // Меню сообщения — после экрана, как и лист неотправленного: что позже, то сверху.
+    sendDraft?.let { draft ->
+        io.tima.feature.chat.PhotoEditor(
+            source = draft,
+            saveLabel = photoWords.photoSend,
+            onSave = { result ->
+                sendDraft = null
+                Journal.note(LogCode.FILE_SEND, "одно фото через редактор", "точек" to "${result.width}x${result.height}")
+                scope.launch {
+                    val jpeg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.encodeJpeg(result, 95) }
+                    store.sendPhotos(listOf(jpeg to "image/jpeg"))
+                }
+            },
+            onCancel = {
+                sendDraft = null
+                Journal.note(LogCode.FILE_SEND, "одно фото — отправка отменена в редакторе")
+            },
+        )
+    }
     photoOpen?.let { opened ->
         // Все фото переписки от старых к новым: «‹», «›» и смахивание вбок листают их (2026-10-18).
         val photos = remember(state.lines, state.names) {
