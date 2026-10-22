@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -98,11 +99,13 @@ private const val MIN_CROP = 0.05f
  * Редактор фото (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ6; вид — правки того же дня).
  *
  * - **Внизу закреплены значки**: «Повернуть», «Обрезать», «Кисть», «Стрелка». Выбран инструмент —
- *   его окно встаёт **поверх** ряда и не больше его: «✕» слева (закрыть, невыполненное пропадает),
- *   цвета и толщина или пояснение посередине, галочка справа — выполнить.
+ *   его окно встаёт **поверх** ряда вместе с подписями и не больше его: «✕» слева (закрыть,
+ *   невыполненное пропадает), посередине — цвета и толщина (кисть, стрелка; без текста) или пояснение
+ *   (обрезка), галочка справа — выполнить.
  * - «Повернуть» — сразу, без подтверждения. Обрезка, кисть, стрелка — нарисовал, галочка — осталось;
  *   не выполнено — при «✕» и смене инструмента пропадает. «Сохранить» выполняет и несохранённое.
- * - **Масштаб**: двумя пальцами — увеличить и сдвинуть; одним без инструмента — сдвинуть увеличенное.
+ * - **Масштаб**: двумя пальцами — увеличить и сдвинуть; одним без инструмента — сдвинуть увеличенное;
+ *   двойное нажатие — при любом инструменте. Увеличенное не заходит на кнопки сверху и значки снизу.
  * - Сверху — «Отмена», «Отменить», «Повторить», «Сохранить».
  * - Кисть и стрелку можно начинать **за краем фото**: след идёт по фото, палец — где угодно. Рамку
  *   обрезки рисуют, а потом тянут за любой угол.
@@ -182,7 +185,8 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
         }
 
         // ── Картинка: рисовать можно и за её краем; двумя пальцами — масштаб ──
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
+        // Увеличенная картинка обрезается своей областью: верхние кнопки и значки видны всегда.
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().clipToBounds().padding(12.dp)) {
             val density = LocalDensity.current
             val boxW = constraints.maxWidth.toFloat()
             val boxH = constraints.maxHeight.toFloat()
@@ -193,6 +197,8 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
             val top = (boxH - shownH) / 2
             val center = Offset(boxW / 2, boxH / 2)
             val handle = with(density) { 28.dp.toPx() }
+            val tapSlop = with(density) { 24.dp.toPx() }
+            val tapNear = with(density) { 80.dp.toPx() }
             /** Сдвиг увеличенного — не дальше края области. */
             fun limited(p: Offset, s: Float): Offset {
                 val mx = max(0f, (s * shownW - boxW) / 2)
@@ -207,8 +213,15 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
             fun clamped(p: Offset) = Offset(p.x.coerceIn(0f, 1f), p.y.coerceIn(0f, 1f))
             Box(
                 Modifier.fillMaxSize().pointerInput(tool, ink, thick, shownW, shownH) {
+                    // Двойное нажатие — при любом инструменте (заказчик 2026-10-22): увеличенное — к исходному,
+                    // исходное — увеличить к месту нажатия. Короткое быстрое касание — нажатие, а не след:
+                    // оно ничего не рисует, иначе двойное оставляло бы точки.
+                    var lastTapUp = 0L
+                    var lastTapAt = Offset.Zero
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
+                        var path = 0f
+                        var upAt = down.uptimeMillis
                         val start = share(down.position)
                         // Рамка: за угол — тянуть угол; иначе — новая рамка.
                         var corner = -1
@@ -223,6 +236,8 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                         var twoFingers = false
                         while (true) {
                             val event = awaitPointerEvent()
+                            upAt = event.changes.maxOf { it.uptimeMillis }
+                            event.changes.firstOrNull { it.id == down.id }?.let { path += it.positionChange().getDistance() }
                             if (event.changes.none { it.pressed }) break
                             if (event.changes.count { it.pressed } > 1) {
                                 // Второй палец — масштаб: начатый след не считается.
@@ -254,6 +269,24 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                         }
                         val pts = live.toList()
                         live.clear()
+                        val tap = !twoFingers && corner < 0 && path <= tapSlop && upAt - down.uptimeMillis <= EDIT_TAP_MS
+                        if (tap) {
+                            if (down.uptimeMillis - lastTapUp <= EDIT_DOUBLE_TAP_MS && (down.position - lastTapAt).getDistance() <= tapNear) {
+                                if (scale > 1f) {
+                                    scale = 1f
+                                    pan = Offset.Zero
+                                } else {
+                                    scale = EDIT_DOUBLE_TAP_SCALE
+                                    pan = limited((center - down.position) * (EDIT_DOUBLE_TAP_SCALE - 1f), scale)
+                                }
+                                lastTapUp = 0L
+                            } else {
+                                lastTapUp = upAt
+                                lastTapAt = down.position
+                            }
+                            return@awaitEachGesture
+                        }
+                        lastTapUp = 0L
                         if (twoFingers || corner >= 0 || tool == Tool.None) return@awaitEachGesture
                         val width = if (thick) THICK else THIN
                         when (tool) {
@@ -308,10 +341,9 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
         }
 
         // ── Низ: значки на месте; выбран инструмент — его окно поверх них, того же размера ──
-        var barHeight by remember { mutableStateOf(0) }
         Box(Modifier.fillMaxWidth()) {
             Row(
-                Modifier.fillMaxWidth().padding(12.dp).onSizeChanged { barHeight = it.height },
+                Modifier.fillMaxWidth().padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 ToolIcon(Glyph.Turn, w.photoRotate, PhotoEditorTags.TURN, selected = false) {
@@ -323,10 +355,10 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                 ToolIcon(Glyph.Brush, w.photoBrush, PhotoEditorTags.BRUSH, selected = tool == Tool.Brush) { choose(Tool.Brush) }
                 ToolIcon(Glyph.Arrow, w.photoArrow, PhotoEditorTags.ARROW, selected = tool == Tool.Arrow) { choose(Tool.Arrow) }
             }
-            if (tool != Tool.None && barHeight > 0) {
-                val panelHeight = with(LocalDensity.current) { barHeight.toDp() }
+            if (tool != Tool.None) {
+                // Поверх всего ряда — со значками и подписями: компактно, полоса та же (заказчик 2026-10-22).
                 Row(
-                    Modifier.fillMaxWidth().height(panelHeight).padding(horizontal = 12.dp, vertical = 6.dp)
+                    Modifier.matchParentSize().padding(horizontal = 12.dp, vertical = 8.dp)
                         .background(colors.surface, RoundedCornerShape(16.dp)).padding(horizontal = 8.dp)
                         .testTag(PhotoEditorTags.PANEL),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -348,13 +380,6 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 IconCircle(Glyph.Thin, PhotoEditorTags.THIN, selected = !thick, size = 28) { thick = false }
                                 IconCircle(Glyph.Thick, PhotoEditorTags.THICK, selected = thick, size = 28) { thick = true }
-                                Caption(
-                                    if (tool == Tool.Brush) w.photoBrushAbout else w.photoArrowAbout,
-                                    fontSize = TimaType.sz5,
-                                    color = colors.text2,
-                                    maxLines = 2,
-                                    modifier = Modifier.testTag(PhotoEditorTags.ABOUT),
-                                )
                             }
                         } else {
                             Caption(w.photoCropAbout, fontSize = TimaType.sz5, color = colors.text, maxLines = 3, modifier = Modifier.testTag(PhotoEditorTags.ABOUT))
@@ -372,8 +397,11 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
     }
 }
 
-/** Наибольшее увеличение в редакторе. */
+/** Наибольшее увеличение в редакторе; двойное нажатие; нажатие — не дольше, второе — не позже. */
 private const val EDIT_MAX_SCALE = 5f
+private const val EDIT_DOUBLE_TAP_SCALE = 2.5f
+private const val EDIT_TAP_MS = 300L
+private const val EDIT_DOUBLE_TAP_MS = 400L
 
 /** Рамка обрезки: вне её — притемнено, по углам — ручки. */
 private fun DrawScope.cropFrame(r: Rect, image: Rect, frame: Color, shade: Color, handle: Float) {

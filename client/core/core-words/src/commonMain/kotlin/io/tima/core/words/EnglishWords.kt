@@ -1358,8 +1358,6 @@ object EnglishWords : Words {
         override val photoRedo = "Redo"
         override val photoApply = "Apply"
         override val photoCropAbout = "Drag a frame, then pull any corner. The tick crops"
-        override val photoBrushAbout = "You can start outside the photo. The tick keeps it"
-        override val photoArrowAbout = "Start to tip, from the edge too. The tick keeps it"
         override val photoSize = "Size"
         override val photoPixels = "Pixels"
         override val photoFrom = "Sent by"

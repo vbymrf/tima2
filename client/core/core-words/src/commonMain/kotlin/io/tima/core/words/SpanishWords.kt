@@ -1358,8 +1358,6 @@ object SpanishWords : Words {
         override val photoRedo = "Rehacer"
         override val photoApply = "Aplicar"
         override val photoCropAbout = "Arrastre un marco y luego cualquier esquina. La marca recorta"
-        override val photoBrushAbout = "Puede empezar fuera de la foto. La marca lo conserva"
-        override val photoArrowAbout = "Del inicio a la punta, también desde el borde. La marca lo conserva"
         override val photoSize = "Tamaño"
         override val photoPixels = "Píxeles"
         override val photoFrom = "Enviada por"

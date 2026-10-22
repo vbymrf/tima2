@@ -1543,8 +1543,6 @@ interface ChatWords {
     val photoRedo: String
     val photoApply: String
     val photoCropAbout: String
-    val photoBrushAbout: String
-    val photoArrowAbout: String
     val photoSize: String
     val photoPixels: String
     val photoFrom: String
@@ -3756,8 +3754,6 @@ object RussianWords : Words {
         override val photoRedo = "Повторить"
         override val photoApply = "Выполнить"
         override val photoCropAbout = "Растяните рамку пальцем, потом тяните любой угол. Галочка — обрезать"
-        override val photoBrushAbout = "Можно начинать за краем фото. Галочка — оставить"
-        override val photoArrowAbout = "От начала к острию, можно с края. Галочка — оставить"
         override val photoSize = "Размер"
         override val photoPixels = "Точек"
         override val photoFrom = "Прислал(а)"
