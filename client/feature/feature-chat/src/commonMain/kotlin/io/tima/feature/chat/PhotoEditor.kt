@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -342,23 +343,29 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
 
         // ── Низ: значки на месте; выбран инструмент — его окно поверх них, того же размера ──
         Box(Modifier.fillMaxWidth()) {
+            // Окно инструмента открыто — значки под ним не видны и не нажимаются: касание мимо цвета
+            // проходило сквозь окно и выбирало инструмент под ним (заказчик 2026-10-22).
+            val iconsOn = tool == Tool.None
             Row(
-                Modifier.fillMaxWidth().padding(12.dp),
+                Modifier.fillMaxWidth().alpha(if (iconsOn) 1f else 0f).padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                ToolIcon(Glyph.Turn, w.photoRotate, PhotoEditorTags.TURN, selected = false) {
+                ToolIcon(Glyph.Turn, w.photoRotate, PhotoEditorTags.TURN, selected = false, enabled = iconsOn) {
                     choose(Tool.None)
                     tool = Tool.None
                     commit(PhotoStep.Turn)
                 }
-                ToolIcon(Glyph.Crop, w.photoCrop, PhotoEditorTags.CROP, selected = tool == Tool.Crop) { choose(Tool.Crop) }
-                ToolIcon(Glyph.Brush, w.photoBrush, PhotoEditorTags.BRUSH, selected = tool == Tool.Brush) { choose(Tool.Brush) }
-                ToolIcon(Glyph.Arrow, w.photoArrow, PhotoEditorTags.ARROW, selected = tool == Tool.Arrow) { choose(Tool.Arrow) }
+                ToolIcon(Glyph.Crop, w.photoCrop, PhotoEditorTags.CROP, selected = tool == Tool.Crop, enabled = iconsOn) { choose(Tool.Crop) }
+                ToolIcon(Glyph.Brush, w.photoBrush, PhotoEditorTags.BRUSH, selected = tool == Tool.Brush, enabled = iconsOn) { choose(Tool.Brush) }
+                ToolIcon(Glyph.Arrow, w.photoArrow, PhotoEditorTags.ARROW, selected = tool == Tool.Arrow, enabled = iconsOn) { choose(Tool.Arrow) }
             }
             if (tool != Tool.None) {
                 // Поверх всего ряда — со значками и подписями: компактно, полоса та же (заказчик 2026-10-22).
                 Row(
-                    Modifier.matchParentSize().padding(horizontal = 12.dp, vertical = 8.dp)
+                    Modifier.matchParentSize()
+                        // Окно забирает касания всей полосы — до значков под ним они не доходят.
+                        .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
                         .background(colors.surface, RoundedCornerShape(16.dp)).padding(horizontal = 8.dp)
                         .testTag(PhotoEditorTags.PANEL),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -422,14 +429,14 @@ private fun DrawScope.cropFrame(r: Rect, image: Rect, frame: Color, shade: Color
 internal enum class Glyph { Turn, Crop, Brush, Arrow, Undo, Redo, Thin, Thick, Edit, Apply, Close }
 
 @Composable
-private fun ToolIcon(glyph: Glyph, label: String, tag: String, selected: Boolean, onClick: () -> Unit) {
+private fun ToolIcon(glyph: Glyph, label: String, tag: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val colors = Tima.colors
     Column(
-        Modifier.clickable(onClick = onClick).testTag(tag).padding(4.dp),
+        Modifier.then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier).testTag(tag).padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        IconCircle(glyph, null, selected = selected, onClick = onClick)
+        IconCircle(glyph, null, selected = selected, enabled = enabled, onClick = onClick)
         Caption(
             label,
             fontSize = TimaType.sz5,
