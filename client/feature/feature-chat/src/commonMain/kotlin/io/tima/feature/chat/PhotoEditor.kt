@@ -29,11 +29,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -47,6 +49,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,7 +57,9 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -225,6 +230,13 @@ fun PhotoEditor(
     var textInk by remember { mutableStateOf(DEFAULT_TEXT_INK) }
     var backInk by remember { mutableStateOf(-1) }
     var face by remember { mutableStateOf(TextFace.Normal) }
+    // Рамка надписи, пока её ведёт палец, — в долях видимого, и раскладка текста на время переноса: текст
+    // едет прежним размером, подбор букв — после отпускания (заказчик 2026-10-22: «текст не должен держать
+    // перемещение рамки»).
+    var liveFrame by remember { mutableStateOf<Rect?>(null) }
+    var liveLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    // Рамку держат: стопка меняется только в начале и в конце переноса, сами сдвиги рисует верхний слой.
+    var holding by remember { mutableStateOf(false) }
     fun restyle() {
         draft = draft?.copy(
             color = PhotoLayers.INKS[textInk],
@@ -244,9 +256,12 @@ fun PhotoEditor(
     // При обрезке видно всё (повёрнутое) фото: рамку ставят заново или правят прежнюю. Правимая надпись —
     // из черновика, а не сохранённая.
     val shownMarks = (if (tool == Tool.Crop) marks.copy(crop = null) else marks).let { m ->
-        if (draftId < 0) m else m.copy(marks = marksOf(acts, hide = draftId).marks + listOfNotNull(draft?.takeIf { it.text.isNotBlank() && phase == TextPhase.Placing }))
+        if (draftId < 0) m else m.copy(marks = marksOf(acts, hide = draftId).marks + listOfNotNull(draft?.takeIf { it.text.isNotBlank() && phase == TextPhase.Placing && !holding }))
     }
     val out = PhotoLayers.outSize(source.width, source.height, shownMarks)
+    // Обработчик касаний берёт стопку отсюда, а не ключом: ключ перезапускал его при каждом сдвиге рамки
+    // надписи, и жест обрывался на паре точек.
+    val marksNow by rememberUpdatedState(shownMarks)
 
     fun commit(act: Act) {
         acts.add(act)
@@ -389,12 +404,12 @@ fun PhotoEditor(
             }
             fun clamped(p: Offset) = Offset(p.x.coerceIn(0f, 1f), p.y.coerceIn(0f, 1f))
             /** Доля видимого → доля фото: туда ложится отметка. */
-            fun photo(q: Offset) = PhotoLayers.toPhoto(q, shownMarks.quarter, shownMarks.crop)
+            fun photo(q: Offset) = PhotoLayers.toPhoto(q, marksNow.quarter, marksNow.crop)
             /** Толщина пера в долях фото: перо выбрано по видимому, хранится по фото. */
             fun widthOnPhoto(t: Tool) = nibOf(t).width * max(out.width, out.height) / max(source.width, source.height)
             /** Рамка надписи: фото → видимое и обратно. */
-            fun textVisible(t: PhotoMark.Text) = PhotoLayers.rectToVisible(t.rect, shownMarks.quarter, shownMarks.crop)
-            fun textOnPhoto(r: Rect) = PhotoLayers.rectToPhoto(r, shownMarks.quarter, shownMarks.crop)
+            fun textVisible(t: PhotoMark.Text) = PhotoLayers.rectToVisible(t.rect, marksNow.quarter, marksNow.crop)
+            fun textOnPhoto(r: Rect) = PhotoLayers.rectToPhoto(r, marksNow.quarter, marksNow.crop)
             /** Нажатие без выбранной рамки: в сохранённую — правка, мимо — новая (заказчик 2026-10-22). */
             fun textTap(q: Offset) {
                 val hit = textsOf(acts).entries.lastOrNull { textVisible(it.value).contains(q) }
@@ -422,14 +437,14 @@ fun PhotoEditor(
                         color = PhotoLayers.INKS[textInk],
                         background = backInk.takeIf { it >= 0 }?.let { PhotoLayers.INKS[it] },
                         face = face,
-                        turn = shownMarks.quarter,
+                        turn = marksNow.quarter,
                     )
                     typed = TextFieldValue("")
                 }
                 phase = TextPhase.Typing
             }
             Box(
-                Modifier.fillMaxSize().pointerInput(tool, ink, nib, shownW, shownH, shownMarks) {
+                Modifier.fillMaxSize().pointerInput(tool, ink, nib, shownW, shownH) {
                     // Двойное нажатие — при любом инструменте (заказчик 2026-10-22): увеличенное — к исходному,
                     // исходное — увеличить к месту нажатия. Короткое быстрое касание — нажатие, а не след:
                     // оно ничего не рисует, иначе двойное оставляло бы точки.
@@ -441,14 +456,49 @@ fun PhotoEditor(
                         var upAt = down.uptimeMillis
                         val start = share(down.position)
                         if (tool == Tool.Text) {
-                            // «Текст»: при выбранной рамке (положение и размер) — тянуть угол или маркер в
-                            // центре; нажатие внутрь — снова набор; нажатия мимо, пока рамка выбрана, — ничего.
+                            // «Текст», рамка выбрана (положение и размер) — как у обрезки, сразу: у угла — угол,
+                            // в остальной рамке — перенос целиком; долгое нажатие внутрь — снова набор.
+                            // Нажатия мимо, пока рамка выбрана, — ничего (двумя пальцами — масштаб).
                             val vr = draft?.takeIf { phase == TextPhase.Placing }?.let(::textVisible)
                             var grab = -1
                             if (vr != null) {
-                                val points = listOf(vr.topLeft, vr.topRight, vr.bottomRight, vr.bottomLeft, vr.center)
-                                grab = points.indexOfFirst { c ->
+                                grab = listOf(vr.topLeft, vr.topRight, vr.bottomRight, vr.bottomLeft).indexOfFirst { c ->
                                     abs((c.x - start.x) * shownW * scale) < handle && abs((c.y - start.y) * shownH * scale) < handle
+                                }
+                                if (grab < 0 && vr.contains(start)) grab = GRAB_MOVE
+                            }
+                            if (grab == GRAB_MOVE) {
+                                // Держит на месте дольше LONG_PRESS_MS — к набору; сдвинул — перенос; отпустил — ничего.
+                                val moving = withTimeoutOrNull(LONG_PRESS_MS) {
+                                    var result = false
+                                    while (true) {
+                                        val e = awaitPointerEvent()
+                                        val c = e.changes.firstOrNull { it.id == down.id }
+                                        if (c == null || !c.pressed || e.changes.count { it.pressed } > 1) break
+                                        if ((c.position - down.position).getDistance() > tapSlop) {
+                                            result = true
+                                            break
+                                        }
+                                    }
+                                    result
+                                }
+                                if (moving == null) {
+                                    phase = TextPhase.Typing
+                                    while (awaitPointerEvent().changes.any { it.pressed }) Unit
+                                    return@awaitEachGesture
+                                }
+                                if (!moving) return@awaitEachGesture
+                            }
+                            if (grab >= 0 && vr != null) {
+                                // Рамка ведётся отдельно от стопки: тяжёлый слой не перерисовывается, текст едет
+                                // готовой раскладкой.
+                                liveFrame = vr
+                                holding = true
+                                liveLayout = draft?.let { d ->
+                                    val bw = vr.width * shownW
+                                    val bh = vr.height * shownH
+                                    val pad = min(bw, bh) * TEXT_PAD
+                                    PhotoLayers.fitText(measurer, d, bw - 2 * pad, bh - 2 * pad)
                                 }
                             }
                             var twoFingers = false
@@ -470,24 +520,27 @@ fun PhotoEditor(
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
                                 if (change.positionChange() != Offset.Zero) change.consume()
                                 val at = share(change.position)
-                                val d = draft ?: break
-                                val r = textVisible(d)
+                                val r = liveFrame ?: break
                                 val p = clamped(at)
-                                val moved = when (grab) {
+                                liveFrame = when (grab) {
                                     0 -> Rect(min(p.x, r.right - MIN_CROP), min(p.y, r.bottom - MIN_CROP), r.right, r.bottom)
                                     1 -> Rect(r.left, min(p.y, r.bottom - MIN_CROP), max(p.x, r.left + MIN_CROP), r.bottom)
                                     2 -> Rect(r.left, r.top, max(p.x, r.left + MIN_CROP), max(p.y, r.top + MIN_CROP))
                                     3 -> Rect(min(p.x, r.right - MIN_CROP), r.top, r.right, max(p.y, r.top + MIN_CROP))
                                     else -> {
-                                        // Маркер в центре — перенос целиком, в пределах фото.
+                                        // Перенос целиком — в пределах фото.
                                         val dx = (at.x - last.x).coerceIn(-r.left, 1f - r.right)
                                         val dy = (at.y - last.y).coerceIn(-r.top, 1f - r.bottom)
                                         r.translate(dx, dy)
                                     }
                                 }
                                 last = at
-                                draft = d.copy(rect = textOnPhoto(moved))
                             }
+                            // Отпустили — рамка встаёт в надпись, размер букв подбирается заново.
+                            liveFrame?.let { r -> draft = draft?.copy(rect = textOnPhoto(r)) }
+                            liveFrame = null
+                            liveLayout = null
+                            holding = false
                             val tap = !twoFingers && grab < 0 && path <= tapSlop && upAt - down.uptimeMillis <= EDIT_TAP_MS
                             if (tap) {
                                 if (down.uptimeMillis - lastTapUp <= EDIT_DOUBLE_TAP_MS && (down.position - lastTapAt).getDistance() <= tapNear) {
@@ -497,10 +550,7 @@ fun PhotoEditor(
                                 } else {
                                     lastTapUp = upAt
                                     lastTapAt = down.position
-                                    when {
-                                        phase == TextPhase.None -> textTap(start)
-                                        phase == TextPhase.Placing && vr != null && vr.contains(start) -> phase = TextPhase.Typing
-                                    }
+                                    if (phase == TextPhase.None) textTap(start)
                                 }
                             }
                             return@awaitEachGesture
@@ -607,15 +657,27 @@ fun PhotoEditor(
                     Canvas(Modifier.fillMaxSize()) {
                         fun px(p: Offset) = Offset(left + p.x * shownW, top + p.y * shownH)
                         crop?.let { r -> cropFrame(Rect(px(r.topLeft), px(r.bottomRight)), Rect(left, top, left + shownW, top + shownH), frame, shade, handle / scale) }
-                        // «Текст»: сохранённые надписи — серые рамки, выбранная — своя, с углами и маркером.
+                        // «Текст»: сохранённые надписи — серые рамки, выбранная — как у обрезки, с уголками.
                         if (tool == Tool.Text) {
                             for ((id, t) in textsOf(acts)) if (id != draftId) {
                                 val r = textVisible(t)
                                 drawRect(idle, px(r.topLeft), Size(r.width * shownW, r.height * shownH), style = Stroke(1.5.dp.toPx() / scale))
                             }
-                            draft?.takeIf { phase == TextPhase.Placing }?.let { d ->
-                                val r = textVisible(d)
-                                textFrame(Rect(px(r.topLeft), px(r.bottomRight)), frame, handle / scale)
+                            val held = liveFrame
+                            if (held != null) {
+                                // Пока ведёт палец — фон и готовая раскладка текста едут с рамкой.
+                                val box = Rect(px(held.topLeft), px(held.bottomRight))
+                                draft?.background?.let { drawRoundRect(it, box.topLeft, box.size, CornerRadius(min(box.width, box.height) * TEXT_CORNER)) }
+                                liveLayout?.let { l ->
+                                    val pad = min(box.width, box.height) * TEXT_PAD
+                                    clipRect(box.left, box.top, box.right, box.bottom) { drawText(l, topLeft = Offset(box.left + pad, box.top + pad)) }
+                                }
+                                textFrame(box, frame, handle / scale)
+                            } else {
+                                draft?.takeIf { phase == TextPhase.Placing }?.let { d ->
+                                    val r = textVisible(d)
+                                    textFrame(Rect(px(r.topLeft), px(r.bottomRight)), frame, handle / scale)
+                                }
                             }
                         }
                         val pts = live.map(::px)
@@ -768,7 +830,7 @@ private const val DEFAULT_TEXT_INK = 4
 private val TYPING_SIZE = 22.sp
 private val TYPING_CORNER = 16.dp
 
-/** Рамка выбранной надписи: углы — ручки размера, в центре — маркер переноса. */
+/** Рамка выбранной надписи — как у обрезки: линия и уголки-ручки; переносится вся рамка, без маркера. */
 private fun DrawScope.textFrame(r: Rect, frame: Color, handle: Float) {
     drawRect(frame, r.topLeft, r.size, style = Stroke(2.dp.toPx()))
     val arm = handle * 0.7f
@@ -777,9 +839,15 @@ private fun DrawScope.textFrame(r: Rect, frame: Color, handle: Float) {
         drawLine(frame, c, Offset(c.x + dx * arm, c.y), sw, StrokeCap.Round)
         drawLine(frame, c, Offset(c.x, c.y + dy * arm), sw, StrokeCap.Round)
     }
-    drawCircle(frame, handle * 0.35f, r.center)
-    drawCircle(frame, handle * 0.35f, r.center, style = Stroke(sw / 2))
 }
+
+/** Захват рамки надписи: углы 0…3, перенос целиком; долгое нажатие внутрь — к набору. */
+private const val GRAB_MOVE = 4
+private const val LONG_PRESS_MS = 450L
+
+/** Отступ текста и скругление фона — те же доли, что при сведении (PhotoLayers). */
+private const val TEXT_PAD = 0.08f
+private const val TEXT_CORNER = 0.18f
 
 /** Начертание надписи — буква «А» в круге: обычная, жирная, курсив. */
 @Composable
