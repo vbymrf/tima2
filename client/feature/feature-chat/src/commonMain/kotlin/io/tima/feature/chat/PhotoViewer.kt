@@ -37,7 +37,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -155,6 +157,10 @@ fun PhotoViewer(
     // Высота кнопок сверху и снизу: увеличенное фото сдвигается до них, а не до края экрана.
     var topBar by remember { mutableStateOf(0) }
     var bottomBar by remember { mutableStateOf(0) }
+    // Края самих кнопок (а не их полос с отступами) и верх области фото — в координатах окна.
+    var buttonsTop by remember { mutableStateOf(0f) }
+    var buttonsBottom by remember { mutableStateOf(0f) }
+    var areaTop by remember { mutableStateOf(0f) }
     // Изменённое в этом просмотре — по номеру файла; уходит при закрытии.
     val edited = remember { mutableStateMapOf<String, ImageBitmap>() }
     var editing by remember { mutableStateOf<Pair<PhotoAt, ImageBitmap>?>(null) }
@@ -201,9 +207,9 @@ fun PhotoViewer(
 
     /**
      * Сдвиг увеличенного фото (заказчик 2026-10-22). По ширине — не дальше края экрана. По высоте — до
-     * кнопок: верх фото можно опустить до низа верхних кнопок, низ — поднять до верха нижних, чтобы
-     * кнопки не закрывали фото; между ними и краем экрана тогда видно чёрное. Фото ниже этой полосы —
-     * по её середине.
+     * кнопок: верх фото можно опустить до низа самих верхних кнопок, низ — поднять до верха самих нижних
+     * (края кнопок, без отступов их полос), чтобы кнопки не закрывали фото. Фото ниже этой полосы — по
+     * её середине.
      */
     fun limited(p: Offset, s: Float): Offset {
         val bmp = edited[photo.media.mediaId]
@@ -217,11 +223,13 @@ fun PhotoViewer(
         val mx = maxOf(0f, (s * dw - area.width) / 2)
         val ih = s * dh
         val half = area.height / 2f
-        val band = area.height - topBar - bottomBar
-        val y = if (ih <= band) {
-            (topBar - bottomBar) / 2f
+        // Граница — край кнопок: низ верхних, верх нижних (заказчик 2026-10-22: «по краю кнопок»).
+        val upper = (buttonsTop - areaTop).coerceIn(0f, area.height.toFloat())
+        val lower = (if (buttonsBottom > 0f) buttonsBottom - areaTop else area.height.toFloat()).coerceIn(upper, area.height.toFloat())
+        val y = if (ih <= lower - upper) {
+            (upper + lower) / 2f - half
         } else {
-            p.y.coerceIn(half - bottomBar - ih / 2, topBar - half + ih / 2)
+            p.y.coerceIn(lower - half - ih / 2, upper - half + ih / 2)
         }
         return Offset(p.x.coerceIn(-mx, mx), y)
     }
@@ -247,6 +255,7 @@ fun PhotoViewer(
         Box(
             Modifier.fillMaxSize()
                 .onSizeChanged { area = it }
+                .onGloballyPositioned { areaTop = it.positionInRoot().y }
                 .offset { IntOffset(drag.x.roundToInt(), 0) }
                 .pointerInput(i, photos.size) {
                     // Одно касание разбирается целиком: короткое и быстрое — нажатие, два нажатия рядом и
@@ -336,7 +345,8 @@ fun PhotoViewer(
             }
         }
         Row(
-            Modifier.fillMaxWidth().align(Alignment.TopCenter).onSizeChanged { topBar = it.height }.padding(12.dp),
+            Modifier.fillMaxWidth().align(Alignment.TopCenter).onSizeChanged { topBar = it.height }.padding(12.dp)
+                .onGloballyPositioned { buttonsTop = it.positionInRoot().y + it.size.height },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SolidButton("≡", PhotoTags.MENU) { menu = !menu; info = false }
@@ -400,7 +410,7 @@ fun PhotoViewer(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Внизу: слева «Повернуть», справа «Изменить», между ними — «3 из 12» (заказчик 2026-10-22).
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().onGloballyPositioned { buttonsBottom = it.positionInRoot().y }, verticalAlignment = Alignment.CenterVertically) {
                 if (actions.load != null) {
                     SolidLabel(w.photoRotate, PhotoTags.ROTATE) { withCurrent(photo) { turned(photo, PhotoSteps.turn(it)) } }
                 }

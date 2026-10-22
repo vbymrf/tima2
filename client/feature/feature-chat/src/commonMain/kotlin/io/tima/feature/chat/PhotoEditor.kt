@@ -82,6 +82,8 @@ object PhotoEditorTags {
     const val ABOUT = "photo.edit.about"
     const val THIN = "photo.edit.thin"
     const val THICK = "photo.edit.thick"
+    const val GLASS_THICK = "photo.edit.glass.thick"
+    const val GLASS_WIDE = "photo.edit.glass.wide"
     const val IMAGE = "photo.edit.image"
     const val PANEL = "photo.edit.panel"
     const val CLOSE = "photo.edit.close"
@@ -93,6 +95,20 @@ private enum class Tool { None, Crop, Brush, Arrow }
 /** Толщина — доля большей стороны картинки. */
 private const val THIN = 0.006f
 private const val THICK = 0.016f
+
+/**
+ * Перо кисти (заказчик 2026-10-22): тонкая и толстая полоса — сплошные; два полупрозрачных — размером с
+ * толстую и пошире, как маркер: подчеркнуть, выделить. Стрелка берёт только сплошные.
+ */
+private enum class Nib(val width: Float, val glass: Boolean) {
+    Thin(THIN, false),
+    Thick(THICK, false),
+    GlassThick(THICK, true),
+    GlassWide(THICK * 2.5f, true),
+}
+
+/** Прозрачность полупрозрачного пера: фото под ним видно. */
+private const val GLASS_ALPHA = 0.4f
 
 /** Рамка обрезки не меньше этой доли стороны. */
 private const val MIN_CROP = 0.05f
@@ -124,7 +140,10 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
     val undone = remember(source) { mutableStateListOf<PhotoStep>() }
     var tool by remember { mutableStateOf(Tool.None) }
     var ink by remember { mutableStateOf(0) }
-    var thick by remember { mutableStateOf(false) }
+    var nib by remember { mutableStateOf(Nib.Thin) }
+    /** Перо инструмента: стрелка полупрозрачной не бывает — берёт сплошное той же толщины. */
+    fun nibOf(t: Tool) = if (t == Tool.Arrow && nib.glass) Nib.Thick else nib
+    fun brushInk() = PhotoSteps.INKS[ink].let { if (nib.glass) it.copy(alpha = GLASS_ALPHA) else it }
     // Нарисованное, но не выполненное: следы кисти и стрелки, рамка обрезки — в долях картинки.
     val pending = remember { mutableStateListOf<PhotoStep>() }
     var crop by remember { mutableStateOf<Rect?>(null) }
@@ -228,7 +247,7 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
             }
             fun clamped(p: Offset) = Offset(p.x.coerceIn(0f, 1f), p.y.coerceIn(0f, 1f))
             Box(
-                Modifier.fillMaxSize().pointerInput(tool, ink, thick, shownW, shownH) {
+                Modifier.fillMaxSize().pointerInput(tool, ink, nib, shownW, shownH) {
                     // Двойное нажатие — при любом инструменте (заказчик 2026-10-22): увеличенное — к исходному,
                     // исходное — увеличить к месту нажатия. Короткое быстрое касание — нажатие, а не след:
                     // оно ничего не рисует, иначе двойное оставляло бы точки.
@@ -304,7 +323,7 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                         }
                         lastTapUp = 0L
                         if (twoFingers || corner >= 0 || tool == Tool.None) return@awaitEachGesture
-                        val width = if (thick) THICK else THIN
+                        val width = nibOf(tool).width
                         when (tool) {
                             Tool.Crop -> if (pts.size > 1) {
                                 val a = clamped(pts.first())
@@ -313,7 +332,7 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                                     crop = Rect(min(a.x, b.x), min(a.y, b.y), max(a.x, b.x), max(a.y, b.y))
                                 }
                             }
-                            Tool.Brush -> pending.add(PhotoStep.Brush(pts, PhotoSteps.INKS[ink], width))
+                            Tool.Brush -> pending.add(PhotoStep.Brush(pts, brushInk(), width))
                             Tool.Arrow -> if (pts.size > 1) pending.add(PhotoStep.Arrow(pts.first(), pts.last(), PhotoSteps.INKS[ink], width))
                             Tool.None -> Unit
                         }
@@ -336,7 +355,7 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                         crop?.let { r -> cropFrame(Rect(px(r.topLeft), px(r.bottomRight)), Rect(left, top, left + shownW, top + shownH), frame, shade, handle / scale) }
                         val pts = live.map(::px)
                         if (pts.isEmpty()) return@Canvas
-                        val stroke = ((if (thick) THICK else THIN) * max(shownW, shownH)).coerceAtLeast(2f)
+                        val stroke = (nibOf(tool).width * max(shownW, shownH)).coerceAtLeast(2f)
                         when (tool) {
                             Tool.Crop -> if (pts.size > 1) {
                                 val a = pts.first()
@@ -346,7 +365,7 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                             Tool.Brush -> {
                                 val path = Path()
                                 pts.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y) }
-                                drawPath(path, PhotoSteps.INKS[ink], style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                                drawPath(path, brushInk(), style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
                             }
                             Tool.Arrow -> if (pts.size > 1) drawLine(PhotoSteps.INKS[ink], pts.first(), pts.last(), stroke, StrokeCap.Round)
                             Tool.None -> Unit
@@ -400,8 +419,13 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                                 }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                IconCircle(Glyph.Thin, PhotoEditorTags.THIN, selected = !thick, size = 28) { thick = false }
-                                IconCircle(Glyph.Thick, PhotoEditorTags.THICK, selected = thick, size = 28) { thick = true }
+                                val now = nibOf(tool)
+                                IconCircle(Glyph.Thin, PhotoEditorTags.THIN, selected = now == Nib.Thin, size = 28) { nib = Nib.Thin }
+                                IconCircle(Glyph.Thick, PhotoEditorTags.THICK, selected = now == Nib.Thick, size = 28) { nib = Nib.Thick }
+                                if (tool == Tool.Brush) {
+                                    IconCircle(Glyph.GlassThick, PhotoEditorTags.GLASS_THICK, selected = now == Nib.GlassThick, size = 28) { nib = Nib.GlassThick }
+                                    IconCircle(Glyph.GlassWide, PhotoEditorTags.GLASS_WIDE, selected = now == Nib.GlassWide, size = 28) { nib = Nib.GlassWide }
+                                }
                             }
                         } else {
                             Caption(w.photoCropAbout, fontSize = TimaType.sz5, color = colors.text, maxLines = 3, modifier = Modifier.testTag(PhotoEditorTags.ABOUT))
@@ -444,7 +468,7 @@ private fun DrawScope.cropFrame(r: Rect, image: Rect, frame: Color, shade: Color
 }
 
 /** Значки редактора и просмотра — рисуются, а не шрифтом: знаков вроде «⟳» в шрифте может не быть. */
-internal enum class Glyph { Turn, Crop, Brush, Arrow, Undo, Redo, Thin, Thick, Edit, Apply, Close }
+internal enum class Glyph { Turn, Crop, Brush, Arrow, Undo, Redo, Thin, Thick, Edit, Apply, Close, GlassThick, GlassWide }
 
 @Composable
 private fun ToolIcon(glyph: Glyph, label: String, tag: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
@@ -553,6 +577,9 @@ private fun DrawScope.glyph(g: Glyph, c: Color) {
         }
         Glyph.Thin -> line(p(0.1f, 0.5f), p(0.9f, 0.5f), s * 0.08f)
         Glyph.Thick -> line(p(0.1f, 0.5f), p(0.9f, 0.5f), s * 0.28f)
+        // Пустой круг — полупрозрачное перо: тонкий обод — размером с толстую кисть, толстый обод — шире.
+        Glyph.GlassThick -> drawCircle(c, s * 0.36f, Offset(o.x + s / 2, o.y + s / 2), style = Stroke(s * 0.1f))
+        Glyph.GlassWide -> drawCircle(c, s * 0.32f, Offset(o.x + s / 2, o.y + s / 2), style = Stroke(s * 0.24f))
         Glyph.Apply -> {
             line(p(0.1f, 0.55f), p(0.4f, 0.85f))
             line(p(0.4f, 0.85f), p(0.92f, 0.2f))
