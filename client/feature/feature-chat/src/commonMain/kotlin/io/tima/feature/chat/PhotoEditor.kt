@@ -87,6 +87,8 @@ object PhotoEditorTags {
     const val THICK = "photo.edit.thick"
     const val GLASS_THICK = "photo.edit.glass.thick"
     const val GLASS_WIDE = "photo.edit.glass.wide"
+    const val ERASE_SMALL = "photo.edit.erase.small"
+    const val ERASE_LARGE = "photo.edit.erase.large"
     const val IMAGE = "photo.edit.image"
     const val PANEL = "photo.edit.panel"
     const val CLOSE = "photo.edit.close"
@@ -99,19 +101,22 @@ private enum class Tool { None, Crop, Brush, Arrow }
 private const val THIN = 0.006f
 private const val THICK = 0.016f
 
+/** Вид пера: сплошное, полупрозрачное (одним слоем), ластик. */
+private enum class NibKind { Solid, Glass, Erase }
+
 /**
  * Перо кисти (заказчик 2026-10-22): тонкая и толстая полоса — сплошные; два полупрозрачных — размером с
- * толстую и пошире, как маркер: подчеркнуть, выделить. Стрелка берёт только сплошные.
+ * толстую и пошире, как маркер; два ластика — малый и большой, стирают нарисованное. Стрелка берёт
+ * только сплошные.
  */
-private enum class Nib(val width: Float, val glass: Boolean) {
-    Thin(THIN, false),
-    Thick(THICK, false),
-    GlassThick(THICK, true),
-    GlassWide(THICK * 2.5f, true),
+private enum class Nib(val width: Float, val kind: NibKind) {
+    Thin(THIN, NibKind.Solid),
+    Thick(THICK, NibKind.Solid),
+    GlassThick(THICK, NibKind.Glass),
+    GlassWide(THICK * 2.5f, NibKind.Glass),
+    EraseSmall(THICK * 1.5f, NibKind.Erase),
+    EraseLarge(THICK * 4f, NibKind.Erase),
 }
-
-/** Прозрачность полупрозрачного пера: фото под ним видно. */
-private const val GLASS_ALPHA = 0.4f
 
 /** Рамка обрезки не меньше этой доли стороны. */
 private const val MIN_CROP = 0.05f
@@ -175,8 +180,9 @@ fun PhotoEditor(
     var ink by remember { mutableStateOf(0) }
     var nib by remember { mutableStateOf(Nib.Thin) }
     /** Перо инструмента: стрелка полупрозрачной не бывает — берёт сплошное той же толщины. */
-    fun nibOf(t: Tool) = if (t == Tool.Arrow && nib.glass) Nib.Thick else nib
-    fun brushInk() = PhotoLayers.INKS[ink].let { if (nib.glass) it.copy(alpha = GLASS_ALPHA) else it }
+    fun nibOf(t: Tool) = if (t == Tool.Arrow && nib.kind != NibKind.Solid) Nib.Thick else nib
+    /** Цвет следа на экране, пока ведётся: полупрозрачный — как ляжет. */
+    fun brushInk() = PhotoLayers.INKS[ink].let { if (nib.kind == NibKind.Glass) it.copy(alpha = PhotoLayers.GLASS_ALPHA) else it }
     // Нарисованное, но не выполненное: следы кисти и стрелки — в долях фото; рамка обрезки — в долях
     // повёрнутого фото целиком (при обрезке оно видно без прежней рамки).
     val pending = remember { mutableStateListOf<PhotoMark>() }
@@ -375,7 +381,12 @@ fun PhotoEditor(
                                     crop = Rect(min(a.x, b.x), min(a.y, b.y), max(a.x, b.x), max(a.y, b.y))
                                 }
                             }
-                            Tool.Brush -> pending.add(PhotoMark.Brush(pts.map(::photo), brushInk(), width))
+                            Tool.Brush -> pending.add(
+                                when (nib.kind) {
+                                    NibKind.Erase -> PhotoMark.Erase(pts.map(::photo), width)
+                                    else -> PhotoMark.Brush(pts.map(::photo), PhotoLayers.INKS[ink], width, glass = nib.kind == NibKind.Glass)
+                                },
+                            )
                             Tool.Arrow -> if (pts.size > 1) pending.add(PhotoMark.Arrow(photo(pts.first()), photo(pts.last()), PhotoLayers.INKS[ink], width))
                             Tool.None -> Unit
                         }
@@ -394,6 +405,7 @@ fun PhotoEditor(
                     }
                     val frame = colors.navigation
                     val shade = colors.viewer.copy(alpha = 0.6f)
+                    val eraseTrail = colors.surface.copy(alpha = 0.5f)
                     Canvas(Modifier.fillMaxSize()) {
                         fun px(p: Offset) = Offset(left + p.x * shownW, top + p.y * shownH)
                         crop?.let { r -> cropFrame(Rect(px(r.topLeft), px(r.bottomRight)), Rect(left, top, left + shownW, top + shownH), frame, shade, handle / scale) }
@@ -409,7 +421,8 @@ fun PhotoEditor(
                             Tool.Brush -> {
                                 val path = Path()
                                 pts.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y) }
-                                drawPath(path, brushInk(), style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                                // Ластик, пока ведётся, — бледный след: что сотрётся, видно после отпускания.
+                                drawPath(path, if (nib.kind == NibKind.Erase) eraseTrail else brushInk(), style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
                             }
                             Tool.Arrow -> if (pts.size > 1) drawLine(PhotoLayers.INKS[ink], pts.first(), pts.last(), stroke, StrokeCap.Round)
                             Tool.None -> Unit
@@ -469,6 +482,8 @@ fun PhotoEditor(
                                 if (tool == Tool.Brush) {
                                     IconCircle(Glyph.GlassThick, PhotoEditorTags.GLASS_THICK, selected = now == Nib.GlassThick, size = 28) { nib = Nib.GlassThick }
                                     IconCircle(Glyph.GlassWide, PhotoEditorTags.GLASS_WIDE, selected = now == Nib.GlassWide, size = 28) { nib = Nib.GlassWide }
+                                    IconCircle(Glyph.EraseSmall, PhotoEditorTags.ERASE_SMALL, selected = now == Nib.EraseSmall, size = 28) { nib = Nib.EraseSmall }
+                                    IconCircle(Glyph.EraseLarge, PhotoEditorTags.ERASE_LARGE, selected = now == Nib.EraseLarge, size = 28) { nib = Nib.EraseLarge }
                                 }
                             }
                         } else {
@@ -512,7 +527,7 @@ private fun DrawScope.cropFrame(r: Rect, image: Rect, frame: Color, shade: Color
 }
 
 /** Значки редактора и просмотра — рисуются, а не шрифтом: знаков вроде «⟳» в шрифте может не быть. */
-internal enum class Glyph { Turn, Crop, Brush, Arrow, Undo, Redo, Thin, Thick, Edit, Apply, Close, GlassThick, GlassWide }
+internal enum class Glyph { Turn, Crop, Brush, Arrow, Undo, Redo, Thin, Thick, Edit, Apply, Close, GlassThick, GlassWide, EraseSmall, EraseLarge }
 
 @Composable
 private fun ToolIcon(glyph: Glyph, label: String, tag: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
@@ -624,6 +639,9 @@ private fun DrawScope.glyph(g: Glyph, c: Color) {
         // Пустой круг — полупрозрачное перо: тонкий обод — размером с толстую кисть, толстый обод — шире.
         Glyph.GlassThick -> drawCircle(c, s * 0.36f, Offset(o.x + s / 2, o.y + s / 2), style = Stroke(s * 0.1f))
         Glyph.GlassWide -> drawCircle(c, s * 0.32f, Offset(o.x + s / 2, o.y + s / 2), style = Stroke(s * 0.24f))
+        // Ластик — пустой квадрат: малый и большой.
+        Glyph.EraseSmall -> drawRect(c, p(0.3f, 0.3f), Size(s * 0.4f, s * 0.4f), style = Stroke(s * 0.1f))
+        Glyph.EraseLarge -> drawRect(c, p(0.08f, 0.08f), Size(s * 0.84f, s * 0.84f), style = Stroke(s * 0.1f))
         Glyph.Apply -> {
             line(p(0.1f, 0.55f), p(0.4f, 0.85f))
             line(p(0.4f, 0.85f), p(0.92f, 0.2f))

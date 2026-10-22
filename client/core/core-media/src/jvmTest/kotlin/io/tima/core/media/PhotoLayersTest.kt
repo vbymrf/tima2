@@ -97,4 +97,25 @@ class PhotoLayersTest {
         // Вне видимого — вне фото: след с поля у края.
         assertTrue(PhotoLayers.toPhoto(Offset(-0.1f, 0.5f), 0, null).x < 0f)
     }
+
+    @Test
+    fun маркер_одним_слоем_пересечение_не_темнеет() {
+        val across = PhotoMark.Brush(listOf(Offset(0.05f, 0.5f), Offset(0.45f, 0.5f)), Color.Green, 0.2f, glass = true)
+        val down = PhotoMark.Brush(listOf(Offset(0.25f, 0.05f), Offset(0.25f, 0.95f)), Color.Green, 0.2f, glass = true)
+        val img = PhotoLayers.render(halves(), PhotoMarks(marks = listOf(across, down)))
+        assertEquals(img.at(4, 10), img.at(10, 10), "один слой: пересечение как одиночный след")
+        assertNotEquals(red, img.at(4, 10), "маркер виден")
+        assertNotEquals(green, img.at(4, 10), "маркер полупрозрачный")
+    }
+
+    @Test
+    fun ластик_стирает_нарисованное_но_не_фото() {
+        val line = PhotoMark.Brush(listOf(Offset(0.1f, 0.5f), Offset(0.9f, 0.5f)), Color.Green, 0.1f)
+        val erase = PhotoMark.Erase(listOf(Offset(0.1f, 0.5f), Offset(0.9f, 0.5f)), 0.3f)
+        val img = PhotoLayers.render(halves(), PhotoMarks(marks = listOf(line, erase)))
+        assertEquals(red, img.at(10, 10), "след стёрт, фото на месте")
+        assertEquals(blue, img.at(30, 10))
+        val after = PhotoLayers.render(halves(), PhotoMarks(marks = listOf(erase, line)))
+        assertEquals(green, after.at(10, 10), "нарисованное после ластика он не трогает")
+    }
 }

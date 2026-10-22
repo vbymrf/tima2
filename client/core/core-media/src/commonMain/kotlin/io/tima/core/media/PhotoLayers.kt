@@ -3,9 +3,11 @@ package io.tima.core.media
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -30,8 +32,15 @@ import kotlin.math.sin
  * копию в редакторе и на исходник при сведении.
  */
 sealed interface PhotoMark {
-    data class Brush(val points: List<Offset>, val color: Color, val width: Float) : PhotoMark
+    /**
+     * [glass] — полупрозрачное перо: все такие следы ложатся **одним** полупрозрачным слоем, как закрашено, —
+     * пересечения не темнеют (заказчик 2026-10-22: «чтобы он создавал только один слой — как закрасить»).
+     */
+    data class Brush(val points: List<Offset>, val color: Color, val width: Float, val glass: Boolean = false) : PhotoMark
     data class Arrow(val from: Offset, val to: Offset, val color: Color, val width: Float) : PhotoMark
+
+    /** Ластик (заказчик 2026-10-22): стирает нарисованное до него — кисть, стрелку, маркер; фото не трогает. */
+    data class Erase(val points: List<Offset>, val width: Float) : PhotoMark
 }
 
 /**
@@ -59,7 +68,14 @@ object PhotoLayers {
      * Краска кисти и стрелки: красный, жёлтый, зелёный, синий, белый, чёрный. Не цвета темы — краска
      * ложится в само фото и у получателя выглядит так же при любой теме.
      */
-    val INKS: List<Color> = listOf(Color(0xFFE53935), Color(0xFFFFD600), Color(0xFF43A047), Color(0xFF1E88E5), Color.White, Color.Black)
+    val INKS: List<Color> = listOf(
+        Color(0xFFE53935), Color(0xFFFFD600), Color(0xFF43A047), Color(0xFF1E88E5), Color.White, Color.Black,
+        // Наш зелёный — шапки приложения (заказчик 2026-10-22: «наш цвет в конце — зелёный из шапки»).
+        Color(0xFF8AC44A),
+    )
+
+    /** Прозрачность полупрозрачного слоя: фото под ним видно. */
+    const val GLASS_ALPHA = 0.4f
 
     private val FULL = Rect(0f, 0f, 1f, 1f)
 
@@ -120,16 +136,12 @@ object PhotoLayers {
         val px = (when (mark) {
             is PhotoMark.Brush -> mark.width
             is PhotoMark.Arrow -> mark.width
+            is PhotoMark.Erase -> mark.width
         } * max(w, h)).coerceAtLeast(1f)
         when (mark) {
-            is PhotoMark.Brush -> if (mark.points.size == 1) {
-                val p = mark.points.single()
-                drawCircle(mark.color, px / 2, Offset(p.x * w, p.y * h))
-            } else if (mark.points.size > 1) {
-                val path = Path()
-                mark.points.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x * w, p.y * h) else path.lineTo(p.x * w, p.y * h) }
-                drawPath(path, mark.color, style = Stroke(px, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            }
+            // Внутри полупрозрачного слоя цвет сплошной: прозрачность — у слоя целиком.
+            is PhotoMark.Brush -> trail(mark.points, if (mark.glass) mark.color.copy(alpha = 1f) else mark.color, px, w, h, BlendMode.SrcOver)
+            is PhotoMark.Erase -> trail(mark.points, Color.Black, px, w, h, BlendMode.Clear)
             is PhotoMark.Arrow -> {
                 val from = Offset(mark.from.x * w, mark.from.y * h)
                 val to = Offset(mark.to.x * w, mark.to.y * h)
@@ -144,7 +156,25 @@ object PhotoLayers {
         }
     }
 
+    private fun DrawScope.trail(points: List<Offset>, color: Color, px: Float, w: Float, h: Float, blend: BlendMode) {
+        if (points.size == 1) {
+            val p = points.single()
+            drawCircle(color, px / 2, Offset(p.x * w, p.y * h), blendMode = blend)
+        } else if (points.size > 1) {
+            val path = Path()
+            points.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x * w, p.y * h) else path.lineTo(p.x * w, p.y * h) }
+            drawPath(path, color, style = Stroke(px, cap = StrokeCap.Round, join = StrokeJoin.Round), blendMode = blend)
+        }
+    }
+
     private const val HEAD_ANGLE = 0.49f
+}
+
+/** Отдельный слой поверх уже нарисованного: внутри — свои отметки и ластик, потом — с прозрачностью [alpha]. */
+private inline fun DrawScope.layer(bounds: Rect, alpha: Float, block: DrawScope.() -> Unit) {
+    drawContext.canvas.saveLayer(bounds, Paint().apply { this.alpha = alpha })
+    block()
+    drawContext.canvas.restore()
 }
 
 /**
@@ -169,9 +199,20 @@ fun DrawScope.drawPhotoLayers(source: ImageBitmap, m: PhotoMarks, extra: List<Ph
             translate(-c.left * w, -c.top * h)
         }) {
             drawImage(source)
+            // Отметки — своими слоями над фото: ластик стирает в слое, а не фото. Полупрозрачные — одним слоем
+            // ниже сплошных: пересечения не темнеют, сплошное ложится поверх маркера. Ластик действует на
+            // оба слоя — на то, что нарисовано до него.
+            val all = m.marks + extra
+            val bounds = Rect(0f, 0f, w, h)
             with(PhotoLayers) {
-                for (mk in m.marks) mark(mk, w, h)
-                for (mk in extra) mark(mk, w, h)
+                if (all.any { it is PhotoMark.Brush && it.glass }) {
+                    layer(bounds, PhotoLayers.GLASS_ALPHA) {
+                        for (mk in all) if ((mk is PhotoMark.Brush && mk.glass) || mk is PhotoMark.Erase) mark(mk, w, h)
+                    }
+                }
+                layer(bounds, 1f) {
+                    for (mk in all) if (!(mk is PhotoMark.Brush && mk.glass)) mark(mk, w, h)
+                }
             }
         }
     }

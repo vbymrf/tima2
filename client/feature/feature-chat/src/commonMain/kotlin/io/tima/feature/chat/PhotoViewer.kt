@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -102,7 +103,6 @@ object PhotoTags {
     const val WHEN = "msg:photo.when"
     const val MENU_OUTSIDE = "msg:photo.menu.outside"
     const val BUBBLE = "msg:photo.bubble"
-    const val BUBBLE_OUTSIDE = "msg:photo.bubble.outside"
     fun item(key: String) = "msg:photo.menu.$key"
 }
 
@@ -251,7 +251,21 @@ fun PhotoViewer(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(colors.viewer).testTag(PhotoTags.WINDOW)) {
+    Box(
+        Modifier.fillMaxSize().background(colors.viewer)
+            // Подсказка над кнопкой закрывается любым касанием, но касание не забирает: второе нажатие
+            // «Повернуть» и поворачивает, и убирает подсказку (заказчик 2026-10-22). Прежде поверх лежала
+            // прозрачная подложка — она съедала нажатие целиком.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val e = awaitPointerEvent(PointerEventPass.Initial)
+                        if (e.type == PointerEventType.Press && bubble != null) bubble = null
+                    }
+                }
+            }
+            .testTag(PhotoTags.WINDOW),
+    ) {
         Box(
             Modifier.fillMaxSize()
                 .onSizeChanged { area = it }
@@ -445,11 +459,6 @@ fun PhotoViewer(
             }
         }
         bubble?.let { (left, text) ->
-            Box(
-                Modifier.fillMaxSize()
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { bubble = null }
-                    .testTag(PhotoTags.BUBBLE_OUTSIDE),
-            )
             val above = with(density) { bottomBar.toDp() }
             Caption(
                 text,
