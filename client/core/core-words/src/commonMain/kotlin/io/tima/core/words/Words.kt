@@ -1540,6 +1540,11 @@ interface ChatWords {
     val photoEditSent: String
     val photoEditRefused: String
     val photoLoadFailed: String
+    val photoRedo: String
+    val photoApply: String
+    val photoCropAbout: String
+    val photoBrushAbout: String
+    val photoArrowAbout: String
     val photoSize: String
     val photoPixels: String
     val photoFrom: String
@@ -3748,6 +3753,11 @@ object RussianWords : Words {
         override val photoEditSent = "Изменённое фото отправлено — у получателя на том же месте, с пометкой «изменено»"
         override val photoEditRefused = "Изменённое фото не ушло: правка больше не принимается (три правки или ключ сменился)"
         override val photoLoadFailed = "Фото не загрузилось — изменить не из чего"
+        override val photoRedo = "Повторить"
+        override val photoApply = "Выполнить"
+        override val photoCropAbout = "Растяните рамку пальцем; любой угол можно потянуть. «Выполнить» — обрезать"
+        override val photoBrushAbout = "Рисуйте пальцем — можно начинать и за краем фото. «Выполнить» — оставить нарисованное"
+        override val photoArrowAbout = "Проведите от начала к острию — можно и с края. «Выполнить» — оставить стрелки"
         override val photoSize = "Размер"
         override val photoPixels = "Точек"
         override val photoFrom = "Прислал(а)"

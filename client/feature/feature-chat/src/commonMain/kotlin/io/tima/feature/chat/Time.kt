@@ -50,3 +50,10 @@ internal fun day(atMs: Long, today: String, yesterday: String, nowMs: Long = kot
         else -> at.dayOfMonth.toString().padStart(2, '0') + "." + at.monthNumber.toString().padStart(2, '0')
     }
 }
+
+/** Дата и время целиком — «22.10.2026 08:44», местное: шапка просмотра фото (заказчик 2026-10-22). */
+internal fun dateTime(atMs: Long): String {
+    val local = Instant.fromEpochMilliseconds(atMs).toLocalDateTime(TimeZone.currentSystemDefault())
+    val d = local.dayOfMonth.toString().padStart(2, '0') + "." + local.monthNumber.toString().padStart(2, '0') + "." + local.year
+    return d + " " + time(atMs)
+}

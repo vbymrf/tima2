@@ -7,7 +7,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +36,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -92,6 +93,7 @@ object PhotoTags {
     const val ROTATE = "msg:photo.rotate"
     const val EDIT = "msg:photo.edit"
     const val IMAGE = "msg:photo.image"
+    const val WHEN = "msg:photo.when"
     fun item(key: String) = "msg:photo.menu.$key"
 }
 
@@ -100,14 +102,19 @@ private const val MAX_SCALE = 5f
 private const val DOUBLE_TAP_SCALE = 2.5f
 private const val WHEEL_STEP = 1.15f
 
+/** Нажатие — не дольше этого; второе нажатие двойного — не позже этого после первого. */
+private const val TAP_MS = 300L
+private const val DOUBLE_TAP_MS = 400L
+
 /**
  * Просмотр фото переписки (заказчик 2026-10-18, 2026-10-22): полное фото — от почтальона, ключом из
  * тела. Слева сверху «≡» — Сохранить как, Удалить у себя, у всех, Переслать, Поделиться,
- * Информация; справа «✕». «‹» и «›» по краям и смахивание вбок — соседние фото, вниз — закрыть.
+ * Информация; справа «✕»; посередине — когда отправлено. «‹» и «›» по краям и смахивание вбок — соседние
+ * фото; закрытия смахиванием вниз нет (заказчик 2026-10-22).
  *
- * - **Масштаб**: щипок двумя пальцами, двойное нажатие, колесо мыши на ПК. Увеличенное двигается
- *   пальцем, а не листается: листание и закрытие — только при обычном размере.
- * - **Слева внизу «Повернуть» и «Изменить»** (редактор: обрезка, кисть, стрелка). Изменённое
+ * - **Масштаб**: щипок двумя пальцами, двойное нажатие (увеличенное — к исходному), колесо мыши на ПК.
+ *   Увеличенное двигается пальцем, а не листается, и край фото не уходит за край экрана.
+ * - **Внизу «Повернуть» слева, «Изменить» справа**, между ними «3 из 12» (редактор: обрезка, кисть, стрелка). Изменённое
  *   показывается сразу, а уходит, **когда просмотр закрыт**, — одной правкой на фото, сколько бы раз
  *   его ни поворачивали и ни сохраняли в редакторе. Закрыт — значит покинул экран любым путём:
  *   «✕», смахивание, удаление, уход из переписки.
@@ -137,6 +144,7 @@ fun PhotoViewer(
     var drag by remember { mutableStateOf(Offset.Zero) }
     var scale by remember(i) { mutableStateOf(1f) }
     var pan by remember(i) { mutableStateOf(Offset.Zero) }
+    var area by remember { mutableStateOf(IntSize.Zero) }
     // Изменённое в этом просмотре — по номеру файла; уходит при закрытии.
     val edited = remember { mutableStateMapOf<String, ImageBitmap>() }
     var editing by remember { mutableStateOf<Pair<PhotoAt, ImageBitmap>?>(null) }
@@ -144,7 +152,11 @@ fun PhotoViewer(
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val turn = with(density) { 80.dp.toPx() }
-    val close = with(density) { 120.dp.toPx() }
+    val pad = with(density) { 12.dp.toPx() }
+    // Короткий сдвиг — ещё нажатие, а не движение (заказчик 2026-10-22: «два быстрых движения короткого
+    // сдвига или короткий сдвиг и клик — двойной клик»).
+    val tapSlop = with(density) { 24.dp.toPx() }
+    val tapNear = with(density) { 80.dp.toPx() }
 
     // Ушёл с экрана — изменённое своё уходит одной правкой на фото (ADR-0052).
     val now by rememberUpdatedState(actions)
@@ -172,6 +184,24 @@ fun PhotoViewer(
         }
     }
 
+    /**
+     * Сдвиг увеличенного фото — не дальше края: край фото не уходит за край экрана, пустого чёрного
+     * поля не видно (заказчик 2026-10-22). По оси, где фото уже экрана, — по центру.
+     */
+    fun limited(p: Offset, s: Float): Offset {
+        val bmp = edited[photo.media.mediaId]
+        val aspect = (bmp?.let { it.width.toFloat() / it.height }
+            ?: photo.media.takeIf { it.width > 0 && it.height > 0 }?.let { it.width.toFloat() / it.height } ?: 1f).coerceIn(0.4f, 3f)
+        val aw = area.width - 2 * pad
+        val ah = area.height - 2 * pad
+        if (aw <= 0f || ah <= 0f) return Offset.Zero
+        val dw = minOf(aw, ah * aspect)
+        val dh = dw / aspect
+        val mx = maxOf(0f, (s * dw - area.width) / 2)
+        val my = maxOf(0f, (s * dh - area.height) / 2)
+        return Offset(p.x.coerceIn(-mx, mx), p.y.coerceIn(-my, my))
+    }
+
     fun changed(p: PhotoAt, bmp: ImageBitmap) {
         val first = edited.isEmpty()
         edited[p.media.mediaId] = bmp
@@ -181,45 +211,64 @@ fun PhotoViewer(
     Box(Modifier.fillMaxSize().background(colors.viewer).testTag(PhotoTags.WINDOW)) {
         Box(
             Modifier.fillMaxSize()
-                .offset { IntOffset(drag.x.roundToInt(), drag.y.coerceAtLeast(0f).roundToInt()) }
+                .onSizeChanged { area = it }
+                .offset { IntOffset(drag.x.roundToInt(), 0) }
                 .pointerInput(i, photos.size) {
+                    // Одно касание разбирается целиком: короткое и быстрое — нажатие, два нажатия рядом и
+                    // подряд — двойное; длиннее — листание (обычный размер) или сдвиг (увеличенное).
+                    // Закрытия смахиванием вниз нет (заказчик 2026-10-22).
+                    var lastTapUp = 0L
+                    var lastTapAt = Offset.Zero
                     awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
+                        val down = awaitFirstDown(requireUnconsumed = false)
                         var moved = Offset.Zero
+                        var path = 0f
                         var zoomed = false
+                        var fingers = 1
+                        var upAt = down.uptimeMillis
                         do {
                             val event = awaitPointerEvent()
+                            fingers = maxOf(fingers, event.changes.size)
                             val zoom = event.calculateZoom()
                             val by = event.calculatePan()
+                            path += by.getDistance()
+                            upAt = event.changes.maxOf { it.uptimeMillis }
                             if (event.changes.size > 1 || scale > 1f) {
                                 if (zoom != 1f) {
                                     scale = (scale * zoom).coerceIn(1f, MAX_SCALE)
                                     zoomed = true
                                 }
-                                pan = if (scale > 1f) pan + by else Offset.Zero
+                                pan = if (scale > 1f) limited(pan + by, scale) else Offset.Zero
                                 if (zoom != 1f || by != Offset.Zero) event.changes.forEach { it.consume() }
                             } else if (by != Offset.Zero) {
                                 moved += by
-                                drag = moved
+                                if (path > tapSlop) drag = Offset(moved.x, 0f)
                                 event.changes.forEach { it.consume() }
                             }
                         } while (event.changes.any { it.pressed })
                         val d = drag
                         drag = Offset.Zero
-                        if (!zoomed && scale <= 1f) {
-                            when {
-                                d.y > close && d.y > abs(d.x) -> onClose()
-                                d.x < -turn && i < photos.lastIndex -> go(i + 1)
-                                d.x > turn && i > 0 -> go(i - 1)
+                        val tap = fingers == 1 && !zoomed && path <= tapSlop && upAt - down.uptimeMillis <= TAP_MS
+                        if (tap) {
+                            if (down.uptimeMillis - lastTapUp <= DOUBLE_TAP_MS && (down.position - lastTapAt).getDistance() <= tapNear) {
+                                // Двойное: увеличенное — к исходному, исходное — увеличить.
+                                scale = if (scale > 1f) 1f else DOUBLE_TAP_SCALE
+                                pan = Offset.Zero
+                                lastTapUp = 0L
+                            } else {
+                                lastTapUp = upAt
+                                lastTapAt = down.position
+                            }
+                        } else {
+                            lastTapUp = 0L
+                            if (!zoomed && scale <= 1f && fingers == 1) {
+                                when {
+                                    d.x < -turn && i < photos.lastIndex -> go(i + 1)
+                                    d.x > turn && i > 0 -> go(i - 1)
+                                }
                             }
                         }
                     }
-                }
-                .pointerInput(i) {
-                    detectTapGestures(onDoubleTap = {
-                        scale = if (scale > 1f) 1f else DOUBLE_TAP_SCALE
-                        pan = Offset.Zero
-                    })
                 }
                 .pointerInput(i) {
                     // Колесо мыши на ПК — масштаб.
@@ -230,7 +279,7 @@ fun PhotoViewer(
                             val dy = e.changes.firstOrNull()?.scrollDelta?.y ?: 0f
                             if (dy == 0f) continue
                             scale = (if (dy < 0) scale * WHEEL_STEP else scale / WHEEL_STEP).coerceIn(1f, MAX_SCALE)
-                            if (scale == 1f) pan = Offset.Zero
+                            pan = if (scale == 1f) Offset.Zero else limited(pan, scale)
                             e.changes.forEach { it.consume() }
                         }
                     }
@@ -257,14 +306,15 @@ fun PhotoViewer(
         ) {
             SolidButton("≡", PhotoTags.MENU) { menu = !menu; info = false }
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                if (photos.size > 1) {
+                // Когда отправлено — дата и время (заказчик 2026-10-22).
+                if (photo.line.atMs > 0) {
                     Caption(
-                        w.photoOf(i + 1, photos.size),
+                        dateTime(photo.line.atMs),
                         fontSize = TimaType.sz5,
                         weight = FontWeight.Bold,
                         color = colors.text,
                         modifier = Modifier.background(colors.surface, RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp)
-                            .testTag(PhotoTags.COUNT),
+                            .testTag(PhotoTags.WHEN),
                     )
                 }
             }
@@ -308,10 +358,24 @@ fun PhotoViewer(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Слева внизу — «Повернуть» и «Изменить» (заказчик 2026-10-22).
-            if (actions.load != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Внизу: слева «Повернуть», справа «Изменить», между ними — «3 из 12» (заказчик 2026-10-22).
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (actions.load != null) {
                     SolidLabel(w.photoRotate, PhotoTags.ROTATE) { withCurrent(photo) { changed(photo, PhotoSteps.turn(it)) } }
+                }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    if (photos.size > 1) {
+                        Caption(
+                            w.photoOf(i + 1, photos.size),
+                            fontSize = TimaType.sz5,
+                            weight = FontWeight.Bold,
+                            color = colors.text,
+                            modifier = Modifier.background(colors.surface, RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 4.dp)
+                                .testTag(PhotoTags.COUNT),
+                        )
+                    }
+                }
+                if (actions.load != null) {
                     SolidLabel(w.photoEdit, PhotoTags.EDIT) { withCurrent(photo) { editing = photo to it } }
                 }
             }
