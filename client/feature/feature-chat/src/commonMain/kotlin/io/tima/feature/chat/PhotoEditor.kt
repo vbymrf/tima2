@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -37,8 +40,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +80,8 @@ object PhotoEditorTags {
     const val THIN = "photo.edit.thin"
     const val THICK = "photo.edit.thick"
     const val IMAGE = "photo.edit.image"
+    const val PANEL = "photo.edit.panel"
+    const val CLOSE = "photo.edit.close"
     fun color(i: Int) = "photo.edit.color.$i"
 }
 
@@ -90,10 +97,12 @@ private const val MIN_CROP = 0.05f
 /**
  * Редактор фото (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ6; вид — правки того же дня).
  *
- * - **Внизу закреплены значки**: «Повернуть», «Обрезать», «Кисть», «Стрелка». Ряд не сдвигается: что
- *   появляется при выборе (пояснение, цвета, «Выполнить»), встаёт **над** ним.
- * - «Повернуть» — сразу, без подтверждения. Обрезка, кисть, стрелка — нарисовал, нажал «Выполнить» —
- *   осталось; не выполнено — при смене инструмента пропадает. «Сохранить» выполняет и несохранённое.
+ * - **Внизу закреплены значки**: «Повернуть», «Обрезать», «Кисть», «Стрелка». Выбран инструмент —
+ *   его окно встаёт **поверх** ряда и не больше его: «✕» слева (закрыть, невыполненное пропадает),
+ *   цвета и толщина или пояснение посередине, галочка справа — выполнить.
+ * - «Повернуть» — сразу, без подтверждения. Обрезка, кисть, стрелка — нарисовал, галочка — осталось;
+ *   не выполнено — при «✕» и смене инструмента пропадает. «Сохранить» выполняет и несохранённое.
+ * - **Масштаб**: двумя пальцами — увеличить и сдвинуть; одним без инструмента — сдвинуть увеличенное.
  * - Сверху — «Отмена», «Отменить», «Повторить», «Сохранить».
  * - Кисть и стрелку можно начинать **за краем фото**: след идёт по фото, палец — где угодно. Рамку
  *   обрезки рисуют, а потом тянут за любой угол.
@@ -149,6 +158,11 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
     }
     val canUndo = pending.isNotEmpty() || crop != null || steps.isNotEmpty()
 
+    // Масштаб картинки в редакторе (заказчик 2026-10-22): двумя пальцами — увеличить и сдвинуть; одним —
+    // рисовать (инструмент выбран) или сдвигать увеличенное (не выбран).
+    var scale by remember(source) { mutableStateOf(1f) }
+    var pan by remember(source) { mutableStateOf(Offset.Zero) }
+
     Column(Modifier.fillMaxSize().background(colors.viewer).testTag(PhotoEditorTags.WINDOW)) {
         // ── Сверху: отмена всего, шаг назад и вперёд, сохранить ─────────────
         Row(
@@ -167,7 +181,7 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
             }
         }
 
-        // ── Картинка: рисовать можно и за её краем ────────────────────────
+        // ── Картинка: рисовать можно и за её краем; двумя пальцами — масштаб ──
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
             val density = LocalDensity.current
             val boxW = constraints.maxWidth.toFloat()
@@ -177,12 +191,22 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
             val shownH = drawn.height * k
             val left = (boxW - shownW) / 2
             val top = (boxH - shownH) / 2
+            val center = Offset(boxW / 2, boxH / 2)
             val handle = with(density) { 28.dp.toPx() }
-            fun share(p: Offset) = Offset((p.x - left) / shownW, (p.y - top) / shownH)
+            /** Сдвиг увеличенного — не дальше края области. */
+            fun limited(p: Offset, s: Float): Offset {
+                val mx = max(0f, (s * shownW - boxW) / 2)
+                val my = max(0f, (s * shownH - boxH) / 2)
+                return Offset(p.x.coerceIn(-mx, mx), p.y.coerceIn(-my, my))
+            }
+            /** Точка экрана → место на неувеличенной картинке → доли картинки. */
+            fun share(p: Offset): Offset {
+                val base = (p - center - pan) / scale + center
+                return Offset((base.x - left) / shownW, (base.y - top) / shownH)
+            }
             fun clamped(p: Offset) = Offset(p.x.coerceIn(0f, 1f), p.y.coerceIn(0f, 1f))
             Box(
                 Modifier.fillMaxSize().pointerInput(tool, ink, thick, shownW, shownH) {
-                    if (tool == Tool.None) return@pointerInput
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val start = share(down.position)
@@ -191,15 +215,28 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                         crop?.takeIf { tool == Tool.Crop }?.let { r ->
                             val corners = listOf(r.topLeft, r.topRight, r.bottomRight, r.bottomLeft)
                             corner = corners.indexOfFirst { c ->
-                                abs((c.x - start.x) * shownW) < handle && abs((c.y - start.y) * shownH) < handle
+                                abs((c.x - start.x) * shownW * scale) < handle && abs((c.y - start.y) * shownH * scale) < handle
                             }
                         }
                         live.clear()
-                        if (corner < 0) live.add(start)
+                        if (tool != Tool.None && corner < 0) live.add(start)
+                        var twoFingers = false
                         while (true) {
                             val event = awaitPointerEvent()
+                            if (event.changes.none { it.pressed }) break
+                            if (event.changes.count { it.pressed } > 1) {
+                                // Второй палец — масштаб: начатый след не считается.
+                                twoFingers = true
+                                live.clear()
+                            }
+                            if (twoFingers || tool == Tool.None) {
+                                val zoom = event.calculateZoom()
+                                scale = (scale * zoom).coerceIn(1f, EDIT_MAX_SCALE)
+                                pan = if (scale > 1f) limited(pan + event.calculatePan(), scale) else Offset.Zero
+                                event.changes.forEach { if (it.positionChange() != Offset.Zero) it.consume() }
+                                continue
+                            }
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) break
                             if (change.positionChange() != Offset.Zero) change.consume()
                             val at = share(change.position)
                             val r = crop
@@ -217,7 +254,7 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                         }
                         val pts = live.toList()
                         live.clear()
-                        if (corner >= 0) return@awaitEachGesture
+                        if (twoFingers || corner >= 0 || tool == Tool.None) return@awaitEachGesture
                         val width = if (thick) THICK else THIN
                         when (tool) {
                             Tool.Crop -> if (pts.size > 1) {
@@ -234,94 +271,109 @@ fun PhotoEditor(source: ImageBitmap, onSave: (ImageBitmap) -> Unit, onCancel: ()
                     }
                 },
             ) {
-                Image(
-                    drawn,
-                    contentDescription = null,
-                    modifier = Modifier.offset { IntOffset(left.roundToInt(), top.roundToInt()) }
-                        .size(with(density) { shownW.toDp() }, with(density) { shownH.toDp() })
-                        .testTag(PhotoEditorTags.IMAGE),
-                )
-                val frame = colors.navigation
-                val shade = colors.viewer.copy(alpha = 0.6f)
-                Canvas(Modifier.fillMaxSize()) {
-                    fun px(p: Offset) = Offset(left + p.x * shownW, top + p.y * shownH)
-                    crop?.let { r -> cropFrame(Rect(px(r.topLeft), px(r.bottomRight)), Rect(left, top, left + shownW, top + shownH), frame, shade, handle) }
-                    val pts = live.map(::px)
-                    if (pts.isEmpty()) return@Canvas
-                    val stroke = ((if (thick) THICK else THIN) * max(shownW, shownH)).coerceAtLeast(2f)
-                    when (tool) {
-                        Tool.Crop -> if (pts.size > 1) {
-                            val a = pts.first()
-                            val b = pts.last()
-                            drawRect(frame, Offset(min(a.x, b.x), min(a.y, b.y)), Size(abs(b.x - a.x), abs(b.y - a.y)), style = Stroke(2.dp.toPx()))
+                // Картинка и рисуемое поверх — в одном слое: масштаб и сдвиг у них общие.
+                Box(Modifier.fillMaxSize().graphicsLayer(scaleX = scale, scaleY = scale, translationX = pan.x, translationY = pan.y)) {
+                    Image(
+                        drawn,
+                        contentDescription = null,
+                        modifier = Modifier.offset { IntOffset(left.roundToInt(), top.roundToInt()) }
+                            .size(with(density) { shownW.toDp() }, with(density) { shownH.toDp() })
+                            .testTag(PhotoEditorTags.IMAGE),
+                    )
+                    val frame = colors.navigation
+                    val shade = colors.viewer.copy(alpha = 0.6f)
+                    Canvas(Modifier.fillMaxSize()) {
+                        fun px(p: Offset) = Offset(left + p.x * shownW, top + p.y * shownH)
+                        crop?.let { r -> cropFrame(Rect(px(r.topLeft), px(r.bottomRight)), Rect(left, top, left + shownW, top + shownH), frame, shade, handle / scale) }
+                        val pts = live.map(::px)
+                        if (pts.isEmpty()) return@Canvas
+                        val stroke = ((if (thick) THICK else THIN) * max(shownW, shownH)).coerceAtLeast(2f)
+                        when (tool) {
+                            Tool.Crop -> if (pts.size > 1) {
+                                val a = pts.first()
+                                val b = pts.last()
+                                drawRect(frame, Offset(min(a.x, b.x), min(a.y, b.y)), Size(abs(b.x - a.x), abs(b.y - a.y)), style = Stroke(2.dp.toPx() / scale))
+                            }
+                            Tool.Brush -> {
+                                val path = Path()
+                                pts.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y) }
+                                drawPath(path, PhotoSteps.INKS[ink], style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                            }
+                            Tool.Arrow -> if (pts.size > 1) drawLine(PhotoSteps.INKS[ink], pts.first(), pts.last(), stroke, StrokeCap.Round)
+                            Tool.None -> Unit
                         }
-                        Tool.Brush -> {
-                            val path = Path()
-                            pts.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y) }
-                            drawPath(path, PhotoSteps.INKS[ink], style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
-                        }
-                        Tool.Arrow -> if (pts.size > 1) drawLine(PhotoSteps.INKS[ink], pts.first(), pts.last(), stroke, StrokeCap.Round)
-                        Tool.None -> Unit
                     }
                 }
             }
         }
 
-        // ── Над значками: пояснение, цвета, «Выполнить» ──────────────────
-        if (tool != Tool.None) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp).background(colors.surface, RoundedCornerShape(12.dp)).padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+        // ── Низ: значки на месте; выбран инструмент — его окно поверх них, того же размера ──
+        var barHeight by remember { mutableStateOf(0) }
+        Box(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().padding(12.dp).onSizeChanged { barHeight = it.height },
+                horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                Caption(
-                    when (tool) {
-                        Tool.Crop -> w.photoCropAbout
-                        Tool.Brush -> w.photoBrushAbout
-                        else -> w.photoArrowAbout
-                    },
-                    fontSize = TimaType.sz5,
-                    color = colors.text,
-                    modifier = Modifier.testTag(PhotoEditorTags.ABOUT),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (tool == Tool.Brush || tool == Tool.Arrow) {
-                        PhotoSteps.INKS.forEachIndexed { i, c ->
-                            Box(
-                                Modifier.size(28.dp).background(c, CircleShape)
-                                    .border(if (i == ink) 3.dp else 1.dp, if (i == ink) colors.navigation else colors.text3, CircleShape)
-                                    .clickable { ink = i }.testTag(PhotoEditorTags.color(i)),
-                            )
+                ToolIcon(Glyph.Turn, w.photoRotate, PhotoEditorTags.TURN, selected = false) {
+                    choose(Tool.None)
+                    tool = Tool.None
+                    commit(PhotoStep.Turn)
+                }
+                ToolIcon(Glyph.Crop, w.photoCrop, PhotoEditorTags.CROP, selected = tool == Tool.Crop) { choose(Tool.Crop) }
+                ToolIcon(Glyph.Brush, w.photoBrush, PhotoEditorTags.BRUSH, selected = tool == Tool.Brush) { choose(Tool.Brush) }
+                ToolIcon(Glyph.Arrow, w.photoArrow, PhotoEditorTags.ARROW, selected = tool == Tool.Arrow) { choose(Tool.Arrow) }
+            }
+            if (tool != Tool.None && barHeight > 0) {
+                val panelHeight = with(LocalDensity.current) { barHeight.toDp() }
+                Row(
+                    Modifier.fillMaxWidth().height(panelHeight).padding(horizontal = 12.dp, vertical = 6.dp)
+                        .background(colors.surface, RoundedCornerShape(16.dp)).padding(horizontal = 8.dp)
+                        .testTag(PhotoEditorTags.PANEL),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // ✕ — закрыть окно: невыполненное пропадает.
+                    IconCircle(Glyph.Close, PhotoEditorTags.CLOSE, size = 40) { choose(tool) }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (tool == Tool.Brush || tool == Tool.Arrow) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                PhotoSteps.INKS.forEachIndexed { i, c ->
+                                    Box(
+                                        Modifier.size(24.dp).background(c, CircleShape)
+                                            .border(if (i == ink) 3.dp else 1.dp, if (i == ink) colors.navigation else colors.text3, CircleShape)
+                                            .clickable { ink = i }.testTag(PhotoEditorTags.color(i)),
+                                    )
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                IconCircle(Glyph.Thin, PhotoEditorTags.THIN, selected = !thick, size = 28) { thick = false }
+                                IconCircle(Glyph.Thick, PhotoEditorTags.THICK, selected = thick, size = 28) { thick = true }
+                                Caption(
+                                    if (tool == Tool.Brush) w.photoBrushAbout else w.photoArrowAbout,
+                                    fontSize = TimaType.sz5,
+                                    color = colors.text2,
+                                    maxLines = 2,
+                                    modifier = Modifier.testTag(PhotoEditorTags.ABOUT),
+                                )
+                            }
+                        } else {
+                            Caption(w.photoCropAbout, fontSize = TimaType.sz5, color = colors.text, maxLines = 3, modifier = Modifier.testTag(PhotoEditorTags.ABOUT))
                         }
                     }
-                    Box(Modifier.weight(1f))
+                    // ✓ — выполнить: нарисованное остаётся, окно закрывается.
                     val ready = if (tool == Tool.Crop) crop != null else pending.isNotEmpty()
-                    Pill(w.photoApply, PhotoEditorTags.APPLY, strong = true, enabled = ready, onClick = ::apply)
-                }
-                if (tool == Tool.Brush || tool == Tool.Arrow) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconCircle(Glyph.Thin, PhotoEditorTags.THIN, selected = !thick, size = 36) { thick = false }
-                        IconCircle(Glyph.Thick, PhotoEditorTags.THICK, selected = thick, size = 36) { thick = true }
+                    IconCircle(Glyph.Apply, PhotoEditorTags.APPLY, selected = ready, enabled = ready, size = 40) {
+                        apply()
+                        tool = Tool.None
                     }
                 }
             }
-        }
-
-        // ── Значки — внизу и на месте ─────────────────────────────────────
-        Row(
-            Modifier.fillMaxWidth().padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            ToolIcon(Glyph.Turn, w.photoRotate, PhotoEditorTags.TURN, selected = false) {
-                choose(Tool.None)
-                tool = Tool.None
-                commit(PhotoStep.Turn)
-            }
-            ToolIcon(Glyph.Crop, w.photoCrop, PhotoEditorTags.CROP, selected = tool == Tool.Crop) { choose(Tool.Crop) }
-            ToolIcon(Glyph.Brush, w.photoBrush, PhotoEditorTags.BRUSH, selected = tool == Tool.Brush) { choose(Tool.Brush) }
-            ToolIcon(Glyph.Arrow, w.photoArrow, PhotoEditorTags.ARROW, selected = tool == Tool.Arrow) { choose(Tool.Arrow) }
         }
     }
 }
+
+/** Наибольшее увеличение в редакторе. */
+private const val EDIT_MAX_SCALE = 5f
 
 /** Рамка обрезки: вне её — притемнено, по углам — ручки. */
 private fun DrawScope.cropFrame(r: Rect, image: Rect, frame: Color, shade: Color, handle: Float) {
@@ -339,7 +391,7 @@ private fun DrawScope.cropFrame(r: Rect, image: Rect, frame: Color, shade: Color
 }
 
 /** Значки редактора и просмотра — рисуются, а не шрифтом: знаков вроде «⟳» в шрифте может не быть. */
-internal enum class Glyph { Turn, Crop, Brush, Arrow, Undo, Redo, Thin, Thick, Edit }
+internal enum class Glyph { Turn, Crop, Brush, Arrow, Undo, Redo, Thin, Thick, Edit, Apply, Close }
 
 @Composable
 private fun ToolIcon(glyph: Glyph, label: String, tag: String, selected: Boolean, onClick: () -> Unit) {
@@ -448,6 +500,14 @@ private fun DrawScope.glyph(g: Glyph, c: Color) {
         }
         Glyph.Thin -> line(p(0.1f, 0.5f), p(0.9f, 0.5f), s * 0.08f)
         Glyph.Thick -> line(p(0.1f, 0.5f), p(0.9f, 0.5f), s * 0.28f)
+        Glyph.Apply -> {
+            line(p(0.1f, 0.55f), p(0.4f, 0.85f))
+            line(p(0.4f, 0.85f), p(0.92f, 0.2f))
+        }
+        Glyph.Close -> {
+            line(p(0.15f, 0.15f), p(0.85f, 0.85f))
+            line(p(0.85f, 0.15f), p(0.15f, 0.85f))
+        }
         Glyph.Edit -> {
             // Карандаш: стержень по диагонали и остриё.
             line(p(0.25f, 0.75f), p(0.85f, 0.15f), s * 0.2f)

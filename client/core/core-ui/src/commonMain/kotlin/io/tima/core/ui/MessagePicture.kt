@@ -15,7 +15,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.github.panpf.sketch.AsyncImage
 import com.github.panpf.sketch.rememberAsyncImageState
+import com.github.panpf.sketch.request.ComposableImageRequest
 import com.github.panpf.sketch.request.ImageResult
+import com.github.panpf.sketch.resize.Precision
 
 /**
  * Картинка внутри сообщения (ПЛАН-(РС) РС4): по адресу загрузчика (`tima-media://…`), место под
@@ -63,13 +65,17 @@ private val MIN_PICTURE = 64.dp
  * Фото вне пузыря в ленте (ADR-0052): само фото, не превью — загрузчик ужимает его под место, это и
  * есть превью получателя. Пока едет — пустое место, размер задаёт [modifier]. Подписи нет: фото,
  * которого уже не будет, лента не показывает вовсе.
+ *
+ * Точность — **ровно размер места** (заказчик 2026-10-22: «превью получше качества, где два и более»):
+ * по умолчанию загрузчик ужимает кратно двум и не больше места по числу точек — квадрат 126 dp из
+ * 1280×960 получал 240 точек на 330 и выглядел мыльным.
  */
 @Composable
 fun PhotoTile(uri: String, modifier: Modifier = Modifier) {
     Box(modifier) {
         val sketch = LocalSketch.current ?: return@Box
         AsyncImage(
-            uri = uri,
+            request = ComposableImageRequest(uri) { precision(Precision.EXACTLY) },
             sketch = sketch,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),

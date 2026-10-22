@@ -3,6 +3,7 @@ package io.tima.feature.chat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -94,6 +95,7 @@ object PhotoTags {
     const val EDIT = "msg:photo.edit"
     const val IMAGE = "msg:photo.image"
     const val WHEN = "msg:photo.when"
+    const val MENU_OUTSIDE = "msg:photo.menu.outside"
     fun item(key: String) = "msg:photo.menu.$key"
 }
 
@@ -145,6 +147,9 @@ fun PhotoViewer(
     var scale by remember(i) { mutableStateOf(1f) }
     var pan by remember(i) { mutableStateOf(Offset.Zero) }
     var area by remember { mutableStateOf(IntSize.Zero) }
+    // Высота кнопок сверху и снизу: увеличенное фото сдвигается до них, а не до края экрана.
+    var topBar by remember { mutableStateOf(0) }
+    var bottomBar by remember { mutableStateOf(0) }
     // Изменённое в этом просмотре — по номеру файла; уходит при закрытии.
     val edited = remember { mutableStateMapOf<String, ImageBitmap>() }
     var editing by remember { mutableStateOf<Pair<PhotoAt, ImageBitmap>?>(null) }
@@ -185,8 +190,10 @@ fun PhotoViewer(
     }
 
     /**
-     * Сдвиг увеличенного фото — не дальше края: край фото не уходит за край экрана, пустого чёрного
-     * поля не видно (заказчик 2026-10-22). По оси, где фото уже экрана, — по центру.
+     * Сдвиг увеличенного фото (заказчик 2026-10-22). По ширине — не дальше края экрана. По высоте — до
+     * кнопок: верх фото можно опустить до низа верхних кнопок, низ — поднять до верха нижних, чтобы
+     * кнопки не закрывали фото; между ними и краем экрана тогда видно чёрное. Фото ниже этой полосы —
+     * по её середине.
      */
     fun limited(p: Offset, s: Float): Offset {
         val bmp = edited[photo.media.mediaId]
@@ -198,8 +205,15 @@ fun PhotoViewer(
         val dw = minOf(aw, ah * aspect)
         val dh = dw / aspect
         val mx = maxOf(0f, (s * dw - area.width) / 2)
-        val my = maxOf(0f, (s * dh - area.height) / 2)
-        return Offset(p.x.coerceIn(-mx, mx), p.y.coerceIn(-my, my))
+        val ih = s * dh
+        val half = area.height / 2f
+        val band = area.height - topBar - bottomBar
+        val y = if (ih <= band) {
+            (topBar - bottomBar) / 2f
+        } else {
+            p.y.coerceIn(half - bottomBar - ih / 2, topBar - half + ih / 2)
+        }
+        return Offset(p.x.coerceIn(-mx, mx), y)
     }
 
     fun changed(p: PhotoAt, bmp: ImageBitmap) {
@@ -301,7 +315,7 @@ fun PhotoViewer(
             }
         }
         Row(
-            Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(12.dp),
+            Modifier.fillMaxWidth().align(Alignment.TopCenter).onSizeChanged { topBar = it.height }.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SolidButton("≡", PhotoTags.MENU) { menu = !menu; info = false }
@@ -327,6 +341,12 @@ fun PhotoViewer(
             Box(Modifier.align(Alignment.CenterEnd).padding(12.dp)) { SolidButton("›", PhotoTags.NEXT) { go(i + 1) } }
         }
         if (menu) {
+            // Нажатие мимо меню — закрыть его (заказчик 2026-10-22).
+            Box(
+                Modifier.fillMaxSize()
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { menu = false }
+                    .testTag(PhotoTags.MENU_OUTSIDE),
+            )
             val mine = edited[photo.media.mediaId]
             Column(
                 Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 72.dp).widthIn(min = 220.dp, max = 300.dp)
@@ -355,7 +375,7 @@ fun PhotoViewer(
             else -> emptyList()
         }
         Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp),
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { bottomBar = it.height }.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Внизу: слева «Повернуть», справа «Изменить», между ними — «3 из 12» (заказчик 2026-10-22).
