@@ -26,13 +26,15 @@ actual fun decodeImage(bytes: ByteArray): ImageBitmap? = try {
     null
 }
 
-actual fun decodeImage(bytes: ByteArray, atLeast: Int): ImageBitmap? = try {
+actual fun decodeImage(bytes: ByteArray, atLeast: Int): ImageBitmap? = decodeImage(bytes, atLeast, MAX_SIDE)
+
+actual fun decodeImage(bytes: ByteArray, atLeast: Int, maxSide: Int): ImageBitmap? = try {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
     var sample = 1
     // Уменьшаем, пока и после следующего уменьшения обе стороны не меньше нужного.
     while (bounds.outWidth / (sample * 2) >= atLeast && bounds.outHeight / (sample * 2) >= atLeast) sample *= 2
-    while (bounds.outWidth / sample > MAX_SIDE || bounds.outHeight / sample > MAX_SIDE) sample *= 2
+    while (bounds.outWidth / sample > maxSide || bounds.outHeight / sample > maxSide) sample *= 2
     val options = BitmapFactory.Options().apply { inSampleSize = sample }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
         ?.let { upright(it, bytes) }

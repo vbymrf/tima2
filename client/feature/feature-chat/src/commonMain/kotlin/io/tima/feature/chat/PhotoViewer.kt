@@ -47,7 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.tima.core.media.PhotoSteps
+import io.tima.core.media.PhotoLayers
 import io.tima.core.media.mediaUri
 import io.tima.core.ui.Caption
 import io.tima.core.ui.MessagePicture
@@ -412,7 +412,7 @@ fun PhotoViewer(
             // Внизу: слева «Повернуть», справа «Изменить», между ними — «3 из 12» (заказчик 2026-10-22).
             Row(Modifier.fillMaxWidth().onGloballyPositioned { buttonsBottom = it.positionInRoot().y }, verticalAlignment = Alignment.CenterVertically) {
                 if (actions.load != null) {
-                    SolidLabel(w.photoRotate, PhotoTags.ROTATE) { withCurrent(photo) { turned(photo, PhotoSteps.turn(it)) } }
+                    SolidLabel(w.photoRotate, PhotoTags.ROTATE) { withCurrent(photo) { turned(photo, PhotoLayers.turn(it)) } }
                 }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     if (photos.size > 1) {
@@ -463,7 +463,8 @@ fun PhotoViewer(
         editing?.let { (p, source) ->
             PhotoEditor(
                 source = source,
-                onSave = { result -> editing = null; saved(p, result) },
+                // Правка отправленного сводится на том, что есть, — пришедшем фото (исходника здесь нет).
+                onSave = { marks -> editing = null; saved(p, PhotoLayers.render(source, marks)) },
                 onCancel = { editing = null },
             )
         }

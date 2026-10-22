@@ -4910,13 +4910,13 @@ private fun Chat(
     var askTrouble by remember { mutableStateOf<String?>(null) }
     // Одно фото — сначала в редактор фото, его «Отправить» и шлёт; «Отмена» — не отправлять (заказчик
     // 2026-10-22). Несколько — уходят сразу, как прежде. Не раскодировалось — уходит как есть: решает отправка.
-    var sendDraft by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var sendDraft by remember { mutableStateOf<SendDraft?>(null) }
     fun sendOne(bytes: ByteArray, mime: String) {
         scope.launch {
             val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                 io.tima.core.media.decodeImage(bytes, atLeast = io.tima.core.media.PhotoPrep.FULL_SIDE)
             }
-            if (bmp != null) sendDraft = bmp else store.sendPhotos(listOf(bytes to mime))
+            if (bmp != null) sendDraft = SendDraft(bytes, mime, bmp) else store.sendPhotos(listOf(bytes to mime))
         }
     }
     val photosPicker = io.tima.core.media.rememberPhotosPicker(io.tima.domain.chat.SendAttachments.MAX_PHOTOS) { list ->
@@ -5292,14 +5292,16 @@ private fun Chat(
     // Меню сообщения — после экрана, как и лист неотправленного: что позже, то сверху.
     sendDraft?.let { draft ->
         io.tima.feature.chat.PhotoEditor(
-            source = draft,
+            source = draft.preview,
             saveLabel = photoWords.photoSend,
-            onSave = { result ->
+            onSave = { marks ->
                 sendDraft = null
-                Journal.note(LogCode.FILE_SEND, "одно фото через редактор", "точек" to "${result.width}x${result.height}")
-                scope.launch {
-                    val jpeg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.encodeJpeg(result, 95) }
-                    store.sendPhotos(listOf(jpeg to "image/jpeg"))
+                if (marks.isEmpty) {
+                    // Ничего не меняли — уходит исходник обычным путём.
+                    Journal.note(LogCode.FILE_SEND, "одно фото через редактор — без изменений")
+                    store.sendPhotos(listOf(draft.bytes to draft.mime))
+                } else {
+                    store.sendPhotoMade { side -> madePhoto(draft, marks, side) }
                 }
             },
             onCancel = {
@@ -7857,3 +7859,36 @@ internal fun photoRefusal(line: ChatLine, edit: io.tima.domain.chat.EditMessage,
         else -> PhotoRefusal.NotSent
     }
 }
+
+/** Одно фото перед отправкой: исходные байты и уменьшенная копия для редактора. */
+internal class SendDraft(val bytes: ByteArray, val mime: String, val preview: androidx.compose.ui.graphics.ImageBitmap)
+
+/**
+ * Свести правку одного фото на исходнике (ADR-0052, заказчик 2026-10-22: «делаем обработку в редакторе…
+ * а потом при нажатии кнопки масштабируем до 1280»). Исходник читается заново таким, чтобы видимое после
+ * рамки было не меньше [side], но не больше 4096 по стороне — потолок памяти; не прочиталось или не
+ * хватило памяти — сводится на копии редактора.
+ */
+internal fun madePhoto(draft: SendDraft, marks: io.tima.core.media.PhotoMarks, side: Int): io.tima.core.media.PhotoPrep.Prepared? {
+    val preview = draft.preview
+    val visible = io.tima.core.media.PhotoLayers.outSize(preview.width, preview.height, marks)
+    val need = side.toFloat() / maxOf(visible.width, visible.height)
+    val source = if (need <= 1f) {
+        preview
+    } else {
+        val atLeast = kotlin.math.ceil(minOf(preview.width, preview.height) * need).toInt()
+        runCatching { io.tima.core.media.decodeImage(draft.bytes, atLeast = atLeast, maxSide = MADE_MAX_SIDE) }.getOrNull() ?: preview
+    }
+    val made = runCatching { io.tima.core.media.PhotoLayers.render(source, marks) }.getOrNull()
+        ?: runCatching { io.tima.core.media.PhotoLayers.render(preview, marks) }.getOrNull()
+        ?: return null
+    Journal.note(
+        LogCode.FILE_SEND, "одно фото через редактор — сведено",
+        "исходник" to "${source.width}x${source.height}", "итог" to "${made.width}x${made.height}",
+    )
+    return io.tima.core.media.PhotoPrep.fit(made, side)
+}
+
+/** Потолок стороны исходника при сведении: 4096×3072 — около 50 МБ в памяти, один раз. */
+private const val MADE_MAX_SIDE = 4096
+

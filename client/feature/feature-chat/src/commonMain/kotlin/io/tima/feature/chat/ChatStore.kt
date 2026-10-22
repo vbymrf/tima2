@@ -834,6 +834,27 @@ class ChatStore(
         }
     }
 
+    /**
+     * Одно фото после редактора (ADR-0052, заказчик 2026-10-22): [make] сводит слои на исходнике и
+     * уменьшает до стороны из правил сервера — её он и получает. `null` — свести не вышло.
+     */
+    fun sendPhotoMade(make: suspend (side: Int) -> PhotoPrep.Prepared?) {
+        val port = attach ?: return
+        _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.sending))
+        scope.launch {
+            val rules = withContext(io) { port.rules() }
+            val ready = withContext(io) { make(rules.photoSide) }
+            if (ready == null) {
+                attachResult(AttachResult.Refused("nothing"))
+                return@launch
+            }
+            val result = withContext(io) {
+                port.photos(chatId, _state.value.level, peerId, listOf(SendAttachments.Photo(ready.full, ready.width, ready.height)))
+            }
+            attachResult(result)
+        }
+    }
+
     /** Файл почтальоном (личная переписка): запреты и предупреждения — по имени (Решения §6). */
     fun sendFile(bytes: ByteArray, mime: String, name: String) {
         val port = attach ?: return

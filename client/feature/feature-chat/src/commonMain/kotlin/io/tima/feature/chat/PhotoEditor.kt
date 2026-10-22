@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -52,8 +53,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import io.tima.core.media.PhotoStep
-import io.tima.core.media.PhotoSteps
+import io.tima.core.media.PhotoLayers
+import io.tima.core.media.PhotoMark
+import io.tima.core.media.PhotoMarks
+import io.tima.core.media.drawPhotoLayers
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaType
@@ -92,7 +95,7 @@ object PhotoEditorTags {
 
 private enum class Tool { None, Crop, Brush, Arrow }
 
-/** Толщина — доля большей стороны картинки. */
+/** Толщина — доля большей стороны того, что видно (повёрнутого и обрезанного фото). */
 private const val THIN = 0.006f
 private const val THICK = 0.016f
 
@@ -114,12 +117,35 @@ private const val GLASS_ALPHA = 0.4f
 private const val MIN_CROP = 0.05f
 
 /**
+ * Действие редактора — то, что снимают «Отменить» и возвращают «Повторить». Сами действия ничего не
+ * впечатывают в фото: из них собирается [PhotoMarks] — поворот, рамка и слой отметок.
+ */
+private sealed interface Act {
+    data object Turn : Act
+    /** Новая рамка в долях исходного фото; `null` — без рамки. */
+    data class Cut(val rect: Rect?) : Act
+    data class Mark(val mark: PhotoMark) : Act
+}
+
+private fun marksOf(acts: List<Act>): PhotoMarks = PhotoMarks(
+    turns = acts.count { it == Act.Turn },
+    crop = acts.filterIsInstance<Act.Cut>().lastOrNull()?.rect,
+    marks = acts.filterIsInstance<Act.Mark>().map { it.mark },
+)
+
+/**
  * Редактор фото (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ6; вид — правки того же дня).
+ *
+ * **Слоями** (заказчик 2026-10-22: «наложить сверху наши рисования, как в фотошопе слои… и далее
+ * обработка в конце»): фото не трогается; поворот и рамка — для всей стопки, кисть и стрелка — свой слой
+ * поверх, в долях исходного фото. Экран показывает стопку на уменьшенной копии; итог сводит вызывающий
+ * ([PhotoLayers.render]) — на исходнике нужного размера. Рамку можно поправить и после рисования:
+ * рисунки на своём слое не теряются.
  *
  * - **Внизу закреплены значки**: «Повернуть», «Обрезать», «Кисть», «Стрелка». Выбран инструмент —
  *   его окно встаёт **поверх** ряда вместе с подписями и не больше его: «✕» слева (закрыть,
- *   невыполненное пропадает), посередине — цвета и толщина (кисть, стрелка; без текста) или пояснение
- *   (обрезка), галочка справа — выполнить.
+ *   невыполненное пропадает), посередине — цвета и перья (кисть, стрелка) или пояснение (обрезка),
+ *   галочка справа — выполнить.
  * - «Повернуть» — сразу, без подтверждения. Обрезка, кисть, стрелка — нарисовал, галочка — осталось;
  *   не выполнено — при «✕» и смене инструмента пропадает. «Сохранить» выполняет и несохранённое.
  * - **Масштаб**: двумя пальцами — увеличить и сдвинуть; одним без инструмента — сдвинуть увеличенное;
@@ -127,15 +153,13 @@ private const val MIN_CROP = 0.05f
  * - Сверху — «Отмена», «Отменить», «Повторить», «Сохранить».
  * - Кисть и стрелку можно начинать **за краем фото**: при выбранном инструменте вокруг фото поле в
  *   36 dp, входящее в область рисования, — палец ложится туда, след идёт по фото. Рамку обрезки рисуют,
- *   а потом тянут за любой угол; за угол у края фото удобно браться с того же поля.
+ *   а потом тянут за любой угол; при обрезке видно всё фото, прежняя рамка — на месте.
  * - Закрытия смахиванием нет.
- *
- * Отправляет не редактор, а просмотр, когда его закроют. Прежних состояний после «Сохранить» нет.
  */
 @Composable
 fun PhotoEditor(
     source: ImageBitmap,
-    onSave: (ImageBitmap) -> Unit,
+    onSave: (PhotoMarks) -> Unit,
     onCancel: () -> Unit,
     /**
      * Надпись главной кнопки: «Сохранить» у правки отправленного, «Отправить» — у одного фото перед
@@ -145,30 +169,36 @@ fun PhotoEditor(
 ) {
     val colors = Tima.colors
     val w = Tima.words.chat
-    val steps = remember(source) { mutableStateListOf<PhotoStep>() }
-    val undone = remember(source) { mutableStateListOf<PhotoStep>() }
+    val acts = remember(source) { mutableStateListOf<Act>() }
+    val undone = remember(source) { mutableStateListOf<Act>() }
     var tool by remember { mutableStateOf(Tool.None) }
     var ink by remember { mutableStateOf(0) }
     var nib by remember { mutableStateOf(Nib.Thin) }
     /** Перо инструмента: стрелка полупрозрачной не бывает — берёт сплошное той же толщины. */
     fun nibOf(t: Tool) = if (t == Tool.Arrow && nib.glass) Nib.Thick else nib
-    fun brushInk() = PhotoSteps.INKS[ink].let { if (nib.glass) it.copy(alpha = GLASS_ALPHA) else it }
-    // Нарисованное, но не выполненное: следы кисти и стрелки, рамка обрезки — в долях картинки.
-    val pending = remember { mutableStateListOf<PhotoStep>() }
+    fun brushInk() = PhotoLayers.INKS[ink].let { if (nib.glass) it.copy(alpha = GLASS_ALPHA) else it }
+    // Нарисованное, но не выполненное: следы кисти и стрелки — в долях фото; рамка обрезки — в долях
+    // повёрнутого фото целиком (при обрезке оно видно без прежней рамки).
+    val pending = remember { mutableStateListOf<PhotoMark>() }
     var crop by remember { mutableStateOf<Rect?>(null) }
-    // Ведомое пальцем прямо сейчас.
+    // Ведомое пальцем прямо сейчас — в долях видимого.
     val live = remember { mutableStateListOf<Offset>() }
-    val image = remember(source, steps.size) { PhotoSteps.apply(source, steps.toList()) }
-    val drawn = remember(image, pending.size) { PhotoSteps.apply(image, pending.toList()) }
+    val marks = marksOf(acts)
+    // При обрезке видно всё (повёрнутое) фото: рамку ставят заново или правят прежнюю.
+    val shownMarks = if (tool == Tool.Crop) marks.copy(crop = null) else marks
+    val out = PhotoLayers.outSize(source.width, source.height, shownMarks)
 
-    fun commit(step: PhotoStep) {
-        steps.add(step)
+    fun commit(act: Act) {
+        acts.add(act)
         undone.clear()
     }
     fun apply() {
         when (tool) {
-            Tool.Crop -> crop?.let { commit(PhotoStep.Crop(it.left, it.top, it.right, it.bottom)) }
-            Tool.Brush, Tool.Arrow -> pending.toList().forEach(::commit)
+            Tool.Crop -> crop?.let { r ->
+                val rect = PhotoLayers.unrotate(r, marks.quarter)
+                if (rect != marks.crop) commit(Act.Cut(rect))
+            }
+            Tool.Brush, Tool.Arrow -> pending.toList().forEach { commit(Act.Mark(it)) }
             Tool.None -> Unit
         }
         pending.clear()
@@ -177,20 +207,20 @@ fun PhotoEditor(
     fun choose(next: Tool) {
         // Не выполненное пропадает: «нарисовал, нажал „Выполнить“ — осталось».
         pending.clear()
-        crop = null
         tool = if (tool == next) Tool.None else next
+        // Обрезка начинается с прежней рамки — её можно поправить.
+        crop = if (tool == Tool.Crop) marks.crop?.let { PhotoLayers.rotate(it, marks.quarter) } else null
     }
     fun undo() {
         when {
             pending.isNotEmpty() -> pending.removeAt(pending.lastIndex)
-            crop != null -> crop = null
-            steps.isNotEmpty() -> undone.add(steps.removeAt(steps.lastIndex))
+            acts.isNotEmpty() -> undone.add(acts.removeAt(acts.lastIndex))
         }
     }
     fun redo() {
-        if (undone.isNotEmpty()) steps.add(undone.removeAt(undone.lastIndex))
+        if (undone.isNotEmpty()) acts.add(undone.removeAt(undone.lastIndex))
     }
-    val canUndo = pending.isNotEmpty() || crop != null || steps.isNotEmpty()
+    val canUndo = pending.isNotEmpty() || acts.isNotEmpty()
 
     // Масштаб картинки в редакторе (заказчик 2026-10-22): двумя пальцами — увеличить и сдвинуть; одним —
     // рисовать (инструмент выбран) или сдвигать увеличенное (не выбран).
@@ -218,7 +248,7 @@ fun PhotoEditor(
             Box(Modifier.weight(1f))
             Pill(saveLabel ?: w.photoSave, PhotoEditorTags.SAVE, strong = true) {
                 apply()
-                onSave(PhotoSteps.apply(source, steps.toList()))
+                onSave(marksOf(acts))
             }
         }
 
@@ -232,9 +262,9 @@ fun PhotoEditor(
             // начать за краем фото, но внутри области рисования — без спора с жестом «Назад» у края экрана.
             // Поле входит в область рисования; без инструмента фото прежнего размера.
             val margin = if (tool == Tool.None) 0f else with(density) { EDGE_ROOM.toPx() }
-            val k = min((boxW - 2 * margin) / drawn.width, (boxH - 2 * margin) / drawn.height)
-            val shownW = drawn.width * k
-            val shownH = drawn.height * k
+            val k = min((boxW - 2 * margin) / out.width, (boxH - 2 * margin) / out.height)
+            val shownW = out.width * k
+            val shownH = out.height * k
             val left = (boxW - shownW) / 2
             val top = (boxH - shownH) / 2
             val center = Offset(boxW / 2, boxH / 2)
@@ -249,14 +279,18 @@ fun PhotoEditor(
             }
             // Поле появилось или пропало — сдвиг в новых границах.
             LaunchedEffect(margin) { pan = if (scale > 1f) limited(pan, scale) else Offset.Zero }
-            /** Точка экрана → место на неувеличенной картинке → доли картинки. */
+            /** Точка экрана → место на неувеличенной картинке → доли видимого. */
             fun share(p: Offset): Offset {
                 val base = (p - center - pan) / scale + center
                 return Offset((base.x - left) / shownW, (base.y - top) / shownH)
             }
             fun clamped(p: Offset) = Offset(p.x.coerceIn(0f, 1f), p.y.coerceIn(0f, 1f))
+            /** Доля видимого → доля фото: туда ложится отметка. */
+            fun photo(q: Offset) = PhotoLayers.toPhoto(q, shownMarks.quarter, shownMarks.crop)
+            /** Толщина пера в долях фото: перо выбрано по видимому, хранится по фото. */
+            fun widthOnPhoto(t: Tool) = nibOf(t).width * max(out.width, out.height) / max(source.width, source.height)
             Box(
-                Modifier.fillMaxSize().pointerInput(tool, ink, nib, shownW, shownH) {
+                Modifier.fillMaxSize().pointerInput(tool, ink, nib, shownW, shownH, shownMarks) {
                     // Двойное нажатие — при любом инструменте (заказчик 2026-10-22): увеличенное — к исходному,
                     // исходное — увеличить к месту нажатия. Короткое быстрое касание — нажатие, а не след:
                     // оно ничего не рисует, иначе двойное оставляло бы точки.
@@ -332,7 +366,7 @@ fun PhotoEditor(
                         }
                         lastTapUp = 0L
                         if (twoFingers || corner >= 0 || tool == Tool.None) return@awaitEachGesture
-                        val width = nibOf(tool).width
+                        val width = widthOnPhoto(tool)
                         when (tool) {
                             Tool.Crop -> if (pts.size > 1) {
                                 val a = clamped(pts.first())
@@ -341,8 +375,8 @@ fun PhotoEditor(
                                     crop = Rect(min(a.x, b.x), min(a.y, b.y), max(a.x, b.x), max(a.y, b.y))
                                 }
                             }
-                            Tool.Brush -> pending.add(PhotoStep.Brush(pts, brushInk(), width))
-                            Tool.Arrow -> if (pts.size > 1) pending.add(PhotoStep.Arrow(pts.first(), pts.last(), PhotoSteps.INKS[ink], width))
+                            Tool.Brush -> pending.add(PhotoMark.Brush(pts.map(::photo), brushInk(), width))
+                            Tool.Arrow -> if (pts.size > 1) pending.add(PhotoMark.Arrow(photo(pts.first()), photo(pts.last()), PhotoLayers.INKS[ink], width))
                             Tool.None -> Unit
                         }
                     }
@@ -350,13 +384,14 @@ fun PhotoEditor(
             ) {
                 // Картинка и рисуемое поверх — в одном слое: масштаб и сдвиг у них общие.
                 Box(Modifier.fillMaxSize().graphicsLayer(scaleX = scale, scaleY = scale, translationX = pan.x, translationY = pan.y)) {
-                    Image(
-                        drawn,
-                        contentDescription = null,
-                        modifier = Modifier.offset { IntOffset(left.roundToInt(), top.roundToInt()) }
+                    // Стопка: фото, рамка, поворот, отметки — то же, что сведётся в итог, только мельче.
+                    Canvas(
+                        Modifier.offset { IntOffset(left.roundToInt(), top.roundToInt()) }
                             .size(with(density) { shownW.toDp() }, with(density) { shownH.toDp() })
                             .testTag(PhotoEditorTags.IMAGE),
-                    )
+                    ) {
+                        scale(k, k, pivot = Offset.Zero) { drawPhotoLayers(source, shownMarks, pending.toList()) }
+                    }
                     val frame = colors.navigation
                     val shade = colors.viewer.copy(alpha = 0.6f)
                     Canvas(Modifier.fillMaxSize()) {
@@ -376,7 +411,7 @@ fun PhotoEditor(
                                 pts.forEachIndexed { i, p -> if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y) }
                                 drawPath(path, brushInk(), style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
                             }
-                            Tool.Arrow -> if (pts.size > 1) drawLine(PhotoSteps.INKS[ink], pts.first(), pts.last(), stroke, StrokeCap.Round)
+                            Tool.Arrow -> if (pts.size > 1) drawLine(PhotoLayers.INKS[ink], pts.first(), pts.last(), stroke, StrokeCap.Round)
                             Tool.None -> Unit
                         }
                     }
@@ -396,7 +431,7 @@ fun PhotoEditor(
                 ToolIcon(Glyph.Turn, w.photoRotate, PhotoEditorTags.TURN, selected = false, enabled = iconsOn) {
                     choose(Tool.None)
                     tool = Tool.None
-                    commit(PhotoStep.Turn)
+                    commit(Act.Turn)
                 }
                 ToolIcon(Glyph.Crop, w.photoCrop, PhotoEditorTags.CROP, selected = tool == Tool.Crop, enabled = iconsOn) { choose(Tool.Crop) }
                 ToolIcon(Glyph.Brush, w.photoBrush, PhotoEditorTags.BRUSH, selected = tool == Tool.Brush, enabled = iconsOn) { choose(Tool.Brush) }
@@ -419,7 +454,7 @@ fun PhotoEditor(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (tool == Tool.Brush || tool == Tool.Arrow) {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                PhotoSteps.INKS.forEachIndexed { i, c ->
+                                PhotoLayers.INKS.forEachIndexed { i, c ->
                                     Box(
                                         Modifier.size(24.dp).background(c, CircleShape)
                                             .border(if (i == ink) 3.dp else 1.dp, if (i == ink) colors.navigation else colors.text3, CircleShape)

@@ -14,6 +14,8 @@ actual fun decodeImage(bytes: ByteArray): ImageBitmap? = try {
 
 actual fun decodeImage(bytes: ByteArray, atLeast: Int): ImageBitmap? = decodeImage(bytes)
 
+actual fun decodeImage(bytes: ByteArray, atLeast: Int, maxSide: Int): ImageBitmap? = decodeImage(bytes)
+
 actual fun encodeJpeg(image: ImageBitmap, quality: Int): ByteArray {
     val data = Image.makeFromBitmap(image.asSkiaBitmap()).encodeToData(EncodedImageFormat.JPEG, quality)
     return requireNotNull(data) { "Skia не закодировала JPEG" }.bytes

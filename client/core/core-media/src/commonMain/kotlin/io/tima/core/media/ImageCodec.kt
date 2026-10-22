@@ -14,6 +14,13 @@ expect fun decodeImage(bytes: ByteArray): ImageBitmap?
 expect fun decodeImage(bytes: ByteArray, atLeast: Int): ImageBitmap?
 
 /**
+ * Раскодировать для сведения правки фото (ADR-0052): стороны не меньше [atLeast], большая — не больше
+ * [maxSide]. Обычный [decodeImage] упирается в 2048 — вырезанный кусок снимка тогда вышел бы мельче 1280.
+ * Где уменьшать при чтении нечем (ПК), — как [decodeImage].
+ */
+expect fun decodeImage(bytes: ByteArray, atLeast: Int, maxSide: Int): ImageBitmap?
+
+/**
  * Закодировать в JPEG.
  *
  * JPEG, а не PNG: аватар — фотография, и PNG весил бы в разы больше без выигрыша.
