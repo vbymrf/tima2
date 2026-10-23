@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -341,6 +342,33 @@ internal fun speedName(speed: Float) = when (speed) {
     else -> "1×"
 }
 
+/**
+ * Полоса «сейчас играет» (ПЛАН-(ВМ) Р22): «Аудио» или «Поток» играет — над любым окном приложения,
+ * и в переписке, и на списке чатов: ▶/⏸, описание, ✕ — остановить.
+ */
+@Composable
+fun NowPlayingBar(hub: AudioHub?) {
+    hub ?: return
+    val now by hub.now.collectAsState()
+    val n = now ?: return
+    val colors = Tima.colors
+    Row(
+        // Над окном, под строкой состояния телефона.
+        Modifier.fillMaxWidth().background(colors.softAccent).statusBarsPadding().padding(horizontal = 12.dp, vertical = 4.dp).testTag("media:now"),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Caption(
+            if (n.playing) "❚❚" else "▶", fontSize = 16.sp, color = colors.navigation,
+            modifier = Modifier.clickable { hub.toggle(AudioItem(n.url, hub.description, n.durationMs, n.live), hub.queueNow) }.padding(4.dp),
+        )
+        Caption(hub.description.ifBlank { MediaLinks.fileName(n.url) }, fontSize = TimaType.sz5, weight = FontWeight.SemiBold, lineOne = true, modifier = Modifier.weight(1f))
+        if (n.live && n.playing) Caption(Tima.words.chat.playerLive, fontSize = TimaType.sz5, color = colors.alarm)
+        else if (!n.live) Tertiary(voiceTime(n.positionMs), lineOne = true)
+        Caption("✕", fontSize = 16.sp, modifier = Modifier.clickable { hub.close() }.padding(4.dp).testTag("media:now.close"))
+    }
+}
+
 /** Звук по ссылке — что играть: адрес, описание, длительность, эфир ли. */
 data class AudioItem(val url: String, val description: String, val durationMs: Long, val live: Boolean)
 
@@ -378,6 +406,12 @@ class AudioHub(private val scope: CoroutineScope, private val player: OwnPlayer)
 
     private var item: AudioItem? = null
     private var queue: List<AudioItem> = emptyList()
+
+    /** Описание играющего — для полосы «сейчас играет». */
+    val description: String get() = item?.description.orEmpty()
+
+    /** Очередь играющего — для ▶ на полосе. */
+    val queueNow: List<AudioItem> get() = queue
     private var watch: Job? = null
     private var listenedFrom: kotlin.time.TimeMark? = null
     private var speed = 1f
@@ -450,6 +484,14 @@ class AudioHub(private val scope: CoroutineScope, private val player: OwnPlayer)
         if (item != null && player.state.value.playing) player.pause()
     }
 
+    /** Закрыть «сейчас играет»: остановить и забыть, служба фона — не нужна. */
+    fun close() {
+        player.pause()
+        item = null
+        _now.value = null
+        io.tima.core.media.keepPlaying(player, false)
+    }
+
     private fun start(next: AudioItem, all: List<AudioItem>, fromMs: Long) {
         onStart?.invoke()
         item = next
@@ -458,13 +500,15 @@ class AudioHub(private val scope: CoroutineScope, private val player: OwnPlayer)
         _now.value = AudioNow(next.url, durationMs = next.durationMs, live = next.live, speed = speed)
         player.open(next.url, fromMs)
         if (!next.live) player.setSpeed(speed) else player.setSpeed(1f)
+        // Звук и после ухода из переписки, при погашенном экране (Р22).
+        io.tima.core.media.keepPlaying(player, true)
         onEvent?.invoke(PlayerEvent.OPENED, MediaLinks.hostOf(next.url).orEmpty())
     }
 
     /** Кончилось — следующее «Аудио» этого сообщения (Р28); после последнего — стоп. */
     private fun advance(done: AudioItem) {
         val at = queue.indexOfFirst { it.url == done.url }
-        val next = queue.getOrNull(at + 1) ?: return
+        val next = queue.getOrNull(at + 1) ?: return io.tima.core.media.keepPlaying(player, false)
         if (at < 0) return
         start(next, queue, 0)
     }

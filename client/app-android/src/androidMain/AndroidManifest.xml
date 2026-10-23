@@ -99,6 +99,8 @@
       Play своим APK (ADR-0022).
     -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- «Аудио» и «Поток» в фоне и при погашенном экране, уведомление ▶/⏸ (ПЛАН-(ВМ) Р22). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <!--
       Поднять канал после включения телефона (У3). Без этого «уведомления работают»
@@ -299,6 +301,17 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- Звук «Аудио» и «Потока» в фоне (ПЛАН-(ВМ) Р22): служба Media3 с уведомлением ▶/⏸.
+             Открыта для системы — к ней подключается системный пульт звука. -->
+        <service
+            android:name="io.tima.core.media.PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
 
         <service
             android:name="io.tima.core.call.CallService"

@@ -45,6 +45,8 @@ kotlin {
             implementation(libs.media3.exoplayer)
             implementation(libs.media3.exoplayer.hls)
             implementation(libs.media3.ui)
+            // Звук в фоне с уведомлением ▶/⏸ (ПЛАН-(ВМ) Р22).
+            implementation(libs.media3.session)
             // Браузерный движок, YouTube (ПЛАН-(ВМ) Р14).
             implementation(libs.android.youtube.player)
         }

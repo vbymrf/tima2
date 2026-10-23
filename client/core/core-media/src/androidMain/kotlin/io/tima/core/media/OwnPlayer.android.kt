@@ -30,7 +30,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** Свой движок на Android — Media3 ExoPlayer (ПЛАН-(ВМ) ВМ5): файлы, HLS, скорость с тоном. */
-private class ExoOwnPlayer(context: Context) : OwnPlayer {
+internal class ExoOwnPlayer(val context: Context) : OwnPlayer {
     // Заголовок браузера — тот же, что у запроса страницы VK: её ссылка на поток помнит браузер (ВМ8).
     val exo: ExoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(

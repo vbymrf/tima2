@@ -485,6 +485,10 @@ fun Root(
             if (what == io.tima.feature.chat.PlayerEvent.OPENED) audioHub?.stop()
             Journal.note(LogCode.PLAYER, playerWord(what), "подробно" to detail)
         }) {
+        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize()) {
+        // «Сейчас играет» — над любым окном, пока звучит «Аудио» или «Поток» (ПЛАН-(ВМ) Р22).
+        io.tima.feature.chat.NowPlayingBar(audioHub)
+        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.weight(1f)) {
         Inside(
             entry = entry,
             callEngine = callEngine,
@@ -518,6 +522,8 @@ fun Root(
                 }
             },
         )
+        }
+        }
         }
       }
     }
