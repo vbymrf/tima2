@@ -443,6 +443,23 @@ fun Root(
           }
       }
       val mediaCards = remember { io.tima.core.network.LinkCardsOverHttp() }
+      // Окно проигрывания (ПЛАН-(ВМ) §3.3, §3.4): поток Rutube и VK для своего движка; движок, с которым
+      // видео пошло, — по сайту, пока работает приложение.
+      val mediaResolve = remember { io.tima.core.network.MediaResolveOverHttp() }
+      val engineBySite = remember { mutableMapOf<String, io.tima.feature.chat.PlayerEngine>() }
+      val playerPorts = remember {
+          io.tima.feature.chat.PlayerPorts(
+              resolve = { kind, url ->
+                  when (kind) {
+                      io.tima.domain.chat.MediaLinks.Kind.RUTUBE -> io.tima.domain.chat.MediaLinks.rutubeId(url)?.let { mediaResolve.rutube(it) }
+                      io.tima.domain.chat.MediaLinks.Kind.VK_VIDEO -> io.tima.domain.chat.MediaLinks.vkVideo(url)?.let { (oid, id) -> mediaResolve.vk(oid, id, io.tima.domain.chat.MediaLinks.vkHash(url)) }
+                      else -> null
+                  }
+              },
+              remembered = { host -> engineBySite[host] },
+              remember = { host, engine -> engineBySite[host] = engine },
+          )
+      }
       val mediaCardMemo = remember { mutableMapOf<String, io.tima.feature.chat.MediaCard?>() }
       val mediaActions = remember(audioHub) {
           io.tima.feature.chat.MediaActions(
@@ -463,7 +480,7 @@ fun Root(
           io.tima.feature.chat.LocalMediaActions provides mediaActions,
       ) {
         // Ссылки из сообщений — через окно «Перейти по ссылке?» с доменом (заказчик 2026-10-19): одно на приложение.
-        io.tima.feature.chat.LinkGate(onPlayer = { what, detail ->
+        io.tima.feature.chat.LinkGate(playerPorts = playerPorts, onPlayer = { what, detail ->
             // Окно видео открылось — звук в сообщениях встаёт на паузу: играет что-то одно.
             if (what == io.tima.feature.chat.PlayerEvent.OPENED) audioHub?.stop()
             Journal.note(LogCode.PLAYER, playerWord(what), "подробно" to detail)
@@ -8092,6 +8109,7 @@ private fun playerWord(e: io.tima.feature.chat.PlayerEvent): String = when (e) {
     io.tima.feature.chat.PlayerEvent.STARTED -> "пошло"
     io.tima.feature.chat.PlayerEvent.FAILED -> "движок не смог"
     io.tima.feature.chat.PlayerEvent.TIMEOUT -> "сторож: ни кадра, ни звука за 15 с"
+    io.tima.feature.chat.PlayerEvent.SWITCHED -> "сменён движок"
     io.tima.feature.chat.PlayerEvent.TO_BROWSER -> "в браузер"
 }
 

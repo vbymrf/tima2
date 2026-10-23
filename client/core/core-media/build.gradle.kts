@@ -45,9 +45,14 @@ kotlin {
             implementation(libs.media3.exoplayer)
             implementation(libs.media3.exoplayer.hls)
             implementation(libs.media3.ui)
+            // Браузерный движок, YouTube (ПЛАН-(ВМ) Р14).
+            implementation(libs.android.youtube.player)
         }
         jvmMain.dependencies {
             implementation(libs.concentus)
+            // WebView2 по COM (ПЛАН-(ВМ) Р15): вызовы и окна Windows.
+            implementation(libs.jna)
+            implementation(libs.jna.platform)
             // Только мост к Media Foundation и его DLL — без транзитивных (см. libs.versions.toml).
             implementation(libs.composemediaplayer.jvm.get().let { "${it.module}:${it.versionConstraint.requiredVersion}" }) {
                 isTransitive = false

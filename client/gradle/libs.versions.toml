@@ -49,6 +49,9 @@ concentus = "1.0.2"
 # Foundation (`WindowsNativeBridge` и его DLL 64 КБ): без транзитивных — те тянут Kotlin stdlib 2.4,
 # kotlinx-datetime 0.8 и androidx.core 1.18 (compileSdk 36).
 media3 = "1.9.4"
+# Браузерный движок для YouTube на Android (ПЛАН-(ВМ) Р14): android-youtube-player, MIT. 12.1.2 — её
+# зависимости (lifecycle 2.6) ниже наших.
+androidYoutubePlayer = "12.1.2"
 composemediaplayer = "0.11.4"
 
 [plugins]
@@ -94,6 +97,7 @@ media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
 # Guava — та, что приходит с Media3 1.9: с ней `listenablefuture` подменяется пустышкой, и сканеру QR
 # (CameraX) класс ListenableFuture нужен из самой Guava — приложению она даётся явно.
 guava-android = { module = "com.google.guava:guava", version = "33.3.1-android" }
+android-youtube-player = { module = "com.pierfrancescosoffritti.androidyoutubeplayer:core", version.ref = "androidYoutubePlayer" }
 composemediaplayer-jvm = { module = "io.github.kdroidfilter:composemediaplayer-jvm", version.ref = "composemediaplayer" }
 ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }

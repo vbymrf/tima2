@@ -1359,6 +1359,7 @@ object SpanishWords : Words {
         override val playerFailed = "No se reproduce aquí — ábrelo en el navegador"
         override val playerLive = "● En directo"
         override val playerBrowser = "Abrir en el navegador"
+        override val playerOther = "Otro reproductor"
         override val mediaUnavailable = "no disponible"
         override val streamUnavailable = "emisión no disponible"
         override val streamConnecting = "conectando…"

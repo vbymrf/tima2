@@ -1359,6 +1359,7 @@ object EnglishWords : Words {
         override val playerFailed = "Cannot play here — open in the browser"
         override val playerLive = "● Live"
         override val playerBrowser = "Open in browser"
+        override val playerOther = "Other player"
         override val mediaUnavailable = "unavailable"
         override val streamUnavailable = "stream unavailable"
         override val streamConnecting = "connecting…"

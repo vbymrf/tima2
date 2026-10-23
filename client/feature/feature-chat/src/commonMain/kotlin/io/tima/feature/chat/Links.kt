@@ -126,6 +126,8 @@ internal fun rememberMessageOpen(): (kind: String, chatId: String, messageId: Lo
 fun LinkGate(
     /** Строка журнала окна проигрывания (`PLAYER`). */
     onPlayer: (what: PlayerEvent, detail: String) -> Unit = { _, _ -> },
+    /** Поток сайтов и память движка по сайту (ПЛАН-(ВМ) §3.3, §3.4). */
+    playerPorts: PlayerPorts = PlayerPorts(),
     content: @Composable () -> Unit,
 ) {
     var asked by remember { mutableStateOf<GateAsk?>(null) }
@@ -174,6 +176,7 @@ fun LinkGate(
                         runCatching { uri.openUri(url) }
                     },
                     onEvent = onPlayer,
+                    ports = playerPorts,
                 )
             }
         }

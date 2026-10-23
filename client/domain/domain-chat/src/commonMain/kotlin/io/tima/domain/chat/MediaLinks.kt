@@ -23,8 +23,8 @@ object MediaLinks {
     private val video = setOf("mp4", "m4v", "mov", "webm", "mkv", "avi", "3gp", "wmv", "ogv")
     private val audio = setOf("mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "wav")
 
-    /** Играет ли ссылка в окне TIMA сейчас: прямые файлы и потоки; сайты — браузерным движком (ВМ8). */
-    fun playsHere(url: String): Boolean = kindOf(url) in setOf(Kind.VIDEO_FILE, Kind.AUDIO_FILE, Kind.STREAM)
+    /** Играет ли ссылка в окне TIMA: прямые файлы, потоки и сайты (YouTube, VK, Rutube) — ВМ5–ВМ8. */
+    fun playsHere(url: String): Boolean = kindOf(url) != null
 
     fun kindOf(url: String): Kind? {
         val u = url.trim()
@@ -84,6 +84,9 @@ object MediaLinks {
         }
         return query(url, "z")?.let { VK.find(it) }?.let { it.groupValues[1] to it.groupValues[2] }
     }
+
+    /** Ключ доступа ролика VK (`hash=` в адресе встраивания); нет — пусто: открытый ролик играет и так. */
+    fun vkHash(url: String): String = query(url, "hash").orEmpty()
 
     /** Секунда из адреса: `t=90`, `t=1m30s`, `start=90` — начать с неё. */
     fun startSeconds(url: String): Int? {

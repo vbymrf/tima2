@@ -50,3 +50,9 @@ expect fun rememberOwnPlayer(): OwnPlayer?
 /** Картинка своего движка — вписана в [modifier] с сохранением пропорций. */
 @Composable
 expect fun OwnPlayerSurface(player: OwnPlayer, modifier: Modifier)
+
+/**
+ * Заголовок браузера для запросов к сайтам видео (ПЛАН-(ВМ) ВМ8): ссылка VK на поток помнит, каким
+ * браузером её запросили (`srcAg`), и другому не отдаёт — свой движок Android ходит с тем же.
+ */
+const val MEDIA_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"

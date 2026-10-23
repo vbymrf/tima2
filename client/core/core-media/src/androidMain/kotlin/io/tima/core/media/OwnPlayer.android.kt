@@ -31,7 +31,17 @@ import kotlinx.coroutines.launch
 
 /** Свой движок на Android — Media3 ExoPlayer (ПЛАН-(ВМ) ВМ5): файлы, HLS, скорость с тоном. */
 private class ExoOwnPlayer(context: Context) : OwnPlayer {
-    val exo: ExoPlayer = ExoPlayer.Builder(context).build()
+    // Заголовок браузера — тот же, что у запроса страницы VK: её ссылка на поток помнит браузер (ВМ8).
+    val exo: ExoPlayer = ExoPlayer.Builder(context)
+        .setMediaSourceFactory(
+            androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+                androidx.media3.datasource.DefaultDataSource.Factory(
+                    context,
+                    androidx.media3.datasource.DefaultHttpDataSource.Factory().setUserAgent(MEDIA_USER_AGENT).setAllowCrossProtocolRedirects(true),
+                ),
+            ),
+        )
+        .build()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val _state = MutableStateFlow(OwnPlayerState())
     override val state: StateFlow<OwnPlayerState> = _state.asStateFlow()

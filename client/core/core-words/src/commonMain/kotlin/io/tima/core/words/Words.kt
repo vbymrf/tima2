@@ -1547,6 +1547,7 @@ interface ChatWords {
     val playerFailed: String
     val playerLive: String
     val playerBrowser: String
+    val playerOther: String
     // ── «Аудио» и «Поток» (ПЛАН-(ВМ) §3.7, §3.8) ──
     val mediaUnavailable: String
     val streamUnavailable: String
@@ -3805,6 +3806,7 @@ object RussianWords : Words {
         override val playerFailed = "Здесь не играет — откройте в браузере"
         override val playerLive = "● В эфире"
         override val playerBrowser = "Открыть в браузере"
+        override val playerOther = "Другой проигрыватель"
         override val mediaUnavailable = "недоступно"
         override val streamUnavailable = "поток недоступен"
         override val streamConnecting = "подключение…"

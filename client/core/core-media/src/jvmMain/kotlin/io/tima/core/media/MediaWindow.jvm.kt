@@ -1,6 +1,7 @@
 package io.tima.core.media
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
@@ -10,5 +11,8 @@ import androidx.compose.ui.window.rememberWindowState
 @Composable
 actual fun MediaWindow(title: String, onClose: () -> Unit, content: @Composable () -> Unit) {
     val state = rememberWindowState(width = 1000.dp, height = 640.dp, position = WindowPosition.PlatformDefault)
-    Window(onCloseRequest = onClose, state = state, title = title) { content() }
+    Window(onCloseRequest = onClose, state = state, title = title) {
+        // Хозяин WebView2 — это окно (ПЛАН-(ВМ) ВМ6).
+        CompositionLocalProvider(LocalMediaAwtWindow provides window) { content() }
+    }
 }
