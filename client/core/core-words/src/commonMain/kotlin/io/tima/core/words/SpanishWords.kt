@@ -1367,6 +1367,7 @@ object SpanishWords : Words {
         override val playerAuto = "Auto"
         override val playerMute = "Silenciar"
         override val playerUnmute = "Activar sonido"
+        override val playerMarks = "Marcas"
         override val mediaUnavailable = "no disponible"
         override val streamUnavailable = "emisión no disponible"
         override val streamConnecting = "conectando…"

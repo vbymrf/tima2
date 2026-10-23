@@ -160,6 +160,7 @@ object PlayerTags {
     const val CLOSE = "player:close"
     const val RESTART = "player:restart"
     const val SOUND = "player:sound"
+    const val MARKS = "player:marks.open"
     const val PEEK = "player:peek"
     const val FULL = "player:full"
     const val QUALITY = "player:quality"
@@ -245,6 +246,8 @@ private fun PlayerContent(
     // Палец на полосе: куда перемотает, когда отпустят (доля), и кадр там — у прямого файла.
     var dragAt by remember(request) { mutableStateOf<Float?>(null) }
     var peekImage by remember(request) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    // Список меток поверх видео в полном экране (3а).
+    var marksOpen by remember(request) { mutableStateOf(false) }
     val peek = io.tima.core.media.rememberFramePeek(if (kind == MediaLinks.Kind.VIDEO_FILE) request.url else null)
     val engine = order.getOrNull(at)
     val idle = remember { kotlinx.coroutines.flow.MutableStateFlow(io.tima.core.media.OwnPlayerState()) }
@@ -429,6 +432,7 @@ private fun PlayerContent(
             },
     ) {
         val sideways = maxWidth > maxHeight
+        val wideTop = maxWidth >= 560.dp
         LaunchedEffect(sideways) { screen.landscape = io.tima.core.media.turnsWithPhone && sideways }
         val full = screen.active
         // Отступы под строку состояния и кнопки навигации — только в обычном окне: на Redmi название и ✕
@@ -531,29 +535,57 @@ private fun PlayerContent(
                 }
             }
         }
-        // Полный экран: кнопки поверх видео — сверху название, «Перезапустить» и выход, снизу ▶, время и
-        // полоса. У браузерного движка снизу свои кнопки сайта — наши легли бы на них (VK, Samsung 2026-10-23).
-        if (full && (overlay || !state.playing || dragAt != null)) {
+        // Полный экран (заказчик 2026-10-23, 3а и 4а): всё наше — в верхней панели, у обоих движков: слева
+        // название, в середине ▶/⏸ и время, справа метки, звук, «Перезапустить» и выход. Низ — сайту (его
+        // кнопки), у своего движка — нашей полосе: так ничто не ложится на кнопки сайта.
+        if (full && (overlay || !state.playing || dragAt != null || marksOpen)) {
             val shade = colors.viewer.copy(alpha = 0.5f)
-            Row(
-                Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = Modifier.weight(1f))
+            val middle: @Composable () -> Unit = {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    playButton()
+                    Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true)
+                }
+            }
+            val right: @Composable () -> Unit = {
+                if (request.marks.isNotEmpty()) {
+                    PlayerIconButton(PlayerIcon.MARKS, words.playerMarks, lit = marksOpen, tag = PlayerTags.MARKS) { marksOpen = !marksOpen }
+                }
                 sound()
                 restart()
                 PlayerIconButton(PlayerIcon.FULL_EXIT, words.playerFullExit, lit = false, tag = PlayerTags.FULL) { screen.exit() }
             }
+            val titleText: @Composable () -> Unit = {
+                Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true)
+            }
+            Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp)) {
+                if (wideTop) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { titleText() }
+                        middle()
+                        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) { right() }
+                    }
+                } else {
+                    // Узко (вертикальное видео во весь экран телефона): середина — второй строкой по центру.
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.weight(1f)) { titleText() }
+                        right()
+                    }
+                    Box(Modifier.fillMaxWidth().padding(top = 6.dp), contentAlignment = Alignment.Center) { middle() }
+                }
+            }
             if (engine != PlayerEngine.WEB) {
-                Column(
-                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp)) { bar() }
+            }
+            // Метки — списком справа поверх видео; нажатие перематывает и закрывает список (3а).
+            if (marksOpen && request.marks.isNotEmpty()) {
+                Box(
+                    Modifier.align(Alignment.CenterEnd).padding(top = 64.dp, bottom = 16.dp, end = 12.dp).width(300.dp)
+                        .background(colors.viewer.copy(alpha = 0.85f), RoundedCornerShape(10.dp)).padding(8.dp),
                 ) {
-                    bar()
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        playButton()
-                        Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.weight(1f))
+                    PlayerMarks(request.marks, state.positionMs, enabled = !state.elsewhere, maxHeight = 600.dp) { ms ->
+                        seek(ms)
+                        play()
+                        marksOpen = false
                     }
                 }
             }
@@ -561,7 +593,7 @@ private fun PlayerContent(
     }
 }
 
-private enum class PlayerIcon { SOUND_ON, SOUND_OFF, RESTART, FULL, FULL_EXIT }
+private enum class PlayerIcon { MARKS, SOUND_ON, SOUND_OFF, RESTART, FULL, FULL_EXIT }
 
 /**
  * Подсказка над полосой, пока палец её держит: кадр (у прямого файла, когда успел прочитаться) и время.
@@ -609,6 +641,14 @@ private fun PlayerIconButton(icon: PlayerIcon, label: String, lit: Boolean, tag:
             val s = size.minDimension
             val stroke = Stroke(width = w, cap = StrokeCap.Round)
             when (icon) {
+                PlayerIcon.MARKS -> {
+                    // Список: три строки с точками слева.
+                    for (k in 0..2) {
+                        val y = s * (0.22f + 0.28f * k)
+                        drawCircle(ink, w * 0.8f, Offset(s * 0.12f, y))
+                        drawLine(ink, Offset(s * 0.32f, y), Offset(s * 0.92f, y), w, StrokeCap.Round)
+                    }
+                }
                 PlayerIcon.SOUND_ON, PlayerIcon.SOUND_OFF -> {
                     // Динамик: коробка и раструб; включён — две волны, выключен — крестик.
                     val speaker = Path().apply {
@@ -669,11 +709,17 @@ private fun PlayerIconButton(icon: PlayerIcon, label: String, lit: Boolean, tag:
 
 /** Метки в окне (§3.6): текущая подсвечена по ходу просмотра, нажатие перематывает; чужой ролик — блёклые. */
 @Composable
-private fun PlayerMarks(marks: List<io.tima.domain.chat.MediaMark>, positionMs: Long, enabled: Boolean, onSeek: (Long) -> Unit) {
+private fun PlayerMarks(
+    marks: List<io.tima.domain.chat.MediaMark>,
+    positionMs: Long,
+    enabled: Boolean,
+    maxHeight: androidx.compose.ui.unit.Dp = 180.dp,
+    onSeek: (Long) -> Unit,
+) {
     val colors = Tima.colors
     val current = if (enabled) currentMark(marks, positionMs) else -1
     Column(
-        Modifier.fillMaxWidth().heightIn(max = 180.dp).verticalScroll(rememberScrollState()).alpha(if (enabled) 1f else 0.4f).testTag("player:marks"),
+        Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState()).alpha(if (enabled) 1f else 0.4f).testTag("player:marks"),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         for ((i, m) in marks.withIndex()) {

@@ -1557,6 +1557,7 @@ interface ChatWords {
     val playerAuto: String
     val playerMute: String
     val playerUnmute: String
+    val playerMarks: String
     // ── «Аудио» и «Поток» (ПЛАН-(ВМ) §3.7, §3.8) ──
     val mediaUnavailable: String
     val streamUnavailable: String
@@ -3823,6 +3824,7 @@ object RussianWords : Words {
         override val playerAuto = "Авто"
         override val playerMute = "Выключить звук"
         override val playerUnmute = "Включить звук"
+        override val playerMarks = "Метки"
         override val mediaUnavailable = "недоступно"
         override val streamUnavailable = "поток недоступен"
         override val streamConnecting = "подключение…"

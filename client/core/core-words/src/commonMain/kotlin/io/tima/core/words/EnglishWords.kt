@@ -1367,6 +1367,7 @@ object EnglishWords : Words {
         override val playerAuto = "Auto"
         override val playerMute = "Mute"
         override val playerUnmute = "Unmute"
+        override val playerMarks = "Marks"
         override val mediaUnavailable = "unavailable"
         override val streamUnavailable = "stream unavailable"
         override val streamConnecting = "connecting…"
