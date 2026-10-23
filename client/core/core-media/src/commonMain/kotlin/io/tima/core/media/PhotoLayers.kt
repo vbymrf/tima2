@@ -23,6 +23,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
@@ -181,7 +182,8 @@ object PhotoLayers {
 
     /**
      * Надпись в рамке: самый крупный размер букв, при котором текст целиком помещается в [maxW]×[maxH]
-     * точек (переносы — по ширине). Пустой текст — `null`.
+     * точек (переносы — по ширине). Строки — по середине ширины (заказчик 2026-10-23: «выравнивание текста в
+     * середине рамки»). Пустой текст — `null`.
      */
     fun fitText(measurer: TextMeasurer, t: PhotoMark.Text, maxW: Float, maxH: Float): TextLayoutResult? {
         if (t.text.isBlank() || maxW < 1f || maxH < 1f) return null
@@ -193,6 +195,7 @@ object PhotoLayers {
                 lineHeight = (size * 1.2f).sp,
                 fontWeight = if (t.face == TextFace.Bold) FontWeight.Bold else FontWeight.Normal,
                 fontStyle = if (t.face == TextFace.Italic) FontStyle.Italic else FontStyle.Normal,
+                textAlign = TextAlign.Center,
             ),
             constraints = Constraints(maxWidth = maxW.toInt().coerceAtLeast(1)),
             density = Density(1f),
@@ -225,9 +228,13 @@ object PhotoLayers {
             t.background?.let { drawRoundRect(it, box.topLeft, box.size, CornerRadius(kotlin.math.min(bw, bh) * CORNER)) }
             val pad = kotlin.math.min(bw, bh) * PAD
             val layout = fitText(measurer, t, bw - 2 * pad, bh - 2 * pad) ?: return@rotate
-            drawText(layout, topLeft = Offset(box.left + pad, box.top + pad))
+            drawText(layout, topLeft = centered(box, layout))
         }
     }
+
+    /** Где начать раскладку надписи, чтобы она стояла посередине рамки [box] — по ширине и по высоте. */
+    fun centered(box: Rect, layout: TextLayoutResult): Offset =
+        Offset(box.center.x - layout.size.width / 2f, box.center.y - layout.size.height / 2f)
 
     private const val FIT_STEPS = 14
     private const val CORNER = 0.18f

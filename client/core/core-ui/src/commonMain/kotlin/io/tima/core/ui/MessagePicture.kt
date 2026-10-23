@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,9 +26,10 @@ import com.github.panpf.sketch.resize.Precision
  * подписью [missing]: невидимого содержимого нет (ADR-0044 §6).
  *
  * @param aspect ширина к высоте; `null` — неизвестно, место квадратное.
+ * @param onFailed не загрузилась — просмотр фото пропускает такие при листании.
  */
 @Composable
-fun MessagePicture(uri: String, aspect: Float?, missing: String, modifier: Modifier = Modifier) {
+fun MessagePicture(uri: String, aspect: Float?, missing: String, modifier: Modifier = Modifier, onFailed: (() -> Unit)? = null) {
     val colors = Tima.colors
     val shape = RoundedCornerShape(8.dp)
     val ratio = (aspect ?: 1f).coerceIn(0.4f, 3f)
@@ -46,7 +48,9 @@ fun MessagePicture(uri: String, aspect: Float?, missing: String, modifier: Modif
             return@Box
         }
         val state = rememberAsyncImageState()
-        if (state.result is ImageResult.Error) Tertiary(missing, lineOne = true)
+        val failed = state.result is ImageResult.Error
+        if (failed) Tertiary(missing, lineOne = true)
+        if (onFailed != null) LaunchedEffect(failed) { if (failed) onFailed() }
         AsyncImage(
             uri = uri,
             sketch = sketch,

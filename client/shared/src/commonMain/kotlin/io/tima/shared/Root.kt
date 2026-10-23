@@ -5384,6 +5384,8 @@ private fun Chat(
                 },
                 // Поворот и редактор (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ5–ИФ7).
                 load = { p -> plainOf(p.media, say)?.let { io.tima.core.media.decodeImage(it) } },
+                // Листание пропускает фото, которого нет и не будет, и ждущее Wi-Fi (заказчик 2026-10-23).
+                skip = { p -> p.media.mediaId in goneFiles || p.media.mediaId in wifiFiles },
                 refusal = { p ->
                     when (val no = if (group) PhotoRefusal.Group else photoRefusal(p.line, environment.edit, chatId)) {
                         null -> null

@@ -459,7 +459,8 @@ fun PhotoEditor(
                         if (tool == Tool.Text) {
                             // «Текст», рамка выбрана (положение и размер) — как у обрезки, сразу: у угла — угол,
                             // в остальной рамке — перенос целиком; долгое нажатие внутрь — снова набор.
-                            // Нажатия мимо, пока рамка выбрана, — ничего (двумя пальцами — масштаб).
+                            // Мимо рамки палец двигает увеличенное фото, как без инструмента, двумя — масштаб;
+                            // рамку ставит только нажатие (заказчик 2026-10-23).
                             val vr = draft?.takeIf { phase == TextPhase.Placing }?.let(::textVisible)
                             var grab = -1
                             if (vr != null) {
@@ -523,11 +524,9 @@ fun PhotoEditor(
                                 if (event.changes.none { it.pressed }) break
                                 if (event.changes.count { it.pressed } > 1) twoFingers = true
                                 if (twoFingers || grab < 0) {
-                                    if (twoFingers) {
-                                        scale = (scale * event.calculateZoom()).coerceIn(1f, EDIT_MAX_SCALE)
-                                        pan = if (scale > 1f) limited(pan + event.calculatePan(), scale) else Offset.Zero
-                                        event.changes.forEach { if (it.positionChange() != Offset.Zero) it.consume() }
-                                    }
+                                    scale = (scale * event.calculateZoom()).coerceIn(1f, EDIT_MAX_SCALE)
+                                    pan = if (scale > 1f) limited(pan + event.calculatePan(), scale) else Offset.Zero
+                                    event.changes.forEach { if (it.positionChange() != Offset.Zero) it.consume() }
                                     continue
                                 }
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -682,8 +681,7 @@ fun PhotoEditor(
                                 val box = Rect(px(held.topLeft), px(held.bottomRight))
                                 draft?.background?.let { drawRoundRect(it, box.topLeft, box.size, CornerRadius(min(box.width, box.height) * TEXT_CORNER)) }
                                 liveLayout?.let { l ->
-                                    val pad = min(box.width, box.height) * TEXT_PAD
-                                    clipRect(box.left, box.top, box.right, box.bottom) { drawText(l, topLeft = Offset(box.left + pad, box.top + pad)) }
+                                    clipRect(box.left, box.top, box.right, box.bottom) { drawText(l, topLeft = PhotoLayers.centered(box, l)) }
                                 }
                                 textFrame(box, frame, handle / scale)
                             } else {

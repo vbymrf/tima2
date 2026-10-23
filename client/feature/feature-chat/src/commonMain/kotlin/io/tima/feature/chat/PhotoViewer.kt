@@ -28,6 +28,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +88,8 @@ class PhotoActions(
      * правок меньше трёх, ключ тот же. Нельзя — «Изменить» заблокирована и по нажатию говорит это.
      */
     val refusal: (PhotoAt) -> String? = { "" },
+    /** Фото, которого заведомо нет: у почтальона его нет и не будет, или оно ждёт Wi-Fi. Листание его пропускает. */
+    val skip: (PhotoAt) -> Boolean = { false },
     /**
      * Просмотр закрыт — сохранённое в редакторе уходит: одна правка на фото за весь просмотр (ADR-0052).
      * Поворот в просмотре остаётся только у человека (заказчик 2026-10-22).
@@ -157,17 +160,35 @@ fun PhotoViewer(
     }
     val colors = Tima.colors
     val w = Tima.words.chat
-    var index by remember(start) { mutableStateOf(start.coerceIn(0, photos.lastIndex)) }
-    val i = index.coerceIn(0, photos.lastIndex)
-    val photo = photos[i]
+    // Листание пропускает фото, которого нет: удалённое у почтальона, ждущее Wi-Fi, не загрузившееся
+    // (заказчик 2026-10-23: «при пролистывании нужно пропустить»). «Файла на сервере уже нет» видно только у
+    // открытого прямо — пока оно на экране; ушли с него — в ленте его больше нет.
+    val opened = remember(start) { photos[start.coerceIn(0, photos.lastIndex)].media.mediaId }
+    var current by remember(start) { mutableStateOf(opened) }
+    val broken = remember { mutableStateMapOf<String, Unit>() }
+    // Куда листали в последний раз: текущее не загрузилось уже на экране — дальше туда же.
+    var ahead by remember { mutableStateOf(true) }
+    val kept = photos.withIndex().filter { (_, p) ->
+        val id = p.media.mediaId
+        (id == current && id == opened) || (id !in broken && !actions.skip(p))
+    }
+    val list = kept.map { it.value }.ifEmpty { listOf(photos.firstOrNull { it.media.mediaId == current } ?: photos[0]) }
+    val i = kept.indexOfFirst { it.value.media.mediaId == current }.takeIf { it >= 0 } ?: run {
+        val from = photos.indexOfFirst { it.media.mediaId == current }
+        val next = kept.indexOfFirst { it.index > from }
+        val prev = kept.indexOfLast { it.index < from }
+        if (ahead) next.takeIf { it >= 0 } ?: prev else prev.takeIf { it >= 0 } ?: next
+    }.coerceIn(0, list.lastIndex)
+    val photo = list[i]
+    LaunchedEffect(photo.media.mediaId) { current = photo.media.mediaId }
     var menu by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf(false) }
     // Лента фото (заказчик 2026-10-22: «чтобы оно уезжало, новое приезжало»): [dragX] — пока ведёт палец,
     // [slide] — доводка после отпускания и листание кнопками.
     var dragX by remember { mutableStateOf(0f) }
     val slide = remember { Animatable(0f) }
-    var scale by remember(i) { mutableStateOf(1f) }
-    var pan by remember(i) { mutableStateOf(Offset.Zero) }
+    var scale by remember(current) { mutableStateOf(1f) }
+    var pan by remember(current) { mutableStateOf(Offset.Zero) }
     var area by remember { mutableStateOf(IntSize.Zero) }
     // Высота кнопок сверху и снизу: увеличенное фото сдвигается до них, а не до края экрана.
     var topBar by remember { mutableStateOf(0) }
@@ -208,7 +229,8 @@ fun PhotoViewer(
     }
 
     fun go(to: Int) {
-        index = to.coerceIn(0, photos.lastIndex)
+        ahead = to >= i
+        current = list[to.coerceIn(0, list.lastIndex)].media.mediaId
         menu = false
         info = false
     }
@@ -222,7 +244,7 @@ fun PhotoViewer(
         dragX = 0f
         scope.launch {
             slide.snapTo(from)
-            if (to == i || to !in photos.indices || area.width == 0) {
+            if (to == i || to !in list.indices || area.width == 0) {
                 slide.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow))
             } else {
                 slide.animateTo(if (to > i) -area.width.toFloat() else area.width.toFloat(), tween(SLIDE_MS))
@@ -307,7 +329,7 @@ fun PhotoViewer(
             Modifier.fillMaxSize()
                 .onSizeChanged { area = it }
                 .onGloballyPositioned { areaTop = it.positionInRoot().y }
-                .pointerInput(i, photos.size) {
+                .pointerInput(current, i, list.size) {
                     // Одно касание разбирается целиком: короткое и быстрое — нажатие, два нажатия рядом и
                     // подряд — двойное; длиннее — листание (обычный размер) или сдвиг (увеличенное).
                     // Закрытия смахиванием вниз нет (заказчик 2026-10-22).
@@ -341,7 +363,7 @@ fun PhotoViewer(
                                 event.changes.firstOrNull { it.id == down.id }?.let { velocity.addPosition(it.uptimeMillis, it.position) }
                                 // Лента за пальцем; за последним и до первого — с сопротивлением (пружина).
                                 if (path > tapSlop) {
-                                    val edge = (moved.x > 0 && i == 0) || (moved.x < 0 && i == photos.lastIndex)
+                                    val edge = (moved.x > 0 && i == 0) || (moved.x < 0 && i == list.lastIndex)
                                     dragX = if (edge) moved.x * EDGE_RESIST else moved.x
                                 }
                                 event.changes.forEach { it.consume() }
@@ -367,7 +389,7 @@ fun PhotoViewer(
                                 val far = area.width / 3f
                                 settle(
                                     when {
-                                        (d < -far || fling < -flingSpeed) && i < photos.lastIndex -> i + 1
+                                        (d < -far || fling < -flingSpeed) && i < list.lastIndex -> i + 1
                                         (d > far || fling > flingSpeed) && i > 0 -> i - 1
                                         else -> i
                                     },
@@ -378,7 +400,7 @@ fun PhotoViewer(
                         }
                     }
                 }
-                .pointerInput(i) {
+                .pointerInput(current) {
                     // Колесо мыши на ПК — масштаб.
                     awaitPointerEventScope {
                         while (true) {
@@ -398,8 +420,8 @@ fun PhotoViewer(
             // мелькает пустое место. Масштаб и сдвиг — только у текущего.
             for (k in -1..1) {
                 val at = i + k
-                if (at !in photos.indices) continue
-                val p = photos[at]
+                if (at !in list.indices) continue
+                val p = list[at]
                 key(p.media.mediaId) {
                     Box(
                         Modifier.fillMaxSize().offset { IntOffset((k * area.width + dragX + slide.value).roundToInt(), 0) },
@@ -421,6 +443,7 @@ fun PhotoViewer(
                                 if (p.media.width > 0 && p.media.height > 0) p.media.width.toFloat() / p.media.height else null,
                                 w.fileGone,
                                 shown,
+                                onFailed = { broken[p.media.mediaId] = Unit },
                             )
                         }
                     }
@@ -451,7 +474,7 @@ fun PhotoViewer(
         if (i > 0 && scale <= 1f) {
             Box(Modifier.align(Alignment.CenterStart).padding(12.dp)) { SolidButton("‹", PhotoTags.PREV) { settle(i - 1) } }
         }
-        if (i < photos.lastIndex && scale <= 1f) {
+        if (i < list.lastIndex && scale <= 1f) {
             Box(Modifier.align(Alignment.CenterEnd).padding(12.dp)) { SolidButton("›", PhotoTags.NEXT) { settle(i + 1) } }
         }
         if (menu) {
@@ -498,9 +521,9 @@ fun PhotoViewer(
                     SolidLabel(w.photoRotate, PhotoTags.ROTATE) { withCurrent(photo) { turned(photo, PhotoLayers.turn(it)) } }
                 }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    if (photos.size > 1) {
+                    if (list.size > 1) {
                         Caption(
-                            w.photoOf(i + 1, photos.size),
+                            w.photoOf(i + 1, list.size),
                             fontSize = TimaType.sz5,
                             weight = FontWeight.Bold,
                             color = colors.text,
