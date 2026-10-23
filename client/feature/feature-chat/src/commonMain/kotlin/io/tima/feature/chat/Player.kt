@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -29,9 +31,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -61,6 +65,8 @@ import io.tima.core.ui.words
 import io.tima.domain.chat.M3u8
 import io.tima.domain.chat.MediaLinks
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
@@ -153,6 +159,8 @@ object PlayerTags {
     const val OTHER = "player:other"
     const val CLOSE = "player:close"
     const val RESTART = "player:restart"
+    const val SOUND = "player:sound"
+    const val PEEK = "player:peek"
     const val FULL = "player:full"
     const val QUALITY = "player:quality"
     fun quality(height: Int) = "player:quality.$height"
@@ -232,6 +240,12 @@ private fun PlayerContent(
     var qualityOpen by remember(request) { mutableStateOf(false) }
     // Последняя секунда нашего ролика — к ней возвращает «Перезапустить», когда сайт увёл на другой (4а).
     var ourMs by remember(request) { mutableStateOf(request.startMs) }
+    // Звук — со звуком по умолчанию, и у VK тоже: он сам запускается без звука (заказчик 2026-10-23).
+    var muted by remember(request) { mutableStateOf(false) }
+    // Палец на полосе: куда перемотает, когда отпустят (доля), и кадр там — у прямого файла.
+    var dragAt by remember(request) { mutableStateOf<Float?>(null) }
+    var peekImage by remember(request) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    val peek = io.tima.core.media.rememberFramePeek(if (kind == MediaLinks.Kind.VIDEO_FILE) request.url else null)
     val engine = order.getOrNull(at)
     val idle = remember { kotlinx.coroutines.flow.MutableStateFlow(io.tima.core.media.OwnPlayerState()) }
     val state by (when (engine) {
@@ -316,6 +330,22 @@ private fun PlayerContent(
         if (!state.elsewhere && state.started && state.positionMs > 0) ourMs = state.positionMs
     }
     LaunchedEffect(state.elsewhere) { if (state.elsewhere && engine != null) onEvent(PlayerEvent.AWAY, "$host ${engine.name.lowercase()}") }
+    // Звук — движку при смене, при нажатии и ещё раз, когда видео пошло: VK включает свой «без звука» при старте.
+    LaunchedEffect(muted, engine, attempt, state.started) {
+        when (engine) {
+            PlayerEngine.OWN -> own?.setMuted(muted)
+            PlayerEngine.WEB -> web?.setMuted(muted)
+            null -> Unit
+        }
+    }
+    // Кадр под пальцем: последний запрошенный, промежуточные пропускаются — чтение кадра по сети долгое.
+    LaunchedEffect(peek) {
+        val p = peek ?: return@LaunchedEffect
+        snapshotFlow { dragAt?.let { (it * state.durationMs).toLong() } }
+            .filterNotNull()
+            .conflate()
+            .collect { ms -> p.frame(ms)?.let { peekImage = it } }
+    }
     // Пока видео идёт, телефон не засыпает (заказчик 2026-10-23); пауза — экран гаснет по настройке.
     io.tima.core.media.KeepScreenOn(state.playing && !failed)
     fun play() = if (engine == PlayerEngine.WEB) web?.play() else own?.play()
@@ -331,6 +361,14 @@ private fun PlayerContent(
     }
     FullScreenMode(screen.active, turn, onUpright = { screen.upright = false })
 
+    // Перед «Перезапустить» и «На весь экран» (заказчик 2026-10-23).
+    val sound: @Composable () -> Unit = {
+        PlayerIconButton(
+            if (muted) PlayerIcon.SOUND_OFF else PlayerIcon.SOUND_ON,
+            if (muted) words.playerUnmute else words.playerMute,
+            lit = false, tag = PlayerTags.SOUND,
+        ) { muted = !muted }
+    }
     val restart: @Composable () -> Unit = {
         // Есть всегда; горит зелёным, когда проигрыватель сайта увёл с нашего ролика (заказчик 2026-10-23, 4а).
         PlayerIconButton(PlayerIcon.RESTART, words.playerRestart, lit = state.elsewhere, tag = PlayerTags.RESTART) {
@@ -351,14 +389,23 @@ private fun PlayerContent(
     val time = if (state.live) words.playerLive else "${io.tima.domain.chat.markTime(state.positionMs)} / ${io.tima.domain.chat.markTime(state.durationMs)}"
     val bar: @Composable () -> Unit = {
         if (!state.live && state.durationMs > 0) {
-            val progress = state.positionMs.toFloat() / state.durationMs
+            val progress = dragAt ?: (state.positionMs.toFloat() / state.durationMs)
             val marks = request.marks.map { it.atMs.toFloat() / state.durationMs }
-            // Непроигранная часть — светлой полосой: цветом линий на чёрном её не было видно (заказчик 2026-10-23).
-            // Чужой ролик — полоса блёклая и не перематывает: время уже не наше.
-            SeekBar(
-                progress, Modifier.fillMaxWidth().height(24.dp).alpha(if (state.elsewhere) 0.4f else 1f).testTag(PlayerTags.BAR), marks,
-                track = onVideo.copy(alpha = 0.35f),
-            ) { f -> if (!state.elsewhere) seek((state.durationMs * f).toLong()) }
+            // Палец держит полосу — над ней время (и кадр у файла), перемотка — когда отпустили (заказчик
+            // 2026-10-23). Подсказка рисуется поверх видео и окно не сдвигает.
+            Box(Modifier.fillMaxWidth()) {
+                // Непроигранная часть — светлой полосой: цветом линий на чёрном её не было видно (заказчик 2026-10-23).
+                // Чужой ролик — полоса блёклая и не перематывает: время уже не наше.
+                SeekBar(
+                    progress, Modifier.fillMaxWidth().height(24.dp).alpha(if (state.elsewhere) 0.4f else 1f).testTag(PlayerTags.BAR), marks,
+                    track = onVideo.copy(alpha = 0.35f),
+                    onDrag = { f ->
+                        if (f == null) peekImage = null
+                        dragAt = if (state.elsewhere) null else f
+                    },
+                ) { f -> if (!state.elsewhere) seek((state.durationMs * f).toLong()) }
+                dragAt?.let { f -> SeekPeek(f, (state.durationMs * f).toLong(), peekImage, Modifier.align(Alignment.BottomStart)) }
+            }
         }
     }
 
@@ -407,10 +454,12 @@ private fun PlayerContent(
             if (!full) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     bar()
-                    // ▶ и время слева; «Перезапустить» и «На весь экран» — справа, в том же ряду (заказчик 2026-10-23).
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // ▶ и время слева; звук, «Перезапустить» и «На весь экран» — справа, в том же ряду (заказчик
+                    // 2026-10-23). Зазоры поуже: на 360 точках иначе не помещалось «4:38 / 2:18:51».
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         playButton()
-                        Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.weight(1f))
+                        Caption(time, color = onVideo, fontSize = 13.sp, lineOne = true, modifier = Modifier.weight(1f))
+                        sound()
                         restart()
                         PlayerIconButton(PlayerIcon.FULL, words.playerFull, lit = false, tag = PlayerTags.FULL) { screen.enter() }
                     }
@@ -484,7 +533,7 @@ private fun PlayerContent(
         }
         // Полный экран: кнопки поверх видео — сверху название, «Перезапустить» и выход, снизу ▶, время и
         // полоса. У браузерного движка снизу свои кнопки сайта — наши легли бы на них (VK, Samsung 2026-10-23).
-        if (full && (overlay || !state.playing)) {
+        if (full && (overlay || !state.playing || dragAt != null)) {
             val shade = colors.viewer.copy(alpha = 0.5f)
             Row(
                 Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
@@ -492,6 +541,7 @@ private fun PlayerContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = Modifier.weight(1f))
+                sound()
                 restart()
                 PlayerIconButton(PlayerIcon.FULL_EXIT, words.playerFullExit, lit = false, tag = PlayerTags.FULL) { screen.exit() }
             }
@@ -511,7 +561,35 @@ private fun PlayerContent(
     }
 }
 
-private enum class PlayerIcon { RESTART, FULL, FULL_EXIT }
+private enum class PlayerIcon { SOUND_ON, SOUND_OFF, RESTART, FULL, FULL_EXIT }
+
+/**
+ * Подсказка над полосой, пока палец её держит: кадр (у прямого файла, когда успел прочитаться) и время.
+ * Стоит над точкой пальца, не выходя за края полосы.
+ */
+@Composable
+private fun SeekPeek(fraction: Float, atMs: Long, image: androidx.compose.ui.graphics.ImageBitmap?, modifier: Modifier) {
+    val colors = Tima.colors
+    val onVideo = io.tima.core.ui.TimaFixed.onVideo
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val w = if (image != null) 160.dp else 84.dp
+        val x = (maxWidth * fraction - w / 2).coerceIn(0.dp, (maxWidth - w).coerceAtLeast(0.dp))
+        Column(
+            Modifier.offset(x = x, y = -(if (image != null) 120.dp else 40.dp)).width(w)
+                .background(colors.viewer.copy(alpha = 0.85f), RoundedCornerShape(8.dp)).padding(4.dp).testTag(PlayerTags.PEEK),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (image != null) {
+                androidx.compose.foundation.Image(
+                    image, contentDescription = null,
+                    modifier = Modifier.fillMaxWidth().height(84.dp).clip(RoundedCornerShape(6.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+            }
+            Caption(io.tima.domain.chat.markTime(atMs), fontSize = 14.sp, weight = FontWeight.SemiBold, color = onVideo, lineOne = true)
+        }
+    }
+}
 
 /**
  * Кнопка-значок окна — без слов (заказчик 2026-10-23): «Перезапустить» (круговая стрелка), «На весь экран»
@@ -522,15 +600,36 @@ private fun PlayerIconButton(icon: PlayerIcon, label: String, lit: Boolean, tag:
     val colors = Tima.colors
     val ink = if (lit) colors.onAccent else io.tima.core.ui.TimaFixed.onVideo
     Box(
-        Modifier.size(44.dp).background(if (lit) colors.navigation else io.tima.core.ui.TimaFixed.onVideo.copy(alpha = 0.18f), CircleShape)
+        Modifier.size(40.dp).background(if (lit) colors.navigation else io.tima.core.ui.TimaFixed.onVideo.copy(alpha = 0.18f), CircleShape)
             .clickable(onClick = onClick).semantics { contentDescription = label }.testTag(tag),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(22.dp)) {
+        Canvas(Modifier.size(20.dp)) {
             val w = 2.2.dp.toPx()
             val s = size.minDimension
             val stroke = Stroke(width = w, cap = StrokeCap.Round)
             when (icon) {
+                PlayerIcon.SOUND_ON, PlayerIcon.SOUND_OFF -> {
+                    // Динамик: коробка и раструб; включён — две волны, выключен — крестик.
+                    val speaker = Path().apply {
+                        moveTo(s * 0.08f, s * 0.38f)
+                        lineTo(s * 0.26f, s * 0.38f)
+                        lineTo(s * 0.50f, s * 0.16f)
+                        lineTo(s * 0.50f, s * 0.84f)
+                        lineTo(s * 0.26f, s * 0.62f)
+                        lineTo(s * 0.08f, s * 0.62f)
+                        close()
+                    }
+                    drawPath(speaker, ink)
+                    if (icon == PlayerIcon.SOUND_ON) {
+                        for (r in listOf(s * 0.18f, s * 0.34f)) {
+                            drawArc(ink, -45f, 90f, false, topLeft = Offset(s * 0.5f - r, s / 2 - r), size = Size(r * 2, r * 2), style = stroke)
+                        }
+                    } else {
+                        drawLine(ink, Offset(s * 0.62f, s * 0.36f), Offset(s * 0.92f, s * 0.64f), w, StrokeCap.Round)
+                        drawLine(ink, Offset(s * 0.92f, s * 0.36f), Offset(s * 0.62f, s * 0.64f), w, StrokeCap.Round)
+                    }
+                }
                 PlayerIcon.RESTART -> {
                     val r = s * 0.38f
                     val c = Offset(s / 2, s / 2)
@@ -590,23 +689,47 @@ private fun PlayerMarks(marks: List<io.tima.domain.chat.MediaMark>, positionMs: 
     }
 }
 
-/** Полоса проигрывания: нажатие и перетаскивание — перемотка к доле [onSeek]. */
+/**
+ * Полоса проигрывания: нажатие — перемотка к доле [onSeek]. Перетаскивание: без [onDrag] — перемотка по
+ * ходу; с ним — по ходу только [onDrag] (подсказка), перемотка — когда отпустили, и [onDrag] `null`.
+ */
 @Composable
 internal fun SeekBar(
     progress: Float,
     modifier: Modifier,
     marks: List<Float> = emptyList(),
     track: Color = Tima.colors.line,
+    onDrag: ((Float?) -> Unit)? = null,
     onSeek: (Float) -> Unit,
 ) {
     val colors = Tima.colors
     // Жесты живут дольше одного показа — зовут последний [onSeek], а не первый: после смены движка
     // перемотка уходила бы в прежний.
     val seekNow by androidx.compose.runtime.rememberUpdatedState(onSeek)
+    val dragNow by androidx.compose.runtime.rememberUpdatedState(onDrag)
     Canvas(
         modifier
             .pointerInput(Unit) { detectTapGestures { o -> seekNow((o.x / size.width).coerceIn(0f, 1f)) } }
-            .pointerInput(Unit) { detectHorizontalDragGestures { c, _ -> seekNow((c.position.x / size.width).coerceIn(0f, 1f)) } },
+            .pointerInput(Unit) {
+                var last = 0f
+                fun at(x: Float) = (x / size.width).coerceIn(0f, 1f)
+                detectHorizontalDragGestures(
+                    onDragStart = { o ->
+                        last = at(o.x)
+                        dragNow?.invoke(last)
+                    },
+                    onDragEnd = {
+                        dragNow?.let {
+                            seekNow(last)
+                            it(null)
+                        }
+                    },
+                    onDragCancel = { dragNow?.invoke(null) },
+                ) { c, _ ->
+                    last = at(c.position.x)
+                    dragNow?.invoke(last) ?: seekNow(last)
+                }
+            },
     ) {
         val h = 4.dp.toPx()
         val y = (size.height - h) / 2

@@ -99,6 +99,7 @@ private class AndroidWebPlayer(private val context: Context) : WebPlayer {
         initialize(object : AbstractYouTubePlayerListener() {
             override fun onReady(youTubePlayer: YouTubePlayer) {
                 yt = youTubePlayer
+                if (muted) youTubePlayer.mute()
                 ytPending?.let { (id, at) -> youTubePlayer.loadVideo(id, at) }
                 ytPending = null
             }
@@ -154,6 +155,13 @@ private class AndroidWebPlayer(private val context: Context) : WebPlayer {
 
     override fun seek(ms: Long) {
         if (_page.value?.kind == WebPage.Kind.YOUTUBE) yt?.seekTo(ms / 1000f) else js("seek(${ms / 1000.0})")
+    }
+
+    private var muted = false
+
+    override fun setMuted(muted: Boolean) {
+        this.muted = muted
+        if (_page.value?.kind == WebPage.Kind.YOUTUBE) yt?.let { if (muted) it.mute() else it.unMute() } else js("mute($muted)")
     }
 
     override fun release() {

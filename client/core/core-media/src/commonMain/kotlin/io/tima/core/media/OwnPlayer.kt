@@ -23,6 +23,9 @@ interface OwnPlayer {
 
     /** Скорость с сохранением тона (Р39). */
     fun setSpeed(speed: Float)
+
+    /** Звук выключен или включён — кнопка окна (заказчик 2026-10-23); держится и после нового `open`. */
+    fun setMuted(muted: Boolean)
     fun release()
 }
 
@@ -64,3 +67,16 @@ expect fun OwnPlayerSurface(player: OwnPlayer, modifier: Modifier)
  * браузером её запросили (`srcAg`), и другому не отдаёт — свой движок Android ходит с тем же.
  */
 const val MEDIA_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+
+/**
+ * Кадр видео по времени — миниатюра над полосой, пока палец держит перемотку (заказчик 2026-10-23).
+ * Только прямой файл: у сайтов и потоков HLS кадр так не достать — там одно время.
+ */
+interface FramePeek {
+    /** Кадр около [atMs], уменьшенный; не вышло — `null`. Долгий вызов: адрес читается по сети. */
+    suspend fun frame(atMs: Long): androidx.compose.ui.graphics.ImageBitmap?
+}
+
+/** Миниатюры кадров файла [url]; `null` — эта платформа не умеет или адреса нет. */
+@Composable
+expect fun rememberFramePeek(url: String?): FramePeek?

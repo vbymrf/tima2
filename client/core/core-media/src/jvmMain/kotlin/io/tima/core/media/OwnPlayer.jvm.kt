@@ -86,6 +86,7 @@ internal class WindowsOwnPlayer : OwnPlayer {
                 val a = MediaEngineAudio()
                 audio = a
                 audioWatch = scope.launch { a.state.collect { _state.value = it } }
+                a.setMuted(muted)
                 a.open(url, startMs, play)
                 return@launch
             }
@@ -102,6 +103,7 @@ internal class WindowsOwnPlayer : OwnPlayer {
             val durationMs = duration[0] / 10_000
             _state.value = _state.value.copy(width = size[0], height = size[1], durationMs = durationMs, live = durationMs <= 0)
             if (_state.value.speed != 1f) bridge.SetPlaybackSpeed(instance, _state.value.speed)
+            if (muted) bridge.SetAudioVolume(instance, 0f)
             if (startMs > 0) bridge.SeekMedia(instance, startMs * 10_000)
             if (play) {
                 bridge.SetPlaybackState(instance, true, false)
@@ -222,6 +224,14 @@ internal class WindowsOwnPlayer : OwnPlayer {
         }
     }
 
+    private var muted = false
+
+    override fun setMuted(muted: Boolean) {
+        this.muted = muted
+        audio?.let { return it.setMuted(muted) }
+        scope.launch { if (instance != 0L) bridge.SetAudioVolume(instance, if (muted) 0f else 1f) }
+    }
+
     private fun close() {
         audioWatch?.cancel()
         audio?.release()
@@ -274,3 +284,7 @@ actual fun OwnPlayerSurface(player: OwnPlayer, modifier: Modifier) {
         drawImage(f, dstOffset = IntOffset(at.x.toInt(), at.y.toInt()), dstSize = IntSize(w, h))
     }
 }
+
+/** ПК: Media Foundation кадр по времени без проигрывания не отдаёт — миниатюры нет, только время. */
+@Composable
+actual fun rememberFramePeek(url: String?): FramePeek? = null

@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 
 /** Свой движок на Android — Media3 ExoPlayer (ПЛАН-(ВМ) ВМ5): файлы, HLS, скорость с тоном. */
 internal class ExoOwnPlayer(val context: Context) : OwnPlayer {
@@ -112,6 +114,10 @@ internal class ExoOwnPlayer(val context: Context) : OwnPlayer {
         _state.value = _state.value.copy(speed = speed)
     }
 
+    override fun setMuted(muted: Boolean) {
+        exo.volume = if (muted) 0f else 1f
+    }
+
     override fun release() {
         scope.cancel()
         exo.release()
@@ -140,4 +146,52 @@ actual fun OwnPlayerSurface(player: OwnPlayer, modifier: Modifier) {
         },
         modifier = modifier,
     )
+}
+
+/**
+ * Миниатюры Android — `MediaMetadataRetriever` по сети: открывается при первом кадре, держится до ухода
+ * из окна. Вызовы по одному: каждый — чтение куска файла. Не открылся — дальше без миниатюр.
+ */
+private class RetrieverPeek(private val url: String) : FramePeek {
+    private val lock = kotlinx.coroutines.sync.Mutex()
+    private var retriever: android.media.MediaMetadataRetriever? = null
+    private var broken = false
+
+    override suspend fun frame(atMs: Long): androidx.compose.ui.graphics.ImageBitmap? = lock.withLock {
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            if (broken) return@withContext null
+            runCatching {
+                val r = retriever ?: android.media.MediaMetadataRetriever().also {
+                    it.setDataSource(url, mapOf("User-Agent" to MEDIA_USER_AGENT))
+                    retriever = it
+                }
+                val us = atMs.coerceAtLeast(0) * 1000
+                val option = android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                val bitmap = if (android.os.Build.VERSION.SDK_INT >= 27) {
+                    r.getScaledFrameAtTime(us, option, PEEK_WIDTH, PEEK_WIDTH * 9 / 16)
+                } else {
+                    r.getFrameAtTime(us, option)?.let { android.graphics.Bitmap.createScaledBitmap(it, PEEK_WIDTH, PEEK_WIDTH * it.height / it.width.coerceAtLeast(1), true) }
+                }
+                bitmap?.asImageBitmap()
+            }.onFailure { if (retriever == null) broken = true }.getOrNull()
+        }
+    }
+
+    /** Закрыть после текущего кадра: освобождать посреди чтения нельзя. */
+    fun close() = kotlinx.coroutines.runBlocking {
+        lock.withLock {
+            runCatching { retriever?.release() }
+            retriever = null
+            broken = true
+        }
+    }
+}
+
+private const val PEEK_WIDTH = 320
+
+@Composable
+actual fun rememberFramePeek(url: String?): FramePeek? {
+    val peek = remember(url) { url?.let { RetrieverPeek(it) } }
+    DisposableEffect(peek) { onDispose { peek?.let { p -> Thread { p.close() }.start() } } }
+    return peek
 }

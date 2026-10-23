@@ -65,6 +65,7 @@ internal class MediaEngineAudio : OwnPlayer {
             oleaut.SysFreeString(bstr)
             if (hr < 0) return@launch fail("источник: 0x${hr.toUInt().toString(16)}")
             if (_state.value.speed != 1f) callDouble(e, SET_PLAYBACK_RATE, _state.value.speed.toDouble())
+            if (muted) call(e, SET_MUTED, 1)
             if (play) call(e, PLAY)
             ticker?.cancel()
             ticker = scope.launch { tick() }
@@ -165,6 +166,14 @@ internal class MediaEngineAudio : OwnPlayer {
         }
     }
 
+    private var muted = false
+
+    /** `IMFMediaEngine::SetMuted` — держится у движка и после новой ссылки. */
+    override fun setMuted(muted: Boolean) {
+        this.muted = muted
+        scope.launch { engine?.let { call(it, SET_MUTED, if (muted) 1 else 0) } }
+    }
+
     override fun release() {
         scope.launch {
             ticker?.cancel()
@@ -215,6 +224,7 @@ internal class MediaEngineAudio : OwnPlayer {
         private const val IS_ENDED = 27
         private const val PLAY = 32
         private const val PAUSE = 33
+        private const val SET_MUTED = 35
         private const val SHUTDOWN = 42
 
         private const val EVENT_ERROR = 5

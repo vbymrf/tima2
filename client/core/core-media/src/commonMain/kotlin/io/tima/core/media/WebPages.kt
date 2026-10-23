@@ -44,7 +44,7 @@ v.addEventListener('pause',function(){send({t:'state',v:'paused'});});
 v.addEventListener('waiting',function(){send({t:'state',v:'buffering'});});
 v.addEventListener('ended',function(){send({t:'state',v:'ended'});});
 v.addEventListener('error',function(){send({t:'error',v:'media '+(v.error?v.error.code:0)});});
-window.tima={play:function(){v.play();},pause:function(){v.pause();},seek:function(s){v.currentTime=s;}};
+window.tima={play:function(){v.play();},pause:function(){v.pause();},seek:function(s){v.currentTime=s;},mute:function(m){v.muted=!!m;}};
 """,
         ),
     )
@@ -59,12 +59,13 @@ var tag=document.createElement('script');tag.src='https://www.youtube.com/iframe
 var player;
 function onYouTubeIframeAPIReady(){player=new YT.Player('p',{videoId:${js(id)},
  playerVars:{autoplay:1,playsinline:1,start:$startSec,rel:0,origin:${js(WebPage.ORIGIN.trimEnd('/'))}},
- events:{onReady:function(){send({t:'ready'});player.playVideo();},
+ events:{onReady:function(){send({t:'ready'});applyM();player.playVideo();},
   onStateChange:function(e){var m={'-1':'buffering','0':'ended','1':'playing','2':'paused','3':'buffering'};send({t:'state',v:m[String(e.data)]||'paused'});
    var vd=player.getVideoData&&player.getVideoData();if(vd&&vd.video_id&&vd.video_id!==${js(id)})send({t:'away'});},
   onError:function(e){send({t:'error',v:'youtube '+e.data});}}});}
 setInterval(function(){if(player&&player.getCurrentTime)send({t:'time',v:player.getCurrentTime(),d:player.getDuration()});},500);
-window.tima={play:function(){player&&player.playVideo();},pause:function(){player&&player.pauseVideo();},seek:function(s){player&&player.seekTo(s,true);}};
+var M=false;function applyM(){if(player&&player.mute){if(M)player.mute();else player.unMute();}}
+window.tima={play:function(){player&&player.playVideo();},pause:function(){player&&player.pauseVideo();},seek:function(s){player&&player.seekTo(s,true);},mute:function(m){M=!!m;applyM();}};
 """,
         ),
     )
@@ -77,15 +78,16 @@ window.tima={play:function(){player&&player.playVideo();},pause:function(){playe
             """
 var f=document.getElementById('f');
 function cmd(type,data){f.contentWindow.postMessage(JSON.stringify({type:type,data:data||{}}),'*');}
+var M=false;function applyM(){cmd(M?'player:mute':'player:unMute');}
 window.addEventListener('message',function(e){var m;try{m=typeof e.data==='string'?JSON.parse(e.data):e.data;}catch(x){return;}
  if(!m||!m.type)return;var d=m.data||{};
- if(m.type==='player:ready')send({t:'ready'});
+ if(m.type==='player:ready'){send({t:'ready'});applyM();}
  else if(m.type==='player:currentTime')send({t:'time',v:d.time||0,d:d.duration||0});
  else if(m.type==='player:durationChange')send({t:'time',v:0,d:d.duration||0});
  else if(m.type==='player:changeState'){var s=d.state;send({t:'state',v:s==='playing'?'playing':s==='stopped'||s==='ended'?'ended':'paused'});}
  else if(m.type==='player:error')send({t:'error',v:'rutube '+(d.code||'')});
 });
-window.tima={play:function(){cmd('player:play');},pause:function(){cmd('player:pause');},seek:function(s){cmd('player:setCurrentTime',{time:s});}};
+window.tima={play:function(){cmd('player:play');},pause:function(){cmd('player:pause');},seek:function(s){cmd('player:setCurrentTime',{time:s});},mute:function(m){M=!!m;applyM();}};
 """,
         ),
     )
@@ -99,15 +101,17 @@ window.tima={play:function(){cmd('player:play');},pause:function(){cmd('player:p
                 """<iframe id="f" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen src="https://vkvideo.ru/video_ext.php?oid=$oid&id=$id&hash=$hash&autoplay=1&js_api=1$t"></iframe>""",
                 """
 var p=null;var f=document.getElementById('f');
+// VK запускает встроенное видео без звука — включаем, когда пошло (заказчик 2026-10-23).
+var M=false;function applyM(){if(!p)return;try{if(M)p.mute();else{p.unmute();p.setVolume(1);}}catch(x){}}
 var s=document.createElement('script');s.src='https://vk.com/js/api/videoplayer.js';
 s.onload=function(){try{p=VK.VideoPlayer(f);var E=VK.VideoPlayer.Events;
- p.on(E.INITED,function(){send({t:'ready'});});
+ p.on(E.INITED,function(){send({t:'ready'});applyM();});
  p.on(E.TIMEUPDATE,function(e){send({t:'time',v:e.time||p.getCurrentTime(),d:p.getDuration()});});
- p.on(E.STARTED,function(){send({t:'state',v:'playing'});});p.on(E.RESUMED,function(){send({t:'state',v:'playing'});});
+ p.on(E.STARTED,function(){send({t:'state',v:'playing'});applyM();});p.on(E.RESUMED,function(){send({t:'state',v:'playing'});});
  p.on(E.PAUSED,function(){send({t:'state',v:'paused'});});p.on(E.ENDED,function(){send({t:'state',v:'ended'});});
  p.on(E.ERROR,function(e){send({t:'error',v:'vk '+(e&&e.code||'')});});}catch(x){send({t:'error',v:'vk api'});}};
 document.head.appendChild(s);
-window.tima={play:function(){p&&p.play();},pause:function(){p&&p.pause();},seek:function(s){p&&p.seek(s);}};
+window.tima={play:function(){p&&p.play();},pause:function(){p&&p.pause();},seek:function(s){p&&p.seek(s);},mute:function(m){M=!!m;applyM();}};
 """,
             ),
         )

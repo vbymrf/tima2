@@ -9,3 +9,6 @@ actual fun rememberOwnPlayer(): OwnPlayer? = null
 
 @Composable
 actual fun OwnPlayerSurface(player: OwnPlayer, modifier: Modifier) = Unit
+
+@Composable
+actual fun rememberFramePeek(url: String?): FramePeek? = null

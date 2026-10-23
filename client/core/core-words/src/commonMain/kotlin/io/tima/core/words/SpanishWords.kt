@@ -1365,6 +1365,8 @@ object SpanishWords : Words {
         override val playerFull = "Pantalla completa"
         override val playerFullExit = "Salir de pantalla completa"
         override val playerAuto = "Auto"
+        override val playerMute = "Silenciar"
+        override val playerUnmute = "Activar sonido"
         override val mediaUnavailable = "no disponible"
         override val streamUnavailable = "emisión no disponible"
         override val streamConnecting = "conectando…"

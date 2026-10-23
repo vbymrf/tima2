@@ -68,6 +68,10 @@ internal class WindowsWebPlayer : WebPlayer {
         js("seek(${ms / 1000.0})")
     }
 
+    override fun setMuted(muted: Boolean) {
+        js("mute($muted)")
+    }
+
     override fun release() {
         engine?.close()
         engine = null
