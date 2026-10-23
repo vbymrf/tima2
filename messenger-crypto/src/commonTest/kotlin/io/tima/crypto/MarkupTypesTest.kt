@@ -27,7 +27,9 @@ class MarkupTypesTest {
                 "paragraph", "heading", "quote", "list", "list_item", "container", "table", "row", "cell",
                 // ADR-0044: ряд, разделитель, блок кода, виджеты, подкладка
                 "flex", "divider", "code_block", "image", "link", "cloud", "map", "contact", "reply",
-                "quoted", "emoji", "underlay", "",
+                "quoted", "emoji", "underlay",
+                // ПЛАН-(ВМ) §3.6–§3.8: видео, звук, эфир и метки по ссылке
+                "video", "audio", "stream", "marks", "",
             ),
             BlockType.entries.map { it.wire }.toSet(),
         )
