@@ -64,4 +64,11 @@ class WebPlayerLiveTest {
         val (_, vk) = runPage(WebPages.vk("https://vkvideo.ru/video-65886767_456239913", "-65886767", "456239913", "", 0), 120.0)
         assertTrue(vk in 119_000..130_000, "VK: после перемотки $vk")
     }
+
+    @Test
+    fun webm_браузерным_движком() = runBlocking {
+        if (System.getenv("TIMA_LIVE_MEDIA") != "1") return@runBlocking
+        val (_, after) = runPage(WebPages.file(OwnPlayerLiveTest.WEBM, 0), 30.0)
+        assertTrue(after in 29_000..40_000, "WebM: после перемотки $after")
+    }
 }

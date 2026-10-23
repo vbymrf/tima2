@@ -41,7 +41,39 @@ class OwnPlayerLiveTest {
         p.release()
     }
 
+    @Test
+    fun mp3_через_media_engine_и_webm_как_выйдет() = runBlocking {
+        if (System.getenv("TIMA_LIVE_MEDIA") != "1") return@runBlocking
+        val mp3 = WindowsOwnPlayer()
+        mp3.open(MP3)
+        val went = withTimeoutOrNull(20_000) {
+            while (!mp3.state.value.started && mp3.state.value.error == null) delay(100)
+            mp3.state.value.started
+        }
+        println("mp3: пошло=$went, длительность ${mp3.state.value.durationMs}, ошибка ${mp3.state.value.error}")
+        assertTrue(went == true, "mp3 не пошёл: ${mp3.state.value}")
+        mp3.seek(120_000)
+        delay(2500)
+        println("mp3: после перемотки на 2:00 — ${mp3.state.value.positionMs} мс")
+        assertTrue(mp3.state.value.positionMs in 119_000..130_000, "mp3: перемотка ${mp3.state.value.positionMs}")
+        mp3.release()
+        val webm = WindowsOwnPlayer()
+        webm.open(WEBM)
+        val done = withTimeoutOrNull(15_000) {
+            while (!webm.state.value.started && webm.state.value.error == null) delay(100)
+            webm.state.value
+        }
+        println("webm своим движком: $done")
+        // WebM у Media Foundation — только с расширениями Windows для VP9 (Microsoft Store): где их нет —
+        // отказ или тишина, и окно уходит в браузерный движок. Здесь — что вышло, без утверждения.
+        webm.release()
+    }
+
     companion object {
+        /** Эталонные ссылки (ПЛАН-(ВМ) ВМ10). */
+        const val MP3 = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+        const val WEBM = "https://upload.wikimedia.org/wikipedia/commons/c/c0/Big_Buck_Bunny_4K.webm"
+
         /** Ссылка заказчика из обсуждения 2026-10-23: mp4 H.264, 199 МБ. */
         const val URL = "https://u-laguna.ru/wp-content/uploads/2026/04/%D0%9C%D0%BE%D0%B1-%D0%94%D0%BE%D1%80%D0%BE%D0%B3%D0%B0-%D0%9E%D0%B1%D0%B7%D0%BE%D1%80-%D0%9F%D0%BB%D1%8F%D0%B6%D0%B0-%D0%93%D0%BE%D1%80%D0%BD%D1%8B%D0%B9-%D0%92%D0%BE%D0%B7%D0%B4%D1%83%D1%85-%D0%92-%D0%A1%D0%BE%D1%87%D0%B8-%D0%9F%D0%BE%D1%81.-%D0%9B%D0%BE%D0%BE-%D0%92%D0%B8%D0%B4%D0%B8%D0%BE-%D0%9E%D1%82-%D0%93%D0%BE%D1%81%D1%82%D0%B8%D0%BD%D0%B8%D1%86%D1%8B-%D0%A3%D1%8E%D1%821.mp4"
     }

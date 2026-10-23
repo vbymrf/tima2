@@ -38,7 +38,8 @@ import java.util.concurrent.Executors
  * забираются по готовности и рисуются в окне Compose — отдельного нативного окна нет.
  *
  * Все вызовы моста — в одном своём потоке: чтение кадра и перемотка в нём не пересекаются.
- * Media Foundation не играет WebM, MKV и AVI — их берёт браузерный движок (ВМ6, ВМ7).
+ * WebM — только с расширениями Windows для VP9, MKV и AVI — нет: не открылось — окно берёт браузерный
+ * движок (ВМ6, ВМ7). Звук без картинки — [MediaEngineAudio].
  */
 internal class WindowsOwnPlayer : OwnPlayer {
     private val bridge = WindowsNativeBridge
@@ -53,6 +54,10 @@ internal class WindowsOwnPlayer : OwnPlayer {
 
     private var instance = 0L
     private var pump: Job? = null
+
+    /** Звук без картинки — Media Engine: мост видео такой файл не открывает (`0xC00D36B3`). */
+    private var audio: MediaEngineAudio? = null
+    private var audioWatch: Job? = null
     private val bitmaps = arrayOfNulls<Bitmap>(3)
     private var next = 0
     private var bw = 0
@@ -74,7 +79,16 @@ internal class WindowsOwnPlayer : OwnPlayer {
             instance = bridge.createInstance()
             if (instance == 0L) return@launch fail("нет экземпляра")
             val hr = bridge.OpenMedia(instance, url, false)
-            if (hr < 0) return@launch fail("не открылся: 0x${hr.toUInt().toString(16)}")
+            if (hr < 0) {
+                // Видео нет — звук: тем же адресом через Media Engine (mp3, m4a, звук HLS).
+                runCatching { bridge.destroyInstance(instance) }
+                instance = 0L
+                val a = MediaEngineAudio()
+                audio = a
+                audioWatch = scope.launch { a.state.collect { _state.value = it } }
+                a.open(url, startMs, play)
+                return@launch
+            }
             val size = IntArray(2)
             bridge.GetVideoSize(instance, size)
             // Картинка больше 1280 по стороне — ужимается здесь: в окне её всё равно не видно, а
@@ -170,6 +184,7 @@ internal class WindowsOwnPlayer : OwnPlayer {
     }
 
     override fun play() {
+        audio?.let { return it.play() }
         scope.launch {
             if (instance == 0L) return@launch
             if (_state.value.ended) {
@@ -182,6 +197,7 @@ internal class WindowsOwnPlayer : OwnPlayer {
     }
 
     override fun pause() {
+        audio?.let { return it.pause() }
         scope.launch {
             if (instance == 0L) return@launch
             bridge.SetPlaybackState(instance, false, false)
@@ -190,6 +206,7 @@ internal class WindowsOwnPlayer : OwnPlayer {
     }
 
     override fun seek(ms: Long) {
+        audio?.let { return it.seek(ms) }
         scope.launch {
             if (instance == 0L) return@launch
             bridge.SeekMedia(instance, ms.coerceAtLeast(0) * 10_000)
@@ -198,6 +215,7 @@ internal class WindowsOwnPlayer : OwnPlayer {
     }
 
     override fun setSpeed(speed: Float) {
+        audio?.let { return it.setSpeed(speed) }
         scope.launch {
             if (instance != 0L) bridge.SetPlaybackSpeed(instance, speed)
             _state.value = _state.value.copy(speed = speed)
@@ -205,6 +223,9 @@ internal class WindowsOwnPlayer : OwnPlayer {
     }
 
     private fun close() {
+        audioWatch?.cancel()
+        audio?.release()
+        audio = null
         pump?.cancel()
         pump = null
         if (instance != 0L) {
