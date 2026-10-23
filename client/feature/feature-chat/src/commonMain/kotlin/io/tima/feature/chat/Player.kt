@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,24 +31,39 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.tima.core.media.FullScreenMode
 import io.tima.core.media.MediaWindow
 import io.tima.core.media.OwnPlayerSurface
+import io.tima.core.media.ScreenTurn
 import io.tima.core.media.rememberOwnPlayer
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
+import io.tima.domain.chat.M3u8
 import io.tima.domain.chat.MediaLinks
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** Что открыть в окне проигрывания (ПЛАН-(ВМ) §3.1): адрес, название, с какой секунды. */
 data class PlayRequest(
@@ -72,21 +88,35 @@ enum class PlayerEvent {
     /** Сменили движок — сами после отказа или кнопкой «Браузерный» / «Встроенный проигрыватель». */
     SWITCHED,
     TO_BROWSER,
+
+    /** Проигрыватель сайта ушёл с нашего ролика — на другой ролик или страницу (4а). */
+    AWAY,
+
+    /** «Перезапустить»: тот же движок, наше видео, та же секунда (4а). */
+    RESTARTED,
+
+    /** Выбрано качество своего движка: «Авто» или высота кадра (8а). */
+    QUALITY,
 }
 
 /** Сколько ждать первого кадра или звука, прежде чем считать, что движок не смог (§3.4). */
 const val PLAYER_WATCH_MS = 15_000L
 
+/** Сколько видны кнопки поверх видео в полном экране после касания. */
+private const val OVERLAY_MS = 3_000L
+
 /** Движок окна (§3.2): свой (Media3, Media Foundation) или браузерный (WebView, WebView2). */
 enum class PlayerEngine { OWN, WEB }
 
 /**
- * Что окну нужно снаружи (§3.3, §3.4): поток сайта для своего движка и память по сайту — с каким
- * движком видео пошло в прошлый раз.
+ * Что окну нужно снаружи (§3.3, §3.4): поток сайта для своего движка, качества потока и память по
+ * сайту — с каким движком видео пошло в прошлый раз.
  */
 class PlayerPorts(
     /** Поток HLS Rutube или VK для своего движка; не вышло — `null`. */
     val resolve: suspend (kind: MediaLinks.Kind, url: String) -> String? = { _, _ -> null },
+    /** Качества главного списка m3u8 (8а); не главный или не вышло — пусто. */
+    val variants: suspend (url: String) -> List<M3u8.Variant> = { emptyList() },
     val remembered: (host: String) -> PlayerEngine? = { null },
     val remember: (host: String, engine: PlayerEngine) -> Unit = { _, _ -> },
 )
@@ -122,12 +152,38 @@ object PlayerTags {
     const val BROWSER = "player:browser"
     const val OTHER = "player:other"
     const val CLOSE = "player:close"
+    const val RESTART = "player:restart"
+    const val FULL = "player:full"
+    const val QUALITY = "player:quality"
+    fun quality(height: Int) = "player:quality.$height"
+}
+
+/**
+ * Полный экран окна (заказчик 2026-10-23, 6–7): кнопкой «На весь экран» или телефоном боком. После
+ * выхода окно держится вертикально, пока телефон не поставят вертикально ([upright]).
+ */
+private class PlayerScreen {
+    var full by mutableStateOf(false)
+    var landscape by mutableStateOf(false)
+    var upright by mutableStateOf(false)
+    val active get() = full || (landscape && !upright)
+
+    fun enter() {
+        full = true
+        upright = false
+    }
+
+    fun exit() {
+        full = false
+        upright = true
+    }
 }
 
 /**
  * Окно проигрывания (ПЛАН-(ВМ) §3.1–§3.4): видео и звук по ссылке — двумя движками. Не смог
  * (ошибка или сторож 15 с) — окно само берёт другой движок с той же секунды; «Браузерный» или
- * «Встроенный проигрыватель» — то же руками; ни один не смог — «Открыть в браузере». Движок, с которым пошло, запоминается по сайту.
+ * «Встроенный проигрыватель» — то же руками; ни один не смог — «Открыть в браузере». Движок, с которым
+ * пошло, запоминается по сайту. «Назад» в полном экране выходит из него, а не закрывает окно.
  */
 @Composable
 fun PlayerWindow(
@@ -138,8 +194,9 @@ fun PlayerWindow(
     ports: PlayerPorts = PlayerPorts(),
 ) {
     val title = request.title.ifBlank { MediaLinks.hostOf(request.url).orEmpty() }
-    MediaWindow(title = title, onClose = onClose) {
-        PlayerContent(request, title, onClose, onBrowser, onEvent, ports)
+    val screen = remember(request) { PlayerScreen() }
+    MediaWindow(title = title, onClose = { if (screen.active) screen.exit() else onClose() }) {
+        PlayerContent(request, title, screen, onClose, onBrowser, onEvent, ports)
     }
 }
 
@@ -147,6 +204,7 @@ fun PlayerWindow(
 private fun PlayerContent(
     request: PlayRequest,
     title: String,
+    screen: PlayerScreen,
     onClose: () -> Unit,
     onBrowser: (String) -> Unit,
     onEvent: (PlayerEvent, String) -> Unit,
@@ -166,6 +224,14 @@ private fun PlayerContent(
     var carryMs by remember(request) { mutableStateOf(request.startMs) }
     var failed by remember(request) { mutableStateOf(order.isEmpty()) }
     var attempt by remember(request) { mutableStateOf(0) }
+    // Поток своего движка и его качества (8а): узнаются один раз, «Авто» (0) — по умолчанию.
+    var ownStream by remember(request) { mutableStateOf<String?>(null) }
+    var variants by remember(request) { mutableStateOf<List<M3u8.Variant>>(emptyList()) }
+    var variantsAsked by remember(request) { mutableStateOf(false) }
+    var quality by remember(request) { mutableStateOf(0) }
+    var qualityOpen by remember(request) { mutableStateOf(false) }
+    // Последняя секунда нашего ролика — к ней возвращает «Перезапустить», когда сайт увёл на другой (4а).
+    var ourMs by remember(request) { mutableStateOf(request.startMs) }
     val engine = order.getOrNull(at)
     val idle = remember { kotlinx.coroutines.flow.MutableStateFlow(io.tima.core.media.OwnPlayerState()) }
     val state by (when (engine) {
@@ -174,10 +240,13 @@ private fun PlayerContent(
         null -> null
     } ?: idle).collectAsState()
 
+    /** С какой секунды продолжать: ушли на чужой ролик — с последней нашей. */
+    fun here(): Long = if (state.elsewhere) ourMs else state.positionMs.takeIf { it > 0 } ?: carryMs
+
     /** Следующий движок с той же секунды; кончились — «не играет». */
     fun next(why: PlayerEvent, detail: String) {
         onEvent(why, "$host ${engine?.name?.lowercase()} $detail")
-        val pos = state.positionMs.takeIf { it > 0 } ?: carryMs
+        val pos = here()
         if (at + 1 < order.size) {
             carryMs = pos
             at++
@@ -188,21 +257,34 @@ private fun PlayerContent(
         }
     }
 
+    /** Тот же движок заново: наше видео с нашей секунды (4а) или другое качество (8а). */
+    fun reopen(why: PlayerEvent, detail: String) {
+        onEvent(why, "$host ${engine?.name?.lowercase()} $detail".trimEnd())
+        carryMs = here()
+        attempt++
+        failed = false
+    }
+
     LaunchedEffect(request, at, attempt) {
         val e = engine ?: return@LaunchedEffect
         val sec = (carryMs / 1000).toInt()
         when (e) {
             PlayerEngine.OWN -> {
                 web?.pause()
-                val direct = when (kind) {
+                val stream = ownStream ?: when (kind) {
                     MediaLinks.Kind.RUTUBE, MediaLinks.Kind.VK_VIDEO -> ports.resolve(kind, request.url)
                     else -> request.url
                 }
-                if (direct == null) {
+                if (stream == null) {
                     next(PlayerEvent.FAILED, "no-stream")
                     return@LaunchedEffect
                 }
-                own?.open(direct, carryMs)
+                ownStream = stream
+                if (!variantsAsked && "m3u8" in stream.substringBefore('?').lowercase()) {
+                    variantsAsked = true
+                    launch { variants = ports.variants(stream) }
+                }
+                own?.open(variants.firstOrNull { it.height == quality }?.url ?: stream, carryMs)
             }
             PlayerEngine.WEB -> {
                 own?.pause()
@@ -227,102 +309,271 @@ private fun PlayerContent(
             ports.remember(host, engine)
         }
     }
+    LaunchedEffect(state.positionMs, state.elsewhere) {
+        if (!state.elsewhere && state.started && state.positionMs > 0) ourMs = state.positionMs
+    }
+    LaunchedEffect(state.elsewhere) { if (state.elsewhere && engine != null) onEvent(PlayerEvent.AWAY, "$host ${engine.name.lowercase()}") }
     // Пока видео идёт, телефон не засыпает (заказчик 2026-10-23); пауза — экран гаснет по настройке.
     io.tima.core.media.KeepScreenOn(state.playing && !failed)
     fun play() = if (engine == PlayerEngine.WEB) web?.play() else own?.play()
     fun pause() = if (engine == PlayerEngine.WEB) web?.pause() else own?.pause()
     fun seek(ms: Long) = if (engine == PlayerEngine.WEB) web?.seek(ms) else own?.seek(ms)
 
-    // Отступы под строку состояния и кнопки навигации: на Redmi название и ✕ уходили под часы,
-    // последняя метка — под кнопки (2026-10-23).
-    Column(Modifier.fillMaxSize().background(colors.viewer).systemBarsPadding().testTag(PlayerTags.WINDOW)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = Modifier.weight(1f))
-            Box(Modifier.size(40.dp).clickable(onClick = onClose).testTag(PlayerTags.CLOSE), contentAlignment = Alignment.Center) {
-                Caption("✕", fontSize = 20.sp, color = onVideo)
-            }
+    // Горизонтальное видео в полном экране кладёт телефон боком; вертикальное (Shorts) — как держат.
+    val wide = if (engine == PlayerEngine.OWN) state.width == 0 || state.width >= state.height else "/shorts/" !in request.url
+    val turn = when {
+        screen.full && wide -> ScreenTurn.LANDSCAPE
+        screen.upright -> ScreenTurn.PORTRAIT
+        else -> ScreenTurn.FREE
+    }
+    FullScreenMode(screen.active, turn, onUpright = { screen.upright = false })
+
+    val restart: @Composable () -> Unit = {
+        // Есть всегда; горит зелёным, когда проигрыватель сайта увёл с нашего ролика (заказчик 2026-10-23, 4а).
+        PlayerIconButton(PlayerIcon.RESTART, words.playerRestart, lit = state.elsewhere, tag = PlayerTags.RESTART) {
+            reopen(PlayerEvent.RESTARTED, if (state.elsewhere) "away" else "")
         }
-        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            when {
-                failed -> Caption(words.playerFailed, color = onVideo, fontSize = 15.sp)
-                engine == PlayerEngine.OWN && own != null -> OwnPlayerSurface(own, Modifier.fillMaxSize())
-                engine == PlayerEngine.WEB && web != null -> io.tima.core.media.WebPlayerSurface(web, Modifier.fillMaxSize())
-            }
-            if (!failed && !state.started && engine == PlayerEngine.OWN) Caption(words.playerLoading, color = onVideo, fontSize = 15.sp)
+    }
+    val playButton: @Composable () -> Unit = {
+        Box(
+            Modifier.size(44.dp).background(colors.navigation, CircleShape)
+                .clickable(enabled = !failed) { if (state.playing) pause() else play() }
+                .testTag(PlayerTags.PLAY),
+            contentAlignment = Alignment.Center,
+        ) {
+            Caption(if (state.playing) "❚❚" else "▶", fontSize = 18.sp, color = colors.onAccent)
         }
-        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (!state.live && state.durationMs > 0) {
-                val progress = state.positionMs.toFloat() / state.durationMs
-                val marks = request.marks.map { it.atMs.toFloat() / state.durationMs }
-                // Непроигранная часть — светлой полосой: цветом линий на чёрном её не было видно (заказчик 2026-10-23).
-                SeekBar(progress, Modifier.fillMaxWidth().height(24.dp).testTag(PlayerTags.BAR), marks, track = onVideo.copy(alpha = 0.35f)) { f ->
-                    seek((state.durationMs * f).toLong())
+    }
+    val time = if (state.live) words.playerLive else "${voiceTime(state.positionMs)} / ${voiceTime(state.durationMs)}"
+    val bar: @Composable () -> Unit = {
+        if (!state.live && state.durationMs > 0) {
+            val progress = state.positionMs.toFloat() / state.durationMs
+            val marks = request.marks.map { it.atMs.toFloat() / state.durationMs }
+            // Непроигранная часть — светлой полосой: цветом линий на чёрном её не было видно (заказчик 2026-10-23).
+            // Чужой ролик — полоса блёклая и не перематывает: время уже не наше.
+            SeekBar(
+                progress, Modifier.fillMaxWidth().height(24.dp).alpha(if (state.elsewhere) 0.4f else 1f).testTag(PlayerTags.BAR), marks,
+                track = onVideo.copy(alpha = 0.35f),
+            ) { f -> if (!state.elsewhere) seek((state.durationMs * f).toLong()) }
+        }
+    }
+
+    // Касание где угодно в полном экране показывает кнопки поверх видео на 3 с; на паузе они видны всегда.
+    var touches by remember { mutableStateOf(0) }
+    var overlay by remember { mutableStateOf(true) }
+    LaunchedEffect(touches, screen.active) {
+        overlay = true
+        delay(OVERLAY_MS)
+        overlay = false
+    }
+
+    BoxWithConstraints(
+        Modifier.fillMaxSize().background(colors.viewer).testTag(PlayerTags.WINDOW)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        if (awaitPointerEvent(PointerEventPass.Initial).type == PointerEventType.Press) touches++
+                    }
+                }
+            },
+    ) {
+        val sideways = maxWidth > maxHeight
+        LaunchedEffect(sideways) { screen.landscape = io.tima.core.media.turnsWithPhone && sideways }
+        val full = screen.active
+        // Отступы под строку состояния и кнопки навигации — только в обычном окне: на Redmi название и ✕
+        // уходили под часы, последняя метка — под кнопки (2026-10-23). В полном экране полосы спрятаны.
+        Column(Modifier.fillMaxSize().then(if (full) Modifier else Modifier.systemBarsPadding())) {
+            if (!full) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = Modifier.weight(1f))
+                    Box(Modifier.size(40.dp).clickable(onClick = onClose).testTag(PlayerTags.CLOSE), contentAlignment = Alignment.Center) {
+                        Caption("✕", fontSize = 20.sp, color = onVideo)
+                    }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(44.dp).background(colors.navigation, CircleShape)
-                        .clickable(enabled = !failed) { if (state.playing) pause() else play() }
-                        .testTag(PlayerTags.PLAY),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Caption(if (state.playing) "❚❚" else "▶", fontSize = 18.sp, color = colors.onAccent)
+            // Место видео — одно и то же в обоих видах: движок не пересоздаётся при входе в полный экран.
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                when {
+                    failed -> Caption(words.playerFailed, color = onVideo, fontSize = 15.sp)
+                    engine == PlayerEngine.OWN && own != null -> OwnPlayerSurface(own, Modifier.fillMaxSize())
+                    engine == PlayerEngine.WEB && web != null -> io.tima.core.media.WebPlayerSurface(web, Modifier.fillMaxSize())
                 }
-                Caption(
-                    if (state.live) words.playerLive else "${voiceTime(state.positionMs)} / ${voiceTime(state.durationMs)}",
-                    color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.weight(1f),
-                )
+                if (!failed && !state.started && engine == PlayerEngine.OWN) Caption(words.playerLoading, color = onVideo, fontSize = 15.sp)
             }
-            // Кнопки — своим рядом с прокруткой: в одном ряду с временем на экране 720 точек время
-            // сжималось в столбик по букве (Redmi, 2026-10-23).
+            if (!full) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    bar()
+                    // ▶ и время слева; «Перезапустить» и «На весь экран» — справа, в том же ряду (заказчик 2026-10-23).
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        playButton()
+                        Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.weight(1f))
+                        restart()
+                        PlayerIconButton(PlayerIcon.FULL, words.playerFull, lit = false, tag = PlayerTags.FULL) { screen.enter() }
+                    }
+                    // Кнопки — своим рядом с прокруткой: в одном ряду с временем на экране 720 точек время
+                    // сжималось в столбик по букве (Redmi, 2026-10-23).
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (!state.live && engine == PlayerEngine.OWN) {
+                            Chip(
+                                speedName(state.speed),
+                                kind = ChipKind.Quiet,
+                                onClick = { own?.setSpeed(when (state.speed) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f }) },
+                                modifier = Modifier.testTag(PlayerTags.SPEED),
+                            )
+                        }
+                        // Качество — когда своему движку есть из чего выбрать (8а); «Авто» подбирает по сети.
+                        if (engine == PlayerEngine.OWN && variants.size > 1) {
+                            Chip(
+                                if (quality == 0) words.playerAuto else "${quality}p",
+                                kind = if (qualityOpen) ChipKind.Selected else ChipKind.Quiet,
+                                onClick = { qualityOpen = !qualityOpen },
+                                modifier = Modifier.testTag(PlayerTags.QUALITY),
+                            )
+                        }
+                        // Смена движка — видна всегда, когда движков больше одного (§3.1); надпись называет тот,
+                        // на который переключит: «Браузерный» или «Встроенный проигрыватель» (заказчик 2026-10-23).
+                        if (order.size > 1) {
+                            val to = order[(at + 1) % order.size]
+                            Chip(if (to == PlayerEngine.WEB) words.playerToWeb else words.playerToOwn, kind = ChipKind.Quiet, modifier = Modifier.testTag(PlayerTags.OTHER), onClick = {
+                                carryMs = here()
+                                at = (at + 1) % order.size
+                                attempt++
+                                failed = false
+                                onEvent(PlayerEvent.SWITCHED, "$host → ${order[at].name.lowercase()} hand")
+                            })
+                        }
+                        Chip(words.playerBrowser, kind = ChipKind.Quiet, onClick = {
+                            onEvent(PlayerEvent.TO_BROWSER, host)
+                            onBrowser(request.url)
+                        }, modifier = Modifier.testTag(PlayerTags.BROWSER))
+                    }
+                    if (qualityOpen && engine == PlayerEngine.OWN) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            for (h in listOf(0) + variants.map { it.height }) {
+                                Chip(
+                                    if (h == 0) words.playerAuto else "${h}p",
+                                    kind = if (h == quality) ChipKind.Selected else ChipKind.Quiet,
+                                    modifier = Modifier.testTag(PlayerTags.quality(h)),
+                                    onClick = {
+                                        qualityOpen = false
+                                        if (h != quality) {
+                                            quality = h
+                                            reopen(PlayerEvent.QUALITY, if (h == 0) "auto" else "${h}p")
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    if (request.marks.isNotEmpty()) {
+                        PlayerMarks(request.marks, state.positionMs, enabled = !state.elsewhere) { ms -> seek(ms); play() }
+                    }
+                }
+            }
+        }
+        // Полный экран: кнопки поверх видео — сверху название, «Перезапустить» и выход, снизу ▶, время и полоса.
+        if (full && (overlay || !state.playing)) {
+            val shade = colors.viewer.copy(alpha = 0.5f)
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (!state.live && engine == PlayerEngine.OWN) {
-                    Chip(
-                        speedName(state.speed),
-                        kind = ChipKind.Quiet,
-                        onClick = { own?.setSpeed(when (state.speed) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f }) },
-                        modifier = Modifier.testTag(PlayerTags.SPEED),
-                    )
-                }
-                // Смена движка — видна всегда, когда движков больше одного (§3.1); надпись называет тот,
-                // на который переключит: «Браузерный» или «Встроенный проигрыватель» (заказчик 2026-10-23).
-                if (order.size > 1) {
-                    val to = order[(at + 1) % order.size]
-                    Chip(if (to == PlayerEngine.WEB) words.playerToWeb else words.playerToOwn, kind = ChipKind.Quiet, modifier = Modifier.testTag(PlayerTags.OTHER), onClick = {
-                        carryMs = state.positionMs.takeIf { it > 0 } ?: carryMs
-                        at = (at + 1) % order.size
-                        attempt++
-                        failed = false
-                        onEvent(PlayerEvent.SWITCHED, "$host → ${order[at].name.lowercase()} hand")
-                    })
-                }
-                Chip(words.playerBrowser, kind = ChipKind.Quiet, onClick = {
-                    onEvent(PlayerEvent.TO_BROWSER, host)
-                    onBrowser(request.url)
-                }, modifier = Modifier.testTag(PlayerTags.BROWSER))
+                Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = Modifier.weight(1f))
+                restart()
+                PlayerIconButton(PlayerIcon.FULL_EXIT, words.playerFullExit, lit = false, tag = PlayerTags.FULL) { screen.exit() }
             }
-            if (request.marks.isNotEmpty()) PlayerMarks(request.marks, state.positionMs) { ms -> seek(ms); play() }
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                bar()
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    playButton()
+                    Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }
 
-/** Метки в окне (§3.6): текущая подсвечена по ходу просмотра, нажатие перематывает. */
+private enum class PlayerIcon { RESTART, FULL, FULL_EXIT }
+
+/**
+ * Кнопка-значок окна — без слов (заказчик 2026-10-23): «Перезапустить» (круговая стрелка), «На весь экран»
+ * (уголки наружу), выход (уголки внутрь). [lit] — горит зелёным. Подпись — для озвучки.
+ */
 @Composable
-private fun PlayerMarks(marks: List<io.tima.domain.chat.MediaMark>, positionMs: Long, onSeek: (Long) -> Unit) {
+private fun PlayerIconButton(icon: PlayerIcon, label: String, lit: Boolean, tag: String, onClick: () -> Unit) {
     val colors = Tima.colors
-    val current = currentMark(marks, positionMs)
+    val ink = if (lit) colors.onAccent else io.tima.core.ui.TimaFixed.onVideo
+    Box(
+        Modifier.size(44.dp).background(if (lit) colors.navigation else io.tima.core.ui.TimaFixed.onVideo.copy(alpha = 0.18f), CircleShape)
+            .clickable(onClick = onClick).semantics { contentDescription = label }.testTag(tag),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(22.dp)) {
+            val w = 2.2.dp.toPx()
+            val s = size.minDimension
+            val stroke = Stroke(width = w, cap = StrokeCap.Round)
+            when (icon) {
+                PlayerIcon.RESTART -> {
+                    val r = s * 0.38f
+                    val c = Offset(s / 2, s / 2)
+                    drawArc(ink, startAngle = -60f, sweepAngle = 300f, useCenter = false, topLeft = Offset(c.x - r, c.y - r), size = Size(r * 2, r * 2), style = stroke)
+                    // Наконечник на конце дуги — по ходу часовой стрелки.
+                    val a = (240.0 * kotlin.math.PI / 180).toFloat()
+                    val p = Offset(c.x + r * cos(a), c.y + r * sin(a))
+                    val t = Offset(-sin(a), cos(a))
+                    val n = Offset(cos(a), sin(a))
+                    val k = s * 0.2f
+                    val head = Path().apply {
+                        moveTo(p.x + t.x * k, p.y + t.y * k)
+                        lineTo(p.x + n.x * k * 0.8f, p.y + n.y * k * 0.8f)
+                        lineTo(p.x - n.x * k * 0.8f, p.y - n.y * k * 0.8f)
+                        close()
+                    }
+                    drawPath(head, ink)
+                }
+                PlayerIcon.FULL, PlayerIcon.FULL_EXIT -> {
+                    val e = s * 0.34f
+                    val out = icon == PlayerIcon.FULL
+                    for ((cx, cy) in listOf(0f to 0f, s to 0f, 0f to s, s to s)) {
+                        val dx = if (cx == 0f) 1f else -1f
+                        val dy = if (cy == 0f) 1f else -1f
+                        // Наружу — уголок в углу; внутрь — уголок отодвинут к середине и смотрит наружу.
+                        val corner = if (out) Offset(cx, cy) else Offset(cx + dx * e, cy + dy * e)
+                        val hx = if (out) dx * e else -dx * e
+                        val hy = if (out) dy * e else -dy * e
+                        drawLine(ink, corner, Offset(corner.x + hx, corner.y), w, StrokeCap.Round)
+                        drawLine(ink, corner, Offset(corner.x, corner.y + hy), w, StrokeCap.Round)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Метки в окне (§3.6): текущая подсвечена по ходу просмотра, нажатие перематывает; чужой ролик — блёклые. */
+@Composable
+private fun PlayerMarks(marks: List<io.tima.domain.chat.MediaMark>, positionMs: Long, enabled: Boolean, onSeek: (Long) -> Unit) {
+    val colors = Tima.colors
+    val current = if (enabled) currentMark(marks, positionMs) else -1
     Column(
-        Modifier.fillMaxWidth().heightIn(max = 180.dp).verticalScroll(rememberScrollState()).testTag("player:marks"),
+        Modifier.fillMaxWidth().heightIn(max = 180.dp).verticalScroll(rememberScrollState()).alpha(if (enabled) 1f else 0.4f).testTag("player:marks"),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         for ((i, m) in marks.withIndex()) {
             Row(
                 Modifier.fillMaxWidth().background(if (i == current) colors.navigation.copy(alpha = 0.35f) else colors.viewer, RoundedCornerShape(6.dp))
-                    .clickable { onSeek(m.atMs) }.padding(horizontal = 6.dp, vertical = 3.dp),
+                    .clickable(enabled = enabled) { onSeek(m.atMs) }.padding(horizontal = 6.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Caption(io.tima.domain.chat.markTime(m.atMs), fontSize = 14.sp, weight = FontWeight.SemiBold, color = colors.link)
@@ -338,14 +589,17 @@ internal fun SeekBar(
     progress: Float,
     modifier: Modifier,
     marks: List<Float> = emptyList(),
-    track: androidx.compose.ui.graphics.Color = Tima.colors.line,
+    track: Color = Tima.colors.line,
     onSeek: (Float) -> Unit,
 ) {
     val colors = Tima.colors
+    // Жесты живут дольше одного показа — зовут последний [onSeek], а не первый: после смены движка
+    // перемотка уходила бы в прежний.
+    val seekNow by androidx.compose.runtime.rememberUpdatedState(onSeek)
     Canvas(
         modifier
-            .pointerInput(Unit) { detectTapGestures { o -> onSeek((o.x / size.width).coerceIn(0f, 1f)) } }
-            .pointerInput(Unit) { detectHorizontalDragGestures { c, _ -> onSeek((c.position.x / size.width).coerceIn(0f, 1f)) } },
+            .pointerInput(Unit) { detectTapGestures { o -> seekNow((o.x / size.width).coerceIn(0f, 1f)) } }
+            .pointerInput(Unit) { detectHorizontalDragGestures { c, _ -> seekNow((c.position.x / size.width).coerceIn(0f, 1f)) } },
     ) {
         val h = 4.dp.toPx()
         val y = (size.height - h) / 2

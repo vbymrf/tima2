@@ -16,3 +16,24 @@ expect fun MediaWindow(title: String, onClose: () -> Unit, content: @Composable 
  */
 @Composable
 expect fun KeepScreenOn(on: Boolean)
+
+/** Куда держать экран телефона в окне проигрывания (заказчик 2026-10-23, 6–7). */
+enum class ScreenTurn {
+    /** Как держат телефон. */
+    FREE,
+
+    /** Горизонтально — полный экран кнопкой для горизонтального видео. */
+    LANDSCAPE,
+
+    /** Вертикально, пока телефон не поставят вертикально, — после выхода из полного экрана; тогда [FullScreenMode] зовёт `onUpright`. */
+    PORTRAIT,
+}
+
+/**
+ * Полный экран окна проигрывания: [on] — системные полосы (часы, кнопки навигации) спрятаны, на ПК окно
+ * разворачивается во весь экран; [turn] — поворот телефона. Уход из окна возвращает всё как было.
+ */
+@Composable
+expect fun FullScreenMode(on: Boolean, turn: ScreenTurn, onUpright: () -> Unit)
+/** Окно поворачивается вместе с устройством — телефон боком значит полный экран (7#). На ПК окно шире всегда. */
+expect val turnsWithPhone: Boolean

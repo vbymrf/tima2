@@ -28,8 +28,22 @@ data class WebPage(
     /** Номер ролика YouTube — для android-youtube-player. */
     val videoId: String = "",
     val html: String = "",
+    /** Сайт проигрывателя и номер нашего ролика в его адресах — узнать уход на другое видео (4а). */
+    val sites: List<String> = emptyList(),
+    val key: String = "",
 ) {
     enum class Kind { FILE, YOUTUBE, RUTUBE, VK }
+
+    /**
+     * Страница [url] внутри проигрывателя — уже не наш ролик: адрес того же сайта без номера нашего.
+     * Чужие сайты (реклама, счётчики) не в счёт; движок зовёт это только сразу после касания, чтобы
+     * служебные страницы сайта, открытые им самим, не зажигали «Перезапустить».
+     */
+    fun isOther(url: String): Boolean {
+        if (key.isEmpty()) return false
+        val host = url.substringAfter("://", "").substringBefore('/').substringBefore('?').substringBefore(':').lowercase()
+        return sites.any { host == it || host.endsWith(".$it") } && key !in url
+    }
 
     companion object {
         /** Адрес нашей страницы: у YouTube и VK проигрыватель хочет настоящий адрес https, а не `about:blank`. */
@@ -47,7 +61,8 @@ expect fun WebPlayerSurface(player: WebPlayer, modifier: Modifier)
 
 /**
  * Сообщение моста страницы → состояние окна: `{"t":"time","v":12.3,"d":600}`, `{"t":"state","v":"playing"}`,
- * `{"t":"error","v":"youtube 150"}`, `{"t":"ready"}`. Незнакомое — без изменений.
+ * `{"t":"error","v":"youtube 150"}`, `{"t":"ready"}`, `{"t":"away"}` — проигрыватель ушёл с нашего ролика.
+ * Незнакомое — без изменений.
  */
 fun OwnPlayerState.bridged(message: String): OwnPlayerState {
     fun field(name: String): String? =
@@ -66,6 +81,7 @@ fun OwnPlayerState.bridged(message: String): OwnPlayerState {
             else -> this
         }
         "error" -> copy(error = field("v") ?: "error", playing = false)
+        "away" -> copy(elsewhere = true)
         else -> this
     }
 }

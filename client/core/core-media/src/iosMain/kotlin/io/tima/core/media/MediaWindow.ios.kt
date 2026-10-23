@@ -8,3 +8,8 @@ actual fun MediaWindow(title: String, onClose: () -> Unit, content: @Composable 
 
 @Composable
 actual fun KeepScreenOn(on: Boolean) = Unit
+
+@Composable
+actual fun FullScreenMode(on: Boolean, turn: ScreenTurn, onUpright: () -> Unit) = Unit
+
+actual val turnsWithPhone: Boolean = false

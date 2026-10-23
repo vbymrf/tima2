@@ -1550,6 +1550,11 @@ interface ChatWords {
     /** Смена движка окна — надпись называет тот, на который переключит (заказчик 2026-10-23). */
     val playerToWeb: String
     val playerToOwn: String
+    /** Кнопки-значки окна — подписи для озвучки; «Авто» — качество по сети (заказчик 2026-10-23). */
+    val playerRestart: String
+    val playerFull: String
+    val playerFullExit: String
+    val playerAuto: String
     // ── «Аудио» и «Поток» (ПЛАН-(ВМ) §3.7, §3.8) ──
     val mediaUnavailable: String
     val streamUnavailable: String
@@ -3810,6 +3815,10 @@ object RussianWords : Words {
         override val playerBrowser = "Открыть в браузере"
         override val playerToWeb = "Браузерный проигрыватель"
         override val playerToOwn = "Встроенный проигрыватель"
+        override val playerRestart = "Перезапустить видео"
+        override val playerFull = "На весь экран"
+        override val playerFullExit = "Выйти из полного экрана"
+        override val playerAuto = "Авто"
         override val mediaUnavailable = "недоступно"
         override val streamUnavailable = "поток недоступен"
         override val streamConnecting = "подключение…"

@@ -51,7 +51,7 @@ window.tima={play:function(){v.play();},pause:function(){v.pause();},seek:functi
 
     /** YouTube — IFrame Player API (Р14); коды ошибок YouTube: 101 и 150 — встраивание запрещено автором. */
     fun youtube(url: String, id: String, startSec: Int): WebPage = WebPage(
-        WebPage.Kind.YOUTUBE, url, videoId = id,
+        WebPage.Kind.YOUTUBE, url, videoId = id, sites = listOf("youtube.com", "youtube-nocookie.com"), key = id,
         html = frame(
             """<div id="p"></div>""",
             """
@@ -60,7 +60,8 @@ var player;
 function onYouTubeIframeAPIReady(){player=new YT.Player('p',{videoId:${js(id)},
  playerVars:{autoplay:1,playsinline:1,start:$startSec,rel:0,origin:${js(WebPage.ORIGIN.trimEnd('/'))}},
  events:{onReady:function(){send({t:'ready'});player.playVideo();},
-  onStateChange:function(e){var m={'-1':'buffering','0':'ended','1':'playing','2':'paused','3':'buffering'};send({t:'state',v:m[String(e.data)]||'paused'});},
+  onStateChange:function(e){var m={'-1':'buffering','0':'ended','1':'playing','2':'paused','3':'buffering'};send({t:'state',v:m[String(e.data)]||'paused'});
+   var vd=player.getVideoData&&player.getVideoData();if(vd&&vd.video_id&&vd.video_id!==${js(id)})send({t:'away'});},
   onError:function(e){send({t:'error',v:'youtube '+e.data});}}});}
 setInterval(function(){if(player&&player.getCurrentTime)send({t:'time',v:player.getCurrentTime(),d:player.getDuration()});},500);
 window.tima={play:function(){player&&player.playVideo();},pause:function(){player&&player.pauseVideo();},seek:function(s){player&&player.seekTo(s,true);}};
@@ -70,7 +71,7 @@ window.tima={play:function(){player&&player.playVideo();},pause:function(){playe
 
     /** Rutube — их проигрыватель и его `postMessage` (`player:play`, `player:setCurrentTime`…). */
     fun rutube(url: String, id: String, startSec: Int): WebPage = WebPage(
-        WebPage.Kind.RUTUBE, url,
+        WebPage.Kind.RUTUBE, url, sites = listOf("rutube.ru"), key = id,
         html = frame(
             """<iframe id="f" allow="autoplay; fullscreen; encrypted-media" allowfullscreen src="https://rutube.ru/play/embed/$id?autoplay=true${if (startSec > 0) "&t=$startSec" else ""}"></iframe>""",
             """
@@ -93,7 +94,7 @@ window.tima={play:function(){cmd('player:play');},pause:function(){cmd('player:p
     fun vk(url: String, oid: String, id: String, hash: String, startSec: Int): WebPage {
         val t = if (startSec > 0) "&t=${startSec / 60}m${startSec % 60}s" else ""
         return WebPage(
-            WebPage.Kind.VK, url,
+            WebPage.Kind.VK, url, sites = listOf("vkvideo.ru", "vk.com", "vk.ru"), key = id,
             html = frame(
                 """<iframe id="f" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen src="https://vkvideo.ru/video_ext.php?oid=$oid&id=$id&hash=$hash&autoplay=1&js_api=1$t"></iframe>""",
                 """

@@ -5,8 +5,11 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
+import android.content.Intent
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
@@ -39,6 +42,9 @@ private class AndroidWebPlayer(private val context: Context) : WebPlayer {
 
     var web: WebView? = null
     var youtube: YouTubePlayerView? = null
+
+    @Volatile
+    private var touchedAt = 0L
     private var yt: YouTubePlayer? = null
     private var ytPending: Pair<String, Float>? = null
 
@@ -51,8 +57,35 @@ private class AndroidWebPlayer(private val context: Context) : WebPlayer {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.mediaPlaybackRequiresUserGesture = false
-        webViewClient = WebViewClient()
+        webViewClient = object : WebViewClient() {
+            // Переход всей страницы (логотип сайта, «Смотреть на …», ссылка в описании) — в браузер
+            // телефона: видео в окне остаётся (заказчик 2026-10-23, 4а).
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                if (!request.isForMainFrame) return false
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, request.url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+                return true
+            }
+
+            // Проигрыватель сайта открыл у себя другую страницу того же сайта сразу после касания —
+            // ушли с нашего ролика; запрос не трогаем.
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                val document = request.requestHeaders["Accept"]?.startsWith("text/html") == true
+                val page = _page.value
+                if (!request.isForMainFrame && document && page != null && System.currentTimeMillis() - touchedAt < TOUCH_WINDOW_MS &&
+                    page.isOther(request.url.toString())
+                ) {
+                    main.post { _state.value = _state.value.copy(elsewhere = true) }
+                }
+                return null
+            }
+        }
         webChromeClient = WebChromeClient()
+        setOnTouchListener { _, _ ->
+            touchedAt = System.currentTimeMillis()
+            false
+        }
         addJavascriptInterface(object {
             @JavascriptInterface
             fun post(message: String) {
@@ -85,6 +118,11 @@ private class AndroidWebPlayer(private val context: Context) : WebPlayer {
             }
             override fun onVideoDuration(youTubePlayer: YouTubePlayer, duration: Float) {
                 _state.value = _state.value.copy(durationMs = (duration * 1000).toLong())
+            }
+            // YouTube сам сообщает, какой ролик открыт: не наш — ушли (подсказка в конце, ссылка в описании).
+            override fun onVideoId(youTubePlayer: YouTubePlayer, videoId: String) {
+                val ours = _page.value?.videoId
+                if (!ours.isNullOrEmpty() && videoId != ours) _state.value = _state.value.copy(elsewhere = true)
             }
             override fun onError(youTubePlayer: YouTubePlayer, error: PlayerConstants.PlayerError) {
                 _state.value = _state.value.copy(error = "youtube ${error.name}", playing = false)
@@ -125,6 +163,9 @@ private class AndroidWebPlayer(private val context: Context) : WebPlayer {
         web = null
     }
 }
+
+/** Сколько после касания переход внутри проигрывателя считается сделанным человеком. */
+private const val TOUCH_WINDOW_MS = 4_000L
 
 @Composable
 actual fun rememberWebPlayer(): WebPlayer? {

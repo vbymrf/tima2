@@ -456,6 +456,8 @@ fun Root(
                       else -> null
                   }
               },
+              // Качества потока (8а) — тем же безопасным загрузчиком, что карточки ссылок и m3u8 при вставке.
+              variants = { url -> mediaCards.text(url, 256 * 1024)?.let { (at, text) -> io.tima.domain.chat.M3u8.variants(text, at) }.orEmpty() },
               remembered = { host -> engineBySite[host] },
               remember = { host, engine -> engineBySite[host] = engine },
           )
@@ -8117,6 +8119,9 @@ private fun playerWord(e: io.tima.feature.chat.PlayerEvent): String = when (e) {
     io.tima.feature.chat.PlayerEvent.TIMEOUT -> "сторож: ни кадра, ни звука за 15 с"
     io.tima.feature.chat.PlayerEvent.SWITCHED -> "сменён движок"
     io.tima.feature.chat.PlayerEvent.TO_BROWSER -> "в браузер"
+    io.tima.feature.chat.PlayerEvent.AWAY -> "проигрыватель сайта ушёл с видео"
+    io.tima.feature.chat.PlayerEvent.RESTARTED -> "перезапуск"
+    io.tima.feature.chat.PlayerEvent.QUALITY -> "качество"
 }
 
 /**
