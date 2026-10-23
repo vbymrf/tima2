@@ -31,6 +31,7 @@ type MediaStore interface {
 	FetchPostman(ctx context.Context, mediaID string, byPeer bool, after time.Duration) (bool, error)
 	ReopenMedia(ctx context.Context, mediaID, userID string) (store.Media, error)
 	DropPostman(ctx context.Context, mediaID, ownerID string) error
+	GroupMemberInfo(ctx context.Context, groupID, userID string) (string, *time.Time, error)
 }
 
 var _ MediaStore = (*store.Store)(nil)
@@ -71,6 +72,7 @@ type MediaRules struct {
 	DailyBytes int64 // квота загрузок за сутки (Решения §14)
 	PhotoSide  int   // большая сторона фото (ПЛАН-(ПФ))
 	MaxPhotos  int   // фото в одном сообщении (Решения §3)
+	TermDays   int   // сколько дней держится файл на срок — голосовое (ПЛАН-(ВМ) Р3, Р20)
 }
 
 // MediaRulesFromEnv — правила из переменных сервера; пусто — числа решений (Решения §3, §6, §14).
@@ -83,6 +85,7 @@ func MediaRulesFromEnv() MediaRules {
 		DailyBytes: envInt("TIMA_MEDIA_DAILY_MB", 1024) << 20,
 		PhotoSide:  int(envInt("TIMA_MEDIA_PHOTO_SIDE", 1280)),
 		MaxPhotos:  int(envInt("TIMA_MEDIA_MAX_PHOTOS", 10)),
+		TermDays:   int(envInt("TIMA_MEDIA_TERM_DAYS", 7)),
 	}
 }
 
@@ -98,6 +101,14 @@ func envInt(name string, def int64) int64 {
 	return n
 }
 
+// termSeconds — срок файла на срок в секундах; в правилах без числа (проверки) — неделя.
+func (rl MediaRules) termSeconds() int32 {
+	if rl.TermDays <= 0 {
+		return 7 * 24 * 3600
+	}
+	return int32(rl.TermDays) * 24 * 3600
+}
+
 // blockedNames — окончания имён, которые клиент не отправляет вовсе (Решения §5, §6).
 var blockedNames = []string{".html", ".htm", ".svg", ".exe", ".msi", ".bat", ".cmd", ".com", ".scr", ".ps1", ".vbs", ".js", ".jar"}
 
@@ -110,6 +121,7 @@ func mediaRules(deps mediaDeps) http.HandlerFunc {
 			"file_bytes": rl.FileBytes, "self_bytes": rl.SelfBytes, "daily_bytes": rl.DailyBytes,
 			"photo_side": rl.PhotoSide, "max_photos": rl.MaxPhotos,
 			"postman_hour_sec": int64(store.PostmanHour.Seconds()), "postman_week_sec": int64(store.PostmanWeek.Seconds()),
+			"term_sec":      rl.termSeconds(),
 			"blocked_names": blockedNames,
 		})
 	}
@@ -139,10 +151,10 @@ func mediaDrop(deps mediaDeps) http.HandlerFunc {
 // проверяется предел другому. У Caddy перед s3 остаётся max_size 2GB — предел держит эта ручка.
 const (
 	// Ссылок пачкой — до 100 (Решения §14).
-	maxURLBatch = 100
-	maxChunks   = 1024
-	uploadURLTTL    = 15 * time.Minute
-	downloadURLTTL  = 10 * time.Minute // media-storage.md §2
+	maxURLBatch    = 100
+	maxChunks      = 1024
+	uploadURLTTL   = 15 * time.Minute
+	downloadURLTTL = 10 * time.Minute // media-storage.md §2
 )
 
 func chunkKey(storageKey string, index int32, total int32) string {
@@ -168,6 +180,13 @@ func mediaInit(deps mediaDeps) http.HandlerFunc {
 				ChatID string `json:"chat_id"`
 				PeerID string `json:"peer_id"`
 			} `json:"postman,omitempty"`
+			// Term — файл на срок, голосовое (ПЛАН-(ВМ) Р3): личная переписка (chat_id и peer_id) или
+			// группа (group_id). Сервер держит его срок из правил, скачиваний не считает.
+			Term *struct {
+				ChatID  string `json:"chat_id,omitempty"`
+				PeerID  string `json:"peer_id,omitempty"`
+				GroupID string `json:"group_id,omitempty"`
+			} `json:"term,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -226,6 +245,32 @@ func mediaInit(deps mediaDeps) http.HandlerFunc {
 				return
 			}
 			media.PostmanChat, media.PostmanPeer, media.OwnerDevice = p.ChatID, p.PeerID, id.DeviceID
+		}
+		if t := req.Term; t != nil {
+			if req.Postman != nil || !req.IsEncrypted || contentHash != nil || req.SizeBytes > deps.rules.FileBytes {
+				writeErr(w, http.StatusBadRequest, "bad_term", fmt.Sprintf("файл на срок — зашифрованный, до %d МБ, не почтальон", deps.rules.FileBytes>>20))
+				return
+			}
+			switch {
+			case t.GroupID != "" && t.ChatID == "" && t.PeerID == "":
+				member, err := isGroupMember(r.Context(), deps, t.GroupID, id.UserID)
+				if err != nil {
+					log.Printf("mediaInit: участник группы: %v", err)
+					writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+					return
+				}
+				if !member {
+					writeErr(w, http.StatusForbidden, "not_member", "файл группы загружает её участник")
+					return
+				}
+				media.TermGroup = t.GroupID
+			case t.GroupID == "" && t.PeerID != "" && t.ChatID == personalChatID(id.UserID, t.PeerID):
+				media.TermChat, media.TermPeer = t.ChatID, t.PeerID
+			default:
+				writeErr(w, http.StatusBadRequest, "bad_term", "файл на срок — в своей личной переписке (chat_id и peer_id) или в группе (group_id)")
+				return
+			}
+			media.TermSec, media.OwnerDevice = deps.rules.termSeconds(), id.DeviceID
 		}
 		m, err := deps.store.CreateMedia(r.Context(), media, contentHash)
 		if errors.Is(err, store.ErrUploadQuota) {
@@ -329,8 +374,19 @@ func mediaURL(deps mediaDeps) http.HandlerFunc {
 		}
 		id, _ := auth.FromContext(r.Context())
 		allowed, byPeer := postmanAccess(m, id.UserID, id.DeviceID)
+		if allowed && m.TermSec > 0 {
+			if allowed, err = termAccess(r.Context(), deps, m, id.UserID); err != nil {
+				log.Printf("mediaURL: доступ: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
+			}
+		}
 		if !allowed {
 			writeErr(w, http.StatusNotFound, "not_found", "медиа не найдено")
+			return
+		}
+		if m.Status == "gone" && m.TermSec > 0 {
+			writeErr(w, http.StatusGone, "media_gone", "файл удалён по сроку")
 			return
 		}
 		if m.Status == "gone" {
@@ -396,6 +452,13 @@ func mediaURLs(deps mediaDeps) http.HandlerFunc {
 		for _, id := range req.MediaIDs {
 			m, ok := byID[id]
 			allowed, byPeer := postmanAccess(m, who.UserID, who.DeviceID)
+			if ok && allowed && m.TermSec > 0 {
+				if allowed, err = termAccess(r.Context(), deps, m, who.UserID); err != nil {
+					log.Printf("mediaURLs: доступ: %v", err)
+					writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+					return
+				}
+			}
 			if !ok || !allowed || m.Status != "complete" {
 				missing = append(missing, id)
 				continue
@@ -435,6 +498,24 @@ func postmanAccess(m store.Media, userID, deviceID string) (allowed, byPeer bool
 		return true, deviceID != m.OwnerDevice
 	}
 	return true, userID == m.PostmanPeer
+}
+
+// termAccess — кому отдаётся файл на срок (ПЛАН-(ВМ) Р3): в личной — отправителю и собеседнику, в
+// группе — её участникам сейчас. Скачивания не считаются.
+func termAccess(ctx context.Context, deps mediaDeps, m store.Media, userID string) (bool, error) {
+	if m.TermGroup != "" {
+		return isGroupMember(ctx, deps, m.TermGroup, userID)
+	}
+	return userID == m.OwnerID || userID == m.TermPeer, nil
+}
+
+// isGroupMember — состоит ли человек в группе сейчас.
+func isGroupMember(ctx context.Context, deps mediaDeps, groupID, userID string) (bool, error) {
+	_, _, err := deps.store.GroupMemberInfo(ctx, groupID, userID)
+	if errors.Is(err, store.ErrNotMember) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // fetched — получатель забрал файл почтальона: срок по правилам §6; первое скачивание — отправителю

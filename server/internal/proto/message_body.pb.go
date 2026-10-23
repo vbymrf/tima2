@@ -449,7 +449,12 @@ type MediaRef struct {
 	ChunkCount uint32                 `protobuf:"varint,9,opt,name=chunk_count,json=chunkCount,proto3" json:"chunk_count,omitempty"` // >1 → chunked (§10.3)
 	// Имя файла вне пузыря (Решения §6): на диске файл лежит по номеру сообщения, имя — здесь, в
 	// зашифрованном теле. Пусто у фото.
-	Name          string `protobuf:"bytes,11,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `protobuf:"bytes,11,opt,name=name,proto3" json:"name,omitempty"`
+	// Голосовое (ПЛАН-(ВМ) §2.2): файл на срок у сервера, Opus в Ogg; длительность — duration_ms.
+	Voice bool `protobuf:"varint,12,opt,name=voice,proto3" json:"voice,omitempty"`
+	// Рисунок волны голосового: громкость по долям записи, байт на долю (0…255), около 64 долей.
+	// Отправитель считает при записи — пузырь рисуется до скачивания.
+	Wave          []byte `protobuf:"bytes,13,opt,name=wave,proto3" json:"wave,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -554,6 +559,20 @@ func (x *MediaRef) GetName() string {
 	return ""
 }
 
+func (x *MediaRef) GetVoice() bool {
+	if x != nil {
+		return x.Voice
+	}
+	return false
+}
+
+func (x *MediaRef) GetWave() []byte {
+	if x != nil {
+		return x.Wave
+	}
+	return nil
+}
+
 var File_message_body_proto protoreflect.FileDescriptor
 
 const file_message_body_proto_rawDesc = "" +
@@ -582,7 +601,7 @@ const file_message_body_proto_rawDesc = "" +
 	"\x03url\x18\x04 \x01(\tR\x03url\x12\x17\n" +
 	"\auser_id\x18\x05 \x01(\tR\x06userId\x12\x1c\n" +
 	"\tattribute\x18\x06 \x01(\tR\tattribute\x12\x19\n" +
-	"\bmedia_id\x18\a \x01(\tR\amediaId\"\xa4\x02\n" +
+	"\bmedia_id\x18\a \x01(\tR\amediaId\"\xce\x02\n" +
 	"\bMediaRef\x12\x19\n" +
 	"\bmedia_id\x18\x01 \x01(\tR\amediaId\x12\x1b\n" +
 	"\tmedia_key\x18\x02 \x01(\fR\bmediaKey\x12\x12\n" +
@@ -596,7 +615,9 @@ const file_message_body_proto_rawDesc = "" +
 	"\bblurhash\x18\b \x01(\tR\bblurhash\x12\x1f\n" +
 	"\vchunk_count\x18\t \x01(\rR\n" +
 	"chunkCount\x12\x12\n" +
-	"\x04name\x18\v \x01(\tR\x04nameJ\x04\b\n" +
+	"\x04name\x18\v \x01(\tR\x04name\x12\x14\n" +
+	"\x05voice\x18\f \x01(\bR\x05voice\x12\x12\n" +
+	"\x04wave\x18\r \x01(\fR\x04waveJ\x04\b\n" +
 	"\x10\vR\apreview*\xdc\x01\n" +
 	"\n" +
 	"EntityType\x12\x12\n" +
