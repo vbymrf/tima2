@@ -175,6 +175,10 @@ internal fun WidgetView(block: RichBlock) {
         is RichBlock.Emoji -> Caption(block.text, fontSize = 40.sp)
         is RichBlock.Quoted -> QuotedWidget(block)
         is RichBlock.Underlay -> UnderlayWidget(block)
+        is RichBlock.Video -> VideoWidget(block)
+        is RichBlock.Marks -> MarksWidget(block)
+        is RichBlock.Audio -> AudioWidget(block)
+        is RichBlock.Stream -> StreamWidget(block)
         is RichBlock.Reply -> {
             // Переход — только через окно перехода (заказчик 2026-10-20).
             val open = rememberMessageOpen()

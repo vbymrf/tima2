@@ -39,6 +39,8 @@ data class OwnPlayerState(
     /** Прямой эфир: шкалы времени нет. */
     val live: Boolean = false,
     val speed: Float = 1f,
+    /** Эфир: название песни, если поток его сообщает (§3.8: «Сейчас: …»). */
+    val title: String? = null,
 )
 
 /** Свой движок этой платформы; `null` — не умеет (iOS, ПК не на Windows). */

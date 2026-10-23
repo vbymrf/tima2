@@ -158,6 +158,23 @@ data class MarkupWidget(
      * клиенты поле не знают и показывают картинку во всю ширину — как раньше.
      */
     val share: Int = 0,
+    /** Видео (ПЛАН-(ВМ) Р43): `picture` (по умолчанию) или `frame`. */
+    val look: String = "",
+    /** Видео: показывать название со страницы. */
+    @SerialName("show_title") val showTitle: Boolean = false,
+    /** Аудио: длительность от отправителя (Р29), мс; 0 — не узнали. */
+    @SerialName("duration_ms") val durationMs: Long = 0,
+    /** Метки: описание видео или аудио этого сообщения, к которому они привязаны (Р10). */
+    val bind: String = "",
+    /** Метки: время и текст, до [MarkupRules.MAX_MARKS] (Р11). */
+    val marks: List<MarkupMark> = emptyList(),
+)
+
+/** Метка видео или аудио (ПЛАН-(ВМ) §3.6): с какой мс и что там. */
+@Serializable
+data class MarkupMark(
+    val at: Long = 0,
+    val text: String = "",
 )
 
 /**

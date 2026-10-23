@@ -1547,6 +1547,12 @@ interface ChatWords {
     val playerFailed: String
     val playerLive: String
     val playerBrowser: String
+    // ── «Аудио» и «Поток» (ПЛАН-(ВМ) §3.7, §3.8) ──
+    val mediaUnavailable: String
+    val streamUnavailable: String
+    val streamConnecting: String
+    fun streamNow(title: String): String
+    fun streamListening(time: String): String
     /** Просмотр и редактор фото (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ5–ИФ7). */
     val photoRotate: String
     val photoEdit: String
@@ -3799,6 +3805,11 @@ object RussianWords : Words {
         override val playerFailed = "Здесь не играет — откройте в браузере"
         override val playerLive = "● В эфире"
         override val playerBrowser = "Открыть в браузере"
+        override val mediaUnavailable = "недоступно"
+        override val streamUnavailable = "поток недоступен"
+        override val streamConnecting = "подключение…"
+        override fun streamNow(title: String) = "Сейчас: $title"
+        override fun streamListening(time: String) = "слушаете $time"
         override val photoRotate = "Повернуть"
         override val photoEdit = "Изменить"
         override val photoCrop = "Обрезать"

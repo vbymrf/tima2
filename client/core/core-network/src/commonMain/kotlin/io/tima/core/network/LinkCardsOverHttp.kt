@@ -45,6 +45,14 @@ class LinkCardsOverHttp(
         else LinkCard(title.orEmpty().take(MAX_TITLE), description.orEmpty().take(MAX_DESCRIPTION), image)
     }.getOrNull()
 
+    /**
+     * Текст по адресу — список m3u8 при вставке (ПЛАН-(ВМ) Р34–Р36): те же пределы и запреты, что у
+     * карточки; адрес после переходов и текст до [limit]; нельзя или не вышло — `null`.
+     */
+    suspend fun text(url: String, limit: Int = MAX_HTML): Pair<String, String>? = runCatching {
+        fetch(url, limit)?.let { it.first to it.second.decodeToString() }
+    }.getOrNull()
+
     /** Адрес после переходов и байты до предела; запрещённый адрес или ошибка — `null`. */
     private suspend fun fetch(start: String, limit: Int): Pair<String, ByteArray>? {
         var url = start

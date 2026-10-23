@@ -94,6 +94,42 @@ interface EditorWords {
     val widgetClips: String
     val widgetAudio: String
     val widgetSoon: String
+    // ── Видео, звук и метки по ссылке (ПЛАН-(ВМ) §3.6–§3.8) ──
+    val widgetVideo: String
+    val widgetMarks: String
+    val widgetStream: String
+    val askVideo: String
+    val askAudio: String
+    val askStream: String
+    val askMarks: String
+    val askUrl: String
+    val askDescription: String
+    val lookPicture: String
+    val lookFrame: String
+    val showTitle: String
+    val ownPicture: String
+    val ownPictureChosen: String
+    val marksCount: String
+    val needDescription: String
+    val needUrl: String
+    val isAudio: String
+    val isVideo: String
+    val isStream: String
+    val isService: String
+    val notStream: String
+    val probing: String
+    val tooMany: String
+    val marksFor: String
+    val marksNoTarget: String
+    val marksTime: String
+    val marksText: String
+    val marksAdd: String
+    val marksAtNow: String
+    val marksBadTime: String
+    val marksMax: String
+    fun listFound(n: Int): String
+    fun skipped(n: Int): String
+    fun duration(time: String): String
     /** Вставленное из подборки: `full`, `cut`. */
     fun cutName(key: String): String
     val authorShown: String
@@ -291,6 +327,41 @@ object RussianEditorWords : EditorWords {
     override val widgetClips = "Видеоклипы"
     override val widgetAudio = "Аудио"
     override val widgetSoon = "Этот виджет появится следующими срезами"
+    override val widgetVideo = "Видео"
+    override val widgetMarks = "Метки"
+    override val widgetStream = "Поток"
+    override val askVideo = "Видео по ссылке"
+    override val askAudio = "Аудио по ссылке"
+    override val askStream = "Поток (эфир)"
+    override val askMarks = "Метки"
+    override val askUrl = "Ссылка"
+    override val askDescription = "Описание"
+    override val lookPicture = "Картинка"
+    override val lookFrame = "Рамка"
+    override val showTitle = "Показывать название"
+    override val ownPicture = "Своя картинка"
+    override val ownPictureChosen = "Своя картинка выбрана"
+    override val marksCount = "Сколько меток (0–30)"
+    override val needDescription = "Нужно описание: по нему находятся метки"
+    override val needUrl = "Нужна ссылка http(s)"
+    override val isAudio = "Это звук — вставьте виджетом «Аудио»"
+    override val isVideo = "Это видео — вставьте виджетом «Видео»"
+    override val isStream = "Это эфир — вставьте виджетом «Поток»"
+    override val isService = "Ссылку на сервис «Аудио» не принимает — вставьте обычной ссылкой"
+    override val notStream = "Поток — это ссылка на m3u8"
+    override val probing = "Проверяю ссылку…"
+    override val tooMany = "В сообщении уже 30 видео, аудио, потоков и меток"
+    override val marksFor = "К чему метки"
+    override val marksNoTarget = "Сначала вставьте видео или аудио с описанием"
+    override val marksTime = "Время"
+    override val marksText = "Текст метки"
+    override val marksAdd = "+Метка"
+    override val marksAtNow = "Метка на текущей секунде"
+    override val marksBadTime = "Время — м:сс или ч:мм:сс"
+    override val marksMax = "Меток — до 30"
+    override fun listFound(n: Int) = "Ссылок в списке: $n — вставить все"
+    override fun skipped(n: Int) = "Пропущено: $n"
+    override fun duration(time: String) = "Длительность $time"
     override fun cutName(key: String) = if (key == "cut") "Обрезать" else "Полностью"
     override val authorShown = "Имя владельца"
     override val nothingChosen = "Выберите ряд, ячейку или виджет"
@@ -485,6 +556,41 @@ object EnglishEditorWords : EditorWords {
     override val widgetClips = "Video clips"
     override val widgetAudio = "Audio"
     override val widgetSoon = "This widget comes in the next slices"
+    override val widgetVideo = "Video"
+    override val widgetMarks = "Marks"
+    override val widgetStream = "Stream"
+    override val askVideo = "Video by link"
+    override val askAudio = "Audio by link"
+    override val askStream = "Live stream"
+    override val askMarks = "Marks"
+    override val askUrl = "Link"
+    override val askDescription = "Description"
+    override val lookPicture = "Picture"
+    override val lookFrame = "Frame"
+    override val showTitle = "Show title"
+    override val ownPicture = "Own picture"
+    override val ownPictureChosen = "Own picture chosen"
+    override val marksCount = "How many marks (0–30)"
+    override val needDescription = "A description is needed: marks find the media by it"
+    override val needUrl = "An http(s) link is needed"
+    override val isAudio = "This is audio — insert it as «Audio»"
+    override val isVideo = "This is video — insert it as «Video»"
+    override val isStream = "This is a live stream — insert it as «Stream»"
+    override val isService = "«Audio» does not take service links — insert a plain link"
+    override val notStream = "A stream is an m3u8 link"
+    override val probing = "Checking the link…"
+    override val tooMany = "The message already has 30 videos, audio, streams and marks"
+    override val marksFor = "Marks for"
+    override val marksNoTarget = "Insert a video or audio with a description first"
+    override val marksTime = "Time"
+    override val marksText = "Mark text"
+    override val marksAdd = "+Mark"
+    override val marksAtNow = "Mark at current second"
+    override val marksBadTime = "Time is m:ss or h:mm:ss"
+    override val marksMax = "Up to 30 marks"
+    override fun listFound(n: Int) = "Links in the list: $n — insert all"
+    override fun skipped(n: Int) = "Skipped: $n"
+    override fun duration(time: String) = "Duration $time"
     override fun cutName(key: String) = if (key == "cut") "Trim" else "Full"
     override val authorShown = "Owner's name"
     override val nothingChosen = "Choose a row, cell or widget"
@@ -675,6 +781,41 @@ object SpanishEditorWords : EditorWords {
     override val widgetClips = "Videoclips"
     override val widgetAudio = "Audio"
     override val widgetSoon = "Este widget llegará en las próximas partes"
+    override val widgetVideo = "Vídeo"
+    override val widgetMarks = "Marcas"
+    override val widgetStream = "Emisión"
+    override val askVideo = "Vídeo por enlace"
+    override val askAudio = "Audio por enlace"
+    override val askStream = "Emisión en directo"
+    override val askMarks = "Marcas"
+    override val askUrl = "Enlace"
+    override val askDescription = "Descripción"
+    override val lookPicture = "Imagen"
+    override val lookFrame = "Marco"
+    override val showTitle = "Mostrar título"
+    override val ownPicture = "Imagen propia"
+    override val ownPictureChosen = "Imagen propia elegida"
+    override val marksCount = "Cuántas marcas (0–30)"
+    override val needDescription = "Falta la descripción: las marcas la usan"
+    override val needUrl = "Falta un enlace http(s)"
+    override val isAudio = "Es audio — insértalo como «Audio»"
+    override val isVideo = "Es vídeo — insértalo como «Vídeo»"
+    override val isStream = "Es una emisión — insértala como «Emisión»"
+    override val isService = "«Audio» no acepta enlaces de servicios — inserta un enlace normal"
+    override val notStream = "Una emisión es un enlace m3u8"
+    override val probing = "Comprobando el enlace…"
+    override val tooMany = "El mensaje ya tiene 30 vídeos, audios, emisiones y marcas"
+    override val marksFor = "Marcas para"
+    override val marksNoTarget = "Primero inserta un vídeo o audio con descripción"
+    override val marksTime = "Tiempo"
+    override val marksText = "Texto de la marca"
+    override val marksAdd = "+Marca"
+    override val marksAtNow = "Marca en el segundo actual"
+    override val marksBadTime = "El tiempo es m:ss o h:mm:ss"
+    override val marksMax = "Hasta 30 marcas"
+    override fun listFound(n: Int) = "Enlaces en la lista: $n — insertar todos"
+    override fun skipped(n: Int) = "Omitidos: $n"
+    override fun duration(time: String) = "Duración $time"
     override fun cutName(key: String) = if (key == "cut") "Recortar" else "Completo"
     override val authorShown = "Nombre del dueño"
     override val nothingChosen = "Elige una fila, celda o widget"

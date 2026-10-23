@@ -40,6 +40,15 @@ object MarkupRules {
     /** Вложенность списков: пункт, вложенный, вложенный во вложенный (§7 Решений: два вложения). */
     const val MAX_LIST_DEPTH = 3
 
+    /** Меток у одного видео или аудио (ПЛАН-(ВМ) Р11). */
+    const val MAX_MARKS = 30
+
+    /** Виджетов «Видео», «Аудио», «Поток» и «Метки» в сообщении вместе (Р24). */
+    const val MAX_MEDIA_WIDGETS = 30
+
+    /** Текст одной метки. */
+    const val MAX_MARK_TEXT = 200
+
     /**
      * Имена палитры. Значения для светлой и тёмной темы — у клиента (core-ui): у имени свой цвет
      * в каждой теме, поэтому в разметке кодов нет.
@@ -75,6 +84,7 @@ object MarkupRules {
     private val CELL_WIDGETS = setOf(
         BlockType.IMAGE, BlockType.LINK, BlockType.CLOUD, BlockType.MAP, BlockType.CONTACT,
         BlockType.REPLY, BlockType.QUOTED, BlockType.EMOJI, BlockType.TABLE,
+        BlockType.VIDEO, BlockType.AUDIO, BlockType.STREAM, BlockType.MARKS,
     )
     private val REF_KINDS = setOf("personal", "group", "channel")
 
@@ -115,6 +125,14 @@ object MarkupRules {
         }
         if (rows > MAX_ROWS) out += Problem("rows", "рядов и таблиц $rows, больше $MAX_ROWS")
         if (ctx.images > MAX_IMAGES) out += Problem("images", "картинок ${ctx.images}, больше $MAX_IMAGES")
+        // Видео, звук и метки (ПЛАН-(ВМ) Р9–Р11, Р24): всего до 30, метки — к описанию видео или аудио
+        // этого сообщения, к одному — одни.
+        val media = ctx.mediaWidgets
+        if (media > MAX_MEDIA_WIDGETS) out += Problem("media-widgets", "видео, аудио, потоков и меток $media, больше $MAX_MEDIA_WIDGETS")
+        if (strict) {
+            for (b in ctx.binds.toSet()) if (b !in ctx.descriptions) out += Problem("marks-bind", "меток к «$b» — такого видео или аудио нет")
+            if (ctx.binds.toSet().size != ctx.binds.size) out += Problem("marks-bind", "к одному видео или аудио — одни метки")
+        }
         for (e in markup.entities) {
             if (e.type == EntityType.UNKNOWN && strict) out += Problem("unknown-type", "незнакомый вид оформления")
             if (e.nodeId !in ids) out += Problem("node-ref", "оформление ссылается на узел ${e.nodeId}, его нет")
@@ -124,6 +142,13 @@ object MarkupRules {
 
     private class Ctx(val ids: Set<Int>, val mediaCount: Int, val strict: Boolean, val out: MutableList<Problem>) {
         var images = 0
+
+        /** Виджетов «Видео», «Аудио», «Поток», «Метки». */
+        var mediaWidgets = 0
+
+        /** Описания видео и аудио — к ним привязываются метки; у потока меток нет. */
+        val descriptions = mutableListOf<String>()
+        val binds = mutableListOf<String>()
     }
 
     private fun checkBlock(block: MarkupBlock, ctx: Ctx, depth: Int) {
@@ -254,6 +279,24 @@ object MarkupRules {
             )
             BlockType.CONTACT -> need(w != null && (w.name.isNotBlank() || w.userId.isNotBlank()), "нет ни имени, ни человека")
             BlockType.EMOJI -> need(w != null && w.text.isNotBlank(), "нет знака")
+            BlockType.VIDEO, BlockType.AUDIO, BlockType.STREAM -> {
+                need(w != null && (w.url.startsWith("https://") || w.url.startsWith("http://")), "нет адреса http(s)")
+                // Описание обязательно (Р13, Р27); мягкий приём — пустое показывается без заглавия.
+                if (ctx.strict) need(w != null && w.description.isNotBlank(), "нет описания")
+                if (block.type == BlockType.VIDEO) {
+                    need(w == null || w.look in setOf("", "picture", "frame"), "вид не «picture» и не «frame»")
+                    if (w != null && w.media >= 0) need(w.media < ctx.mediaCount, "своей картинки нет в теле")
+                }
+                ctx.mediaWidgets++
+                if (block.type != BlockType.STREAM) ctx.descriptions += w?.description.orEmpty()
+            }
+            BlockType.MARKS -> {
+                need(w != null && w.bind.isNotBlank(), "не привязаны к видео или аудио")
+                need(w != null && w.marks.size in 1..MAX_MARKS, "меток не 1–$MAX_MARKS")
+                need(w == null || w.marks.all { it.at >= 0 && it.text.length <= MAX_MARK_TEXT }, "время меньше нуля или текст длиннее $MAX_MARK_TEXT")
+                ctx.mediaWidgets++
+                ctx.binds += w?.bind.orEmpty()
+            }
             BlockType.REPLY, BlockType.QUOTED, BlockType.UNDERLAY -> {
                 val ref = w?.ref
                 need(ref != null && ref.kind in REF_KINDS && ref.container.isNotBlank() && ref.message > 0, "нет ссылки на сообщение")

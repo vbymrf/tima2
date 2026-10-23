@@ -50,7 +50,7 @@ import io.tima.domain.chat.SpanKind
  */
 @Composable
 fun RichBody(content: RichContent, modifier: Modifier = Modifier) {
-    androidx.compose.runtime.CompositionLocalProvider(LocalRichMedia provides content.media) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalRichMedia provides content.media, LocalRichBlocks provides content.blocks) {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             for ((i, block) in content.blocks.withIndex()) {
                 if (block is RichBlock.Underlay && LocalRefDepth.current == 0) {
@@ -117,7 +117,8 @@ internal fun RichBlockViewOf(block: RichBlock) {
         // Вложения внутри смешанного тела — тем же видом, что и вне пузыря.
         is RichBlock.Album, is RichBlock.File, is RichBlock.Voice -> AttachmentsView(io.tima.domain.chat.RichContent(listOf(block), LocalRichMedia.current))
         is RichBlock.Image, is RichBlock.Link, is RichBlock.Cloud, is RichBlock.Place, is RichBlock.Contact,
-        is RichBlock.Emoji, is RichBlock.Quoted, is RichBlock.Underlay -> WidgetView(block)
+        is RichBlock.Emoji, is RichBlock.Quoted, is RichBlock.Underlay,
+        is RichBlock.Video, is RichBlock.Marks, is RichBlock.Audio, is RichBlock.Stream -> WidgetView(block)
         // Цитата, список и код — со стилем куска, как абзац (doc_mig/РЕДАКТОР-СВОЙСТВА-И-ВЛОЖЕНИЕ.md).
         is RichBlock.Quote -> {
             val st = block.style.over(cell)

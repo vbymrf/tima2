@@ -144,6 +144,10 @@ internal object ComposedFromContent {
             BlockType.REPLY -> w.ref?.let { ComposedWidget.Reply(ReplyTarget(it.kind, it.container, it.message, w.userId)) }
             BlockType.QUOTED -> w.ref?.let { ComposedWidget.Quoted(it.kind, it.container, it.message, w.author, quotedLines(w), w.more, w.moreText, w.tap) }
             BlockType.UNDERLAY -> w.ref?.let { ComposedWidget.Underlay(it.kind, it.container, it.message, w.lines, w.author, w.more, w.moreText, w.tap) }
+            BlockType.VIDEO -> ComposedWidget.Video(w.url, w.description, w.look.ifEmpty { "picture" }, w.showTitle, w.title, if (w.media >= 0) media(w.media) else null)
+            BlockType.AUDIO -> ComposedWidget.Audio(w.url, w.description, w.durationMs)
+            BlockType.STREAM -> ComposedWidget.Stream(w.url, w.description)
+            BlockType.MARKS -> ComposedWidget.Marks(w.bind, w.marks.map { io.tima.domain.chat.MediaMark(it.at, it.text) })
             else -> null
         }
     }

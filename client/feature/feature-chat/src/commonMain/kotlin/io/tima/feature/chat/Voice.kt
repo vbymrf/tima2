@@ -89,6 +89,9 @@ class VoiceHub(
     /** Следующее голосовое после [mediaId] в открытой переписке; `null` — дальше не голосовое. */
     var next: ((mediaId: String) -> RichMedia?)? = null
 
+    /** Началось проигрывание — остановить прочее («Аудио», «Поток»): одно на всё приложение. */
+    var onStart: (() -> Unit)? = null
+
     /** Строка журнала: что случилось, с каким файлом; слова журнала — у того, кто пишет (`shared`). */
     var onEvent: ((what: VoiceEvent, mediaId: String, seconds: Long) -> Unit)? = null
 
@@ -136,6 +139,7 @@ class VoiceHub(
 
     private fun start(m: RichMedia, fromMs: Long) {
         stop()
+        onStart?.invoke()
         current = m
         _now.value = VoiceNow(m.mediaId, durationMs = m.durationMs, speed = speed, loading = true)
         watch = scope.launch {

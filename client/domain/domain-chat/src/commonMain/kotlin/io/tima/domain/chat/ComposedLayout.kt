@@ -825,6 +825,8 @@ object RowFit {
         is ComposedWidget.Cloud, is ComposedWidget.Place, is ComposedWidget.Contact -> 120
         is ComposedWidget.Quoted, is ComposedWidget.Reply, is ComposedWidget.Underlay -> 140
         is ComposedWidget.Emoji -> 48
+        // Видео, звук и метки (ПЛАН-(ВМ) §3.6–§3.8): как карточка ссылки.
+        is ComposedWidget.Video, is ComposedWidget.Audio, is ComposedWidget.Stream, is ComposedWidget.Marks -> 140
     }
 
     private fun cellDp(cell: ComposedCell): Int = maxOf(TEXT_DP, cell.widgets.maxOfOrNull(::widgetDp) ?: 0)

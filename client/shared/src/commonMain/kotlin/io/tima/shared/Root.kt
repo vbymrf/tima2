@@ -430,13 +430,44 @@ fun Root(
       val pictureSource = remember { PictureSource() }
       val sketch = rememberTimaSketch(pictureSource)
       // Полосы авторов — из тех же «Цветов»: тип темы и выключатель (заказчик 2026-09-19).
+      // «Аудио» и «Поток» — один проигрыватель на приложение (ПЛАН-(ВМ) §3.7): живёт выше сессии и
+      // переписки, поэтому играет и после ухода из неё (Р22). Название и картинку видео загружает
+      // получатель, когда сообщение видно (Р7, Р16) — те же пределы и запреты, что у карточки ссылки.
+      val mediaScope = rememberCoroutineScope()
+      val audioEngine = io.tima.core.media.rememberOwnPlayer()
+      val audioHub = remember(audioEngine) {
+          audioEngine?.let { engine ->
+              io.tima.feature.chat.AudioHub(mediaScope, engine).also { hub ->
+                  hub.onEvent = { what, host -> Journal.note(LogCode.PLAYER, playerWord(what), "подробно" to "звук $host") }
+              }
+          }
+      }
+      val mediaCards = remember { io.tima.core.network.LinkCardsOverHttp() }
+      val mediaCardMemo = remember { mutableMapOf<String, io.tima.feature.chat.MediaCard?>() }
+      val mediaActions = remember(audioHub) {
+          io.tima.feature.chat.MediaActions(
+              card = { url ->
+                  if (url in mediaCardMemo) mediaCardMemo[url] else {
+                      val c = runCatching { mediaCards.card(url) }.getOrNull()?.let { io.tima.feature.chat.MediaCard(it.title, it.image) }
+                      mediaCardMemo[url] = c
+                      c
+                  }
+              },
+              audio = audioHub,
+          )
+      }
       CompositionLocalProvider(
           LocalStripLook provides appearance.strips,
           io.tima.core.ui.LocalSketch provides sketch,
           LocalPictureSource provides pictureSource,
+          io.tima.feature.chat.LocalMediaActions provides mediaActions,
       ) {
         // Ссылки из сообщений — через окно «Перейти по ссылке?» с доменом (заказчик 2026-10-19): одно на приложение.
-        io.tima.feature.chat.LinkGate(onPlayer = { what, detail -> Journal.note(LogCode.PLAYER, playerWord(what), "подробно" to detail) }) {
+        io.tima.feature.chat.LinkGate(onPlayer = { what, detail ->
+            // Окно видео открылось — звук в сообщениях встаёт на паузу: играет что-то одно.
+            if (what == io.tima.feature.chat.PlayerEvent.OPENED) audioHub?.stop()
+            Journal.note(LogCode.PLAYER, playerWord(what), "подробно" to detail)
+        }) {
         Inside(
             entry = entry,
             callEngine = callEngine,
@@ -1154,6 +1185,12 @@ private fun App(
         }
     }
     DisposableEffect(voiceHub) { onDispose { voiceHub.stop() } }
+    // Играет что-то одно (ПЛАН-(ВМ) §3.7): голосовое ставит «Аудио» на паузу и наоборот.
+    val audioHubHere = io.tima.feature.chat.LocalMediaActions.current.audio
+    SideEffect {
+        voiceHub.onStart = { audioHubHere?.stop() }
+        audioHubHere?.onStart = { voiceHub.stop() }
+    }
     SideEffect {
         pictureSource?.media = network.media
         // Своя папка — первой (Решения §6): фото вне пузыря у почтальона живёт недолго.
@@ -5567,6 +5604,9 @@ private fun Chat(
         var editorNotice by remember { mutableStateOf<String?>(null) }
         var editorAsk by remember { mutableStateOf<String?>(null) }
         var editorChoice by remember { mutableStateOf<String?>(null) }
+        // Вставка видео, аудио, потока (вид) и форма меток (к чему, сколько строк) — ПЛАН-(ВМ) §3.6–§3.8.
+        var editorMedia by remember { mutableStateOf<String?>(null) }
+        var editorMarks by remember { mutableStateOf<Pair<String?, Int>?>(null) }
         fun put(widget: io.tima.domain.chat.ComposedWidget) = editorModel.insert(io.tima.domain.chat.ComposedItem.Widget(widget))
         // Картинка внутри сообщения (Решения §3): под ширину ряда 720, без превью, хранится, пока живёт сообщение.
         val editorUploads = remember { SealedUploads({ network.media }) }
@@ -5587,6 +5627,17 @@ private fun Chat(
             }
         }
         val editorPicture = io.tima.core.media.rememberPhotosPicker(1) { list -> list.firstOrNull()?.let(::insertPicture) }
+        // Своя картинка видео (ПЛАН-(ВМ) Р43): тем же путём, что картинка в сообщении, но в виджет видео.
+        var editorVideoPicture by remember { mutableStateOf<((io.tima.domain.chat.OutMedia?) -> Unit)?>(null) }
+        val editorPictureForVideo = io.tima.core.media.rememberPhotosPicker(1) { list ->
+            val done = editorVideoPicture ?: return@rememberPhotosPicker
+            val picked = list.firstOrNull() ?: return@rememberPhotosPicker done(null)
+            scope.launch {
+                val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(picked.bytes) }
+                val up = prepared?.let { editorUploads.upload(it.full, "image/jpeg", null, null) }
+                done(if (prepared != null && up != null) io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", prepared.width, prepared.height, prepared.full.size.toLong()) else null)
+            }
+        }
         val editorContact = io.tima.core.media.rememberContactPicker { c -> c?.let { put(io.tima.domain.chat.ComposedWidget.Contact(it.name, it.phone)) } }
         val noPlaceAccess = Tima.words.chat.placeNoAccess
         val editorPlace = io.tima.core.media.rememberMyPlace { p ->
@@ -5649,6 +5700,8 @@ private fun Chat(
                     return@send
                 }
                 scope.launch {
+                    // Метки без своего видео не уходят (ПЛАН-(ВМ) Р9), и по порядку времени.
+                    val doc = io.tima.domain.chat.ComposedMedia.prune(doc)
                     // Картинка в ячейке уже ряда — под её ширину (720 × доля), из исходного файла.
                     val fitted = doc.copy(
                         items = doc.items.map { item ->
@@ -5702,6 +5755,9 @@ private fun Chat(
                     "place" -> { editorPlace?.invoke() ?: run { editorAsk = "place" }; true }
                     "contact" -> { editorContact?.invoke() ?: run { editorAsk = "contact" }; true }
                     "reply", "picks", "underlay" -> { editorChoice = key; true }
+                    // Видео, звук и метки по ссылке (ПЛАН-(ВМ) §3.6–§3.8).
+                    "video", "audio", "stream" -> { editorMedia = key; true }
+                    "marks" -> { editorMarks = null to 0; true }
                     else -> false
                 }
             },
@@ -5726,6 +5782,32 @@ private fun Chat(
                 put = ::put,
                 onNotice = { editorNotice = it },
                 onClose = { editorAsk = null },
+            )
+        }
+        editorMedia?.let { kind ->
+            io.tima.feature.chat.MediaWidgetAsk(
+                kind = kind,
+                doc = editorModel.doc,
+                ports = io.tima.feature.chat.MediaAskPorts(
+                    probe = { url -> probeStream(linkCards, url) },
+                    pickPicture = { done -> editorVideoPicture = done; editorPictureForVideo() },
+                ),
+                onInsert = { widgets -> widgets.forEach(::put) },
+                onMarks = { bind, n -> editorMedia = null; editorMarks = bind to n },
+                onClose = { editorMedia = null },
+            )
+        }
+        editorMarks?.let { (bind, n) ->
+            io.tima.feature.chat.MarksAsk(
+                doc = editorModel.doc,
+                bind = bind,
+                count = n,
+                onSave = { marks ->
+                    // Метки к этому видео уже есть — правятся на месте; к одному видео одни (Р11).
+                    val swapped = io.tima.domain.chat.ComposedMedia.replace(editorModel.doc, { it is io.tima.domain.chat.ComposedWidget.Marks && it.bind == marks.bind }, marks)
+                    if (swapped != null) editorModel.layout { _, s -> swapped to s } else put(marks)
+                },
+                onClose = { editorMarks = null },
             )
         }
         when (editorChoice) {
@@ -8011,4 +8093,16 @@ private fun playerWord(e: io.tima.feature.chat.PlayerEvent): String = when (e) {
     io.tima.feature.chat.PlayerEvent.FAILED -> "движок не смог"
     io.tima.feature.chat.PlayerEvent.TIMEOUT -> "сторож: ни кадра, ни звука за 15 с"
     io.tima.feature.chat.PlayerEvent.TO_BROWSER -> "в браузер"
+}
+
+/**
+ * Что за m3u8 (ПЛАН-(ВМ) Р34–Р36): читает список тем же безопасным загрузчиком, что карточки ссылок;
+ * у главного без видео — ещё и первый вариант. Длительность записи — сумма кусков.
+ */
+private suspend fun probeStream(cards: io.tima.core.network.LinkCardsOverHttp, url: String): io.tima.feature.chat.MediaProbe? {
+    val (at, text) = cards.text(url, 256 * 1024) ?: return null
+    val info = io.tima.domain.chat.M3u8.parse(text, at) ?: return null
+    val variant = if (info.master && !info.video) info.firstVariant?.let { v -> cards.text(v, 256 * 1024)?.let { (a, t) -> io.tima.domain.chat.M3u8.parse(t, a) } } else null
+    val kind = io.tima.domain.chat.M3u8.widgetOf(info, variant)
+    return io.tima.feature.chat.MediaProbe(kind, (variant ?: info).durationMs)
 }

@@ -6,6 +6,7 @@ import io.tima.crypto.MarkupBlock
 import io.tima.crypto.MarkupEntity
 import io.tima.crypto.MarkupRef
 import io.tima.crypto.MarkupRules
+import io.tima.crypto.MarkupMark
 import io.tima.crypto.MarkupWidget
 import io.tima.crypto.MessageContent
 import io.tima.crypto.MessageContentCodec
@@ -260,6 +261,19 @@ object ComposedBodiesOverKodium : ComposedBodies {
                     author = w.author, lines = w.lines, more = w.more, moreText = w.moreText, tap = w.tap,
                 ),
             )
+            is ComposedWidget.Video -> {
+                val picture = w.picture?.let { media += ref(it); media.size - 1 } ?: -1
+                MarkupBlock(
+                    type = BlockType.VIDEO,
+                    widget = MarkupWidget(url = w.url, description = w.description, look = w.look, showTitle = w.showTitle, title = w.title, media = picture),
+                )
+            }
+            is ComposedWidget.Audio -> MarkupBlock(type = BlockType.AUDIO, widget = MarkupWidget(url = w.url, description = w.description, durationMs = w.durationMs))
+            is ComposedWidget.Stream -> MarkupBlock(type = BlockType.STREAM, widget = MarkupWidget(url = w.url, description = w.description))
+            is ComposedWidget.Marks -> MarkupBlock(
+                type = BlockType.MARKS,
+                widget = MarkupWidget(bind = w.bind, marks = w.marks.map { MarkupMark(at = it.atMs, text = it.text) }),
+            )
         }
 
         private fun ref(m: OutMedia) = MediaRef(
@@ -377,6 +391,10 @@ object ComposedBodiesOverKodium : ComposedBodies {
         }
     }
 
+    /** Метка в черновике (ПЛАН-(ВМ) §3.6). */
+    @Serializable
+    private data class SavedMark(val at: Long = 0, val text: String = "")
+
     @OptIn(ExperimentalEncodingApi::class)
     @Serializable
     private data class SavedWidget(
@@ -412,6 +430,11 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val tap: Boolean = false,
         /** Картинка: доля ширины, 20…100; 0 — у прежних черновиков, то есть 100. */
         val share: Int = 0,
+        /** Видео, аудио, метки (ПЛАН-(ВМ) §3.6–§3.8). */
+        val look: String = "",
+        val showTitle: Boolean = false,
+        val durationMs: Long = 0,
+        val marks: List<SavedMark> = emptyList(),
     ) {
         private fun media(): OutMedia? = if (mediaId.isEmpty()) null else
             OutMedia(mediaId, Base64.decode(key), mime, width, height, size, name)
@@ -426,6 +449,10 @@ object ComposedBodiesOverKodium : ComposedBodies {
             "reply" -> ComposedWidget.Reply(ReplyTarget(kind, chatId, messageId, userId))
             "quoted" -> ComposedWidget.Quoted(kind, chatId, messageId, author, if (linesSet) lines else if (cut == "full") 0 else 3, more, moreText, tap)
             "underlay" -> ComposedWidget.Underlay(kind, chatId, messageId, lines, author, more, moreText, tap)
+            "video" -> ComposedWidget.Video(url, description, look.ifEmpty { "picture" }, showTitle, title, media())
+            "audio" -> ComposedWidget.Audio(url, description, durationMs)
+            "stream" -> ComposedWidget.Stream(url, description)
+            "marks" -> ComposedWidget.Marks(text, marks.map { io.tima.domain.chat.MediaMark(it.at, it.text) })
             else -> null
         }
 
@@ -456,6 +483,14 @@ object ComposedBodiesOverKodium : ComposedBodies {
                     "underlay", kind = w.kind, chatId = w.container, messageId = w.message, author = w.author, lines = w.lines,
                     more = w.more, moreText = w.moreText, tap = w.tap,
                 )
+                is ComposedWidget.Video -> SavedWidget(
+                    "video", url = w.url, description = w.description, look = w.look, showTitle = w.showTitle, title = w.title,
+                    mediaId = w.picture?.mediaId.orEmpty(), key = w.picture?.let { Base64.encode(it.key) }.orEmpty(),
+                    mime = w.picture?.mime.orEmpty(), width = w.picture?.width ?: 0, height = w.picture?.height ?: 0, size = w.picture?.size ?: 0,
+                )
+                is ComposedWidget.Audio -> SavedWidget("audio", url = w.url, description = w.description, durationMs = w.durationMs)
+                is ComposedWidget.Stream -> SavedWidget("stream", url = w.url, description = w.description)
+                is ComposedWidget.Marks -> SavedWidget("marks", text = w.bind, marks = w.marks.map { SavedMark(it.atMs, it.text) })
             }
         }
     }

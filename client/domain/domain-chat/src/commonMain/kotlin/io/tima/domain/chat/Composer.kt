@@ -197,7 +197,33 @@ sealed interface ComposedWidget {
         val moreText: String = "",
         val tap: Boolean = false,
     ) : ComposedWidget
+
+    /**
+     * Видео по ссылке (ПЛАН-(ВМ) §3.6): [description] — заглавие и привязка меток, обязательно (Р13);
+     * [look] — `picture` (по умолчанию) или `frame`; [picture] — своя картинка, если у сайта нет (Р43);
+     * [title] — название со страницы, показывается при [showTitle].
+     */
+    data class Video(
+        val url: String,
+        val description: String,
+        val look: String = "picture",
+        val showTitle: Boolean = false,
+        val title: String = "",
+        val picture: OutMedia? = null,
+    ) : ComposedWidget
+
+    /** Звуковой файл или запись m3u8 (§3.7): играет в сообщении; длительность — от отправителя (Р29). */
+    data class Audio(val url: String, val description: String, val durationMs: Long = 0) : ComposedWidget
+
+    /** Прямой эфир m3u8, только звук (§3.8). */
+    data class Stream(val url: String, val description: String) : ComposedWidget
+
+    /** Метки к видео или аудио этого сообщения по его описанию [bind] (§3.6, Р10). */
+    data class Marks(val bind: String, val marks: List<MediaMark>) : ComposedWidget
 }
+
+/** Метка видео или аудио (ПЛАН-(ВМ) §3.6): с какой мс и что там. */
+data class MediaMark(val atMs: Long, val text: String)
 
 /** Вид абзаца — «Абзац ▾» (Решения §10.2). */
 enum class ParagraphKind(val sign: String) {

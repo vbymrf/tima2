@@ -66,6 +66,12 @@ sealed interface GateAsk {
     data class Message(val name: String?, val preview: String?, val go: () -> Unit, override val blocked: Boolean = false) : GateAsk
 }
 
+/**
+ * Открыть видео или звук в окне проигрывания (ПЛАН-(ВМ) §3.1) — ставит [LinkGate]: файлы и потоки —
+ * в окне TIMA, сайты — пока браузером (ВМ6–ВМ8). `null` — окна нет (снимки, проверки).
+ */
+val LocalPlay = staticCompositionLocalOf<((PlayRequest) -> Unit)?> { null }
+
 /** Окно перехода над всем приложением — ставит [LinkGate]; нет его (снимки, проверки) — переход сразу. */
 val LocalGate = staticCompositionLocalOf<((GateAsk) -> Unit)?> { null }
 
@@ -129,6 +135,9 @@ fun LinkGate(
     CompositionLocalProvider(
         LocalGate provides { ask -> asked = ask },
         LocalLinkOpen provides { url -> asked = GateAsk.Link(url) },
+        LocalPlay provides { req ->
+            if (MediaLinks.playsHere(req.url)) playing = req else runCatching { uri.openUri(req.url) }
+        },
     ) {
         Box(Modifier.fillMaxSize()) {
             content()

@@ -455,7 +455,11 @@ fun EditorScreen(
             Box(Modifier.fillMaxWidth().heightIn(max = PANEL_MAX).verticalScroll(rememberScrollState())) {
                 when {
                     panel == "paragraph" -> ParagraphList(model.paragraphHere) { kind -> model.paragraph(kind); panel = null }
-                    panel == "widgets" -> WidgetsAsk { hint = w.widgetSoon; panel = null }
+                    panel == "widgets" -> WidgetsAsk { key ->
+                        panel = null
+                        // Видео, метки, аудио и поток (ПЛАН-(ВМ) §3.6–§3.8) — формой ведущего; прочее — заглушки.
+                        if (key !in MEDIA_WIDGETS || onButton?.invoke(key) != true) hint = w.widgetSoon
+                    }
                     panel == "grid" -> GridAsk { lines, columns ->
                         panel = null
                         model.insertRow(lines, columns)
@@ -882,7 +886,10 @@ internal fun ParagraphList(current: ParagraphKind, onPick: (ParagraphKind) -> Un
     }
 }
 
-/** «Разметка → Виджет» (ПЛАН-(ВД)): виджеты с особым действием — пока заглушки. */
+/** Виджеты медиа по ссылке (ПЛАН-(ВМ) §3.6–§3.8): вставляет форма ведущего редактор. */
+private val MEDIA_WIDGETS = setOf("video", "marks", "audio", "stream")
+
+/** «Вставка → Виджет»: видео, метки, аудио, поток (ПЛАН-(ВМ)); опрос, мероприятие, клипы — пока заглушки (ПЛАН-(ВД)). */
 @Composable
 private fun WidgetsAsk(onPick: (String) -> Unit) {
     val colors = Tima.colors
@@ -892,7 +899,11 @@ private fun WidgetsAsk(onPick: (String) -> Unit) {
             .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2).testTag(EditorTags.WIDGETS),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
     ) {
-        for ((key, label) in listOf("poll" to w.widgetPoll, "event" to w.widgetEvent, "clips" to w.widgetClips, "audio" to w.widgetAudio)) {
+        val items = listOf(
+            "video" to w.widgetVideo, "marks" to w.widgetMarks, "audio" to w.widgetAudio, "stream" to w.widgetStream,
+            "poll" to w.widgetPoll, "event" to w.widgetEvent, "clips" to w.widgetClips,
+        )
+        for ((key, label) in items) {
             io.tima.core.ui.Chip(label, kind = io.tima.core.ui.ChipKind.Neutral, onClick = { onPick(key) }, modifier = Modifier.testTag("editor:widgets.$key"))
         }
     }

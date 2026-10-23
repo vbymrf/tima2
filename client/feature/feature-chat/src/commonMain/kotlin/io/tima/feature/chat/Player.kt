@@ -13,8 +13,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -44,7 +48,13 @@ import io.tima.domain.chat.MediaLinks
 import kotlinx.coroutines.delay
 
 /** Что открыть в окне проигрывания (ПЛАН-(ВМ) §3.1): адрес, название, с какой секунды. */
-data class PlayRequest(val url: String, val title: String = "", val startMs: Long = 0)
+data class PlayRequest(
+    val url: String,
+    val title: String = "",
+    val startMs: Long = 0,
+    /** Метки этого видео (§3.6): список в окне, отрезки на полосе, текущая подсвечена. */
+    val marks: List<io.tima.domain.chat.MediaMark> = emptyList(),
+)
 
 /** Что случилось в окне — для журнала (`PLAYER`); слова — у пишущего журнал. */
 enum class PlayerEvent {
@@ -139,7 +149,8 @@ private fun PlayerContent(
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (!state.live && state.durationMs > 0) {
                 val progress = state.positionMs.toFloat() / state.durationMs
-                SeekBar(progress, Modifier.fillMaxWidth().height(24.dp).testTag(PlayerTags.BAR)) { f ->
+                val marks = request.marks.map { it.atMs.toFloat() / state.durationMs }
+                SeekBar(progress, Modifier.fillMaxWidth().height(24.dp).testTag(PlayerTags.BAR), marks) { f ->
                     player?.seek((state.durationMs * f).toLong())
                 }
             }
@@ -168,6 +179,29 @@ private fun PlayerContent(
                     onEvent(PlayerEvent.TO_BROWSER, MediaLinks.hostOf(request.url).orEmpty())
                     onBrowser(request.url)
                 }, modifier = Modifier.testTag(PlayerTags.BROWSER))
+            }
+            if (request.marks.isNotEmpty()) PlayerMarks(request.marks, state.positionMs) { ms -> player?.seek(ms); player?.play() }
+        }
+    }
+}
+
+/** Метки в окне (§3.6): текущая подсвечена по ходу просмотра, нажатие перематывает. */
+@Composable
+private fun PlayerMarks(marks: List<io.tima.domain.chat.MediaMark>, positionMs: Long, onSeek: (Long) -> Unit) {
+    val colors = Tima.colors
+    val current = currentMark(marks, positionMs)
+    Column(
+        Modifier.fillMaxWidth().heightIn(max = 180.dp).verticalScroll(rememberScrollState()).testTag("player:marks"),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        for ((i, m) in marks.withIndex()) {
+            Row(
+                Modifier.fillMaxWidth().background(if (i == current) colors.navigation.copy(alpha = 0.35f) else colors.viewer, RoundedCornerShape(6.dp))
+                    .clickable { onSeek(m.atMs) }.padding(horizontal = 6.dp, vertical = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Caption(io.tima.domain.chat.markTime(m.atMs), fontSize = 14.sp, weight = FontWeight.SemiBold, color = colors.link)
+                Caption(m.text, fontSize = 14.sp, color = io.tima.core.ui.TimaFixed.onVideo, modifier = Modifier.weight(1f))
             }
         }
     }

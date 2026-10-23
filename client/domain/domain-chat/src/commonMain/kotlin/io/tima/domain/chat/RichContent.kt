@@ -154,6 +154,25 @@ sealed interface RichBlock {
     /** Голосовое вне пузыря (ПЛАН-(ВМ) §2.4): ▶, волна, время, скорость. */
     data class Voice(val media: Int) : RichBlock
 
+    /** Видео по ссылке (ПЛАН-(ВМ) §3.6): [picture] — своя картинка в [RichContent.media], -1 — нет. */
+    data class Video(
+        val url: String,
+        val description: String,
+        val title: String = "",
+        val showTitle: Boolean = false,
+        val look: String = "picture",
+        val picture: Int = -1,
+    ) : RichBlock
+
+    /** Звук по ссылке, играет в сообщении (§3.7). */
+    data class Audio(val url: String, val description: String, val durationMs: Long = 0) : RichBlock
+
+    /** Прямой эфир, только звук (§3.8). */
+    data class Stream(val url: String, val description: String) : RichBlock
+
+    /** Метки к видео или аудио этого сообщения по описанию [bind] (§3.6). */
+    data class Marks(val bind: String, val marks: List<MediaMark>) : RichBlock
+
     /** Подкладка в конце: [lines] строк исходного и «Продолжить чтение». */
     data class Underlay(
         val kind: String,

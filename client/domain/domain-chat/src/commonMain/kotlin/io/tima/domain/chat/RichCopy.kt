@@ -71,6 +71,10 @@ object RichCopy {
             is RichBlock.Fallback -> add(b.text)
             is RichBlock.Quoted -> quoted(b.kind, b.chatId, b.messageId, ref, unavailable, depth).forEach(::add)
             is RichBlock.Underlay -> quoted(b.kind, b.chatId, b.messageId, ref, unavailable, depth).forEach(::add)
+            is RichBlock.Video -> add(listOf(b.description, b.url).filter { it.isNotBlank() }.joinToString(" "))
+            is RichBlock.Audio -> add(listOf(b.description, b.url).filter { it.isNotBlank() }.joinToString(" "))
+            is RichBlock.Stream -> add(listOf(b.description, b.url).filter { it.isNotBlank() }.joinToString(" "))
+            is RichBlock.Marks -> b.marks.forEach { m -> add("${markTime(m.atMs)} ${m.text}".trim()) }
             is RichBlock.Reply, is RichBlock.Image, is RichBlock.Album, is RichBlock.File, is RichBlock.Voice -> Unit
         }
         return out
@@ -92,4 +96,22 @@ object RichCopy {
         if (body.isEmpty()) return listOf(unavailable)
         return listOfNotNull(found.author?.takeIf { it.isNotBlank() }) + body
     }
+}
+
+/** Время метки: `м:сс` или `ч:мм:сс` (ПЛАН-(ВМ) §3.6). */
+fun markTime(ms: Long): String {
+    val s = (ms / 1000).coerceAtLeast(0)
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = (s % 60).toString().padStart(2, '0')
+    return if (h > 0) "$h:${m.toString().padStart(2, '0')}:$sec" else "$m:$sec"
+}
+
+/** Время метки из строки `м:сс` или `ч:мм:сс`; не время — `null`. */
+fun parseMarkTime(text: String): Long? {
+    val parts = text.trim().split(':')
+    if (parts.size !in 2..3 || parts.any { it.isEmpty() || it.any { c -> !c.isDigit() } }) return null
+    val n = parts.map { it.toLong() }
+    if (n.drop(1).any { it >= 60 }) return null
+    return (if (n.size == 3) n[0] * 3600 + n[1] * 60 + n[2] else n[0] * 60 + n[1]) * 1000
 }

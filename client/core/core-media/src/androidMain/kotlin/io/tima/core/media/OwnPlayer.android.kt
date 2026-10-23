@@ -47,6 +47,11 @@ private class ExoOwnPlayer(context: Context) : OwnPlayer {
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 _state.value = _state.value.copy(width = videoSize.width, height = videoSize.height)
             }
+            override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
+                val title = listOfNotNull(mediaMetadata.artist?.toString(), mediaMetadata.title?.toString())
+                    .filter { it.isNotBlank() }.joinToString(" — ")
+                _state.value = _state.value.copy(title = title.ifBlank { null })
+            }
             override fun onPlayerError(error: PlaybackException) {
                 _state.value = _state.value.copy(error = error.errorCodeName, playing = false)
             }
