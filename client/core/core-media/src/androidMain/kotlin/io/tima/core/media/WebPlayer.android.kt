@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -43,6 +44,10 @@ private class AndroidWebPlayer(private val context: Context) : WebPlayer {
 
     @SuppressLint("SetJavaScriptEnabled")
     fun webView(): WebView = web ?: WebView(context).apply {
+        // Во всё место: с `WRAP_CONTENT` (так `AndroidView` ставит сам) WebView считает высоту страницы
+        // по содержимому, «100%» у `html` и `<video>` становится нулём — время шло, а поле стояло чёрным
+        // (Redmi и Samsung, 2026-10-23; высота видео 0 — по DevTools).
+        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.mediaPlaybackRequiresUserGesture = false
@@ -84,7 +89,7 @@ private class AndroidWebPlayer(private val context: Context) : WebPlayer {
             override fun onError(youTubePlayer: YouTubePlayer, error: PlayerConstants.PlayerError) {
                 _state.value = _state.value.copy(error = "youtube ${error.name}", playing = false)
             }
-        }, true, IFramePlayerOptions.Builder().controls(1).rel(0).build())
+        }, true, IFramePlayerOptions.Builder(context).controls(1).rel(0).build())
     }.also { youtube = it }
 
     override fun open(page: WebPage, startMs: Long) {

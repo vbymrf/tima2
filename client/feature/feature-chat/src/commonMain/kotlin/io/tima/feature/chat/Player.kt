@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -229,7 +231,9 @@ private fun PlayerContent(
     fun pause() = if (engine == PlayerEngine.WEB) web?.pause() else own?.pause()
     fun seek(ms: Long) = if (engine == PlayerEngine.WEB) web?.seek(ms) else own?.seek(ms)
 
-    Column(Modifier.fillMaxSize().background(colors.viewer).testTag(PlayerTags.WINDOW)) {
+    // Отступы под строку состояния и кнопки навигации: на Redmi название и ✕ уходили под часы,
+    // последняя метка — под кнопки (2026-10-23).
+    Column(Modifier.fillMaxSize().background(colors.viewer).systemBarsPadding().testTag(PlayerTags.WINDOW)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = Modifier.weight(1f))
             Box(Modifier.size(40.dp).clickable(onClick = onClose).testTag(PlayerTags.CLOSE), contentAlignment = Alignment.Center) {
@@ -263,8 +267,16 @@ private fun PlayerContent(
                 }
                 Caption(
                     if (state.live) words.playerLive else "${voiceTime(state.positionMs)} / ${voiceTime(state.durationMs)}",
-                    color = onVideo, fontSize = 14.sp, modifier = Modifier.weight(1f),
+                    color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.weight(1f),
                 )
+            }
+            // Кнопки — своим рядом с прокруткой: в одном ряду с временем на экране 720 точек время
+            // сжималось в столбик по букве (Redmi, 2026-10-23).
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (!state.live && engine == PlayerEngine.OWN) {
                     Chip(
                         speedName(state.speed),

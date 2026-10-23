@@ -15,6 +15,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        Background.service = this
         val player = Background.player ?: return
         session = MediaSession.Builder(this, player).build().also { addSession(it) }
     }
@@ -27,6 +28,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        if (Background.service === this) Background.service = null
         session?.release()
         session = null
         super.onDestroy()
@@ -34,6 +36,7 @@ class PlaybackService : MediaSessionService() {
 
     internal object Background {
         @Volatile var player: Player? = null
+        @Volatile var service: PlaybackService? = null
     }
 }
 
@@ -44,6 +47,10 @@ actual fun keepPlaying(player: OwnPlayer, on: Boolean) {
         PlaybackService.Background.player = exo.exo
         runCatching { exo.context.startService(intent) }
     } else {
-        runCatching { exo.context.stopService(intent) }
+        // Не `stopService`: после паузы Media3 ещё держит службу на переднем плане и пересоздаёт её
+        // через `startForegroundService`, а новая на передний план не выходит — через 30 с Android
+        // роняет приложение (Redmi, 2026-10-23). Остановка средствами самой Media3 убирает и
+        // уведомление, и передний план.
+        runCatching { PlaybackService.Background.service?.pauseAllPlayersAndStopSelf() }
     }
 }

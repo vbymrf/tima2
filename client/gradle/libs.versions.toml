@@ -49,9 +49,10 @@ concentus = "1.0.2"
 # Foundation (`WindowsNativeBridge` и его DLL 64 КБ): без транзитивных — те тянут Kotlin stdlib 2.4,
 # kotlinx-datetime 0.8 и androidx.core 1.18 (compileSdk 36).
 media3 = "1.9.4"
-# Браузерный движок для YouTube на Android (ПЛАН-(ВМ) Р14): android-youtube-player, MIT. 12.1.2 — её
-# зависимости (lifecycle 2.6) ниже наших.
-androidYoutubePlayer = "12.1.2"
+# Браузерный движок для YouTube на Android (ПЛАН-(ВМ) Р14): android-youtube-player, MIT. 13.0.0: YouTube
+# с 2025 года отказывает встраиванию без адреса страницы (ошибка 152/153, у 12.1.2 — «UNKNOWN»; Redmi
+# 2026-10-23), 13.0.0 подставляет адрес приложения. Тянет lifecycle 2.9.4 — как у нас; compileSdk не требует.
+androidYoutubePlayer = "13.0.0"
 composemediaplayer = "0.11.4"
 
 [plugins]
