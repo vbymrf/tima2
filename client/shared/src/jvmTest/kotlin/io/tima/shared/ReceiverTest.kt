@@ -68,6 +68,21 @@ class ReceiverTest {
         assertFalse(receiver("d-моё").ownCopy(null))
     }
 
+    /**
+     * Переписка с собой — собеседник «я» по праву, починка её не трогает и сервер не спрашивает
+     * (отчёт X63M, 2026-10-23: чинятся только личные переписки, заведённые своим сообщением с
+     * другого устройства с собеседником «я»).
+     */
+    @Test
+    fun переписку_с_собой_починка_не_трогает() {
+        val r = receiver("d-я")
+        val self = io.tima.core.encryption.PersonalChatIdsOverKodium.personalChatId("u-я", "u-я")
+        val env = Environment.open(desktopDatabase(File(catalog, "tima.db")), SECRET, "u-я")
+        io.tima.core.database.SqlChatBook(env.db, env.cipher).remember(self, io.tima.domain.chat.ChatKind.Personal, "Я", "u-я")
+        kotlin.test.assertEquals(0, kotlinx.coroutines.runBlocking { r.repairSelfPeers() })
+        kotlin.test.assertEquals(listOf(self to "u-я"), io.tima.core.database.SqlChatRehome(env.db).personalPeers())
+    }
+
     private companion object {
         val SECRET: ByteArray = ByteArray(32) { (it + 5).toByte() }
     }

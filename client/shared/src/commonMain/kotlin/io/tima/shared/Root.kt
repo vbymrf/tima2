@@ -1859,6 +1859,12 @@ private fun App(
         runCatching { environment.settings.put(key, "1") }
     }
 
+    // Переписки «с собой», заведённые своим сообщением с другого устройства (отчёт X63M,
+    // 2026-10-23), — собеседника по списку сервера. Без отметки: нечего чинить — сеть не трогается.
+    LaunchedEffect(assembled.session.userId) {
+        runCatching { assembled.receiver.repairSelfPeers() }
+    }
+
     // История личных переписок (ИУ1, ИУ3): своё устройство передало — забрать; при первом
     // запуске — строки всех своих переписок и всё, что уже можно прочесть.
     LaunchedEffect(assembled.session.userId) {

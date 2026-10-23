@@ -1198,14 +1198,54 @@ class Receiver(
 
         // Переписка от незнакомого — со своим именем: иначе в списке появится строка без
         // имени, и человек не узнает, кто написал.
+        //
+        // Своё с другого своего устройства собеседника не называет: автор там — сам человек.
+        // Прежде строка заводилась с собеседником «я», и на ПК, где почти не пишут, переписки
+        // показывались как переписка с собой (отчёт X63M, 2026-10-23). Собеседник такой — по
+        // списку личных переписок сервера; не ответил — строку заведёт следующее сообщение.
         if (sender != null && !environment.chatFacts.knows(chatId)) {
-            book.remember(
-                chatId = chatId,
-                kind = ChatKind.Personal,
-                title = network.directory.nameOrNumber(sender.userId),
-                peerId = sender.userId,
-            )
+            val peer = if (sender.userId == session.userId) ownPeer(chatId) else sender.userId
+            if (peer != null) {
+                book.remember(
+                    chatId = chatId,
+                    kind = ChatKind.Personal,
+                    title = network.directory.nameOrNumber(peer),
+                    peerId = peer,
+                )
+                if (sender.userId == session.userId) Journal.note(LogCode.CHAT_PEER, "переписка заведена", "откуда" to "своё с другого устройства")
+            }
         }
+    }
+
+    /** Собеседник личной переписки, где пришло своё: переписка с собой — я, иначе — по списку сервера. */
+    private suspend fun ownPeer(chatId: String): String? {
+        val me = session.userId
+        if (chatId == io.tima.core.encryption.PersonalChatIdsOverKodium.personalChatId(me, me)) return me
+        return network.history.personalChats()?.firstOrNull { it.chatId == chatId }?.peerId?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Починка строк, заведённых своим сообщением с другого устройства (отчёт X63M, 2026-10-23):
+     * личная переписка с собеседником «я», хотя это не переписка с собой. Собеседник — по
+     * списку личных переписок сервера. Чинить нечего — сеть не трогается.
+     *
+     * @return сколько строк исправлено; `null` — сервер не ответил, повторится при следующем запуске.
+     */
+    suspend fun repairSelfPeers(): Int? {
+        val me = session.userId
+        if (me.isBlank()) return 0
+        val self = io.tima.core.encryption.PersonalChatIdsOverKodium.personalChatId(me, me)
+        val wrong = io.tima.core.database.SqlChatRehome(environment.db).personalPeers().filter { (chat, peer) -> peer == me && chat != self }
+        if (wrong.isEmpty()) return 0
+        val chats = network.history.personalChats(allIdentities = true) ?: return null
+        var fixed = 0
+        for ((chatId, _) in wrong) {
+            val peer = chats.firstOrNull { it.chatId == chatId }?.peerId?.takeIf { it.isNotBlank() && it != me } ?: continue
+            book.remember(chatId = chatId, kind = ChatKind.Personal, title = network.directory.nameOrNumber(peer), peerId = peer)
+            fixed++
+        }
+        Journal.note(LogCode.CHAT_PEER, "переписке дописан собеседник", "откуда" to "починка своего", "было" to wrong.size, "исправлено" to fixed)
+        return fixed
     }
 
     /**
