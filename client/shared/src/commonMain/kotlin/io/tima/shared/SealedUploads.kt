@@ -3,6 +3,7 @@ package io.tima.shared
 import io.tima.core.encryption.MediaFiles
 import io.tima.core.media.Media
 import io.tima.domain.chat.AttachmentUploads
+import io.tima.domain.chat.SendAttachments
 
 /**
  * Загрузка файла сообщения (Решения §3, §6): свой ключ у каждого файла, байты закрыты до выхода с
@@ -32,6 +33,26 @@ class SealedUploads(
         )
         if (id == null) return null
         if (postmanChat != null) keepSent?.invoke(id, sealed, mime)
+        return id to key
+    }
+
+    /** Голосовое — файл на срок (ПЛАН-(ВМ) Р3); ушедшее — в свою папку, слушать без сети. */
+    override suspend fun uploadVoice(bytes: ByteArray, chatId: String, peerId: String?, groupId: String?): Pair<String, ByteArray>? {
+        val key = MediaFiles.newKey()
+        val sealed = MediaFiles.seal(key, bytes)
+        val started = msNow()
+        val term = if (groupId != null) Media.MediaTerm(groupId = groupId) else Media.MediaTerm(chatId = chatId, peerId = peerId.orEmpty())
+        val id = media().uploadSealed(sealed, SendAttachments.VOICE_MIME, term = term)
+        io.tima.core.diag.Journal.note(
+            io.tima.core.diag.LogCode.FILE_SEND,
+            if (id != null) "загружено" else "не вышло",
+            "вид" to "голосовое",
+            "размер" to sealed.size,
+            "мс" to (msNow() - started),
+            "группа" to (groupId != null),
+        )
+        if (id == null) return null
+        keepSent?.invoke(id, sealed, SendAttachments.VOICE_MIME)
         return id to key
     }
 }

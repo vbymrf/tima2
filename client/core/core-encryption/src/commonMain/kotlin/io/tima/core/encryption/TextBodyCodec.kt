@@ -142,7 +142,12 @@ object TextBodyCodec : MessageBodyCodec {
         // Без текста, с файлами — метка для списка: «Фото», «Файл: имя» скажет экран (Решения §12).
         if (c.plainText().isBlank() && c.media.isNotEmpty()) {
             val photos = c.media.count { it.mime.startsWith("image/") && it.name.isEmpty() }
-            if (photos == c.media.size) {
+            val voice = c.media.firstOrNull { it.voice }
+            if (voice != null) {
+                // Голосовое (ПЛАН-(ВМ)): в списке — «Голосовое 0:07».
+                val s = voice.duration_ms / 1000
+                io.tima.domain.chat.MediaSummary.of(io.tima.domain.chat.MediaSummary.Kind.VOICE, 1, "${s / 60}:${(s % 60).toString().padStart(2, '0')}")
+            } else if (photos == c.media.size) {
                 io.tima.domain.chat.MediaSummary.of(io.tima.domain.chat.MediaSummary.Kind.PHOTO, photos)
             } else {
                 val file = c.media.first { it.name.isNotEmpty() || !it.mime.startsWith("image/") }

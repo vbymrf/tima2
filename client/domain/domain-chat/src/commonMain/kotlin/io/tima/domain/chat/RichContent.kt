@@ -29,6 +29,10 @@ class RichMedia(
     /** Имя файла вне пузыря (Решения §6); пусто у фото. */
     val name: String = "",
     val size: Long = 0,
+    /** Голосовое (ПЛАН-(ВМ) §2.2): длительность и рисунок волны — от отправителя. */
+    val voice: Boolean = false,
+    val durationMs: Long = 0,
+    val wave: ByteArray = ByteArray(0),
 ) {
     override fun equals(other: Any?) = other is RichMedia && other.mediaId == mediaId
     override fun hashCode() = mediaId.hashCode()
@@ -146,6 +150,9 @@ sealed interface RichBlock {
 
     /** Файл вне пузыря (Решения §6): имя, размер, скачать и «Сохранить как». */
     data class File(val media: Int) : RichBlock
+
+    /** Голосовое вне пузыря (ПЛАН-(ВМ) §2.4): ▶, волна, время, скорость. */
+    data class Voice(val media: Int) : RichBlock
 
     /** Подкладка в конце: [lines] строк исходного и «Продолжить чтение». */
     data class Underlay(

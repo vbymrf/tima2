@@ -36,10 +36,19 @@ kotlin {
             // что `TimaSketch` отдаёт тип `Sketch` наружу: его держат корень приложения и core-ui.
             api(libs.sketch.compose.core)
             implementation(libs.sketch.animated.webp)
+            implementation(libs.kotlinx.coroutines.core)
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            implementation(libs.concentus)
         }
+        jvmMain.dependencies {
+            implementation(libs.concentus)
+        }
+        // Кодек голосовых (Concentus, ПЛАН-(ВМ) §2.1) — одна Java-библиотека на Android и ПК, один
+        // исходник на обе платформы: каталог `jvmShared` входит в обе.
+        androidMain { kotlin.srcDir("src/jvmShared/kotlin") }
+        jvmMain { kotlin.srcDir("src/jvmShared/kotlin") }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }

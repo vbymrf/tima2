@@ -268,7 +268,7 @@ private fun MediaKindSection(
     onLimits: (String, KeepFor?, Int) -> Unit,
     onClear: (String) -> Unit,
 ) {
-    Caption(if (m.kind == "photo") words.mediaPhotos else words.mediaFiles, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+    Caption(when (m.kind) { "photo" -> words.mediaPhotos; "voice" -> words.mediaVoices; else -> words.mediaFiles }, fontSize = TimaType.sz5, weight = FontWeight.Bold)
     ListLine(middle = { Name(words.occupies) }, right = { Secondary(megabytes(m.occupied, words)) })
     Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
         KeepUnit.entries.forEach { unit ->

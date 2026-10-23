@@ -871,6 +871,21 @@ class ChatStore(
         }
     }
 
+    /**
+     * Голосовое (ПЛАН-(ВМ) ВМ3): в личной — файл на срок для собеседника, в группе — для её
+     * участников ([chatId] — номер группы). В канале голосовых нет (Р19): экран кнопки не даёт.
+     */
+    fun sendVoice(ogg: ByteArray, durationMs: Long, wave: ByteArray) {
+        val port = attach ?: return
+        _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.sending))
+        scope.launch {
+            val result = withContext(io) {
+                port.voice(chatId, _state.value.level, peerId, if (peerId == null) chatId else null, ogg, durationMs, wave)
+            }
+            attachResult(result)
+        }
+    }
+
     fun sendContact(name: String, phone: String) {
         val port = attach ?: return
         if (name.isBlank() && phone.isBlank()) return

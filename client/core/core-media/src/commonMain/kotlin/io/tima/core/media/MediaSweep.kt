@@ -12,8 +12,15 @@ data class MediaLimits(val keepDays: Int, val maxMegabytes: Int) {
         /** Файлы вне пузыря — 1 месяц, 1 ГБ. */
         val FILE = MediaLimits(30, 1024)
 
+        /** Голосовые — 1 месяц, 300 МБ (ПЛАН-(ВМ) Р41). */
+        val VOICE = MediaLimits(30, 300)
+
         const val MB = 1024L * 1024
-        fun defaultsOf(kind: String) = if (kind == MediaFolder.PHOTO) PHOTO else FILE
+        fun defaultsOf(kind: String) = when (kind) {
+            MediaFolder.PHOTO -> PHOTO
+            MediaFolder.VOICE -> VOICE
+            else -> FILE
+        }
     }
 }
 

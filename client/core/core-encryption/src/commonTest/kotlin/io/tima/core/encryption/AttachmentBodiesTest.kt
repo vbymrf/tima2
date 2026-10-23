@@ -40,6 +40,20 @@ class AttachmentBodiesTest {
     }
 
     @Test
+    fun голосовое_доходит_голосовым_с_длительностью_и_волной() {
+        val wave = ByteArray(64) { (it * 4).toByte() }
+        val body = bodies.voice(OutMedia("v", key, "audio/ogg; codecs=opus", size = 9000, voice = true, durationMs = 7_400, wave = wave))
+        val rich = TextBodyCodec.decodeLine(body)!!.rich!!
+        assertEquals(RichBlock.Voice(0), rich.blocks.single())
+        val m = rich.media.single()
+        assertEquals(true, m.voice)
+        assertEquals(7_400, m.durationMs)
+        assertEquals(wave.toList(), m.wave.toList())
+        assertEquals(key.toList(), m.key.toList())
+        assertEquals(MediaSummary.of(MediaSummary.Kind.VOICE, 1, "0:07"), TextBodyCodec.decodeText(body))
+    }
+
+    @Test
     fun карточки_доходят_виджетами_и_подписью_в_списке() {
         val cases = listOf(
             bodies.contact("Аня", "+7 900", "") to MediaSummary.of(MediaSummary.Kind.CONTACT, 1, "Аня"),

@@ -115,7 +115,7 @@ internal fun RichBlockViewOf(block: RichBlock) {
         }
         is RichBlock.Row -> RichRow(block)
         // Вложения внутри смешанного тела — тем же видом, что и вне пузыря.
-        is RichBlock.Album, is RichBlock.File -> AttachmentsView(io.tima.domain.chat.RichContent(listOf(block), LocalRichMedia.current))
+        is RichBlock.Album, is RichBlock.File, is RichBlock.Voice -> AttachmentsView(io.tima.domain.chat.RichContent(listOf(block), LocalRichMedia.current))
         is RichBlock.Image, is RichBlock.Link, is RichBlock.Cloud, is RichBlock.Place, is RichBlock.Contact,
         is RichBlock.Emoji, is RichBlock.Quoted, is RichBlock.Underlay -> WidgetView(block)
         // Цитата, список и код — со стилем куска, как абзац (doc_mig/РЕДАКТОР-СВОЙСТВА-И-ВЛОЖЕНИЕ.md).

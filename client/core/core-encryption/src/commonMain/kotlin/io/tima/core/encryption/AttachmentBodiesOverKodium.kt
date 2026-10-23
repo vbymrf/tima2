@@ -30,6 +30,9 @@ object AttachmentBodiesOverKodium : AttachmentBodies {
         width = m.width,
         height = m.height,
         name = m.name,
+        duration_ms = m.durationMs.toInt(),
+        voice = m.voice,
+        wave = (m.wave ?: ByteArray(0)).toByteString(),
     )
 
     private fun encode(content: MessageContent): ByteArray = MessageSerializer.encodeBody(MessageContentCodec.toBody(content))
@@ -37,6 +40,8 @@ object AttachmentBodiesOverKodium : AttachmentBodies {
     override fun album(photos: List<OutMedia>): ByteArray = encode(MessageContent(nodes = listOf(""), media = photos.map(::ref)))
 
     override fun file(file: OutMedia): ByteArray = encode(MessageContent(nodes = listOf(""), media = listOf(ref(file))))
+
+    override fun voice(voice: OutMedia): ByteArray = encode(MessageContent(nodes = listOf(""), media = listOf(ref(voice))))
 
     private fun card(vararg widgets: MarkupBlock, media: List<MediaRef> = emptyList()): ByteArray = encode(
         MessageContent(

@@ -60,6 +60,24 @@ class PostmanFilesTest {
     }
 
     @Test
+    fun голосовое_в_свой_раздел_а_по_сроку_не_просится_снова() = runTest {
+        val folder = MemoryFolder()
+        val media = FakeMedia(mutableMapOf("v-1" to byteArrayOf(5), "v-old" to null))
+        val postman = PostmanFiles({ media }, folder, this)
+        val voice = { id: String -> RichMedia(id, ByteArray(32), "audio/ogg; codecs=opus", 0, 0, voice = true, durationMs = 3000) }
+        postman.received(RichContent(listOf(RichBlock.Voice(0)), listOf(voice("v-1"))))
+        testScheduler.advanceUntilIdle()
+        assertContentEquals(byteArrayOf(5), folder.get(MediaFolder.VOICE, "v-1"), "голосовое — в раздел «Голосовые»")
+        // Срок на сервере вышел (ПЛАН-(ВМ) Р3): просить снова не у кого — голосового нет.
+        assertIs<PostmanFiles.Obtained.Failed>(postman.obtain(voice("v-old")))
+        assertTrue(media.asked.isEmpty(), "голосовое не просится снова")
+        assertTrue("v-old" in postman.gone.value)
+        // Своё отправленное — в «Голосовые».
+        postman.keepSent("v-mine", byteArrayOf(9), photo = false, voice = true)
+        assertContentEquals(byteArrayOf(9), folder.get(MediaFolder.VOICE, "v-mine"))
+    }
+
+    @Test
     fun нет_у_почтальона_просим_снова_просят_загружаем() = runTest {
         val folder = MemoryFolder()
         val media = FakeMedia(mutableMapOf("gone" to null))

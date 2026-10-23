@@ -11,7 +11,7 @@ package io.tima.domain.chat
 object MediaSummary {
     private const val MARK = '\u001E'
 
-    enum class Kind { PHOTO, FILE, CONTACT, PLACE, LINK }
+    enum class Kind { PHOTO, FILE, CONTACT, PLACE, LINK, VOICE }
 
     fun of(kind: Kind, count: Int, name: String = ""): String = "$MARK${kind.name}|$count|$name"
 

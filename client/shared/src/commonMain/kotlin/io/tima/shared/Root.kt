@@ -1129,7 +1129,7 @@ private fun App(
     // Уборка папки медиа при запуске — по пределам из настроек (Решения §6).
     LaunchedEffect(assembled) {
         val saved = environment.settings.all().first()
-        for (kind in listOf(io.tima.core.media.MediaFolder.PHOTO, io.tima.core.media.MediaFolder.FILE)) {
+        for (kind in listOf(io.tima.core.media.MediaFolder.PHOTO, io.tima.core.media.MediaFolder.FILE, io.tima.core.media.MediaFolder.VOICE)) {
             val d = io.tima.core.media.MediaLimits.defaultsOf(kind)
             val limits = io.tima.core.media.MediaLimits(
                 keepDays = saved["media.$kind.days"]?.toIntOrNull() ?: d.keepDays,
@@ -1141,6 +1141,19 @@ private fun App(
             if (removed > 0) Journal.note(LogCode.FILE_STORE, "уборка", "раздел" to kind, "убрано" to removed)
         }
     }
+    // Голосовые — один проигрыватель на всё приложение (ПЛАН-(ВМ) §2.4): новое ставит прежнее на
+    // паузу. Файл — из своей папки, иначе у сервера; открывается в памяти, на диск не ложится.
+    val voiceHub = remember(assembled) {
+        io.tima.feature.chat.VoiceHub(scope) { m ->
+            when (val got = assembled.receiver.postman.obtain(m)) {
+                is PostmanFiles.Obtained.Got -> io.tima.core.encryption.MediaFiles.open(m.key, got.sealed)
+                else -> null
+            }
+        }.also { hub ->
+            hub.onEvent = { what, id, seconds -> Journal.note(LogCode.VOICE, voiceWord(what), "файл" to id.take(8), "секунд" to seconds) }
+        }
+    }
+    DisposableEffect(voiceHub) { onDispose { voiceHub.stop() } }
     SideEffect {
         pictureSource?.media = network.media
         // Своя папка — первой (Решения §6): фото вне пузыря у почтальона живёт недолго.
@@ -4120,6 +4133,13 @@ private fun App(
                     Chat(
                         desktop = platform == Platform.DESKTOP,
                         postman = assembled.receiver.postman,
+                        voiceHub = voiceHub,
+                        // Микрофон голосовых на ПК — выбранный для звонков (ПЛАН-(ВМ) Р42); имя — для Java Sound.
+                        voiceMic = {
+                            (callEngine as? io.tima.core.call.CallDevices)?.let { d ->
+                                d.setup.microphone?.let { id -> runCatching { d.microphones() }.getOrNull()?.firstOrNull { it.id == id }?.name }
+                            }
+                        },
                         liveStates = assembled.liveStates,
                         onPullGroupNew = { id -> assembled.receiver.pullGroupNew(id) },
                         myDeviceId = assembled.session.deviceId,
@@ -4634,6 +4654,10 @@ private fun Chat(
     /** Пересланное сюда из другой переписки — отправить; `onIncomingTaken` — ушло. */
     incoming: List<io.tima.feature.chat.Forwarded>? = null,
     onIncomingTaken: () -> Unit = {},
+    /** Проигрыватель голосовых — один на приложение (ПЛАН-(ВМ) §2.4). */
+    voiceHub: io.tima.feature.chat.VoiceHub? = null,
+    /** Имя микрофона для голосовых (ПК: выбранный для звонков); `null` — по умолчанию. */
+    voiceMic: () -> String? = { null },
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
     var chatMenu by remember { mutableStateOf(false) }
@@ -4803,7 +4827,7 @@ private fun Chat(
             attach = io.tima.domain.chat.SendAttachments(
                 queue = environment.queue,
                 uploads = SealedUploads({ network.media }) { id, sealed, mime ->
-                    postman?.keepSent(id, sealed, photo = mime.startsWith("image/"))
+                    postman?.keepSent(id, sealed, photo = mime.startsWith("image/"), voice = mime == io.tima.domain.chat.SendAttachments.VOICE_MIME)
                 },
                 bodies = io.tima.core.encryption.AttachmentBodiesOverKodium,
                 keys = io.tima.core.outbox.UuidDedupKeys,
@@ -4893,6 +4917,8 @@ private fun Chat(
     // Меню отправленного сообщения (Решения §11.1): на какое сообщение нажали.
     var menuFor by remember { mutableStateOf<ChatLine?>(null) }
     // Забранные получателем файлы почтальона — галочки у своих (Решения §6).
+    // Голосовые подряд (ПЛАН-(ВМ) Р40): следующее — новее в этой переписке; не голосовое — стоп.
+    SideEffect { voiceHub?.next = { id -> io.tima.feature.chat.nextVoiceAfter(state.lines, id) } }
     val fetchedFiles by (postman?.fetched ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
     val goneFiles by (postman?.gone ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
     val wifiFiles by (postman?.waitingWifi ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
@@ -5165,6 +5191,19 @@ private fun Chat(
             jumpPlace = jumpPlace,
             onAttach = if (store.canAttach) attachHandler else null,
             attachItems = attachItems,
+            // Голосовое (ПЛАН-(ВМ) §2.5): в личной и в группе; разрешение — как у звонка, без камеры.
+            voice = if (store.canAttach) io.tima.feature.chat.VoiceInput(
+                ask = { done -> io.tima.core.call.askCallAccess(false) { done(it) } },
+                micName = voiceMic,
+                send = { clip ->
+                    Journal.note(LogCode.VOICE, "отправка", "секунд" to clip.durationMs / 1000, "размер" to clip.ogg.size)
+                    store.sendVoice(clip.ogg, clip.durationMs, clip.wave)
+                },
+                onEvent = { what, value ->
+                    if (what == io.tima.feature.chat.VoiceEvent.RECORD_STARTED) Journal.note(LogCode.VOICE, voiceWord(what), "кГц" to value)
+                    else Journal.note(LogCode.VOICE, voiceWord(what), "секунд" to value)
+                },
+            ) else null,
             attachments = io.tima.feature.chat.AttachmentActions(
                 // Идёт выбор — нажатие на фото отмечает его сообщение, а не открывает (2026-10-19).
             openPhoto = { photo ->
@@ -5178,6 +5217,7 @@ private fun Chat(
                 fetched = { id -> id in fetchedFiles },
                 gone = { id -> id in goneFiles },
                 waitsWifi = { id -> id in wifiFiles },
+                voice = voiceHub,
                 fileMenu = { file ->
                     // Идёт выбор — нажатие отмечает сообщение с файлом, как у фото.
                     val owner = state.lines.firstOrNull { l -> l.rich?.media?.any { it.mediaId == file.mediaId } == true }
@@ -5404,7 +5444,7 @@ private fun Chat(
                 },
                 commit = { changed ->
                     val peer = peerUser ?: myUserId.takeIf { it.isNotEmpty() }
-                    val uploads = SealedUploads({ network.media }) { id, sealed, mime -> postman?.keepSent(id, sealed, photo = mime.startsWith("image/")) }
+                    val uploads = SealedUploads({ network.media }) { id, sealed, mime -> postman?.keepSent(id, sealed, photo = mime.startsWith("image/"), voice = mime == io.tima.domain.chat.SendAttachments.VOICE_MIME) }
                     val rules = io.tima.domain.chat.CachedMediaRules(environment.settings, { network.media.rules() }, ::msNow)
                     photoEditScope.launch {
                         for ((p, bmp) in changed) {
@@ -6575,7 +6615,7 @@ private fun Storage(
     // Пересчёт — по смене пределов и после уборки: занятое человек обязан увидеть сразу.
     val mediaRows = remember(saved, mediaTick) {
         if (media === io.tima.core.media.MediaFolder.NONE) emptyList() else
-        listOf(io.tima.core.media.MediaFolder.PHOTO, io.tima.core.media.MediaFolder.FILE).map { kind ->
+        listOf(io.tima.core.media.MediaFolder.PHOTO, io.tima.core.media.MediaFolder.FILE, io.tima.core.media.MediaFolder.VOICE).map { kind ->
             val l = limitsOf(kind)
             io.tima.feature.shell.MediaKindState(
                 kind = kind,
@@ -7951,3 +7991,15 @@ private fun savedName(m: io.tima.domain.chat.RichMedia, n: Int): String = m.name
     if (n > 0) "photo-$n.$ext" else "photo.$ext"
 }
 
+/** Слова журнала голосовых (`VOICE`, РЕЕСТР): событие экрана — строкой журнала. */
+private fun voiceWord(e: io.tima.feature.chat.VoiceEvent): String = when (e) {
+    io.tima.feature.chat.VoiceEvent.OPEN_FAILED -> "не вышло открыть"
+    io.tima.feature.chat.VoiceEvent.PLAYING -> "играет"
+    io.tima.feature.chat.VoiceEvent.ENDED -> "доиграло, дальше не голосовое"
+    io.tima.feature.chat.VoiceEvent.ENDED_NEXT -> "доиграло, следующее голосовое"
+    io.tima.feature.chat.VoiceEvent.RECORD_STARTED -> "запись начата"
+    io.tima.feature.chat.VoiceEvent.NO_MICROPHONE -> "микрофон недоступен: нет микрофона"
+    io.tima.feature.chat.VoiceEvent.NO_CODEC -> "микрофон недоступен: нет кодека"
+    io.tima.feature.chat.VoiceEvent.RECORD_STOPPED -> "запись остановлена"
+    io.tima.feature.chat.VoiceEvent.RECORD_DELETED -> "запись удалена"
+}

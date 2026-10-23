@@ -476,6 +476,8 @@ interface StorageWords {
     /** Разделы папки медиа (Решения §6): фото вне пузыря, файлы, картинки в сообщениях. */
     val mediaPhotos: String
     val mediaFiles: String
+    /** Голосовые сообщения — свой раздел папки (ПЛАН-(ВМ) Р17). */
+    val mediaVoices: String
     val mediaInline: String
     val mediaInlineAbout: String
     /** Карточки ссылок (Решения §4): запрос к сайту делает телефон отправителя — можно выключить. */
@@ -1528,6 +1530,18 @@ interface ChatWords {
     val photoNoName: String
     /** Фото не забрано: мобильная сеть, а качать по ней выключено («Память и трафик»), заказчик 2026-10-22. */
     val photoWaitsWifi: String
+    // ── Голосовые (ПЛАН-(ВМ) §2.4, §2.5) ──
+    val voiceUnavailable: String
+    val voiceRecording: String
+    val voiceStopped: String
+    val voiceDeleteAsk: String
+    val voiceDelete: String
+    val voiceKeep: String
+    val voiceLimitSoon: String
+    val voiceNoMic: String
+    val voiceNotSent: String
+    val voiceArea: String
+    val voiceFailed: String
     /** Просмотр и редактор фото (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ5–ИФ7). */
     val photoRotate: String
     val photoEdit: String
@@ -3158,6 +3172,7 @@ object RussianWords : Words {
                 "почтальона вернуть можно, только если его ещё держит другое устройство."
         override val mediaPhotos = "Фото"
         override val mediaFiles = "Файлы"
+        override val mediaVoices = "Голосовые"
         override val mediaInline = "Картинки в сообщениях"
         override val mediaInlineAbout = "Кеш загрузчика: докачиваются сами, пока живо сообщение"
         override val linkCards = "Карточки ссылок"
@@ -3751,6 +3766,7 @@ object RussianWords : Words {
             "CONTACT" -> "Контакт" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
             "PLACE" -> "Место" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
             "LINK" -> "Ссылка" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            "VOICE" -> "Голосовое" + name.ifBlank { null }?.let { " $it" }.orEmpty()
             else -> "Файл: " + name.ifBlank { "без имени" }
         }
         override val fileDownload = "Скачать"
@@ -3763,6 +3779,17 @@ object RussianWords : Words {
         override val photoName = "Имя"
         override val photoNoName = "не указано"
         override val photoWaitsWifi = "Ждёт Wi-Fi: по мобильной сети файлы не скачиваются — «Память и трафик»"
+        override val voiceUnavailable = "Голосовое недоступно"
+        override val voiceRecording = "идёт запись · стоп — послушать перед отправкой"
+        override val voiceStopped = "послушайте и отправьте или удалите"
+        override val voiceDeleteAsk = "Удалить запись?"
+        override val voiceDelete = "Удалить"
+        override val voiceKeep = "Оставить"
+        override val voiceLimitSoon = "Осталось 30 секунд: запись идёт до 10 минут"
+        override val voiceNoMic = "Микрофон недоступен — разрешите его в настройках телефона"
+        override val voiceNotSent = "Голосовое не отправилось — нет связи"
+        override val voiceArea = "Голосовое"
+        override val voiceFailed = "Не играет: колонки недоступны"
         override val photoRotate = "Повернуть"
         override val photoEdit = "Изменить"
         override val photoCrop = "Обрезать"

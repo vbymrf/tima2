@@ -186,6 +186,8 @@ fun ChatScreen(
     attachments: AttachmentActions = AttachmentActions(),
     /** Плитки скрепки на этой платформе. */
     attachItems: List<AttachItem> = AttachItem.entries,
+    /** Голосовое из строки ввода (ПЛАН-(ВМ) §2.5); `null` — голосовых здесь нет. */
+    voice: VoiceInput? = null,
     /**
      * Унести чужую запись к себе на страницу: `(messageId, круг записи)`.
      *
@@ -463,6 +465,7 @@ fun ChatScreen(
             onAttach = onAttach,
             onEmojiSend = onEmojiSend,
             attachItems = attachItems,
+            voice = voice,
         )
     }
     }

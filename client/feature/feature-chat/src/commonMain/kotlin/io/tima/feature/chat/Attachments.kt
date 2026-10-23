@@ -68,6 +68,8 @@ class AttachmentActions(
     val gone: (mediaId: String) -> Boolean = { false },
     /** Фото ждёт Wi-Fi: качать по мобильной сети выключено (заказчик 2026-10-22) — сказать на месте. */
     val waitsWifi: (mediaId: String) -> Boolean = { false },
+    /** Проигрыватель голосовых — один на всё приложение (ПЛАН-(ВМ) §2.4); `null` — не играет. */
+    val voice: VoiceHub? = null,
 )
 
 /**
@@ -75,7 +77,7 @@ class AttachmentActions(
  * нечитаемое. Файл рядом или текст — сообщение остаётся.
  */
 fun AttachmentActions.photosGone(rich: RichContent?): Boolean {
-    if (rich == null || !rich.isOutside() || rich.blocks.any { it is RichBlock.File }) return false
+    if (rich == null || !rich.isOutside() || rich.blocks.any { it is RichBlock.File || it is RichBlock.Voice }) return false
     val ids = rich.blocks.filterIsInstance<RichBlock.Album>().flatMap { it.media }.mapNotNull { rich.media.getOrNull(it)?.mediaId }
     return ids.isNotEmpty() && ids.all(gone)
 }
@@ -90,7 +92,7 @@ val LocalAttachmentActions = staticCompositionLocalOf { AttachmentActions() }
 
 /** Только вложения, без текста — рисуется вне пузыря (Решения §2). */
 internal fun RichContent.isOutside(): Boolean =
-    blocks.isNotEmpty() && blocks.all { it is RichBlock.Album || it is RichBlock.File }
+    blocks.isNotEmpty() && blocks.all { it is RichBlock.Album || it is RichBlock.File || it is RichBlock.Voice }
 
 @Composable
 internal fun AttachmentsView(rich: RichContent) {
@@ -98,6 +100,7 @@ internal fun AttachmentsView(rich: RichContent) {
         for (block in rich.blocks) when (block) {
             is RichBlock.Album -> AlbumView(block.media.mapNotNull { rich.media.getOrNull(it) })
             is RichBlock.File -> rich.media.getOrNull(block.media)?.let { FileView(it) }
+            is RichBlock.Voice -> rich.media.getOrNull(block.media)?.let { VoiceView(it) }
             else -> Unit
         }
     }

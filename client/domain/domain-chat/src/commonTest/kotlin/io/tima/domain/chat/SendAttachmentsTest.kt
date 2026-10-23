@@ -21,12 +21,21 @@ class SendAttachmentsTest {
             uploads += Upload(bytes.size, mime, postmanChat, postmanPeer)
             return "m-${uploads.size}" to ByteArray(32)
         }
+
+        override suspend fun uploadVoice(bytes: ByteArray, chatId: String, peerId: String?, groupId: String?): Pair<String, ByteArray>? {
+            if (!online) return null
+            voices += Triple(chatId, peerId, groupId)
+            return "v-${voices.size}" to ByteArray(32)
+        }
     }
+
+    private val voices = mutableListOf<Triple<String, String?, String?>>()
 
     /** Тело-подделка: вид и что в нём — строкой, чтобы видеть выбор пути. */
     private val bodies = object : AttachmentBodies {
         override fun album(photos: List<OutMedia>) = ("album:" + photos.joinToString(",") { "${it.mediaId}/${it.width}" }).encodeToByteArray()
         override fun file(file: OutMedia) = "file:${file.mediaId}/${file.name}/${file.size}".encodeToByteArray()
+        override fun voice(voice: OutMedia) = "voice:${voice.mediaId}/${voice.durationMs}/${voice.wave?.size}".encodeToByteArray()
         override fun inlineImages(images: List<OutMedia>) = ("inline:" + images.joinToString(",") { "${it.mediaId}/${it.width}" }).encodeToByteArray()
         override fun contact(name: String, phone: String, userId: String) = "contact:$name/$phone".encodeToByteArray()
         override fun place(lat: Double, lon: Double, label: String) = "place:$lat/$lon/$label".encodeToByteArray()
@@ -41,6 +50,21 @@ class SendAttachmentsTest {
     )
 
     private fun photo() = SendAttachments.Photo(ByteArray(100), 1280, 960)
+
+    @Test
+    fun голосовое_файлом_на_срок_в_личной_и_в_группе() = runTest {
+        val ogg = ByteArray(9000)
+        val wave = ByteArray(64)
+        assertIs<AttachResult.Queued>(send.voice("chat", -1, "peer", null, ogg, 7_000, wave))
+        assertIs<AttachResult.Queued>(send.voice("g-1", 2, null, "g-1", ogg, 3_000, wave))
+        assertEquals(listOf(Triple("chat", "peer", null), Triple("g-1", null, "g-1")), voices)
+        assertTrue(uploads.isEmpty(), "голосовое — не почтальон")
+        assertEquals(listOf("voice:v-1/7000/64", "voice:v-2/3000/64"), queued)
+        assertEquals(AttachResult.Refused("large"), send.voice("chat", -1, "peer", null, ByteArray(MediaRules().fileBytes.toInt() + 1), 1, wave))
+        online = false
+        assertEquals(AttachResult.Offline, send.voice("chat", -1, "peer", null, ogg, 1, wave))
+        assertEquals(2, queued.size, "без сети в очередь не встаёт")
+    }
 
     @Test
     fun фото_в_личной_почтальоном_целиком() = runTest {

@@ -19,7 +19,13 @@ interface Media {
      * [postmanChat] и [postmanPeer] — файл вне пузыря в личной переписке: его держит почтальон.
      * @return media_id или `null` — сети нет, предел, квота.
      */
-    suspend fun uploadSealed(sealed: ByteArray, mime: String, postmanChat: String? = null, postmanPeer: String? = null): String? = null
+    suspend fun uploadSealed(
+        sealed: ByteArray,
+        mime: String,
+        postmanChat: String? = null,
+        postmanPeer: String? = null,
+        term: MediaTerm? = null,
+    ): String? = null
 
     /**
      * Забрать файл почтальона (Решения §6): байты, «на сервере его уже нет» (срок прошёл — можно
@@ -41,6 +47,12 @@ interface Media {
 
     /** Убрать свой файл почтальона — фото заменено правкой (ПЛАН-(ИФ) ИФ-В2). */
     suspend fun drop(mediaId: String): Boolean = false
+
+    /**
+     * Файл на срок — голосовое (ПЛАН-(ВМ) Р3): сервер держит его срок из своих правил и отдаёт
+     * участникам. Личная — [chatId] и [peerId], группа — [groupId].
+     */
+    class MediaTerm(val chatId: String = "", val peerId: String = "", val groupId: String = "")
 
     /** Исход забора файла почтальона. */
     sealed interface MediaFetch {

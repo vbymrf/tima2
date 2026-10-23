@@ -752,6 +752,7 @@ object EnglishWords : Words {
         override val mediaAndFilesAbout = "Photos and files from personal chats are kept on the device encrypted. Once the postman period is over, deleted items can only come back from another device that still has them."
         override val mediaPhotos = "Photos"
         override val mediaFiles = "Files"
+        override val mediaVoices = "Voice messages"
         override val mediaInline = "Pictures in messages"
         override val mediaInlineAbout = "Loader cache: re-downloaded while the message lives"
         override val linkCards = "Link cards"
@@ -1330,6 +1331,7 @@ object EnglishWords : Words {
             "CONTACT" -> "Contact" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
             "PLACE" -> "Location" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
             "LINK" -> "Link" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            "VOICE" -> "Voice message" + name.ifBlank { null }?.let { " $it" }.orEmpty()
             else -> "File: " + name.ifBlank { "unnamed" }
         }
         override val fileDownload = "Download"
@@ -1342,6 +1344,17 @@ object EnglishWords : Words {
         override val photoName = "Name"
         override val photoNoName = "not set"
         override val photoWaitsWifi = "Waiting for Wi-Fi: files do not download over mobile data — see «Storage and data»"
+        override val voiceUnavailable = "Voice message is no longer available"
+        override val voiceRecording = "recording · stop to listen before sending"
+        override val voiceStopped = "listen, then send or delete"
+        override val voiceDeleteAsk = "Delete the recording?"
+        override val voiceDelete = "Delete"
+        override val voiceKeep = "Keep"
+        override val voiceLimitSoon = "30 seconds left: recordings are up to 10 minutes"
+        override val voiceNoMic = "Microphone unavailable — allow it in the phone settings"
+        override val voiceNotSent = "Voice message not sent — no connection"
+        override val voiceArea = "Voice message"
+        override val voiceFailed = "Cannot play: no speaker available"
         override val photoRotate = "Rotate"
         override val photoEdit = "Edit"
         override val photoCrop = "Crop"

@@ -65,7 +65,7 @@ object InputTags {
 }
 
 /** Что открыто на месте клавиатуры. */
-private enum class InputArea { EMOJI, ATTACH }
+private enum class InputArea { EMOJI, ATTACH, VOICE }
 
 /**
  * Собрано в редакторе (Решения §9): строка ввода показывает первую строку и не даёт печатать
@@ -106,6 +106,8 @@ internal fun InputLine(
     onEmojiSend: ((String) -> Unit)? = null,
     /** Плитки скрепки, которые есть на этой платформе (на ПК нет камеры). */
     attachItems: List<AttachItem> = AttachItem.entries,
+    /** Голосовое (ПЛАН-(ВМ) §2.5): микрофон справа, пока строка пустая; `null` — голосовых нет (канал, комментарии). */
+    voice: VoiceInput? = null,
 ) {
     val colors = Tima.colors
     val keyboard = LocalSoftwareKeyboardController.current
@@ -188,8 +190,23 @@ internal fun InputLine(
                     }
                 }
             }
-            ButtonCircle(onClick = onSend, live = true, modifier = Modifier.testTag(CHAT_SEND_TAG)) {
-                Arrow(Side.Up, color = colors.onAccent)
+            if (voice != null && typed.isEmpty() && composed == null) {
+                // Пока не введён ни один символ — микрофон (Р33): нажали — область записи, запись сразу.
+                ButtonCircle(
+                    onClick = {
+                        keyboard?.hide()
+                        if (area == InputArea.VOICE) return@ButtonCircle
+                        voice.ask { area = InputArea.VOICE }
+                    },
+                    live = true,
+                    modifier = Modifier.testTag(VoiceTags.MIC),
+                ) {
+                    Caption("🎙", fontSize = 18.sp, color = colors.onAccent)
+                }
+            } else {
+                ButtonCircle(onClick = onSend, live = true, modifier = Modifier.testTag(CHAT_SEND_TAG)) {
+                    Arrow(Side.Up, color = colors.onAccent)
+                }
             }
         }
         when (area) {
@@ -206,6 +223,7 @@ internal fun InputLine(
                 }
             }
             InputArea.ATTACH -> if (onAttach != null) AttachArea(attachItems, onClose = { area = null }) { item -> area = null; onAttach(item) }
+            InputArea.VOICE -> if (voice != null) VoiceArea(voice, onClose = { area = null })
             null -> Unit
         }
     }

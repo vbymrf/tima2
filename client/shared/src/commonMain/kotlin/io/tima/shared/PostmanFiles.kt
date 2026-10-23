@@ -52,15 +52,20 @@ class PostmanFiles(
      */
     val waitingWifi: StateFlow<Set<String>> = _waitingWifi.asStateFlow()
 
-    /** Свой раздел папки: фото без имени — «Фото», остальное — «Файлы» («Память и трафик»). */
-    fun kindOf(m: RichMedia): String = if (m.name.isEmpty() && m.mime.startsWith("image/")) MediaFolder.PHOTO else MediaFolder.FILE
+    /** Свой раздел папки: фото без имени — «Фото», голосовые — «Голосовые», остальное — «Файлы». */
+    fun kindOf(m: RichMedia): String = when {
+        m.voice -> MediaFolder.VOICE
+        m.name.isEmpty() && m.mime.startsWith("image/") -> MediaFolder.PHOTO
+        else -> MediaFolder.FILE
+    }
 
     /** Лежит ли файл на устройстве — закрытые байты, как пришли с сервера. */
-    fun local(mediaId: String): ByteArray? = folder.get(MediaFolder.PHOTO, mediaId) ?: folder.get(MediaFolder.FILE, mediaId)
+    fun local(mediaId: String): ByteArray? =
+        folder.get(MediaFolder.PHOTO, mediaId) ?: folder.get(MediaFolder.FILE, mediaId) ?: folder.get(MediaFolder.VOICE, mediaId)
 
     /** Своё отправленное — сразу в папку: показать без сети и загрузить снова, если попросят. */
-    fun keepSent(mediaId: String, sealed: ByteArray, photo: Boolean) {
-        runCatching { folder.put(if (photo) MediaFolder.PHOTO else MediaFolder.FILE, mediaId, sealed) }
+    fun keepSent(mediaId: String, sealed: ByteArray, photo: Boolean, voice: Boolean = false) {
+        runCatching { folder.put(if (voice) MediaFolder.VOICE else if (photo) MediaFolder.PHOTO else MediaFolder.FILE, mediaId, sealed) }
     }
 
     /** Исход забора: байты, «попросили снова» (на сервере уже нет), или не вышло (связь). */
@@ -90,7 +95,8 @@ class PostmanFiles(
                 Obtained.Got(got.bytes)
             }
             Media.MediaFetch.Gone -> {
-                val asked = media().requestAgain(mediaId)
+                // Голосовое — файл на срок (ПЛАН-(ВМ) Р3): срок вышел — его нет, просить не у кого.
+                val asked = kind != MediaFolder.VOICE && media().requestAgain(mediaId)
                 Journal.note(LogCode.FILE_GET, "у почтальона нет — попросили снова", "файл" to mediaId.take(8), "ушло" to asked.toString())
                 if (!asked) {
                     // Попросить не у кого — файла не будет: лента его не показывает (ADR-0052).
@@ -131,7 +137,7 @@ class PostmanFiles(
             val ids = _waitingWifi.value
             Journal.note(LogCode.FILE_GET, "забираем отложенное", "файлов" to ids.size)
             for (id in ids) {
-                val kind = folder.get(WAIT, id)?.decodeToString()?.takeIf { it == MediaFolder.PHOTO || it == MediaFolder.FILE } ?: MediaFolder.PHOTO
+                val kind = folder.get(WAIT, id)?.decodeToString()?.takeIf { it == MediaFolder.PHOTO || it == MediaFolder.FILE || it == MediaFolder.VOICE } ?: MediaFolder.PHOTO
                 runCatching { obtain(id, kind) }
             }
         }
@@ -169,6 +175,7 @@ class PostmanFiles(
                 when (b) {
                     is RichBlock.Album -> b.media
                     is RichBlock.File -> listOf(b.media)
+                    is RichBlock.Voice -> listOf(b.media)
                     else -> emptyList()
                 }
             }

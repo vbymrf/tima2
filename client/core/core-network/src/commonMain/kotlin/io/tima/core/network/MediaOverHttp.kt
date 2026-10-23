@@ -39,7 +39,7 @@ class MediaOverHttp(
     private val token: () -> String,
 ) : Media {
 
-    override suspend fun uploadSealed(sealed: ByteArray, mime: String, postmanChat: String?, postmanPeer: String?): String? = try {
+    override suspend fun uploadSealed(sealed: ByteArray, mime: String, postmanChat: String?, postmanPeer: String?, term: Media.MediaTerm?): String? = try {
         val init = client.post(route.api("/api/v1/media/init")) {
             header("Authorization", "Bearer ${token()}")
             contentType(ContentType.Application.Json)
@@ -52,6 +52,16 @@ class MediaOverHttp(
                         put("postman", buildJsonObject {
                             put("chat_id", JsonPrimitive(postmanChat))
                             put("peer_id", JsonPrimitive(postmanPeer))
+                        })
+                    }
+                    if (term != null) {
+                        put("term", buildJsonObject {
+                            if (term.groupId.isNotEmpty()) {
+                                put("group_id", JsonPrimitive(term.groupId))
+                            } else {
+                                put("chat_id", JsonPrimitive(term.chatId))
+                                put("peer_id", JsonPrimitive(term.peerId))
+                            }
                         })
                     }
                 }.toString(),

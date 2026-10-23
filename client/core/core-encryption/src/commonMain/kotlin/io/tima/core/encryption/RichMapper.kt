@@ -106,15 +106,16 @@ internal object RichMapper {
         RichMedia(
             it.media_id, it.media_key.toByteArray(), it.mime, it.width, it.height,
             name = it.name, size = it.size_bytes,
+            voice = it.voice, durationMs = it.duration_ms.toLong(), wave = it.wave.toByteArray(),
         )
     }
 
     private fun attachments(content: MessageContent): RichContent {
         val all = media(content)
-        val photos = all.indices.filter { all[it].mime.startsWith("image/") && all[it].name.isEmpty() }
+        val photos = all.indices.filter { all[it].mime.startsWith("image/") && all[it].name.isEmpty() && !all[it].voice }
         val blocks = buildList {
             if (photos.isNotEmpty()) add(RichBlock.Album(photos))
-            for (i in all.indices) if (i !in photos) add(RichBlock.File(i))
+            for (i in all.indices) if (i !in photos) add(if (all[i].voice) RichBlock.Voice(i) else RichBlock.File(i))
         }
         return RichContent(blocks, all)
     }

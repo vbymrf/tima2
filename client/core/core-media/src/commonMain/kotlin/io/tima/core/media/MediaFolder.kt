@@ -12,8 +12,8 @@ data class MediaEntry(val name: String, val size: Long, val atMs: Long)
  * поэтому и на диске он не читается без базы. Имя на диске — номер файла, латиницей; имя для
  * человека — в сообщении.
  *
- * Раздел [kind]: `photo` — фото вне пузыря, `file` — файлы; срок и предел у каждого свой
- * («Память и трафик → Медиа и другие файлы»).
+ * Раздел [kind]: `photo` — фото вне пузыря, `file` — файлы, `voice` — голосовые (ПЛАН-(ВМ) Р17);
+ * срок и предел у каждого свой («Память и трафик → Медиа и другие файлы»).
  */
 interface MediaFolder {
     fun put(kind: String, name: String, bytes: ByteArray)
@@ -27,6 +27,7 @@ interface MediaFolder {
     companion object {
         const val PHOTO = "photo"
         const val FILE = "file"
+        const val VOICE = "voice"
 
         /** Папки нет (проверки, iOS до своей реализации): ничего не хранится. */
         val NONE: MediaFolder = object : MediaFolder {

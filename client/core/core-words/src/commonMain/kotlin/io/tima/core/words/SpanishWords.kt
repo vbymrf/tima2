@@ -751,6 +751,7 @@ object SpanishWords : Words {
         override val mediaAndFilesAbout = "Las fotos y archivos de chats personales se guardan cifrados en el dispositivo. Pasado el plazo del cartero, lo borrado solo vuelve si otro dispositivo aún lo tiene."
         override val mediaPhotos = "Fotos"
         override val mediaFiles = "Archivos"
+        override val mediaVoices = "Mensajes de voz"
         override val mediaInline = "Imágenes en mensajes"
         override val mediaInlineAbout = "Caché del cargador: se vuelven a descargar mientras vive el mensaje"
         override val linkCards = "Tarjetas de enlaces"
@@ -1330,6 +1331,7 @@ object SpanishWords : Words {
             "CONTACT" -> "Contacto" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
             "PLACE" -> "Ubicación" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
             "LINK" -> "Enlace" + name.ifBlank { null }?.let { ": $it" }.orEmpty()
+            "VOICE" -> "Mensaje de voz" + name.ifBlank { null }?.let { " $it" }.orEmpty()
             else -> "Archivo: " + name.ifBlank { "sin nombre" }
         }
         override val fileDownload = "Descargar"
@@ -1342,6 +1344,17 @@ object SpanishWords : Words {
         override val photoName = "Nombre"
         override val photoNoName = "sin nombre"
         override val photoWaitsWifi = "Espera Wi-Fi: los archivos no se descargan con datos móviles — «Memoria y datos»"
+        override val voiceUnavailable = "El mensaje de voz ya no está disponible"
+        override val voiceRecording = "grabando · detén para escuchar antes de enviar"
+        override val voiceStopped = "escucha y envía o elimina"
+        override val voiceDeleteAsk = "¿Eliminar la grabación?"
+        override val voiceDelete = "Eliminar"
+        override val voiceKeep = "Conservar"
+        override val voiceLimitSoon = "Quedan 30 segundos: las grabaciones duran hasta 10 minutos"
+        override val voiceNoMic = "Micrófono no disponible — permítelo en los ajustes del teléfono"
+        override val voiceNotSent = "El mensaje de voz no se envió — sin conexión"
+        override val voiceArea = "Mensaje de voz"
+        override val voiceFailed = "No se reproduce: no hay altavoz"
         override val photoRotate = "Girar"
         override val photoEdit = "Editar"
         override val photoCrop = "Recortar"

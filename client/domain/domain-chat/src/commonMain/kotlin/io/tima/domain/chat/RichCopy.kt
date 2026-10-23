@@ -71,7 +71,7 @@ object RichCopy {
             is RichBlock.Fallback -> add(b.text)
             is RichBlock.Quoted -> quoted(b.kind, b.chatId, b.messageId, ref, unavailable, depth).forEach(::add)
             is RichBlock.Underlay -> quoted(b.kind, b.chatId, b.messageId, ref, unavailable, depth).forEach(::add)
-            is RichBlock.Reply, is RichBlock.Image, is RichBlock.Album, is RichBlock.File -> Unit
+            is RichBlock.Reply, is RichBlock.Image, is RichBlock.Album, is RichBlock.File, is RichBlock.Voice -> Unit
         }
         return out
     }

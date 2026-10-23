@@ -13,6 +13,10 @@ class OutMedia(
     val height: Int = 0,
     val size: Long = 0,
     val name: String = "",
+    /** Голосовое (ПЛАН-(ВМ) §2.2): длительность и рисунок волны — в теле, до скачивания. */
+    val voice: Boolean = false,
+    val durationMs: Long = 0,
+    val wave: ByteArray? = null,
 )
 
 /**
@@ -25,6 +29,9 @@ interface AttachmentBodies {
 
     /** Файл вне пузыря (личная переписка). */
     fun file(file: OutMedia): ByteArray
+
+    /** Голосовое — вне пузыря, в личной и в группе (ПЛАН-(ВМ) Р2). */
+    fun voice(voice: OutMedia): ByteArray
 
     /** Картинки внутри сообщения — по одной в ряд во всю ширину (группа, канал). */
     fun inlineImages(images: List<OutMedia>): ByteArray
@@ -62,6 +69,12 @@ fun interface MediaRulesSource {
 interface AttachmentUploads {
     /** @return загруженный файл или `null` — нет сети, предел, квота. */
     suspend fun upload(bytes: ByteArray, mime: String, postmanChat: String?, postmanPeer: String?): Pair<String, ByteArray>?
+
+    /**
+     * Голосовое — файл на срок у сервера (ПЛАН-(ВМ) Р3): личная — [peerId], группа — [groupId].
+     * @return номер и ключ или `null` — нет сети, предел.
+     */
+    suspend fun uploadVoice(bytes: ByteArray, chatId: String, peerId: String?, groupId: String?): Pair<String, ByteArray>? = null
 }
 
 /** Чем кончилась отправка вложения. */
@@ -115,6 +128,17 @@ class SendAttachments(
         return enqueue(chatId, level, bodies.file(OutMedia(id, key, mime, size = bytes.size.toLong(), name = name)))
     }
 
+    /**
+     * Голосовое (ПЛАН-(ВМ) ВМ3): Opus в Ogg, длительность и волна. Личная — [peerId], группа —
+     * [groupId]; в канале голосовых нет (Р19) — экран кнопки не показывает.
+     */
+    suspend fun voice(chatId: String, level: Int, peerId: String?, groupId: String?, ogg: ByteArray, durationMs: Long, wave: ByteArray): AttachResult {
+        if (ogg.isEmpty()) return AttachResult.Refused("nothing")
+        if (ogg.size > rules().fileBytes) return AttachResult.Refused("large")
+        val (id, key) = uploads.uploadVoice(ogg, chatId, peerId, groupId) ?: return AttachResult.Offline
+        return enqueue(chatId, level, bodies.voice(OutMedia(id, key, VOICE_MIME, size = ogg.size.toLong(), voice = true, durationMs = durationMs, wave = wave)))
+    }
+
     fun contact(chatId: String, level: Int, name: String, phone: String, userId: String = ""): AttachResult =
         enqueue(chatId, level, bodies.contact(name, phone, userId))
 
@@ -133,5 +157,8 @@ class SendAttachments(
     companion object {
         /** До 10 фото в одном сообщении (Решения §3) — выбор в системном окне; дальше решает сервер. */
         const val MAX_PHOTOS = 10
+
+        /** Голосовое — Opus в Ogg (ПЛАН-(ВМ) Р1). */
+        const val VOICE_MIME = "audio/ogg; codecs=opus"
     }
 }
