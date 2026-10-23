@@ -1,5 +1,10 @@
 package io.tima.feature.chat
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -378,9 +384,30 @@ private fun PlayerContent(
             reopen(PlayerEvent.RESTARTED, if (state.elsewhere) "away" else "")
         }
     }
+    // Видео грузится («кружится») — вокруг ▶ бежит белая дуга (заказчик 2026-10-23).
+    val spinning = !failed && engine != null && (state.buffering || !state.started)
     val playButton: @Composable () -> Unit = {
+        val turn = if (spinning) {
+            rememberInfiniteTransition(label = "spin").animateFloat(
+                0f, 360f, infiniteRepeatable(tween(1000, easing = LinearEasing)), label = "spin",
+            ).value
+        } else {
+            null
+        }
         Box(
-            Modifier.size(44.dp).background(colors.navigation, CircleShape)
+            Modifier.size(44.dp)
+                .drawWithContent {
+                    drawContent()
+                    if (turn != null) {
+                        val gap = 4.dp.toPx()
+                        drawArc(
+                            onVideo, startAngle = turn - 90f, sweepAngle = 100f, useCenter = false,
+                            topLeft = Offset(-gap, -gap), size = Size(size.width + gap * 2, size.height + gap * 2),
+                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
+                        )
+                    }
+                }
+                .background(colors.navigation, CircleShape)
                 .clickable(enabled = !failed) { if (state.playing) pause() else play() }
                 .testTag(PlayerTags.PLAY),
             contentAlignment = Alignment.Center,
@@ -432,7 +459,7 @@ private fun PlayerContent(
             },
     ) {
         val sideways = maxWidth > maxHeight
-        val wideTop = maxWidth >= 560.dp
+        val windowWidth = maxWidth
         LaunchedEffect(sideways) { screen.landscape = io.tima.core.media.turnsWithPhone && sideways }
         val full = screen.active
         // Отступы под строку состояния и кнопки навигации — только в обычном окне: на Redmi название и ✕
@@ -535,46 +562,71 @@ private fun PlayerContent(
                 }
             }
         }
-        // Полный экран (заказчик 2026-10-23, 3а и 4а): всё наше — в верхней панели, у обоих движков: слева
-        // название, в середине ▶/⏸ и время, справа метки, звук, «Перезапустить» и выход. Низ — сайту (его
-        // кнопки), у своего движка — нашей полосе: так ничто не ложится на кнопки сайта.
+        // Полный экран (заказчик 2026-10-23, 3а, 4а и следом): ▶ — в середине панели и с места не уходит; сразу
+        // за ним время в поле постоянной ширины (с часами, если видео длиннее часа), за временем — «Метки»
+        // (если есть), звук, «Перезапустить», выход. Название — слева. Низ — кнопкам сайта, у своего движка —
+        // нашей полосе. Свой движок с вертикальным видео (телефон стоит) — всё наше внизу, как в окне.
         if (full && (overlay || !state.playing || dragAt != null || marksOpen)) {
             val shade = colors.viewer.copy(alpha = 0.5f)
-            val middle: @Composable () -> Unit = {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val template = when {
+                state.live -> words.playerLive
+                state.durationMs >= 3_600_000 -> "0:00:00 / 0:00:00"
+                else -> "00:00 / 00:00"
+            }
+            val slot = remember(template, density) {
+                with(density) { measurer.measure(template, androidx.compose.ui.text.TextStyle(fontSize = 14.sp)).size.width.toDp() + 8.dp }
+            }
+            val buttons = 3 + (if (request.marks.isNotEmpty()) 1 else 0)
+            val group = 44.dp + 12.dp + slot + 12.dp + 40.dp * buttons + 8.dp * (buttons - 1)
+            val controls: @Composable (Modifier) -> Unit = { m ->
+                Row(m, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     playButton()
-                    Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true)
-                }
-            }
-            val right: @Composable () -> Unit = {
-                if (request.marks.isNotEmpty()) {
-                    PlayerIconButton(PlayerIcon.MARKS, words.playerMarks, lit = marksOpen, tag = PlayerTags.MARKS) { marksOpen = !marksOpen }
-                }
-                sound()
-                restart()
-                PlayerIconButton(PlayerIcon.FULL_EXIT, words.playerFullExit, lit = false, tag = PlayerTags.FULL) { screen.exit() }
-            }
-            val titleText: @Composable () -> Unit = {
-                Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true)
-            }
-            Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp)) {
-                if (wideTop) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.weight(1f)) { titleText() }
-                        middle()
-                        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) { right() }
-                    }
-                } else {
-                    // Узко (вертикальное видео во весь экран телефона): середина — второй строкой по центру.
+                    Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.width(slot))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.weight(1f)) { titleText() }
-                        right()
+                        if (request.marks.isNotEmpty()) {
+                            PlayerIconButton(PlayerIcon.MARKS, words.playerMarks, lit = marksOpen, tag = PlayerTags.MARKS) { marksOpen = !marksOpen }
+                        }
+                        sound()
+                        restart()
+                        PlayerIconButton(PlayerIcon.FULL_EXIT, words.playerFullExit, lit = false, tag = PlayerTags.FULL) { screen.exit() }
                     }
-                    Box(Modifier.fillMaxWidth().padding(top = 6.dp), contentAlignment = Alignment.Center) { middle() }
                 }
             }
-            if (engine != PlayerEngine.WEB) {
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp)) { bar() }
+            val titleText: @Composable (Modifier) -> Unit = { m ->
+                Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = m)
+            }
+            // ▶ в середине — когда от середины до края хватает места на ▶, время и значки.
+            val inner = windowWidth - 24.dp
+            val centered = inner / 2 - 22.dp + group <= inner
+            val ownUpright = engine == PlayerEngine.OWN && !sideways
+            if (ownUpright) {
+                Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    titleText(Modifier)
+                }
+                Column(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    bar()
+                    controls(Modifier)
+                }
+            } else {
+                Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    if (centered) {
+                        titleText(Modifier.align(Alignment.CenterStart).width((inner / 2 - 22.dp - 12.dp).coerceAtLeast(0.dp)))
+                        controls(Modifier.align(Alignment.CenterStart).offset(x = inner / 2 - 22.dp))
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            titleText(Modifier)
+                            controls(Modifier)
+                        }
+                    }
+                }
+                if (engine != PlayerEngine.WEB) {
+                    Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp)) { bar() }
+                }
             }
             // Метки — списком справа поверх видео; нажатие перематывает и закрывает список (3а).
             if (marksOpen && request.marks.isNotEmpty()) {
