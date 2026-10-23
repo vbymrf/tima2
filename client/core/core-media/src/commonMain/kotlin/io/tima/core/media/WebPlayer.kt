@@ -67,7 +67,8 @@ expect fun WebPlayerSurface(player: WebPlayer, modifier: Modifier)
 
 /**
  * Сообщение моста страницы → состояние окна: `{"t":"time","v":12.3,"d":600}`, `{"t":"state","v":"playing"}`,
- * `{"t":"error","v":"youtube 150"}`, `{"t":"ready"}`, `{"t":"away"}` — проигрыватель ушёл с нашего ролика.
+ * `{"t":"error","v":"youtube 150"}`, `{"t":"ready"}`, `{"t":"away"}` — проигрыватель ушёл с нашего ролика,
+ * `{"t":"size","w":720,"h":1280}` — размер кадра файла.
  * Незнакомое — без изменений.
  */
 fun OwnPlayerState.bridged(message: String): OwnPlayerState {
@@ -88,6 +89,7 @@ fun OwnPlayerState.bridged(message: String): OwnPlayerState {
         }
         "error" -> copy(error = field("v") ?: "error", playing = false)
         "away" -> copy(elsewhere = true)
+        "size" -> copy(width = field("w")?.toDoubleOrNull()?.toInt() ?: width, height = field("h")?.toDoubleOrNull()?.toInt() ?: height)
         else -> this
     }
 }

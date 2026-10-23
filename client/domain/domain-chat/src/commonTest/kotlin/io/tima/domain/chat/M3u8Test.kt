@@ -36,12 +36,16 @@ class M3u8Test {
         """.trimIndent()
         assertEquals(
             listOf(
-                M3u8.Variant(1080, "https://r.ru/hd/1080.m3u8"),
-                M3u8.Variant(720, "https://cdn.r.ru/720.m3u8?s=1"),
-                M3u8.Variant(360, "https://r.ru/radio/360/index.m3u8"),
+                M3u8.Variant(1080, "https://r.ru/hd/1080.m3u8", 1920, 1080),
+                M3u8.Variant(720, "https://cdn.r.ru/720.m3u8?s=1", 1280, 720),
+                M3u8.Variant(360, "https://r.ru/radio/360/index.m3u8", 640, 360),
             ),
             M3u8.variants(master, base),
         )
+        // Снятое на телефон: качество — по меньшей стороне, размер кадра — как есть (вертикальное).
+        val upright = M3u8.variants("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1,RESOLUTION=720x1280\nv.m3u8", base).single()
+        assertEquals(720, upright.quality)
+        assertEquals(true, upright.height > upright.width)
         assertEquals(emptyList(), M3u8.variants("#EXTM3U\n#EXTINF:10.0,\na.ts", base), "список кусков — не выбор качества")
     }
 

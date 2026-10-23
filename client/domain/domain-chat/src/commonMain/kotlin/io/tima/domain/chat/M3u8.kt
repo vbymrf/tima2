@@ -58,34 +58,38 @@ object M3u8 {
         else -> MediaLinks.Kind.STREAM
     }
 
-    /** Вариант качества главного списка: высота кадра и адрес. */
-    data class Variant(val height: Int, val url: String)
+    /**
+     * Вариант качества главного списка: [quality] — меньшая сторона кадра («720p» и у вертикального
+     * 720×1280), адрес и размер кадра — по нему окно знает, вертикальное ли видео (заказчик 2026-10-23, 3а).
+     */
+    data class Variant(val quality: Int, val url: String, val width: Int, val height: Int)
 
     /**
-     * Качества главного списка для выбора в окне (заказчик 2026-10-23, 8а): по высоте кадра, сверху
-     * лучшее; одна высота — один вариант, с большей полосой. Без разрешения (только звук) — не качество.
+     * Качества главного списка для выбора в окне (заказчик 2026-10-23, 8а): по качеству, сверху лучшее;
+     * одно качество — один вариант, с большей полосой. Без разрешения (только звук) — не качество.
      */
     fun variants(text: String, base: String): List<Variant> {
         val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.firstOrNull() != "#EXTM3U") return emptyList()
-        val best = mutableMapOf<Int, Pair<Long, String>>()
-        var pending: Pair<Int, Long>? = null
+        val best = mutableMapOf<Int, Pair<Long, Variant>>()
+        var pending: Triple<Int, Int, Long>? = null
         for (l in lines) {
             when {
                 l.startsWith("#EXT-X-STREAM-INF") -> {
-                    val h = Regex("RESOLUTION=\\d+x(\\d+)").find(l)?.groupValues?.get(1)?.toIntOrNull()
+                    val size = Regex("RESOLUTION=(\\d+)x(\\d+)").find(l)?.groupValues
                     val bw = Regex("[^-]BANDWIDTH=(\\d+)").find(l)?.groupValues?.get(1)?.toLongOrNull() ?: 0
-                    pending = h?.let { it to bw }
+                    pending = size?.let { Triple(it[1].toInt(), it[2].toInt(), bw) }
                 }
                 !l.startsWith("#") && pending != null -> {
-                    val (h, bw) = pending!!
-                    if ((best[h]?.first ?: -1) < bw) best[h] = bw to resolve(base, l)
+                    val (w, h, bw) = pending!!
+                    val q = minOf(w, h)
+                    if ((best[q]?.first ?: -1) < bw) best[q] = bw to Variant(q, resolve(base, l), w, h)
                     pending = null
                 }
                 !l.startsWith("#") -> pending = null
             }
         }
-        return best.entries.sortedByDescending { it.key }.map { Variant(it.key, it.value.second) }
+        return best.entries.sortedByDescending { it.key }.map { it.value.second }
     }
 
     /** Относительный адрес варианта — от адреса списка. */

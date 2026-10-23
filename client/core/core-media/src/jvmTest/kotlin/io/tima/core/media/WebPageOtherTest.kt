@@ -19,6 +19,13 @@ class WebPageOtherTest {
     }
 
     @Test
+    fun мост_size_даёт_размер_кадра_файла() {
+        val s = OwnPlayerState().bridged("""{"t":"size","w":720,"h":1280}""")
+        assertEquals(720, s.width)
+        assertEquals(1280, s.height)
+    }
+
+    @Test
     fun мост_away_зажигает_ушёл() {
         val s = OwnPlayerState(positionMs = 5_000).bridged("""{"t":"away"}""")
         assertTrue(s.elsewhere)

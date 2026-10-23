@@ -288,6 +288,17 @@ private fun PlayerContent(
         failed = false
     }
 
+    /** Список качеств один раз на окно; прервали (сменили движок) — спросится снова. */
+    suspend fun askVariants(stream: String) {
+        variantsAsked = true
+        try {
+            variants = ports.variants(kind, stream)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            variantsAsked = false
+            throw e
+        }
+    }
+
     LaunchedEffect(request, at, attempt) {
         val e = engine ?: return@LaunchedEffect
         val sec = (carryMs / 1000).toInt()
@@ -306,11 +317,8 @@ private fun PlayerContent(
                 // Список качеств — у Rutube и VK всегда (их поток — HLS, адрес не всегда кончается на m3u8),
                 // у ссылки из сообщения — когда это m3u8.
                 val hls = kind == MediaLinks.Kind.RUTUBE || kind == MediaLinks.Kind.VK_VIDEO || "m3u8" in stream.substringBefore('?').lowercase()
-                if (!variantsAsked && hls) {
-                    variantsAsked = true
-                    launch { variants = ports.variants(kind, stream) }
-                }
-                own?.open(variants.firstOrNull { it.height == quality }?.url ?: stream, carryMs, hls = hls)
+                if (!variantsAsked && hls) launch { askVariants(stream) }
+                own?.open(variants.firstOrNull { it.quality == quality }?.url ?: stream, carryMs, hls = hls)
             }
             PlayerEngine.WEB -> {
                 own?.pause()
@@ -320,6 +328,14 @@ private fun PlayerContent(
                     return@LaunchedEffect
                 }
                 web?.open(page, carryMs)
+                // Rutube и VK: размер кадра — из их списка качеств, а не с картинки (там бывает реклама):
+                // вертикальное видео в полном экране не поворачиваем (3а). Пригодится и своему движку.
+                if (!variantsAsked && (kind == MediaLinks.Kind.RUTUBE || kind == MediaLinks.Kind.VK_VIDEO)) {
+                    launch {
+                        val stream = ownStream ?: ports.resolve(kind, request.url)?.also { ownStream = it }
+                        if (stream != null) askVariants(stream)
+                    }
+                }
             }
         }
         onEvent(PlayerEvent.OPENED, "$host ${e.name.lowercase()}")
@@ -362,7 +378,14 @@ private fun PlayerContent(
     fun seek(ms: Long) = if (engine == PlayerEngine.WEB) web?.seek(ms) else own?.seek(ms)
 
     // Горизонтальное видео в полном экране кладёт телефон боком; вертикальное (Shorts) — как держат.
-    val wide = if (engine == PlayerEngine.OWN) state.width == 0 || state.width >= state.height else "/shorts/" !in request.url
+    // Размер — из сведений о видео, не с картинки (3а): свой движок и файл браузерным — кадр; Rutube и VK —
+    // их список качеств; YouTube размера не отдаёт — только Shorts по адресу. Не знаем — горизонтальное.
+    val sized = variants.firstOrNull()
+    val wide = when {
+        engine == PlayerEngine.OWN || kind == MediaLinks.Kind.VIDEO_FILE -> state.width == 0 || state.width >= state.height
+        sized != null -> sized.width >= sized.height
+        else -> "/shorts/" !in request.url
+    }
     val turn = when {
         screen.full && wide -> ScreenTurn.LANDSCAPE
         screen.upright -> ScreenTurn.PORTRAIT
@@ -459,7 +482,6 @@ private fun PlayerContent(
             },
     ) {
         val sideways = maxWidth > maxHeight
-        val windowWidth = maxWidth
         LaunchedEffect(sideways) { screen.landscape = io.tima.core.media.turnsWithPhone && sideways }
         val full = screen.active
         // Отступы под строку состояния и кнопки навигации — только в обычном окне: на Redmi название и ✕
@@ -540,7 +562,7 @@ private fun PlayerContent(
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            for (h in listOf(0) + variants.map { it.height }) {
+                            for (h in listOf(0) + variants.map { it.quality }) {
                                 Chip(
                                     if (h == 0) words.playerAuto else "${h}p",
                                     kind = if (h == quality) ChipKind.Selected else ChipKind.Quiet,
@@ -562,9 +584,9 @@ private fun PlayerContent(
                 }
             }
         }
-        // Полный экран (заказчик 2026-10-23, 3а, 4а и следом): ▶ — в середине панели и с места не уходит; сразу
-        // за ним время в поле постоянной ширины (с часами, если видео длиннее часа), за временем — «Метки»
-        // (если есть), звук, «Перезапустить», выход. Название — слева. Низ — кнопкам сайта, у своего движка —
+        // Полный экран (заказчик 2026-10-23, 3а, 4а и следом): ▶ от левого края, сразу за ним время в поле
+        // постоянной ширины (с часами, если видео длиннее часа), за временем — «Метки» (если есть), звук,
+        // «Перезапустить», выход — одним рядом. Название — строкой выше. Низ — кнопкам сайта, у своего движка —
         // нашей полосе. Свой движок с вертикальным видео (телефон стоит) — всё наше внизу, как в окне.
         if (full && (overlay || !state.playing || dragAt != null || marksOpen)) {
             val shade = colors.viewer.copy(alpha = 0.5f)
@@ -578,8 +600,6 @@ private fun PlayerContent(
             val slot = remember(template, density) {
                 with(density) { measurer.measure(template, androidx.compose.ui.text.TextStyle(fontSize = 14.sp)).size.width.toDp() + 8.dp }
             }
-            val buttons = 3 + (if (request.marks.isNotEmpty()) 1 else 0)
-            val group = 44.dp + 12.dp + slot + 12.dp + 40.dp * buttons + 8.dp * (buttons - 1)
             val controls: @Composable (Modifier) -> Unit = { m ->
                 Row(m, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     playButton()
@@ -597,9 +617,6 @@ private fun PlayerContent(
             val titleText: @Composable (Modifier) -> Unit = { m ->
                 Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = m)
             }
-            // ▶ в середине — когда от середины до края хватает места на ▶, время и значки.
-            val inner = windowWidth - 24.dp
-            val centered = inner / 2 - 22.dp + group <= inner
             val ownUpright = engine == PlayerEngine.OWN && !sideways
             if (ownUpright) {
                 Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 10.dp)) {
@@ -613,16 +630,14 @@ private fun PlayerContent(
                     controls(Modifier)
                 }
             } else {
-                Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    if (centered) {
-                        titleText(Modifier.align(Alignment.CenterStart).width((inner / 2 - 22.dp - 12.dp).coerceAtLeast(0.dp)))
-                        controls(Modifier.align(Alignment.CenterStart).offset(x = inner / 2 - 22.dp))
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            titleText(Modifier)
-                            controls(Modifier)
-                        }
-                    }
+                // Кнопки вверху: название первой строкой, под ним одним рядом ▶ от левого края, время, значки —
+                // в одну строку с названием они вставали в два ряда (заказчик 2026-10-23).
+                Column(
+                    Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    titleText(Modifier)
+                    controls(Modifier)
                 }
                 if (engine != PlayerEngine.WEB) {
                     Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp)) { bar() }

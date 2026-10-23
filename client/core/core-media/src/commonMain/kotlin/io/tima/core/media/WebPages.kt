@@ -36,7 +36,7 @@ window.onerror=function(m){send({t:'error',v:String(m).slice(0,120)});};
             """<video id="v" autoplay playsinline></video>""",
             """
 var v=document.getElementById('v');v.src=${js(url)};
-v.addEventListener('loadedmetadata',function(){if($startSec>0)v.currentTime=$startSec;send({t:'ready'});
+v.addEventListener('loadedmetadata',function(){if($startSec>0)v.currentTime=$startSec;send({t:'ready'});send({t:'size',w:v.videoWidth,h:v.videoHeight});
  var p=v.play();if(p&&p.catch)p.catch(function(e){send({t:'error',v:'play '+e.name});});});
 v.addEventListener('timeupdate',function(){send({t:'time',v:v.currentTime,d:isFinite(v.duration)?v.duration:0});});
 v.addEventListener('playing',function(){send({t:'state',v:'playing'});});
