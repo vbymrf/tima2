@@ -69,7 +69,7 @@ enum class PlayerEvent {
     /** Сторож: за [PLAYER_WATCH_MS] ни кадра, ни звука. */
     TIMEOUT,
 
-    /** Сменили движок — сами после отказа или кнопкой «Другой проигрыватель». */
+    /** Сменили движок — сами после отказа или кнопкой «Браузерный» / «Встроенный проигрыватель». */
     SWITCHED,
     TO_BROWSER,
 }
@@ -126,8 +126,8 @@ object PlayerTags {
 
 /**
  * Окно проигрывания (ПЛАН-(ВМ) §3.1–§3.4): видео и звук по ссылке — двумя движками. Не смог
- * (ошибка или сторож 15 с) — окно само берёт другой движок с той же секунды; «Другой проигрыватель» —
- * то же руками; ни один не смог — «Открыть в браузере». Движок, с которым пошло, запоминается по сайту.
+ * (ошибка или сторож 15 с) — окно само берёт другой движок с той же секунды; «Браузерный» или
+ * «Встроенный проигрыватель» — то же руками; ни один не смог — «Открыть в браузере». Движок, с которым пошло, запоминается по сайту.
  */
 @Composable
 fun PlayerWindow(
@@ -227,6 +227,8 @@ private fun PlayerContent(
             ports.remember(host, engine)
         }
     }
+    // Пока видео идёт, телефон не засыпает (заказчик 2026-10-23); пауза — экран гаснет по настройке.
+    io.tima.core.media.KeepScreenOn(state.playing && !failed)
     fun play() = if (engine == PlayerEngine.WEB) web?.play() else own?.play()
     fun pause() = if (engine == PlayerEngine.WEB) web?.pause() else own?.pause()
     fun seek(ms: Long) = if (engine == PlayerEngine.WEB) web?.seek(ms) else own?.seek(ms)
@@ -252,7 +254,8 @@ private fun PlayerContent(
             if (!state.live && state.durationMs > 0) {
                 val progress = state.positionMs.toFloat() / state.durationMs
                 val marks = request.marks.map { it.atMs.toFloat() / state.durationMs }
-                SeekBar(progress, Modifier.fillMaxWidth().height(24.dp).testTag(PlayerTags.BAR), marks) { f ->
+                // Непроигранная часть — светлой полосой: цветом линий на чёрном её не было видно (заказчик 2026-10-23).
+                SeekBar(progress, Modifier.fillMaxWidth().height(24.dp).testTag(PlayerTags.BAR), marks, track = onVideo.copy(alpha = 0.35f)) { f ->
                     seek((state.durationMs * f).toLong())
                 }
             }
@@ -285,9 +288,11 @@ private fun PlayerContent(
                         modifier = Modifier.testTag(PlayerTags.SPEED),
                     )
                 }
-                // «Другой проигрыватель» — виден всегда, когда движков больше одного (§3.1).
+                // Смена движка — видна всегда, когда движков больше одного (§3.1); надпись называет тот,
+                // на который переключит: «Браузерный» или «Встроенный проигрыватель» (заказчик 2026-10-23).
                 if (order.size > 1) {
-                    Chip(words.playerOther, kind = ChipKind.Quiet, modifier = Modifier.testTag(PlayerTags.OTHER), onClick = {
+                    val to = order[(at + 1) % order.size]
+                    Chip(if (to == PlayerEngine.WEB) words.playerToWeb else words.playerToOwn, kind = ChipKind.Quiet, modifier = Modifier.testTag(PlayerTags.OTHER), onClick = {
                         carryMs = state.positionMs.takeIf { it > 0 } ?: carryMs
                         at = (at + 1) % order.size
                         attempt++
@@ -329,7 +334,13 @@ private fun PlayerMarks(marks: List<io.tima.domain.chat.MediaMark>, positionMs: 
 
 /** Полоса проигрывания: нажатие и перетаскивание — перемотка к доле [onSeek]. */
 @Composable
-internal fun SeekBar(progress: Float, modifier: Modifier, marks: List<Float> = emptyList(), onSeek: (Float) -> Unit) {
+internal fun SeekBar(
+    progress: Float,
+    modifier: Modifier,
+    marks: List<Float> = emptyList(),
+    track: androidx.compose.ui.graphics.Color = Tima.colors.line,
+    onSeek: (Float) -> Unit,
+) {
     val colors = Tima.colors
     Canvas(
         modifier
@@ -338,7 +349,7 @@ internal fun SeekBar(progress: Float, modifier: Modifier, marks: List<Float> = e
     ) {
         val h = 4.dp.toPx()
         val y = (size.height - h) / 2
-        drawRoundRect(colors.line, Offset(0f, y), Size(size.width, h), CornerRadius(h / 2, h / 2))
+        drawRoundRect(track, Offset(0f, y), Size(size.width, h), CornerRadius(h / 2, h / 2))
         drawRoundRect(colors.navigation, Offset(0f, y), Size(size.width * progress.coerceIn(0f, 1f), h), CornerRadius(h / 2, h / 2))
         // Отрезки по меткам (Р12): тонкий зазор на месте каждой метки.
         for (m in marks) drawRect(colors.viewer, Offset(size.width * m - 1.dp.toPx(), y), Size(2.dp.toPx(), h))

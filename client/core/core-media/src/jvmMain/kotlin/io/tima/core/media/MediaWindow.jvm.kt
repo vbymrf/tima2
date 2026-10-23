@@ -16,3 +16,6 @@ actual fun MediaWindow(title: String, onClose: () -> Unit, content: @Composable 
         CompositionLocalProvider(LocalMediaAwtWindow provides window) { content() }
     }
 }
+
+@Composable
+actual fun KeepScreenOn(on: Boolean) = Unit

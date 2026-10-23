@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
@@ -56,6 +57,13 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** Что за ссылка на поток и сколько длится запись (Р29, Р34–Р36): узнаёт отправитель при вставке. */
 data class MediaProbe(val kind: MediaLinks.Kind, val durationMs: Long = 0)
 
+/**
+ * Ссылка в форме «Видео», которая в окне TIMA не играет (страница автора, канал, обычный сайт), —
+ * кнопкой-ссылкой с названием из «Описания»: вид, картинка и метки ей ни к чему (заказчик 2026-10-23).
+ */
+internal fun videoAskLink(url: String, description: String): ComposedWidget.Link =
+    ComposedWidget.Link(url, title = description.trim(), mode = "button")
+
 /** Что форме вставки нужно от ведущего редактор: сеть и загрузка картинки. */
 class MediaAskPorts(
     /** m3u8: видео, запись или эфир и длительность записи; не узнали — `null`. */
@@ -70,6 +78,7 @@ object MediaAskTags {
     const val COUNT = "media.ask.count"
     const val OK = "media.ask.ok"
     const val MARK_AT_NOW = "media.ask.mark.now"
+    const val NOT_VIDEO = "media.ask.notvideo"
     fun markTime(i: Int) = "media.ask.mark.$i.time"
     fun markText(i: Int) = "media.ask.mark.$i.text"
 }
@@ -98,6 +107,7 @@ fun MediaWidgetAsk(
     var count by remember { mutableStateOf("0") }
     var trouble by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var notVideo by remember { mutableStateOf(false) }
     val links = ComposedMedia.splitLinks(url)
     val list = kind != "stream" && links.size > 1
     val left = 30 - ComposedMedia.count(doc)
@@ -150,8 +160,10 @@ fun MediaWidgetAsk(
         }
     }
 
+    fun normalized() = url.trim().let { if (it.isEmpty() || "://" in it) it else "https://$it" }
+
     fun insertOne() {
-        val u = url.trim().let { if (it.isEmpty() || "://" in it) it else "https://$it" }
+        val u = normalized()
         if (!u.startsWith("http://") && !u.startsWith("https://")) return run { trouble = ew.needUrl }
         if (description.isBlank()) return run { trouble = ew.needDescription }
         if (left <= 0) return run { trouble = ew.tooMany }
@@ -166,6 +178,10 @@ fun MediaWidgetAsk(
                 "video" -> when (k) {
                     MediaLinks.Kind.AUDIO_FILE -> trouble = ew.isAudio
                     MediaLinks.Kind.STREAM -> trouble = ew.isStream
+                    null -> {
+                        onInsert(listOf(videoAskLink(u, description)))
+                        onClose()
+                    }
                     else -> {
                         onInsert(listOf(ComposedWidget.Video(u, desc, look, showTitle, picture = picture)))
                         val n = count.toIntOrNull()?.coerceIn(0, 30) ?: 0
@@ -203,12 +219,18 @@ fun MediaWidgetAsk(
         },
         onClose = onClose,
     ) {
-        Field(ew.askUrl, url, MediaAskTags.URL, single = false) { url = it; trouble = null }
+        Field(
+            ew.askUrl, url, MediaAskTags.URL, single = false,
+            // Ушли с поля — ссылка, которая в окне TIMA не играет, видна сразу, а не по «Готово» (заказчик 2026-10-23).
+            onLeave = { notVideo = kind == "video" && !list && url.isNotBlank() && !MediaLinks.playsHere(normalized()) },
+        ) { url = it; trouble = null; notVideo = false }
+        if (notVideo) Caption(ew.notVideo, fontSize = TimaType.sz5, color = Tima.colors.alarm, modifier = Modifier.testTag(MediaAskTags.NOT_VIDEO))
         if (list) {
             Tertiary(ew.listFound(links.size))
         } else {
             Field(ew.askDescription, description, MediaAskTags.DESCRIPTION) { description = it; trouble = null }
-            if (kind == "video") {
+            // Вид, своя картинка и метки — только у видео: кнопке-ссылке они ни к чему.
+            if (kind == "video" && !notVideo) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Chip(ew.lookPicture, kind = if (look == "picture") ChipKind.Selected else ChipKind.Quiet, onClick = { look = "picture" })
                     Chip(ew.lookFrame, kind = if (look == "frame") ChipKind.Selected else ChipKind.Quiet, onClick = { look = "frame" })
@@ -218,7 +240,7 @@ fun MediaWidgetAsk(
                     ports.pickPicture { picture = it }
                 })
             }
-            if (kind != "stream") Field(ew.marksCount, count, MediaAskTags.COUNT) { count = it.filter(Char::isDigit).take(2) }
+            if (kind != "stream" && !notVideo) Field(ew.marksCount, count, MediaAskTags.COUNT) { count = it.filter(Char::isDigit).take(2) }
         }
         trouble?.let { Caption(it, fontSize = TimaType.sz5, color = Tima.colors.alarm) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -343,8 +365,17 @@ private fun SheetFrame(title: String, onClose: () -> Unit, content: @Composable 
 }
 
 @Composable
-private fun Field(label: String?, value: String, tag: String, single: Boolean = true, alarm: Boolean = false, onChange: (String) -> Unit) {
+private fun Field(
+    label: String?,
+    value: String,
+    tag: String,
+    single: Boolean = true,
+    alarm: Boolean = false,
+    onLeave: (() -> Unit)? = null,
+    onChange: (String) -> Unit,
+) {
     val colors = Tima.colors
+    var focused by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (label != null) Tertiary(label, lineOne = true)
         BasicTextField(
@@ -355,7 +386,8 @@ private fun Field(label: String?, value: String, tag: String, single: Boolean = 
             textStyle = TextStyle(fontSize = TimaType.sz4, color = if (alarm && value.isNotBlank()) colors.alarm else colors.text),
             cursorBrush = SolidColor(colors.navigation),
             modifier = Modifier.fillMaxWidth().background(if (alarm) colors.alarm.copy(alpha = 0.12f) else colors.functional, RoundedCornerShape(8.dp))
-                .padding(10.dp).testTag(tag),
+                .padding(10.dp).testTag(tag)
+                .onFocusChanged { if (it.isFocused) focused = true else if (focused) { focused = false; onLeave?.invoke() } },
         )
     }
 }

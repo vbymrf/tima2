@@ -9,3 +9,10 @@ import androidx.compose.runtime.Composable
  */
 @Composable
 expect fun MediaWindow(title: String, onClose: () -> Unit, content: @Composable () -> Unit)
+
+/**
+ * Экран не гаснет, пока [on] — видео идёт (заказчик 2026-10-23: «чтобы телефон не уходил в сон»). На ПК
+ * ничего не делает: там видео смотрят в своём окне, а гашение экрана — настройка Windows.
+ */
+@Composable
+expect fun KeepScreenOn(on: Boolean)
