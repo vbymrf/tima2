@@ -456,8 +456,15 @@ fun Root(
                       else -> null
                   }
               },
-              // Качества потока (8а) — тем же безопасным загрузчиком, что карточки ссылок и m3u8 при вставке.
-              variants = { url -> mediaCards.text(url, 256 * 1024)?.let { (at, text) -> io.tima.domain.chat.M3u8.variants(text, at) }.orEmpty() },
+              // Качества потока (8а): список от самого сайта — клиентом потока (VK привязывает ссылку к
+              // браузеру), m3u8 из сообщения — безопасным загрузчиком, что карточки ссылок и вставка.
+              variants = { kind, url ->
+                  val text = when (kind) {
+                      io.tima.domain.chat.MediaLinks.Kind.RUTUBE, io.tima.domain.chat.MediaLinks.Kind.VK_VIDEO -> mediaResolve.playlist(url)?.let { url to it }
+                      else -> mediaCards.text(url, 256 * 1024)
+                  }
+                  text?.let { (at, t) -> io.tima.domain.chat.M3u8.variants(t, at) }.orEmpty()
+              },
               remembered = { host -> engineBySite[host] },
               remember = { host, engine -> engineBySite[host] = engine },
           )

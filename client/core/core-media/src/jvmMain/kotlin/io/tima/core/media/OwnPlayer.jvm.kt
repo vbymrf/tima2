@@ -63,7 +63,7 @@ internal class WindowsOwnPlayer : OwnPlayer {
     private var bw = 0
     private var bh = 0
 
-    override fun open(url: String, startMs: Long, play: Boolean) {
+    override fun open(url: String, startMs: Long, play: Boolean, hls: Boolean) {
         scope.launch {
             close()
             _state.value = OwnPlayerState(speed = _state.value.speed)

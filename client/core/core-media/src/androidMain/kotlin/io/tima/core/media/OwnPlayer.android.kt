@@ -91,9 +91,10 @@ internal class ExoOwnPlayer(val context: Context) : OwnPlayer {
         )
     }
 
-    override fun open(url: String, startMs: Long, play: Boolean) {
+    override fun open(url: String, startMs: Long, play: Boolean, hls: Boolean) {
         _state.value = OwnPlayerState(speed = _state.value.speed)
-        exo.setMediaItem(MediaItem.fromUri(url), startMs.coerceAtLeast(0))
+        val item = MediaItem.Builder().setUri(url).apply { if (hls) setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8) }.build()
+        exo.setMediaItem(item, startMs.coerceAtLeast(0))
         exo.playWhenReady = play
         exo.prepare()
     }

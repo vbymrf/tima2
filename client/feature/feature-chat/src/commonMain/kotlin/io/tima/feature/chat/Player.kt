@@ -115,8 +115,8 @@ enum class PlayerEngine { OWN, WEB }
 class PlayerPorts(
     /** Поток HLS Rutube или VK для своего движка; не вышло — `null`. */
     val resolve: suspend (kind: MediaLinks.Kind, url: String) -> String? = { _, _ -> null },
-    /** Качества главного списка m3u8 (8а); не главный или не вышло — пусто. */
-    val variants: suspend (url: String) -> List<M3u8.Variant> = { emptyList() },
+    /** Качества главного списка m3u8 (8а) потока ссылки вида [kind]; не главный или не вышло — пусто. */
+    val variants: suspend (kind: MediaLinks.Kind?, url: String) -> List<M3u8.Variant> = { _, _ -> emptyList() },
     val remembered: (host: String) -> PlayerEngine? = { null },
     val remember: (host: String, engine: PlayerEngine) -> Unit = { _, _ -> },
 )
@@ -280,11 +280,14 @@ private fun PlayerContent(
                     return@LaunchedEffect
                 }
                 ownStream = stream
-                if (!variantsAsked && "m3u8" in stream.substringBefore('?').lowercase()) {
+                // Список качеств — у Rutube и VK всегда (их поток — HLS, адрес не всегда кончается на m3u8),
+                // у ссылки из сообщения — когда это m3u8.
+                val hls = kind == MediaLinks.Kind.RUTUBE || kind == MediaLinks.Kind.VK_VIDEO || "m3u8" in stream.substringBefore('?').lowercase()
+                if (!variantsAsked && hls) {
                     variantsAsked = true
-                    launch { variants = ports.variants(stream) }
+                    launch { variants = ports.variants(kind, stream) }
                 }
-                own?.open(variants.firstOrNull { it.height == quality }?.url ?: stream, carryMs)
+                own?.open(variants.firstOrNull { it.height == quality }?.url ?: stream, carryMs, hls = hls)
             }
             PlayerEngine.WEB -> {
                 own?.pause()
@@ -344,7 +347,8 @@ private fun PlayerContent(
             Caption(if (state.playing) "❚❚" else "▶", fontSize = 18.sp, color = colors.onAccent)
         }
     }
-    val time = if (state.live) words.playerLive else "${voiceTime(state.positionMs)} / ${voiceTime(state.durationMs)}"
+    // Часы — как у меток: фильм на 2 часа 18 минут — «2:18:51», а не «138:51» (Samsung, 2026-10-23).
+    val time = if (state.live) words.playerLive else "${io.tima.domain.chat.markTime(state.positionMs)} / ${io.tima.domain.chat.markTime(state.durationMs)}"
     val bar: @Composable () -> Unit = {
         if (!state.live && state.durationMs > 0) {
             val progress = state.positionMs.toFloat() / state.durationMs
@@ -478,7 +482,8 @@ private fun PlayerContent(
                 }
             }
         }
-        // Полный экран: кнопки поверх видео — сверху название, «Перезапустить» и выход, снизу ▶, время и полоса.
+        // Полный экран: кнопки поверх видео — сверху название, «Перезапустить» и выход, снизу ▶, время и
+        // полоса. У браузерного движка снизу свои кнопки сайта — наши легли бы на них (VK, Samsung 2026-10-23).
         if (full && (overlay || !state.playing)) {
             val shade = colors.viewer.copy(alpha = 0.5f)
             Row(
@@ -490,14 +495,16 @@ private fun PlayerContent(
                 restart()
                 PlayerIconButton(PlayerIcon.FULL_EXIT, words.playerFullExit, lit = false, tag = PlayerTags.FULL) { screen.exit() }
             }
-            Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                bar()
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    playButton()
-                    Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.weight(1f))
+            if (engine != PlayerEngine.WEB) {
+                Column(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    bar()
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        playButton()
+                        Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.weight(1f))
+                    }
                 }
             }
         }

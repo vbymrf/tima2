@@ -55,7 +55,7 @@ internal class MediaEngineAudio : OwnPlayer {
     private var pendingSeek = 0.0
     private val keep = mutableListOf<Any>()
 
-    override fun open(url: String, startMs: Long, play: Boolean) {
+    override fun open(url: String, startMs: Long, play: Boolean, hls: Boolean) {
         scope.launch {
             _state.value = OwnPlayerState(speed = _state.value.speed)
             val e = engine ?: create() ?: return@launch

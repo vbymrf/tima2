@@ -12,8 +12,11 @@ import kotlinx.coroutines.flow.StateFlow
 interface OwnPlayer {
     val state: StateFlow<OwnPlayerState>
 
-    /** Открыть [url] с [startMs]; [play] — сразу играть. */
-    fun open(url: String, startMs: Long = 0, play: Boolean = true)
+    /**
+     * Открыть [url] с [startMs]; [play] — сразу играть; [hls] — это поток HLS, даже если адрес не кончается
+     * на m3u8 (варианты качества VK — без окончания, Media3 принимал их за файл, 2026-10-23).
+     */
+    fun open(url: String, startMs: Long = 0, play: Boolean = true, hls: Boolean = false)
     fun play()
     fun pause()
     fun seek(ms: Long)

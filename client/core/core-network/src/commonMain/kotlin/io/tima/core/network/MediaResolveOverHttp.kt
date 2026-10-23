@@ -59,6 +59,21 @@ class MediaResolveOverHttp(
         }
     }.getOrNull()
 
+    /**
+     * Главный список потока, который отдал сам сайт ([rutube], [vk]), — для выбора качества (8а). Тем же
+     * заголовком браузера: ссылка VK чужому браузеру список не отдаёт. Ссылку из сообщения так не читать —
+     * для неё безопасный загрузчик карточек.
+     */
+    suspend fun playlist(url: String): String? = runCatching {
+        val c = client()
+        try {
+            val r = c.get(url) { header(HttpHeaders.UserAgent, AGENT) }
+            if (r.status.isSuccess()) r.bodyAsText().take(256 * 1024) else null
+        } finally {
+            c.close()
+        }
+    }.getOrNull()
+
     /** Строка JSON как адрес: `\/` и `&` и прочие `\uXXXX`. */
     private fun unescape(s: String): String =
         s.replace("\\/", "/").replace(Regex("""\\u([0-9a-fA-F]{4})""")) { it.groupValues[1].toInt(16).toChar().toString() }
