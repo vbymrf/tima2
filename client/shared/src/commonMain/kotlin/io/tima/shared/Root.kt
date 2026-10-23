@@ -436,7 +436,7 @@ fun Root(
           LocalPictureSource provides pictureSource,
       ) {
         // Ссылки из сообщений — через окно «Перейти по ссылке?» с доменом (заказчик 2026-10-19): одно на приложение.
-        io.tima.feature.chat.LinkGate {
+        io.tima.feature.chat.LinkGate(onPlayer = { what, detail -> Journal.note(LogCode.PLAYER, playerWord(what), "подробно" to detail) }) {
         Inside(
             entry = entry,
             callEngine = callEngine,
@@ -8002,4 +8002,13 @@ private fun voiceWord(e: io.tima.feature.chat.VoiceEvent): String = when (e) {
     io.tima.feature.chat.VoiceEvent.NO_CODEC -> "микрофон недоступен: нет кодека"
     io.tima.feature.chat.VoiceEvent.RECORD_STOPPED -> "запись остановлена"
     io.tima.feature.chat.VoiceEvent.RECORD_DELETED -> "запись удалена"
+}
+
+/** Слова журнала окна проигрывания (`PLAYER`, РЕЕСТР). */
+private fun playerWord(e: io.tima.feature.chat.PlayerEvent): String = when (e) {
+    io.tima.feature.chat.PlayerEvent.OPENED -> "открыто"
+    io.tima.feature.chat.PlayerEvent.STARTED -> "пошло"
+    io.tima.feature.chat.PlayerEvent.FAILED -> "движок не смог"
+    io.tima.feature.chat.PlayerEvent.TIMEOUT -> "сторож: ни кадра, ни звука за 15 с"
+    io.tima.feature.chat.PlayerEvent.TO_BROWSER -> "в браузер"
 }

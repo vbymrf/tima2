@@ -44,6 +44,12 @@ livekit = "2.28.2"
 # Встроенный кодер Opus у Android — с 10-й версии, а minSdk 26; на ПК его нет вовсе. 420 КБ,
 # без зависимостей.
 concentus = "1.0.2"
+# Свой движок окна проигрывания (ПЛАН-(ВМ) ВМ5). Android — Media3: 1.9.x — последняя линия, которой
+# хватает compileSdk 35 (1.10 требует 36). ПК — из ComposeMediaPlayer (MIT) берётся только мост к Media
+# Foundation (`WindowsNativeBridge` и его DLL 64 КБ): без транзитивных — те тянут Kotlin stdlib 2.4,
+# kotlinx-datetime 0.8 и androidx.core 1.18 (compileSdk 36).
+media3 = "1.9.4"
+composemediaplayer = "0.11.4"
 
 [plugins]
 kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
@@ -82,6 +88,13 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 concentus = { module = "io.github.jaredmdobson:concentus", version.ref = "concentus" }
+media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
+media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls", version.ref = "media3" }
+media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
+# Guava — та, что приходит с Media3 1.9: с ней `listenablefuture` подменяется пустышкой, и сканеру QR
+# (CameraX) класс ListenableFuture нужен из самой Guava — приложению она даётся явно.
+guava-android = { module = "com.google.guava:guava", version = "33.3.1-android" }
+composemediaplayer-jvm = { module = "io.github.kdroidfilter:composemediaplayer-jvm", version.ref = "composemediaplayer" }
 ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }

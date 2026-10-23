@@ -41,9 +41,17 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
             implementation(libs.concentus)
+            // Свой движок окна проигрывания (ПЛАН-(ВМ) ВМ5): файлы, HLS.
+            implementation(libs.media3.exoplayer)
+            implementation(libs.media3.exoplayer.hls)
+            implementation(libs.media3.ui)
         }
         jvmMain.dependencies {
             implementation(libs.concentus)
+            // Только мост к Media Foundation и его DLL — без транзитивных (см. libs.versions.toml).
+            implementation(libs.composemediaplayer.jvm.get().let { "${it.module}:${it.versionConstraint.requiredVersion}" }) {
+                isTransitive = false
+            }
         }
         // Кодек голосовых (Concentus, ПЛАН-(ВМ) §2.1) — одна Java-библиотека на Android и ПК, один
         // исходник на обе платформы: каталог `jvmShared` входит в обе.

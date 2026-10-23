@@ -22,6 +22,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import io.tima.domain.chat.MediaLinks
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -116,8 +117,14 @@ internal fun rememberMessageOpen(): (kind: String, chatId: String, messageId: Lo
  * адрес целиком; у сообщения — автор и строка. «Перейти» переходит, «✕» — нет.
  */
 @Composable
-fun LinkGate(content: @Composable () -> Unit) {
+fun LinkGate(
+    /** Строка журнала окна проигрывания (`PLAYER`). */
+    onPlayer: (what: PlayerEvent, detail: String) -> Unit = { _, _ -> },
+    content: @Composable () -> Unit,
+) {
     var asked by remember { mutableStateOf<GateAsk?>(null) }
+    // Видео или звук прямой ссылкой — своё окно проигрывания, а не браузер (ПЛАН-(ВМ) §3.1).
+    var playing by remember { mutableStateOf<PlayRequest?>(null) }
     val uri = LocalUriHandler.current
     CompositionLocalProvider(
         LocalGate provides { ask -> asked = ask },
@@ -131,7 +138,11 @@ fun LinkGate(content: @Composable () -> Unit) {
                     blocked = ask.blocked,
                     onOpen = {
                         asked = null
-                        runCatching { uri.openUri(ask.url) }
+                        if (MediaLinks.playsHere(ask.url)) {
+                            playing = PlayRequest(ask.url, startMs = (MediaLinks.startSeconds(ask.url) ?: 0) * 1000L)
+                        } else {
+                            runCatching { uri.openUri(ask.url) }
+                        }
                     },
                     onCancel = { asked = null },
                 )
@@ -144,6 +155,17 @@ fun LinkGate(content: @Composable () -> Unit) {
                     onCancel = { asked = null },
                 )
                 null -> Unit
+            }
+            playing?.let { req ->
+                PlayerWindow(
+                    request = req,
+                    onClose = { playing = null },
+                    onBrowser = { url ->
+                        playing = null
+                        runCatching { uri.openUri(url) }
+                    },
+                    onEvent = onPlayer,
+                )
             }
         }
     }

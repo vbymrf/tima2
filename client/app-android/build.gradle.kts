@@ -45,6 +45,8 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             // Сканер кода подключения в «Фраза и устройства» (заказчик 2026-09-30, 1б):
             // камера CameraX и чтение QR ZXing — без сервисов Google, целиком на устройстве.
+            // ListenableFuture для CameraX — из Guava, пришедшей с Media3 (libs.versions.toml, guava-android).
+            implementation(libs.guava.android)
             implementation(libs.androidx.camera.camera2)
             implementation(libs.androidx.camera.lifecycle)
             implementation(libs.androidx.camera.view)

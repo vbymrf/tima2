@@ -1542,6 +1542,11 @@ interface ChatWords {
     val voiceNotSent: String
     val voiceArea: String
     val voiceFailed: String
+    // ── Окно проигрывания (ПЛАН-(ВМ) §3.1) ──
+    val playerLoading: String
+    val playerFailed: String
+    val playerLive: String
+    val playerBrowser: String
     /** Просмотр и редактор фото (заказчик 2026-10-22, ПЛАН-(ИФ) ИФ5–ИФ7). */
     val photoRotate: String
     val photoEdit: String
@@ -3790,6 +3795,10 @@ object RussianWords : Words {
         override val voiceNotSent = "Голосовое не отправилось — нет связи"
         override val voiceArea = "Голосовое"
         override val voiceFailed = "Не играет: колонки недоступны"
+        override val playerLoading = "Загрузка…"
+        override val playerFailed = "Здесь не играет — откройте в браузере"
+        override val playerLive = "● В эфире"
+        override val playerBrowser = "Открыть в браузере"
         override val photoRotate = "Повернуть"
         override val photoEdit = "Изменить"
         override val photoCrop = "Обрезать"
