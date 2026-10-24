@@ -171,6 +171,7 @@ fun MediaWidgetAsk(
     var notVideo by remember { mutableStateOf(false) }
     var linkSays by remember { mutableStateOf<String?>(null) }
     val links = ComposedMedia.splitLinks(url)
+    val once = io.tima.core.ui.rememberOnePress()
     val list = kind != "stream" && links.size > 1
     val left = 30 - ComposedMedia.count(doc)
     val prober = rememberOwnPlayer()
@@ -215,10 +216,10 @@ fun MediaWidgetAsk(
                 }
                 taken += name
             }
-            busy = false
             onInsert(out)
             trouble = if (skipped > 0) ew.skipped(skipped) else null
-            if (skipped == 0) onClose()
+            // Окно закрывается — «занято» остаётся: нажатия до перерисовки вставили бы копию (заказчик 2026-10-24).
+            if (skipped == 0) onClose() else busy = false
         }
     }
 
@@ -234,12 +235,16 @@ fun MediaWidgetAsk(
         scope.launch {
             val k = kindOf(u)
             val desc = ComposedMedia.unique(doc, description)
-            busy = false
             trouble = null
+            // Не вышло — снова можно нажать; вышло — окно закрывается, «занято» остаётся до конца (заказчик 2026-10-24).
+            fun failed(why: String) {
+                trouble = why
+                busy = false
+            }
             when (kind) {
                 "video" -> when (k) {
-                    MediaLinks.Kind.AUDIO_FILE -> trouble = ew.isAudio
-                    MediaLinks.Kind.STREAM -> trouble = ew.isStream
+                    MediaLinks.Kind.AUDIO_FILE -> failed(ew.isAudio)
+                    MediaLinks.Kind.STREAM -> failed(ew.isStream)
                     null -> {
                         onInsert(listOf(videoAskLink(u, description)))
                         onClose()
@@ -256,18 +261,18 @@ fun MediaWidgetAsk(
                         val n = count.toIntOrNull()?.coerceIn(0, 30) ?: 0
                         if (n > 0) onMarks(desc, n) else onClose()
                     }
-                    MediaLinks.Kind.STREAM -> trouble = ew.isStream
-                    MediaLinks.Kind.VIDEO_FILE -> trouble = ew.isVideo
-                    else -> trouble = ew.isService
+                    MediaLinks.Kind.STREAM -> failed(ew.isStream)
+                    MediaLinks.Kind.VIDEO_FILE -> failed(ew.isVideo)
+                    else -> failed(ew.isService)
                 }
                 else -> when (k) {
                     MediaLinks.Kind.STREAM -> {
                         onInsert(listOf(ComposedWidget.Stream(u, desc)))
                         onClose()
                     }
-                    MediaLinks.Kind.AUDIO_FILE -> trouble = ew.isAudio
-                    MediaLinks.Kind.VIDEO_FILE -> trouble = ew.isVideo
-                    else -> trouble = ew.notStream
+                    MediaLinks.Kind.AUDIO_FILE -> failed(ew.isAudio)
+                    MediaLinks.Kind.VIDEO_FILE -> failed(ew.isVideo)
+                    else -> failed(ew.notStream)
                 }
             }
         }
@@ -311,7 +316,7 @@ fun MediaWidgetAsk(
         }
         trouble?.let { Caption(it, fontSize = TimaType.sz5, color = Tima.colors.alarm) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Chip(Tima.words.chat.ok, kind = ChipKind.Selected, onClick = { if (!busy) { if (list) insertList() else insertOne() } }, modifier = Modifier.testTag(MediaAskTags.OK))
+            Chip(Tima.words.chat.ok, kind = ChipKind.Selected, onClick = { once.press { if (!busy) { if (list) insertList() else insertOne() } } }, modifier = Modifier.testTag(MediaAskTags.OK))
             Chip(Tima.words.chat.cancel, kind = ChipKind.Quiet, onClick = onClose)
         }
     }
@@ -357,6 +362,7 @@ fun MarksAsk(
     }
     var hidden by remember(chosen) { mutableStateOf(existing?.hidden ?: false) }
     var trouble by remember { mutableStateOf<String?>(null) }
+    val once = io.tima.core.ui.rememberOnePress()
     val target = chosen?.let { ComposedMedia.target(doc, it) }
     val targetUrl = when (target) {
         is ComposedWidget.Video -> target.url
@@ -432,23 +438,28 @@ fun MarksAsk(
             modifier = Modifier.testTag(MediaAskTags.HIDDEN))
         trouble?.let { Caption(it, fontSize = TimaType.sz5, color = colors.alarm) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // «Готово» и «Удалить» — один раз (заказчик 2026-10-24).
             Chip(Tima.words.chat.ok, kind = ChipKind.Selected, modifier = Modifier.testTag(MediaAskTags.OK), onClick = {
-                val b = chosen ?: return@Chip
-                val marks = rows.map { r -> markTimeOf(r.h, r.m, r.s)?.let { MediaMark(it, r.text.trim()) } }
-                when {
-                    rows.isEmpty() -> trouble = ew.marksNeed
-                    marks.any { it == null } -> trouble = ew.marksBadTime
-                    rows.size > 30 -> trouble = ew.marksMax
-                    else -> {
-                        onSave(ComposedWidget.Marks(b, marks.filterNotNull().sortedBy { it.atMs }, hidden))
-                        onClose()
+                once.press done@{
+                    val b = chosen ?: return@done
+                    val marks = rows.map { r -> markTimeOf(r.h, r.m, r.s)?.let { MediaMark(it, r.text.trim()) } }
+                    when {
+                        rows.isEmpty() -> trouble = ew.marksNeed
+                        marks.any { it == null } -> trouble = ew.marksBadTime
+                        rows.size > 30 -> trouble = ew.marksMax
+                        else -> {
+                            onSave(ComposedWidget.Marks(b, marks.filterNotNull().sortedBy { it.atMs }, hidden))
+                            onClose()
+                        }
                     }
                 }
             })
             Chip(Tima.words.chat.cancel, kind = ChipKind.Quiet, onClick = onClose)
             Chip(ew.marksDelete, kind = ChipKind.Quiet, modifier = Modifier.testTag(MediaAskTags.DELETE), onClick = {
-                chosen?.let(onDelete)
-                onClose()
+                once.press {
+                    chosen?.let(onDelete)
+                    onClose()
+                }
             })
         }
     }

@@ -362,9 +362,16 @@ internal fun VoiceArea(voice: VoiceInput, onClose: () -> Unit) {
     fun close() {
         if ((clip?.durationMs ?: elapsed) > 3000) asking = true else discard()
     }
+    // Отправка — один раз: она идёт в фоне, и до закрытия окна второе нажатие отправило бы голосовое ещё раз.
+    var sending by remember { mutableStateOf(false) }
     fun send() {
+        if (sending) return
+        sending = true
         scope.launch {
-            val c = clip ?: recording?.stop() ?: return@launch
+            val c = clip ?: recording?.stop() ?: run {
+                sending = false
+                return@launch
+            }
             preview?.release()
             voice.send(c)
             onClose()

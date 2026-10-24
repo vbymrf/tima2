@@ -53,6 +53,8 @@ fun ChoiceSheet(
     place: TextPlace = TextPlace.MENU,
 ) {
     val colors = Tima.colors
+    // Выбор — один раз: второе нажатие до перерисовки вставило бы копию.
+    val once = io.tima.core.ui.rememberOnePress()
     ProvidePlace(place) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
@@ -66,7 +68,7 @@ fun ChoiceSheet(
             if (items.isEmpty()) Tertiary(empty)
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 items.forEachIndexed { i, item ->
-                    Column(Modifier.fillMaxWidth().clickable { onPick(i) }.padding(vertical = 8.dp).testTag("chat:choice.$i")) {
+                    Column(Modifier.fillMaxWidth().clickable { once.press { onPick(i) } }.padding(vertical = 8.dp).testTag("chat:choice.$i")) {
                         Caption(item.title, fontSize = TimaType.sz4, lineOne = true)
                         if (item.about.isNotBlank()) Tertiary(item.about, lineOne = true)
                     }
@@ -103,6 +105,7 @@ fun ManyChoiceSheet(
     val chosen = remember { mutableStateListOf<Int>() }
     var list by remember { mutableStateOf(false) }
     val limit = if (list) maxList else max
+    val once = io.tima.core.ui.rememberOnePress()
     ProvidePlace(TextPlace.MENU) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
@@ -115,7 +118,7 @@ fun ManyChoiceSheet(
         ) {
             ProvidePlace(TextPlace.HEADERS) { Name(title) }
             head?.let { h ->
-                Column(Modifier.fillMaxWidth().clickable(onClick = onHead).padding(vertical = 8.dp).testTag("chat:many.head")) {
+                Column(Modifier.fillMaxWidth().clickable { once.press(onHead) }.padding(vertical = 8.dp).testTag("chat:many.head")) {
                     Caption(h.title, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
                     if (h.about.isNotBlank()) Tertiary(h.about, lineOne = true)
                 }
@@ -148,7 +151,7 @@ fun ManyChoiceSheet(
                         // Без «Списком» — не больше [max]: лишние отметки снимаются с конца.
                         while (!list && chosen.size > max) chosen.removeAt(chosen.lastIndex)
                     }, modifier = Modifier.testTag("chat:many.list"))
-                    Chip(insert, kind = ChipKind.Selected, onClick = { if (chosen.isNotEmpty()) onPick(chosen.toList(), list) },
+                    Chip(insert, kind = ChipKind.Selected, onClick = { if (chosen.isNotEmpty()) once.press { onPick(chosen.toList(), list) } },
                         modifier = Modifier.testTag("chat:many.ok"))
                 }
                 Tertiary(picked(chosen.size, limit), lineOne = true)

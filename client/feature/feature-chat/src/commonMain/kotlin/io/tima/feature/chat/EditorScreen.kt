@@ -641,13 +641,15 @@ private fun HeaderToggle(glyph: String, on: Boolean, tag: String, onClick: () ->
 @Composable
 private fun SendButton(ready: Boolean, broken: Boolean, onClick: () -> Unit) {
     val colors = Tima.colors
+    // Один раз: второе нажатие до закрытия окна отправило бы то же сообщение ещё раз (заказчик 2026-10-24).
+    val once = io.tima.core.ui.rememberOnePress()
     val fill = when {
         broken -> colors.alarm
         ready -> colors.navigation
         else -> colors.functional
     }
     Box(
-        Modifier.size(40.dp).background(fill, CircleShape).clickable(enabled = ready && !broken, onClick = onClick).testTag(EditorTags.SEND),
+        Modifier.size(40.dp).background(fill, CircleShape).clickable(enabled = ready && !broken) { once.press(onClick) }.testTag(EditorTags.SEND),
         contentAlignment = Alignment.Center,
     ) {
         Caption("➤", fontSize = 18.sp, weight = FontWeight.Bold, color = if (ready || broken) colors.onAccent else colors.text3)
