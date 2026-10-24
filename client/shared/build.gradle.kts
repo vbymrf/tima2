@@ -84,6 +84,8 @@ kotlin {
             implementation(libs.sqldelight.driver.jvm)
             // Поддельный сервер для проверки обновления токена (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А1/А2).
             implementation(libs.ktor.client.mock)
+            // Снимки экранов для «Частых вопросов» (заказчик 2026-10-24, 2а#).
+            implementation(projects.test.testUi)
         }
     }
 }

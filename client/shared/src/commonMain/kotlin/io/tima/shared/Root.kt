@@ -6374,6 +6374,8 @@ private fun Settings(
 ) {
     // Название темы считается в составе, а не в лямбде списка: лямбда не composable.
     val themeName = Tima.words.appearance.theme(appearance.choice)
+    // Где человек в «Частых вопросах» — живёт, пока открыты настройки.
+    val help = remember { HelpNav() }
     val fleet = remember {
         DevicesStore(
             network.myFleet, scope, trust = deviceTrust, onIdentityRestored = onIdentityRestored,
@@ -6405,6 +6407,8 @@ private fun Settings(
             when {
                 opened == null -> onBack()
                 opened == SettingsItem.APPEARANCE && appearance.colors.merged().isNotEmpty() -> Unit
+                // «Частые вопросы»: «назад» сначала шагает внутри — со страницы к списку, из раздела к разделам.
+                opened == SettingsItem.QUESTIONS && help.back() -> Unit
                 else -> onOpen(null)
             }
         },
@@ -6607,6 +6611,9 @@ private fun Settings(
 
             // Предложение — та же отправка с очередью, но без журнала (заказчик 2026-10-07).
             SettingsItem.SUGGEST -> Suggest(problemFacts, reporting, scope, platform)
+
+            // «Частые вопросы» (заказчик 2026-10-24): разделы, вкладки, страницы нашим же markdown.
+            SettingsItem.QUESTIONS -> Questions(help)
 
             SettingsItem.STORAGE -> Storage(diaryPolicy, callsLog, callsState, deviceSettings, mediaFolder, postman)
 
