@@ -599,6 +599,8 @@ private fun Feed(
                     if (jumps != null && line.serverId > 0) jumps.from = line.serverId
                     openOuter(kind, chat, number)
                 },
+                // Где стоит звук: к этому сообщению ведёт полоса «сейчас играет» (2026-10-24).
+                LocalMessagePlace provides line.serverId.takeIf { it > 0 }?.let { MessagePlace(line.chatId, it) },
             ) {
             Reply(
                 line = line,

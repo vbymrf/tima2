@@ -189,6 +189,7 @@ internal fun MarksWidget(marks: RichBlock.Marks) {
     val actions = LocalMediaActions.current
     val blocks = LocalRichBlocks.current
     val target = blocks.mediaBy(marks.bind)
+    val from = LocalMessagePlace.current
     val nowFlow = actions.audio?.now ?: remember { MutableStateFlow<AudioNow?>(null) }
     val now by nowFlow.collectAsState()
     val playingHere = target is RichBlock.Audio && now?.url == target.url
@@ -209,7 +210,7 @@ internal fun MarksWidget(marks: RichBlock.Marks) {
                     modifier = Modifier.clickable(enabled = target != null) {
                         when (target) {
                             is RichBlock.Video -> play?.invoke(PlayRequest(target.url, target.description, m.atMs, marks.marks))
-                            is RichBlock.Audio -> actions.audio?.playAt(target.item(), blocks.audios().map { it.item() }, m.atMs)
+                            is RichBlock.Audio -> actions.audio?.playAt(target.item(from), blocks.audios().map { it.item(from) }, m.atMs)
                             else -> Unit
                         }
                     }.testTag(MediaTags.mark(i)),
@@ -232,8 +233,14 @@ internal fun RichBlock.hiddenOnly(): Boolean = when (this) {
 /** Номер текущей метки на [positionMs]; до первой — -1. */
 internal fun currentMark(marks: List<MediaMark>, positionMs: Long): Int = marks.indexOfLast { it.atMs <= positionMs }
 
-internal fun RichBlock.Audio.item() = AudioItem(url, description, durationMs, live = false)
-internal fun RichBlock.Stream.item() = AudioItem(url, description, 0, live = true)
+internal fun RichBlock.Audio.item(from: MessagePlace? = null) = AudioItem(url, description, durationMs, live = false, from = from)
+internal fun RichBlock.Stream.item(from: MessagePlace? = null) = AudioItem(url, description, 0, live = true, from = from)
+
+/** Сообщение, где стоит виджет: переписка и номер — к нему ведёт полоса «сейчас играет». */
+data class MessagePlace(val chatId: String, val messageId: Long)
+
+/** Сообщение, которое сейчас рисуется в ленте; вне ленты (редактор, окно одного сообщения) — `null`. */
+internal val LocalMessagePlace = staticCompositionLocalOf<MessagePlace?> { null }
 
 /**
  * Виджет «Аудио» (§3.7, Р38): ▶, описание и длительность, под ними полоса — нажатие и перетаскивание
@@ -249,13 +256,14 @@ internal fun AudioWidget(audio: RichBlock.Audio) {
     val mine = now?.takeIf { it.url == audio.url }
     val duration = mine?.durationMs?.takeIf { it > 0 } ?: audio.durationMs
     val marks = blocks.marksOf(audio.description)
+    val from = LocalMessagePlace.current
     Row(
         Modifier.fillMaxWidth().background(colors.functional, RoundedCornerShape(18.dp)).padding(8.dp).testTag(MediaTags.AUDIO),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PlayCircle(mine?.playing == true, enabled = hub != null && mine?.failed != true, tag = MediaTags.AUDIO_PLAY) {
-            hub?.toggle(audio.item(), blocks.audios().map { it.item() })
+            hub?.toggle(audio.item(from), blocks.audios().map { it.item(from) })
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -272,7 +280,7 @@ internal fun AudioWidget(audio: RichBlock.Audio) {
             }
             val progress = if (mine != null && duration > 0) mine.positionMs.toFloat() / duration else 0f
             SeekBar(progress, Modifier.fillMaxWidth().height(20.dp), marks = if (duration > 0) marks.map { it.atMs.toFloat() / duration } else emptyList()) { f ->
-                hub?.seek(audio.item(), blocks.audios().map { it.item() }, f)
+                hub?.seek(audio.item(from), blocks.audios().map { it.item(from) }, f)
             }
             if (mine != null && mine.playing && hub != null) {
                 Chip(speedName(mine.speed), kind = ChipKind.Quiet, onClick = { hub.cycleSpeed() })
@@ -293,12 +301,13 @@ internal fun StreamWidget(stream: RichBlock.Stream) {
     val nowFlow = hub?.now ?: remember { MutableStateFlow<AudioNow?>(null) }
     val now by nowFlow.collectAsState()
     val mine = now?.takeIf { it.url == stream.url }
+    val from = LocalMessagePlace.current
     Row(
         Modifier.fillMaxWidth().background(colors.functional, RoundedCornerShape(18.dp)).padding(8.dp).testTag(MediaTags.STREAM),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PlayCircle(mine?.playing == true, enabled = hub != null, tag = "msg:stream.play") { hub?.toggle(stream.item(), emptyList()) }
+        PlayCircle(mine?.playing == true, enabled = hub != null, tag = "msg:stream.play") { hub?.toggle(stream.item(from), emptyList()) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Caption(stream.description.ifBlank { MediaLinks.hostOf(stream.url).orEmpty() }, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true, modifier = Modifier.weight(1f))
@@ -357,7 +366,8 @@ internal fun speedName(speed: Float) = when (speed) {
 
 /**
  * Полоса «сейчас играет» (ПЛАН-(ВМ) Р22): «Аудио» или «Поток» играет — над любым окном приложения,
- * и в переписке, и на списке чатов: ▶/⏸, описание, ✕ — остановить. Крупно, по «Шапкам» «Шрифтов и
+ * и в переписке, и на списке чатов: ▶/⏸, описание, ✕ — остановить; нажатие на полосу — к сообщению, где
+ * запущено. Крупно, по «Шапкам» «Шрифтов и
  * размеров» (заказчик 2026-10-24): описание — главной строкой шапки, ▶ и ✕ — кругами, как в окне видео.
  */
 @Composable
@@ -369,13 +379,18 @@ fun NowPlayingBar(hub: AudioHub?) {
     ProvidePlace(TextPlace.HEADERS) {
     Row(
         // Над окном, под строкой состояния телефона.
-        Modifier.fillMaxWidth().background(colors.softAccent).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).testTag("media:now"),
+        // Нажатие на полосу — к сообщению, где запущено (заказчик 2026-10-24); ▶ и ✕ — свои.
+        Modifier.fillMaxWidth().background(colors.softAccent).statusBarsPadding()
+            .then(
+                hub.current?.from?.let { place -> hub.onOpenPlace?.let { open -> Modifier.clickable { open(place) } } } ?: Modifier,
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp).testTag("media:now"),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             Modifier.size(40.dp).background(colors.navigation, CircleShape)
-                .clickable { hub.toggle(AudioItem(n.url, hub.description, n.durationMs, n.live), hub.queueNow) },
+                .clickable { hub.toggle(hub.current ?: AudioItem(n.url, hub.description, n.durationMs, n.live), hub.queueNow) },
             contentAlignment = Alignment.Center,
         ) { Caption(if (n.playing) "❚❚" else "▶", fontSize = TimaType.sz3, color = colors.onAccent) }
         Caption(hub.description.ifBlank { MediaLinks.fileName(n.url) }, fontSize = TimaType.sz3, weight = FontWeight.Bold, lineOne = true, modifier = Modifier.weight(1f))
@@ -389,8 +404,8 @@ fun NowPlayingBar(hub: AudioHub?) {
     }
 }
 
-/** Звук по ссылке — что играть: адрес, описание, длительность, эфир ли. */
-data class AudioItem(val url: String, val description: String, val durationMs: Long, val live: Boolean)
+/** Звук по ссылке — что играть: адрес, описание, длительность, эфир ли и из какого сообщения запущен. */
+data class AudioItem(val url: String, val description: String, val durationMs: Long, val live: Boolean, val from: MessagePlace? = null)
 
 /** Что играет из «Аудио» и «Потока» сейчас (§3.7, §3.8). */
 data class AudioNow(
@@ -432,6 +447,12 @@ class AudioHub(private val scope: CoroutineScope, private val player: OwnPlayer)
 
     /** Очередь играющего — для ▶ на полосе. */
     val queueNow: List<AudioItem> get() = queue
+
+    /** Играющее — для ▶ на полосе: с ним и сообщение, откуда запущено. */
+    val current: AudioItem? get() = item
+
+    /** Нажали полосу «сейчас играет» — к сообщению, где запущено (заказчик 2026-10-24). Ставит окно. */
+    var onOpenPlace: ((MessagePlace) -> Unit)? = null
     private var watch: Job? = null
     private var listenedFrom: kotlin.time.TimeMark? = null
     private var speed = 1f

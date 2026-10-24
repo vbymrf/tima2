@@ -1237,6 +1237,11 @@ private fun App(
     SideEffect {
         voiceHub.onStart = { audioHubHere?.stop() }
         audioHubHere?.onStart = { voiceHub.stop() }
+        // Нажали полосу «сейчас играет» — переписка, где запущено, и к сообщению (заказчик 2026-10-24).
+        audioHubHere?.onOpenPlace = { place ->
+            Journal.note(LogCode.JUMP, "из «сейчас играет»")
+            where = Where.Chat(place.chatId, null, jumpTo = place.messageId)
+        }
     }
     SideEffect {
         pictureSource?.media = network.media
