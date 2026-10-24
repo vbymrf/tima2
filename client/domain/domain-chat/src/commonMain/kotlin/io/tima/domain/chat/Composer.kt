@@ -218,8 +218,11 @@ sealed interface ComposedWidget {
     /** Прямой эфир m3u8, только звук (§3.8). */
     data class Stream(val url: String, val description: String) : ComposedWidget
 
-    /** Метки к видео или аудио этого сообщения по его описанию [bind] (§3.6, Р10). */
-    data class Marks(val bind: String, val marks: List<MediaMark>) : ComposedWidget
+    /**
+     * Метки к видео или аудио этого сообщения по его описанию [bind] (§3.6, Р10). [hidden] — «Не показывать
+     * в сообщении» (заказчик 2026-10-24): метки только в проигрывателе, ни в сообщении, ни в редакторе.
+     */
+    data class Marks(val bind: String, val marks: List<MediaMark>, val hidden: Boolean = false) : ComposedWidget
 }
 
 /** Метка видео или аудио (ПЛАН-(ВМ) §3.6): с какой мс и что там. */

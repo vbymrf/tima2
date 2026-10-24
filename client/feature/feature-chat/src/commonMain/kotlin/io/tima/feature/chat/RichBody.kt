@@ -53,6 +53,8 @@ fun RichBody(content: RichContent, modifier: Modifier = Modifier) {
     androidx.compose.runtime.CompositionLocalProvider(LocalRichMedia provides content.media, LocalRichBlocks provides content.blocks) {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             for ((i, block) in content.blocks.withIndex()) {
+                // Метки «Не показывать в сообщении» — без места и без зазора (заказчик 2026-10-24).
+                if (block.hiddenOnly()) continue
                 if (block is RichBlock.Underlay && LocalRefDepth.current == 0) {
                     // Подкладка — как ещё одно сообщение внутри пузыря (заказчик 2026-10-20): во всю его
                     // ширину; соседние подкладки разделены тонкой линией цвета рамки.

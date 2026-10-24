@@ -142,7 +142,7 @@ internal object RichMapper {
             BlockType.VIDEO -> w.takeIf { it.url.isNotBlank() }?.let { RichBlock.Video(it.url, it.description, it.title, it.showTitle, it.look.ifEmpty { "picture" }, it.media) }
             BlockType.AUDIO -> w.takeIf { it.url.isNotBlank() }?.let { RichBlock.Audio(it.url, it.description, it.durationMs) }
             BlockType.STREAM -> w.takeIf { it.url.isNotBlank() }?.let { RichBlock.Stream(it.url, it.description) }
-            BlockType.MARKS -> w.takeIf { it.marks.isNotEmpty() }?.let { RichBlock.Marks(it.bind, it.marks.map { m -> io.tima.domain.chat.MediaMark(m.at, m.text) }) }
+            BlockType.MARKS -> w.takeIf { it.marks.isNotEmpty() }?.let { RichBlock.Marks(it.bind, it.marks.map { m -> io.tima.domain.chat.MediaMark(m.at, m.text) }, it.hidden) }
             else -> null
         }
     }

@@ -5746,6 +5746,8 @@ private fun Chat(
         // Ссылке выбрали вид «Карточка» в «Свойствах» (ADR-0050 §3) — карточка из сети. Сама кнопка
         // карточкой не становится (заказчик 2026-10-20: «стала Карточкой… с лагом 2 секунды»).
         androidx.compose.runtime.SideEffect {
+            // «Свойства» видео, аудио или меток → «Редактировать метки» (заказчик 2026-10-24): нет меток — одна пустая строка.
+            editorModel.onEditMarks = { bind -> editorMarks = bind to 1 }
             editorModel.onLink = { url ->
                 scope.launch {
                     val card = linkCards.card(url) ?: return@launch
@@ -5908,6 +5910,11 @@ private fun Chat(
                     // Метки к этому видео уже есть — правятся на месте; к одному видео одни (Р11).
                     val swapped = io.tima.domain.chat.ComposedMedia.replace(editorModel.doc, { it is io.tima.domain.chat.ComposedWidget.Marks && it.bind == marks.bind }, marks)
                     if (swapped != null) editorModel.layout { _, s -> swapped to s } else put(marks)
+                },
+                // «Удалить» — метки к этому видео убираются; их не было — ничего (заказчик 2026-10-24).
+                onDelete = { b ->
+                    val left = io.tima.domain.chat.ComposedMedia.removeMarks(editorModel.doc, b)
+                    if (left != editorModel.doc) editorModel.layout { _, s -> left to (if (s.item < left.items.size) s else io.tima.domain.chat.Spot((left.items.size - 1).coerceAtLeast(0))) }
                 },
                 onClose = { editorMarks = null },
             )

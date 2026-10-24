@@ -270,4 +270,14 @@ class ComposedBodiesTest {
         assertEquals(300L, image.size)
         assertNull(bodies.load("не json"))
     }
+
+    @Test
+    fun метки_не_показывать_в_сообщении_доходят_до_получателя() {
+        val marks = ComposedWidget.Marks("Клип", listOf(io.tima.domain.chat.MediaMark(5_000, "начало")), hidden = true)
+        val doc = ComposedDoc(listOf(ComposedItem.Widget(ComposedWidget.Video("https://x.ru/a.mp4", "Клип")), ComposedItem.Widget(marks)))
+        val rich = TextBodyCodec.decodeLine(assertNotNull(bodies.encode(doc)))!!.rich!!
+        fun all(blocks: List<RichBlock>): List<RichBlock> = blocks.flatMap { if (it is RichBlock.Row) all(it.cells.flatMap { c -> c.blocks + c.widgets }) else listOf(it) }
+        assertTrue(all(rich.blocks).filterIsInstance<RichBlock.Marks>().single().hidden)
+        assertEquals(marks, assertIs<ComposedItem.Widget>(bodies.load(bodies.save(doc))!!.items[1]).widget, "черновик")
+    }
 }

@@ -64,6 +64,20 @@ object ComposedMedia {
         return if (done) doc.copy(items = items) else null
     }
 
+    /** Убрать метки к [bind] — «Удалить» в окне меток (заказчик 2026-10-24); их нет — документ тот же. */
+    fun removeMarks(doc: ComposedDoc, bind: String): ComposedDoc {
+        fun keep(w: ComposedWidget) = !(w is ComposedWidget.Marks && w.bind == bind)
+        val items = doc.items.mapNotNull { item ->
+            when (item) {
+                is ComposedItem.Widget -> item.takeIf { keep(it.widget) }
+                is ComposedItem.Row -> item.copy(cells = item.cells.map { c -> c.copy(widgets = c.widgets.filter(::keep)) })
+                is ComposedItem.ItemList -> item.copy(items = item.items.map { p -> p.copy(widgets = p.widgets.filter(::keep)) })
+                else -> item
+            }
+        }
+        return if (items == doc.items) doc else doc.copy(items = items)
+    }
+
     /** Убрать метки, чьего видео или аудио в документе нет (Р9), и метки по порядку времени. */
     fun prune(doc: ComposedDoc): ComposedDoc {
         val targets = bindable(doc).toSet()

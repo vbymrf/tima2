@@ -260,9 +260,12 @@ private fun LinkWidget(link: RichBlock.Link) {
     }
 }
 
-/** Полоса у ссылки «Текстом» — всегда синяя, какого бы цвета ни была сама ссылка (заказчик 2026-10-21). */
+/**
+ * Полоса у ссылки «Текстом» — всегда синяя, какого бы цвета ни была сама ссылка (заказчик 2026-10-21); такая
+ * же — у меток (заказчик 2026-10-24).
+ */
 @Composable
-private fun linkStripe(): androidx.compose.ui.graphics.Color = paletteColor("blue") ?: Tima.colors.link
+internal fun linkStripe(): androidx.compose.ui.graphics.Color = paletteColor("blue") ?: Tima.colors.link
 
 /** В ячейке ряда (не во всю ширину пузыря) — полосе на рамке пузыря там не место. */
 internal val LocalInCell = staticCompositionLocalOf { false }
@@ -272,7 +275,7 @@ internal val LocalInCell = staticCompositionLocalOf { false }
  * того, что рядом с ней. Вне пузыря и в ячейке ряда — у правого края самого места.
  */
 @Composable
-private fun Modifier.edgeStripe(color: androidx.compose.ui.graphics.Color): Modifier {
+internal fun Modifier.edgeStripe(color: androidx.compose.ui.graphics.Color): Modifier {
     val inset = io.tima.core.ui.LocalBubbleInset.current
     val out = if (LocalInCell.current) 0.dp else inset.end
     return this.drawBehind {

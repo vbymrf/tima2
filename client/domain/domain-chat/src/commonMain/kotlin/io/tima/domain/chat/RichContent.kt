@@ -170,8 +170,8 @@ sealed interface RichBlock {
     /** Прямой эфир, только звук (§3.8). */
     data class Stream(val url: String, val description: String) : RichBlock
 
-    /** Метки к видео или аудио этого сообщения по описанию [bind] (§3.6). */
-    data class Marks(val bind: String, val marks: List<MediaMark>) : RichBlock
+    /** Метки к видео или аудио этого сообщения по описанию [bind] (§3.6); [hidden] — только в проигрывателе. */
+    data class Marks(val bind: String, val marks: List<MediaMark>, val hidden: Boolean = false) : RichBlock
 
     /** Подкладка в конце: [lines] строк исходного и «Продолжить чтение». */
     data class Underlay(

@@ -107,6 +107,30 @@ fun markTime(ms: Long): String {
     return if (h > 0) "$h:${m.toString().padStart(2, '0')}:$sec" else "$m:$sec"
 }
 
+/**
+ * Время метки из трёх полей — час, минута, секунда (заказчик 2026-10-24): заполнено любое — пустые
+ * считаются нулём, ведущие нули не мешают («00», «0» — ноль); минуты и секунды сверх 59 переходят в
+ * старшие. Ни одно не заполнено или не цифры — `null`.
+ */
+fun markTimeOf(hours: String, minutes: String, seconds: String): Long? {
+    val parts = listOf(hours, minutes, seconds).map { it.trim() }
+    if (parts.all { it.isEmpty() } || parts.any { p -> p.any { !it.isDigit() } || p.length > 6 }) return null
+    val (h, m, s) = parts.map { it.ifEmpty { "0" }.toLong() }
+    return (h * 3600 + m * 60 + s) * 1000
+}
+
+/**
+ * Время метки — в три поля (час, минута, секунда): старшие нули пустые, их показывает серая подсказка;
+ * секунда — всегда числом, чтобы метка на нуле не стала «ни одно не заполнено».
+ */
+fun markParts(ms: Long): Triple<String, String, String> {
+    val total = (ms / 1000).coerceAtLeast(0)
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    val s = total % 60
+    return Triple(if (h > 0) "$h" else "", if (h > 0 || m > 0) "$m" else "", "$s")
+}
+
 /** Время метки из строки `м:сс` или `ч:мм:сс`; не время — `null`. */
 fun parseMarkTime(text: String): Long? {
     val parts = text.trim().split(':')

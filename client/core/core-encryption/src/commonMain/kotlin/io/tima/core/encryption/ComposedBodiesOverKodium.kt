@@ -272,7 +272,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
             is ComposedWidget.Stream -> MarkupBlock(type = BlockType.STREAM, widget = MarkupWidget(url = w.url, description = w.description))
             is ComposedWidget.Marks -> MarkupBlock(
                 type = BlockType.MARKS,
-                widget = MarkupWidget(bind = w.bind, marks = w.marks.map { MarkupMark(at = it.atMs, text = it.text) }),
+                widget = MarkupWidget(bind = w.bind, marks = w.marks.map { MarkupMark(at = it.atMs, text = it.text) }, hidden = w.hidden),
             )
         }
 
@@ -435,6 +435,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
         val showTitle: Boolean = false,
         val durationMs: Long = 0,
         val marks: List<SavedMark> = emptyList(),
+        val hidden: Boolean = false,
     ) {
         private fun media(): OutMedia? = if (mediaId.isEmpty()) null else
             OutMedia(mediaId, Base64.decode(key), mime, width, height, size, name)
@@ -452,7 +453,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
             "video" -> ComposedWidget.Video(url, description, look.ifEmpty { "picture" }, showTitle, title, media())
             "audio" -> ComposedWidget.Audio(url, description, durationMs)
             "stream" -> ComposedWidget.Stream(url, description)
-            "marks" -> ComposedWidget.Marks(text, marks.map { io.tima.domain.chat.MediaMark(it.at, it.text) })
+            "marks" -> ComposedWidget.Marks(text, marks.map { io.tima.domain.chat.MediaMark(it.at, it.text) }, hidden)
             else -> null
         }
 
@@ -490,7 +491,7 @@ object ComposedBodiesOverKodium : ComposedBodies {
                 )
                 is ComposedWidget.Audio -> SavedWidget("audio", url = w.url, description = w.description, durationMs = w.durationMs)
                 is ComposedWidget.Stream -> SavedWidget("stream", url = w.url, description = w.description)
-                is ComposedWidget.Marks -> SavedWidget("marks", text = w.bind, marks = w.marks.map { SavedMark(it.atMs, it.text) })
+                is ComposedWidget.Marks -> SavedWidget("marks", text = w.bind, marks = w.marks.map { SavedMark(it.atMs, it.text) }, hidden = w.hidden)
             }
         }
     }

@@ -76,6 +76,12 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
      */
     var onLink: ((String) -> Unit)? = null
 
+    /**
+     * «Свойства» видео, аудио или меток → «Редактировать метки» (заказчик 2026-10-24): окно меток к описанию
+     * — и скрытых «Не показывать в сообщении», которых в редакторе не видно.
+     */
+    var onEditMarks: ((String) -> Unit)? = null
+
     var snapshot by mutableStateOf(history.current)
         private set
 

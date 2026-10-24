@@ -176,10 +176,12 @@ internal fun VideoWidget(video: RichBlock.Video) {
 /**
  * Виджет «Метки» (§3.6): заглавие — описание видео, заголовком 3; время — цветом ссылок, нажатие —
  * окно с этой секунды (видео) или проигрывание с неё прямо в сообщении (аудио). У играющего аудио
- * текущая метка подсвечена.
+ * текущая метка подсвечена. Справа синяя полоса, как у ссылки «Текстом» (заказчик 2026-10-24).
+ * «Не показывать в сообщении» — не рисуется вовсе: метки только в проигрывателе.
  */
 @Composable
 internal fun MarksWidget(marks: RichBlock.Marks) {
+    if (marks.hidden) return
     val colors = Tima.colors
     val play = LocalPlay.current
     val actions = LocalMediaActions.current
@@ -189,7 +191,7 @@ internal fun MarksWidget(marks: RichBlock.Marks) {
     val now by nowFlow.collectAsState()
     val playingHere = target is RichBlock.Audio && now?.url == target.url
     val current = if (playingHere) currentMark(marks.marks, now!!.positionMs) else -1
-    Column(Modifier.fillMaxWidth().testTag(MediaTags.MARKS), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.fillMaxWidth().edgeStripe(linkStripe()).testTag(MediaTags.MARKS), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (marks.bind.isNotBlank()) Caption(marks.bind, fontSize = TimaType.heading3, weight = FontWeight.ExtraBold)
         for ((i, m) in marks.marks.withIndex()) {
             Row(
@@ -214,6 +216,15 @@ internal fun MarksWidget(marks: RichBlock.Marks) {
             }
         }
     }
+}
+
+/** Блок, в котором видно только метки «Не показывать в сообщении», — в пузыре ему нет места. */
+internal fun RichBlock.hiddenOnly(): Boolean = when (this) {
+    is RichBlock.Marks -> hidden
+    is RichBlock.Row -> cells.isNotEmpty() && cells.all { c ->
+        c.text?.text.isNullOrEmpty() && (c.blocks + c.widgets).let { inside -> inside.isNotEmpty() && inside.all { it.hiddenOnly() } }
+    }
+    else -> false
 }
 
 /** Номер текущей метки на [positionMs]; до первой — -1. */

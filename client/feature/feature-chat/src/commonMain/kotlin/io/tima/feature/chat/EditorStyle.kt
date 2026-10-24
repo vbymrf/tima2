@@ -275,8 +275,28 @@ private fun WidgetOptions(model: EditorModel, spot: Spot) {
         is ComposedWidget.Underlay -> RefOptions("underlay", widget.author, widget.lines, widget.more, widget.moreText, widget.tap) { au, li, mo, mt, ta ->
             put(widget.copy(author = au, lines = li, more = mo, moreText = mt, tap = ta))
         }
+        // Метки — правятся окном меток; их не видно в сообщении — не видно и здесь, потому пункт и у видео,
+        // и у аудио (заказчик 2026-10-24). Нет меток — то же окно их создаёт.
+        is ComposedWidget.Video -> EditMarks(model, widget.description)
+        is ComposedWidget.Audio -> EditMarks(model, widget.description)
+        is ComposedWidget.Marks -> androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            EditMarks(model, widget.bind)
+            Chip(w.marksHidden, kind = if (widget.hidden) ChipKind.Selected else ChipKind.Quiet,
+                onClick = { put(widget.copy(hidden = !widget.hidden)) }, modifier = Modifier.testTag("editor:style.marks.hidden"))
+        }
         else -> Tertiary(w.selected("widget"))
     }
+}
+
+/** «Редактировать метки» к видео или аудио с описанием [bind]; без описания меток не бывает (Р10). */
+@Composable
+private fun EditMarks(model: EditorModel, bind: String) {
+    val w = Tima.words.editor
+    if (bind.isBlank()) {
+        Tertiary(w.marksNoTarget)
+        return
+    }
+    Chip(w.marksEdit, kind = ChipKind.Quiet, onClick = { model.onEditMarks?.invoke(bind) }, modifier = Modifier.testTag("editor:style.marks.edit"))
 }
 
 /**

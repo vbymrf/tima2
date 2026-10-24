@@ -188,6 +188,9 @@ internal fun EditorWidget(
     drag: EditorDrag,
     preview: (ComposedDoc) -> RichContent?,
 ) {
+    // «Не показывать в сообщении» — и в редакторе нет (заказчик 2026-10-24): правятся через «Свойства» видео
+    // или аудио → «Редактировать метки».
+    if (widget is ComposedWidget.Marks && widget.hidden) return
     val colors = Tima.colors
     var corner by remember { mutableStateOf(Offset.Zero) }
     val onDrop: (Spot, Drop) -> Unit = { from, to -> model.drop(from, to) }

@@ -132,6 +132,29 @@ interface EditorWords {
     val marksAtNow: String
     val marksBadTime: String
     val marksMax: String
+
+    /** Поля времени метки — час, минута, секунда (заказчик 2026-10-24). */
+    val markHour: String
+    val markMinute: String
+    val markSecond: String
+
+    /** Метки «Не показывать в сообщении» — только в проигрывателе (заказчик 2026-10-24). */
+    val marksHidden: String
+
+    /** «Свойства» видео, аудио и меток → окно меток. */
+    val marksEdit: String
+
+    /** «Удалить» в окне меток — убрать метки к видео. */
+    val marksDelete: String
+
+    /** «Готово» в окне без единой метки. */
+    val marksNeed: String
+
+    /**
+     * Что по ссылке в форме «Видео», «Аудио», «Поток» — после ухода с поля (заказчик 2026-10-24). [key] —
+     * `youtube`, `rutube`, `vk`, `video`, `audio`, `stream`; [ext] — окончание файла.
+     */
+    fun linkPlays(key: String, ext: String): String
     fun listFound(n: Int): String
     fun skipped(n: Int): String
     fun duration(time: String): String
@@ -363,8 +386,23 @@ object RussianEditorWords : EditorWords {
     override val marksText = "Текст метки"
     override val marksAdd = "+Метка"
     override val marksAtNow = "Метка на текущей секунде"
-    override val marksBadTime = "Время — м:сс или ч:мм:сс"
+    override val marksBadTime = "Заполните у метки час, минуту или секунду"
     override val marksMax = "Меток — до 30"
+    override val markHour = "Час"
+    override val markMinute = "Мин"
+    override val markSecond = "Сек"
+    override val marksHidden = "Не показывать в сообщении"
+    override val marksEdit = "Редактировать метки"
+    override val marksDelete = "Удалить"
+    override val marksNeed = "Добавьте метки"
+    override fun linkPlays(key: String, ext: String) = "По ссылке — " + when (key) {
+        "youtube" -> "видео YouTube"
+        "rutube" -> "видео Rutube"
+        "vk" -> "видео VK"
+        "video" -> "видеофайл ${ext.uppercase()}"
+        "audio" -> "звуковой файл ${ext.uppercase()}"
+        else -> "поток m3u8"
+    }
     override fun listFound(n: Int) = "Ссылок в списке: $n — вставить все"
     override fun skipped(n: Int) = "Пропущено: $n"
     override fun duration(time: String) = "Длительность $time"
@@ -593,8 +631,23 @@ object EnglishEditorWords : EditorWords {
     override val marksText = "Mark text"
     override val marksAdd = "+Mark"
     override val marksAtNow = "Mark at current second"
-    override val marksBadTime = "Time is m:ss or h:mm:ss"
+    override val marksBadTime = "Fill in the hour, minute or second of the mark"
     override val marksMax = "Up to 30 marks"
+    override val markHour = "Hour"
+    override val markMinute = "Min"
+    override val markSecond = "Sec"
+    override val marksHidden = "Don't show in the message"
+    override val marksEdit = "Edit marks"
+    override val marksDelete = "Delete"
+    override val marksNeed = "Add marks"
+    override fun linkPlays(key: String, ext: String) = "The link is " + when (key) {
+        "youtube" -> "a YouTube video"
+        "rutube" -> "a Rutube video"
+        "vk" -> "a VK video"
+        "video" -> "a ${ext.uppercase()} video file"
+        "audio" -> "a ${ext.uppercase()} audio file"
+        else -> "an m3u8 stream"
+    }
     override fun listFound(n: Int) = "Links in the list: $n — insert all"
     override fun skipped(n: Int) = "Skipped: $n"
     override fun duration(time: String) = "Duration $time"
@@ -819,8 +872,23 @@ object SpanishEditorWords : EditorWords {
     override val marksText = "Texto de la marca"
     override val marksAdd = "+Marca"
     override val marksAtNow = "Marca en el segundo actual"
-    override val marksBadTime = "El tiempo es m:ss o h:mm:ss"
+    override val marksBadTime = "Rellena la hora, el minuto o el segundo de la marca"
     override val marksMax = "Hasta 30 marcas"
+    override val markHour = "Hora"
+    override val markMinute = "Min"
+    override val markSecond = "Seg"
+    override val marksHidden = "No mostrar en el mensaje"
+    override val marksEdit = "Editar marcas"
+    override val marksDelete = "Eliminar"
+    override val marksNeed = "Añade marcas"
+    override fun linkPlays(key: String, ext: String) = "El enlace es " + when (key) {
+        "youtube" -> "un vídeo de YouTube"
+        "rutube" -> "un vídeo de Rutube"
+        "vk" -> "un vídeo de VK"
+        "video" -> "un archivo de vídeo ${ext.uppercase()}"
+        "audio" -> "un archivo de audio ${ext.uppercase()}"
+        else -> "una emisión m3u8"
+    }
     override fun listFound(n: Int) = "Enlaces en la lista: $n — insertar todos"
     override fun skipped(n: Int) = "Omitidos: $n"
     override fun duration(time: String) = "Duración $time"

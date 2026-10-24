@@ -11,7 +11,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -48,8 +53,8 @@ import io.tima.domain.chat.ComposedWidget
 import io.tima.domain.chat.MediaLinks
 import io.tima.domain.chat.MediaMark
 import io.tima.domain.chat.OutMedia
-import io.tima.domain.chat.markTime
-import io.tima.domain.chat.parseMarkTime
+import io.tima.domain.chat.markParts
+import io.tima.domain.chat.markTimeOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -79,6 +84,26 @@ fun cloudMediaWidget(url: String, title: String, kind: String?, doc: ComposedDoc
     }
 }
 
+/**
+ * Что по ссылке — словами, после ухода с поля (заказчик 2026-10-24): видео сайта, видео- или звуковой файл,
+ * поток; не играет, а по окончанию файл — вид файла («По ссылке — файл: Картинка»). Страница — `null`: о ней
+ * говорит подсказка «не является видео».
+ */
+private fun linkKindText(url: String, ew: io.tima.core.words.EditorWords, cw: io.tima.core.words.ChatWords): String? {
+    val ext = io.tima.domain.chat.FileKinds.extOf(io.tima.domain.chat.FileKinds.nameOf(url))
+    return when (MediaLinks.kindOf(url)) {
+        MediaLinks.Kind.YOUTUBE -> ew.linkPlays("youtube", ext)
+        MediaLinks.Kind.RUTUBE -> ew.linkPlays("rutube", ext)
+        MediaLinks.Kind.VK_VIDEO -> ew.linkPlays("vk", ext)
+        MediaLinks.Kind.VIDEO_FILE -> ew.linkPlays("video", ext)
+        MediaLinks.Kind.AUDIO_FILE -> ew.linkPlays("audio", ext)
+        MediaLinks.Kind.STREAM -> ew.linkPlays("stream", ext)
+        null -> if (io.tima.domain.chat.FileKinds.isFile(url, null)) {
+            cw.linkFileIs(cw.fileKindName(io.tima.domain.chat.FileKinds.ofName(io.tima.domain.chat.FileKinds.nameOf(url)).key))
+        } else null
+    }
+}
+
 /** Что форме вставки нужно от ведущего редактор: сеть и загрузка картинки. */
 class MediaAskPorts(
     /** m3u8: видео, запись или эфир и длительность записи; не узнали — `null`. */
@@ -94,8 +119,15 @@ object MediaAskTags {
     const val OK = "media.ask.ok"
     const val MARK_AT_NOW = "media.ask.mark.now"
     const val NOT_VIDEO = "media.ask.notvideo"
-    fun markTime(i: Int) = "media.ask.mark.$i.time"
+    const val DELETE = "media.ask.delete"
+    const val HIDDEN = "media.ask.hidden"
+    /** Что по ссылке — после ухода с поля (заказчик 2026-10-24). */
+    const val LINK_KIND = "media.ask.kind"
+    fun markHour(i: Int) = "media.ask.mark.$i.hour"
+    fun markMinute(i: Int) = "media.ask.mark.$i.minute"
+    fun markSecond(i: Int) = "media.ask.mark.$i.second"
     fun markText(i: Int) = "media.ask.mark.$i.text"
+    fun markDelete(i: Int) = "media.ask.mark.$i.delete"
 }
 
 /**
@@ -113,6 +145,7 @@ fun MediaWidgetAsk(
     onClose: () -> Unit,
 ) {
     val ew = Tima.words.editor
+    val cw = Tima.words.chat
     val scope = rememberCoroutineScope()
     var url by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -123,6 +156,7 @@ fun MediaWidgetAsk(
     var trouble by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var notVideo by remember { mutableStateOf(false) }
+    var linkSays by remember { mutableStateOf<String?>(null) }
     val links = ComposedMedia.splitLinks(url)
     val list = kind != "stream" && links.size > 1
     val left = 30 - ComposedMedia.count(doc)
@@ -237,8 +271,13 @@ fun MediaWidgetAsk(
         Field(
             ew.askUrl, url, MediaAskTags.URL, single = false,
             // Ушли с поля — ссылка, которая в окне TIMA не играет, видна сразу, а не по «Готово» (заказчик 2026-10-23).
-            onLeave = { notVideo = kind == "video" && !list && url.isNotBlank() && !MediaLinks.playsHere(normalized()) },
-        ) { url = it; trouble = null; notVideo = false }
+            onLeave = {
+                notVideo = kind == "video" && !list && url.isNotBlank() && !MediaLinks.playsHere(normalized())
+                linkSays = if (list || url.isBlank()) null else linkKindText(normalized(), ew, cw)
+            },
+        ) { url = it; trouble = null; notVideo = false; linkSays = null }
+        // Что по ссылке — видео, звук, поток, картинка или другой файл (заказчик 2026-10-24).
+        linkSays?.let { Tertiary(it, modifier = Modifier.testTag(MediaAskTags.LINK_KIND)) }
         if (notVideo) Caption(ew.notVideo, fontSize = TimaType.sz5, color = Tima.colors.alarm, modifier = Modifier.testTag(MediaAskTags.NOT_VIDEO))
         if (list) {
             Tertiary(ew.listFound(links.size))
@@ -265,10 +304,22 @@ fun MediaWidgetAsk(
     }
 }
 
+/** Строка окна меток: время тремя полями — час, минута, секунда (заказчик 2026-10-24) — и текст. */
+private data class MarkRow(val h: String = "", val m: String = "", val s: String = "", val text: String = "") {
+    /** Ни одно поле времени не заполнено — строка красная. */
+    val empty get() = h.isBlank() && m.isBlank() && s.isBlank()
+
+    companion object {
+        fun at(ms: Long, text: String = "") = markParts(ms).let { (h, m, s) -> MarkRow(h, m, s, text) }
+    }
+}
+
 /**
- * Метки к видео или аудио этого сообщения (§3.6): строки «время — текст», «+Метка», убрать строку;
- * маленький проигрыватель привязанного и «Метка на текущей секунде». До 30; неверное время — строка
- * красная, сохранить нельзя. При сохранении встают по времени.
+ * Метки к видео или аудио этого сообщения (§3.6): строки «час · мин · сек — текст», «+Метка», убрать
+ * строку — круглый «✕»; маленький проигрыватель привязанного и «Метка на текущей секунде». До 30. Время
+ * — три поля (заказчик 2026-10-24): заполнено любое — пустые нули; ни одно — строка красная, сохранить
+ * нельзя. Окно без единой метки — как без меток: «Готово» просит добавить, «Удалить» убирает метки к
+ * видео. «Не показывать в сообщении» — метки только в проигрывателе. При сохранении встают по времени.
  */
 @Composable
 fun MarksAsk(
@@ -277,6 +328,8 @@ fun MarksAsk(
     count: Int,
     onSave: (ComposedWidget.Marks) -> Unit,
     onClose: () -> Unit,
+    /** «Удалить» — убрать метки к этому видео или аудио. */
+    onDelete: (bind: String) -> Unit = {},
 ) {
     val ew = Tima.words.editor
     val colors = Tima.colors
@@ -285,10 +338,11 @@ fun MarksAsk(
     val existing = chosen?.let { ComposedMedia.marksOf(doc, it) }
     var rows by remember(chosen) {
         mutableStateOf(
-            existing?.marks?.map { markTime(it.atMs) to it.text }
-                ?: List(count.coerceIn(1, 30)) { "" to "" },
+            existing?.marks?.map { MarkRow.at(it.atMs, it.text) }
+                ?: List(count.coerceIn(1, 30)) { MarkRow() },
         )
     }
+    var hidden by remember(chosen) { mutableStateOf(existing?.hidden ?: false) }
     var trouble by remember { mutableStateOf<String?>(null) }
     val target = chosen?.let { ComposedMedia.target(doc, it) }
     val targetUrl = when (target) {
@@ -299,6 +353,10 @@ fun MarksAsk(
     val player = if (targetUrl != null && MediaLinks.playsHere(targetUrl)) rememberOwnPlayer() else null
     LaunchedEffect(player, targetUrl) { if (player != null && targetUrl != null) player.open(targetUrl, play = false) }
     val state = player?.state?.collectAsState()
+    fun change(i: Int, row: MarkRow) {
+        rows = rows.toMutableList().also { it[i] = row }
+        trouble = null
+    }
     SheetFrame(ew.askMarks, onClose) {
         if (targets.isEmpty()) {
             Tertiary(ew.marksNoTarget)
@@ -319,46 +377,72 @@ fun MarksAsk(
                 Chip(if (s.playing) "❚❚" else "▶", kind = ChipKind.Quiet, onClick = { if (s.playing) player.pause() else player.play() })
                 Caption(voiceTime(s.positionMs), fontSize = TimaType.sz4)
                 Chip(ew.marksAtNow, kind = ChipKind.Selected, modifier = Modifier.testTag(MediaAskTags.MARK_AT_NOW), onClick = {
-                    if (rows.size >= 30) trouble = ew.marksMax else rows = rows + (markTime(s.positionMs) to "")
+                    if (rows.size >= 30) trouble = ew.marksMax else rows = rows + MarkRow.at(s.positionMs)
                 })
             }
             if (s.durationMs > 0) SeekBar(s.positionMs.toFloat() / s.durationMs, Modifier.fillMaxWidth().heightIn(min = 20.dp)) { f -> player.seek((s.durationMs * f).toLong()) }
         }
+        // Подписи полей времени — над строками, в самих полях только серый «0».
+        if (rows.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (label in listOf(ew.markHour, ew.markMinute, ew.markSecond)) Box(Modifier.width(TIME_FIELD)) { Tertiary(label, lineOne = true) }
+                Tertiary(ew.marksText, lineOne = true)
+            }
+        }
         Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             for ((i, row) in rows.withIndex()) {
-                val bad = row.first.isNotBlank() && parseMarkTime(row.first) == null
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.width(84.dp)) {
-                        Field(null, row.first, MediaAskTags.markTime(i), alarm = bad || row.first.isBlank()) { v ->
-                            rows = rows.toMutableList().also { it[i] = v to row.second }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    for ((part, tag) in listOf(0 to MediaAskTags.markHour(i), 1 to MediaAskTags.markMinute(i), 2 to MediaAskTags.markSecond(i))) {
+                        val value = when (part) { 0 -> row.h; 1 -> row.m; else -> row.s }
+                        Box(Modifier.width(TIME_FIELD)) {
+                            Field(null, value, tag, alarm = row.empty, hint = "0", digits = true) { v ->
+                                val d = v.filter(Char::isDigit).take(4)
+                                change(i, when (part) { 0 -> row.copy(h = d); 1 -> row.copy(m = d); else -> row.copy(s = d) })
+                            }
                         }
                     }
                     Box(Modifier.weight(1f)) {
-                        Field(null, row.second, MediaAskTags.markText(i)) { v -> rows = rows.toMutableList().also { it[i] = row.first to v.take(200) } }
+                        Field(null, row.text, MediaAskTags.markText(i)) { v -> change(i, row.copy(text = v.take(200))) }
                     }
-                    Caption("✕", fontSize = TimaType.sz4, modifier = Modifier.clickable { rows = rows.filterIndexed { j, _ -> j != i } }.padding(6.dp))
+                    // Убрать строку — круглым пузырём, как «+Метка»: знак без круга на белом был не виден.
+                    Box(
+                        Modifier.size(32.dp).background(colors.softAccent, CircleShape)
+                            .clickable { rows = rows.filterIndexed { j, _ -> j != i }; trouble = null }
+                            .testTag(MediaAskTags.markDelete(i)),
+                        contentAlignment = Alignment.Center,
+                    ) { Caption("✕", fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.text2) }
                 }
             }
         }
-        Chip(ew.marksAdd, kind = ChipKind.Quiet, onClick = { if (rows.size >= 30) trouble = ew.marksMax else rows = rows + ("" to "") })
+        Chip(ew.marksAdd, kind = ChipKind.Quiet, onClick = { if (rows.size >= 30) trouble = ew.marksMax else rows = rows + MarkRow() })
+        Chip(ew.marksHidden, kind = if (hidden) ChipKind.Selected else ChipKind.Quiet, onClick = { hidden = !hidden },
+            modifier = Modifier.testTag(MediaAskTags.HIDDEN))
         trouble?.let { Caption(it, fontSize = TimaType.sz5, color = colors.alarm) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip(Tima.words.chat.ok, kind = ChipKind.Selected, modifier = Modifier.testTag(MediaAskTags.OK), onClick = {
                 val b = chosen ?: return@Chip
-                val marks = rows.map { (t, text) -> parseMarkTime(t)?.let { MediaMark(it, text.trim()) } }
+                val marks = rows.map { r -> markTimeOf(r.h, r.m, r.s)?.let { MediaMark(it, r.text.trim()) } }
                 when {
-                    rows.isEmpty() || marks.any { it == null } -> trouble = ew.marksBadTime
+                    rows.isEmpty() -> trouble = ew.marksNeed
+                    marks.any { it == null } -> trouble = ew.marksBadTime
                     rows.size > 30 -> trouble = ew.marksMax
                     else -> {
-                        onSave(ComposedWidget.Marks(b, marks.filterNotNull().sortedBy { it.atMs }))
+                        onSave(ComposedWidget.Marks(b, marks.filterNotNull().sortedBy { it.atMs }, hidden))
                         onClose()
                     }
                 }
             })
             Chip(Tima.words.chat.cancel, kind = ChipKind.Quiet, onClick = onClose)
+            Chip(ew.marksDelete, kind = ChipKind.Quiet, modifier = Modifier.testTag(MediaAskTags.DELETE), onClick = {
+                chosen?.let(onDelete)
+                onClose()
+            })
         }
     }
 }
+
+/** Ширина поля часа, минуты и секунды — на четыре цифры. */
+private val TIME_FIELD = 48.dp
 
 /** Подокно снизу, как у других вопросов редактора: затемнение, нажатие мимо закрывает. */
 @Composable
@@ -387,6 +471,10 @@ private fun Field(
     single: Boolean = true,
     alarm: Boolean = false,
     onLeave: (() -> Unit)? = null,
+    /** Серая подсказка в пустом поле. */
+    hint: String? = null,
+    /** Только цифры — цифровая клавиатура. */
+    digits: Boolean = false,
     onChange: (String) -> Unit,
 ) {
     val colors = Tima.colors
@@ -400,6 +488,13 @@ private fun Field(
             maxLines = if (single) 1 else 4,
             textStyle = TextStyle(fontSize = TimaType.sz4, color = if (alarm && value.isNotBlank()) colors.alarm else colors.text),
             cursorBrush = SolidColor(colors.navigation),
+            keyboardOptions = if (digits) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
+            decorationBox = { inner ->
+                Box {
+                    if (hint != null && value.isEmpty()) Caption(hint, fontSize = TimaType.sz4, color = colors.text3)
+                    inner()
+                }
+            },
             modifier = Modifier.fillMaxWidth().background(if (alarm) colors.alarm.copy(alpha = 0.12f) else colors.functional, RoundedCornerShape(8.dp))
                 .padding(10.dp).testTag(tag)
                 .onFocusChanged { if (it.isFocused) focused = true else if (focused) { focused = false; onLeave?.invoke() } },

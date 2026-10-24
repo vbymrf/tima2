@@ -65,4 +65,30 @@ class ComposedMediaTest {
         assertNull(parseMarkTime("abc"))
         assertNull(parseMarkTime("5"))
     }
+
+    @Test
+    fun время_метки_из_трёх_полей() {
+        assertEquals(5_000L, markTimeOf("", "", "5"), "одна секунда — остальное ноль")
+        assertEquals(2 * 3_600_000L, markTimeOf("2", "", ""), "только час")
+        assertEquals(0L, markTimeOf("00", "0", ""), "нули с ведущим нулём — ноль, а не пусто")
+        assertEquals(90_000L, markTimeOf("", "", "90"), "секунды сверх 59 — в минуты")
+        assertEquals(3_723_000L, markTimeOf("01", "02", "03"))
+        assertNull(markTimeOf("", " ", ""), "ни одно не заполнено")
+        assertNull(markTimeOf("1", "a", ""))
+        assertEquals(Triple("", "", "0"), markParts(0))
+        assertEquals(Triple("", "1", "5"), markParts(65_000))
+        assertEquals(Triple("1", "0", "3"), markParts(3_603_000))
+    }
+
+    @Test
+    fun удалить_метки_к_видео() {
+        val doc = ComposedDoc(listOf(
+            ComposedItem.Widget(ComposedWidget.Video("https://x.ru/a.mp4", "А")),
+            ComposedItem.Widget(ComposedWidget.Marks("А", listOf(MediaMark(1000, "x")))),
+        ))
+        val left = ComposedMedia.removeMarks(doc, "А")
+        assertEquals(1, left.items.size)
+        assertNull(ComposedMedia.marksOf(left, "А"))
+        assertEquals(left, ComposedMedia.removeMarks(left, "А"))
+    }
 }
