@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
@@ -65,6 +67,7 @@ fun AskSheet(
     var values by remember(fields) { mutableStateOf(fields.map { "" }) }
     var chosen by remember(options) { mutableStateOf(options.firstOrNull()?.first) }
     var left by remember(fields) { mutableStateOf(emptySet<Int>()) }
+    ProvidePlace(TextPlace.MENU) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
         contentAlignment = Alignment.BottomCenter,
@@ -74,7 +77,7 @@ fun AskSheet(
                 .padding(TimaSpacing.about4).testTag("chat:ask"),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Name(title)
+            ProvidePlace(TextPlace.HEADERS) { Name(title) }
             fields.forEachIndexed { i, label ->
                 Tertiary(label, lineOne = true)
                 BasicTextField(
@@ -112,5 +115,6 @@ fun AskSheet(
                 Chip(cancel, kind = ChipKind.Quiet, onClick = onCancel)
             }
         }
+    }
     }
 }

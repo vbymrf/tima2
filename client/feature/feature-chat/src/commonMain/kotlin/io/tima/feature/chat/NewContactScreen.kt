@@ -394,6 +394,8 @@ private fun FindActions(
 ) {
     val words = Tima.words.chat
     val who = state.foundUserId ?: return
+    // Кнопки найденному — по «Вкладкам окон», как «Написать» и «Позвонить» в окнах (заказчик 2026-10-24).
+    ProvidePlace(TextPlace.TABS) {
     if (purpose == FindPurpose.Write && onWrite != null) {
         Button(label = words.write, onClick = { onWrite(who) }, modifier = Modifier.testTag(FindTags.WRITE))
     }
@@ -408,6 +410,7 @@ private fun FindActions(
         Tertiary(Tima.words.page.alreadyInContacts)
     } else if (state.canSave) {
         Button(label = words.toContacts, kind = ButtonKind.Quiet, onClick = onToContacts, modifier = Modifier.testTag(FindTags.TO_CONTACTS))
+    }
     }
 }
 

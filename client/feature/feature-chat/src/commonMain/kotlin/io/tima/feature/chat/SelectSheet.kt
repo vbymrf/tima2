@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
@@ -35,6 +37,7 @@ import io.tima.core.ui.words
 fun SelectSheet(text: String, onCopyAll: () -> Unit, onClose: () -> Unit) {
     val colors = Tima.colors
     val w = Tima.words.chat
+    ProvidePlace(TextPlace.MENU) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onClose),
         contentAlignment = Alignment.BottomCenter,
@@ -47,7 +50,7 @@ fun SelectSheet(text: String, onCopyAll: () -> Unit, onClose: () -> Unit) {
             Tertiary(w.selectHint)
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                 SelectionContainer {
-                    Caption(text, fontSize = TimaType.sz4, modifier = Modifier.testTag(SELECT_TEXT_TAG))
+                    ProvidePlace(TextPlace.MESSAGES) { Caption(text, fontSize = TimaType.sz4, modifier = Modifier.testTag(SELECT_TEXT_TAG)) }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -55,6 +58,7 @@ fun SelectSheet(text: String, onCopyAll: () -> Unit, onClose: () -> Unit) {
                 Chip(w.cancel, kind = ChipKind.Quiet, onClick = onClose)
             }
         }
+    }
     }
 }
 

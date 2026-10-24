@@ -90,6 +90,7 @@ fun ChatMenuSheet(
     val book = Tima.words.book
     var moving by remember { mutableStateOf(false) }
 
+    ProvidePlace(TextPlace.MENU) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -203,5 +204,6 @@ fun ChatMenuSheet(
                 )
             }
         }
+    }
     }
 }

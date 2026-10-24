@@ -14,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import io.tima.core.words.SocialWords
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.Button
 import io.tima.core.ui.Caption
@@ -61,6 +63,7 @@ fun CatalogTab(
     onShowcase: ((kind: String, id: String, title: String) -> Unit)? = null,
 ) {
     val words = Tima.words.social
+    ProvidePlace(TextPlace.LISTS) {
     Column(modifier.fillMaxSize()) {
         state.trouble?.let { Trouble(it, Modifier.padding(TimaSpacing.about4)) }
 
@@ -115,8 +118,10 @@ fun CatalogTab(
         // Плюс — вход в мастер создания. Стоит в каталоге, как и решено: прежний вход в
         // окне 1 был придуманным и убран.
         Box(Modifier.fillMaxWidth().padding(TimaSpacing.about4), contentAlignment = Alignment.CenterEnd) {
-            Button(label = words.create, onClick = onNew, modifier = Modifier.testTag(SOCIAL_CREATE_TAG))
+            // Кнопка окна — по «Вкладкам окон» (заказчик 2026-10-24).
+            ProvidePlace(TextPlace.TABS) { Button(label = words.create, onClick = onNew, modifier = Modifier.testTag(SOCIAL_CREATE_TAG)) }
         }
+    }
     }
 }
 
@@ -162,6 +167,7 @@ fun FriendsTab(
     onShowcase: ((kind: String, id: String, title: String) -> Unit)? = null,
 ) {
     val words = Tima.words.social
+    ProvidePlace(TextPlace.LISTS) {
     Column(modifier.fillMaxSize()) {
         state.trouble?.let { Trouble(it, Modifier.padding(TimaSpacing.about4)) }
 
@@ -184,6 +190,7 @@ fun FriendsTab(
                 )
             }
         }
+    }
     }
 }
 

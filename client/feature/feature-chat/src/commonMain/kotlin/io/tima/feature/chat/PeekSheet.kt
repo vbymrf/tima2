@@ -17,6 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
@@ -45,6 +47,7 @@ object PeekTags {
 fun PeekSheet(found: FoundMessage, onClose: () -> Unit, onOpenChat: (() -> Unit)?, author: String? = null) {
     val colors = Tima.colors
     val w = Tima.words.showcase
+    ProvidePlace(TextPlace.MENU) {
     Box(
         modifier = Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onClose),
         contentAlignment = Alignment.BottomCenter,
@@ -60,10 +63,11 @@ fun PeekSheet(found: FoundMessage, onClose: () -> Unit, onOpenChat: (() -> Unit)
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { Name(author ?: w.peekTitle) }
+                Box(Modifier.weight(1f)) { ProvidePlace(TextPlace.HEADERS) { Name(author ?: w.peekTitle) } }
                 IconButton(glyph = "✕", onClick = onClose, modifier = Modifier.testTag(PeekTags.CLOSE))
             }
             Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                ProvidePlace(TextPlace.MESSAGES) {
                 when (found) {
                     is FoundMessage.Found -> {
                         val rich = found.line.rich
@@ -76,10 +80,12 @@ fun PeekSheet(found: FoundMessage, onClose: () -> Unit, onOpenChat: (() -> Unit)
                     is FoundMessage.Unavailable -> Tertiary(w.peekUnavailable(found.reason, found.level))
                     FoundMessage.Offline -> Tertiary(w.peekOffline)
                 }
+                }
             }
             if (onOpenChat != null && found is FoundMessage.Found) {
                 Button(w.peekOpenChat, onOpenChat, Modifier.fillMaxWidth().testTag(PeekTags.OPEN_CHAT), kind = ButtonKind.Quiet)
             }
         }
+    }
     }
 }

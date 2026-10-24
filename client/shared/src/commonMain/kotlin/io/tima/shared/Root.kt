@@ -5921,6 +5921,7 @@ private fun Chat(
         }
         when (editorChoice) {
             "reply" -> io.tima.feature.chat.ChoiceSheet(
+                place = io.tima.core.ui.TextPlace.MESSAGES,
                 title = ew.replyTitle,
                 items = replyLines.map { line ->
                     io.tima.feature.chat.Choice(
@@ -5944,6 +5945,7 @@ private fun Chat(
             // Подкладка (ADR-0050 §1): несколько сообщений целиком в конец, вне пузыря; «Списком» — список
             // подборок по строке; в группе — ещё и новое продолжение своего уровня.
             "underlay" -> io.tima.feature.chat.ManyChoiceSheet(
+                place = io.tima.core.ui.TextPlace.MESSAGES,
                 title = ew.button("underlay"),
                 items = pickList.map { pick ->
                     val here = if (pick.chatId == chatId) state.lines.firstOrNull { it.serverId == pick.serverId } else null
@@ -5994,6 +5996,7 @@ private fun Chat(
             // Подборка — одно или несколько сообщений (заказчик 2026-10-21: «вернуть возможность вставлять
             // несколько Подборок»); несколько встают списком — пункт «Сообщение», под ним подборка.
             "picks" -> io.tima.feature.chat.ManyChoiceSheet(
+                place = io.tima.core.ui.TextPlace.MESSAGES,
                 title = ew.picksTitle,
                 items = pickList.map { pick ->
                     val here = if (pick.chatId == chatId) state.lines.firstOrNull { it.serverId == pick.serverId } else null

@@ -17,6 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Caption
 import io.tima.core.ui.IconButton
 import io.tima.core.ui.ListLine
@@ -52,6 +54,9 @@ object MessageMenuTags {
  * **Своё:** вместо «Ответить» — одна кнопка с выбором: Изменить · Удалить у себя · Удалить у всех
  * («самому себе не отвечаем»). Пункта нет, когда делать им нечего (`null`): «Перенести себе» в
  * личной переписке, «Изменить» после трёх правок.
+ *
+ * Размеры — по «Шрифтам и размерам» (заказчик 2026-10-24): строка из сообщения — по «Сообщениям»,
+ * пункты — по «Меню и настройкам», как в окнах ссылок.
  */
 @Composable
 fun MessageMenuSheet(
@@ -83,6 +88,7 @@ fun MessageMenuSheet(
     // Выбор своей кнопки раскрывается на месте: три действия под одним пунктом, а не три пункта
     // в общем ряду — так в меню своего столько же строк, сколько у чужого.
     var choosing by remember { mutableStateOf(false) }
+    ProvidePlace(TextPlace.MENU) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -106,7 +112,7 @@ fun MessageMenuSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f)) {
-                    if (!text.isNullOrBlank()) Caption("«$text»", fontSize = TimaType.sz4, color = colors.text2, maxLines = 2)
+                    if (!text.isNullOrBlank()) ProvidePlace(TextPlace.MESSAGES) { Caption("«$text»", fontSize = TimaType.sz4, color = colors.text2, maxLines = 2) }
                 }
                 IconButton(glyph = "✕", onClick = onClose, modifier = Modifier.testTag(MessageMenuTags.CLOSE))
             }
@@ -135,6 +141,7 @@ fun MessageMenuSheet(
             onPick?.let { Item(words.menuPick, MessageMenuTags.PICK, onClick = it) }
             onCarry?.let { Item(words.menuCarry, MessageMenuTags.CARRY, onClick = it) }
         }
+    }
     }
 }
 

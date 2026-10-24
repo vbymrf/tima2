@@ -19,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontWeight
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.AvatarSize
 import io.tima.core.ui.Button
@@ -167,10 +169,13 @@ fun GuestPageScreen(
                     horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                 ) {
+                    // Кнопки — по «Вкладкам окон» (заказчик 2026-10-24).
+                    ProvidePlace(TextPlace.TABS) {
                     onCall?.let { Button(label = words.call, onClick = it) }
                     onVideoCall?.let { Button(label = words.videoCall, kind = ButtonKind.Quiet, onClick = it) }
                     onGroupCall?.let { Button(label = words.groupCall, kind = ButtonKind.Quiet, onClick = it) }
                     onWrite?.let { Button(label = words.write, kind = ButtonKind.Quiet, onClick = it, modifier = Modifier.testTag(PAGE_WRITE_TAG)) }
+                    }
                 }
             }
 

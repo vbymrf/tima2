@@ -23,6 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
@@ -37,11 +39,21 @@ data class Choice(val title: String, val about: String = "")
 
 /**
  * Выбор из списка над окном — на какое сообщение ответить, что вставить из подборки (Решения §10.4).
- * Пустой список — строка [empty] вместо него.
+ * Пустой список — строка [empty] вместо него. Заголовок — по «Шапкам», строки — по [place]
+ * (заказчик 2026-10-24).
  */
 @Composable
-fun ChoiceSheet(title: String, items: List<Choice>, empty: String, onPick: (Int) -> Unit, onCancel: () -> Unit) {
+fun ChoiceSheet(
+    title: String,
+    items: List<Choice>,
+    empty: String,
+    onPick: (Int) -> Unit,
+    onCancel: () -> Unit,
+    /** Группа размера строк: сообщения (на что ответить) — «Сообщения», остальное — «Меню и настройки». */
+    place: TextPlace = TextPlace.MENU,
+) {
     val colors = Tima.colors
+    ProvidePlace(place) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
         contentAlignment = Alignment.BottomCenter,
@@ -50,7 +62,7 @@ fun ChoiceSheet(title: String, items: List<Choice>, empty: String, onPick: (Int)
             Modifier.fillMaxWidth().heightIn(max = 480.dp).background(colors.surface).clickable(enabled = false) {}
                 .padding(TimaSpacing.about4).testTag("chat:choice"),
         ) {
-            Name(title)
+            ProvidePlace(TextPlace.HEADERS) { Name(title) }
             if (items.isEmpty()) Tertiary(empty)
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 items.forEachIndexed { i, item ->
@@ -61,6 +73,7 @@ fun ChoiceSheet(title: String, items: List<Choice>, empty: String, onPick: (Int)
                 }
             }
         }
+    }
     }
 }
 
@@ -79,6 +92,8 @@ fun ManyChoiceSheet(
     asList: String,
     insert: String,
     picked: (n: Int, max: Int) -> String,
+    /** Группа размера строк выбора — как у [ChoiceSheet]. */
+    place: TextPlace = TextPlace.MENU,
     head: Choice? = null,
     onHead: () -> Unit = {},
     onPick: (indices: List<Int>, asList: Boolean) -> Unit,
@@ -88,6 +103,7 @@ fun ManyChoiceSheet(
     val chosen = remember { mutableStateListOf<Int>() }
     var list by remember { mutableStateOf(false) }
     val limit = if (list) maxList else max
+    ProvidePlace(TextPlace.MENU) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
         contentAlignment = Alignment.BottomCenter,
@@ -97,7 +113,7 @@ fun ManyChoiceSheet(
                 .padding(TimaSpacing.about4).testTag("chat:many"),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Name(title)
+            ProvidePlace(TextPlace.HEADERS) { Name(title) }
             head?.let { h ->
                 Column(Modifier.fillMaxWidth().clickable(onClick = onHead).padding(vertical = 8.dp).testTag("chat:many.head")) {
                     Caption(h.title, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
@@ -106,6 +122,7 @@ fun ManyChoiceSheet(
             }
             if (items.isEmpty()) Tertiary(empty)
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                ProvidePlace(place) {
                 items.forEachIndexed { i, item ->
                     val on = i in chosen
                     Row(
@@ -120,6 +137,7 @@ fun ManyChoiceSheet(
                             if (item.about.isNotBlank()) Tertiary(item.about, lineOne = true)
                         }
                     }
+                }
                 }
             }
             if (items.isNotEmpty()) {
@@ -136,5 +154,6 @@ fun ManyChoiceSheet(
                 Tertiary(picked(chosen.size, limit), lineOne = true)
             }
         }
+    }
     }
 }

@@ -75,6 +75,7 @@ fun MyColorSheet(
     val words = Tima.words.chat
     val dark = LocalStripLook.current.dark
     val sharedMay = members > SHARED_FROM
+    ProvidePlace(TextPlace.MENU) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -169,6 +170,7 @@ fun MyColorSheet(
                 }
             }
         }
+    }
     }
 }
 

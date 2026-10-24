@@ -29,6 +29,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.AvatarSize
 import io.tima.core.ui.Caption
@@ -124,12 +126,14 @@ fun CallsScreen(
     Box(modifier.fillMaxSize()) {
         if (onNewCall != null) {
             io.tima.core.ui.WithCluster(
-                cluster = { io.tima.core.ui.Button(label = Tima.words.chat.call, onClick = onNewCall, modifier = Modifier.testTag(CALLS_NEW_TAG)) },
+                // Кнопка окна — по «Вкладкам окон» (заказчик 2026-10-24).
+                cluster = { ProvidePlace(TextPlace.TABS) { io.tima.core.ui.Button(label = Tima.words.chat.call, onClick = onNewCall, modifier = Modifier.testTag(CALLS_NEW_TAG)) } },
             ) {
-                Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf)
+                ProvidePlace(TextPlace.LISTS) { Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf) }
             }
         } else {
-            Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf)
+            // Журнал — список, как «Чаты» и «Контакты» (заказчик 2026-10-24).
+            ProvidePlace(TextPlace.LISTS) { Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf) }
         }
         note?.let {
             Caption(

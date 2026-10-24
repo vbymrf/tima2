@@ -156,7 +156,8 @@ fun ChatsScreen(
             // Надписью «Написать», а не кругом со стрелкой (заказчик 2026-10-24, 5а#): открывает поиск
             // по нику или телефону, найденному — «Написать».
             cluster = {
-                io.tima.core.ui.Button(label = words.write, onClick = onNew, modifier = Modifier.testTag(CHATS_NEW_TAG))
+                // Кнопка окна — по «Вкладкам окон», а не по списку под ней (заказчик 2026-10-24).
+                ProvidePlace(TextPlace.TABS) { io.tima.core.ui.Button(label = words.write, onClick = onNew, modifier = Modifier.testTag(CHATS_NEW_TAG)) }
             },
             modifier = Modifier.weight(1f),
         ) {

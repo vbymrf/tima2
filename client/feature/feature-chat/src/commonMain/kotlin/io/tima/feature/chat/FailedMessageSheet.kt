@@ -60,6 +60,7 @@ fun FailedMessageSheet(
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
+    ProvidePlace(TextPlace.MENU) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -91,7 +92,7 @@ fun FailedMessageSheet(
                 Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3),
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
             ) {
-                if (!text.isNullOrBlank()) Caption("«$text»", fontSize = TimaType.sz4, color = colors.text2, maxLines = 3)
+                if (!text.isNullOrBlank()) ProvidePlace(TextPlace.MESSAGES) { Caption("«$text»", fontSize = TimaType.sz4, color = colors.text2, maxLines = 3) }
                 when {
                     reason == null -> Secondary(if (waiting) words.waitingNoReason else words.notSentNoReason)
                     else -> {
@@ -116,5 +117,6 @@ fun FailedMessageSheet(
                 ListLine(onClick = onReport, middle = { Name(words.reportProblem) }, right = { Tertiary("›", lineOne = true) })
             }
         }
+    }
     }
 }

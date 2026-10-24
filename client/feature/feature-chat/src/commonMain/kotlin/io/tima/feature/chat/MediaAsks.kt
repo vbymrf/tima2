@@ -38,6 +38,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import io.tima.core.media.OwnPlayerSurface
 import io.tima.core.media.rememberOwnPlayer
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
@@ -444,10 +446,14 @@ fun MarksAsk(
 /** Ширина поля часа, минуты и секунды — на четыре цифры. */
 private val TIME_FIELD = 48.dp
 
-/** Подокно снизу, как у других вопросов редактора: затемнение, нажатие мимо закрывает. */
+/**
+ * Подокно снизу, как у других вопросов редактора: затемнение, нажатие мимо закрывает. Заголовок — по
+ * «Шапкам», поля и кнопки — по «Меню и настройкам» (заказчик 2026-10-24).
+ */
 @Composable
 private fun SheetFrame(title: String, onClose: () -> Unit, content: @Composable () -> Unit) {
     val colors = Tima.colors
+    ProvidePlace(TextPlace.MENU) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onClose),
         contentAlignment = Alignment.BottomCenter,
@@ -457,9 +463,10 @@ private fun SheetFrame(title: String, onClose: () -> Unit, content: @Composable 
                 .padding(TimaSpacing.about4).verticalScroll(rememberScrollState()).testTag("media.ask"),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Name(title)
+            ProvidePlace(TextPlace.HEADERS) { Name(title) }
             content()
         }
+    }
     }
 }
 
