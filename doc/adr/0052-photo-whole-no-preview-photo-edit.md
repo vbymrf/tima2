@@ -55,7 +55,7 @@
 | `file_bytes` | файл другому человеку | 10 МБ | `TIMA_MEDIA_FILE_MB` |
 | `self_bytes` | файл себе, верх загрузки | 50 МБ | `TIMA_MEDIA_SELF_MB` |
 | `daily_bytes` | заявлено за сутки | 1 ГБ | `TIMA_MEDIA_DAILY_MB` |
-| `photo_side` | большая сторона фото | 1280 | `TIMA_MEDIA_PHOTO_SIDE` |
+| `photo_side` | большая сторона фото | 1920 (заказчик 2026-10-24; было 1280) | `TIMA_MEDIA_PHOTO_SIDE` |
 | `max_photos` | фото в одном сообщении | 10 | `TIMA_MEDIA_MAX_PHOTOS` |
 | `postman_hour_sec`, `postman_week_sec` | сроки почтальона | 3600, 604800 | — |
 | `blocked_names` | окончания имён под запретом | `.html`, `.svg`, исполняемые | — |

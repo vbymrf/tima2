@@ -32,10 +32,10 @@ class AttachmentPrepTest {
     }
 
     @Test
-    fun фото_ужимается_до_1280() {
-        val prepared = assertNotNull(PhotoPrep.prepare(noisy(2000, 1500)))
-        assertEquals(1280, prepared.width)
-        assertEquals(960, prepared.height)
+    fun фото_ужимается_до_1920() {
+        val prepared = assertNotNull(PhotoPrep.prepare(noisy(2400, 1800)))
+        assertEquals(1920, prepared.width)
+        assertEquals(1440, prepared.height)
         assertNotNull(decodeImage(prepared.full))
         assertNull(PhotoPrep.prepare("не картинка".encodeToByteArray()))
     }

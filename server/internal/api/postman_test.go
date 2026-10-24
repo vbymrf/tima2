@@ -155,7 +155,7 @@ func TestMediaRulesAndDrop(t *testing.T) {
 	if code := authedJSON(t, ts, "GET", "/api/v1/media/rules", a.token, nil, &rules); code != http.StatusOK {
 		t.Fatalf("правила: %d", code)
 	}
-	if rules.FileBytes != 10<<20 || rules.SelfBytes != 50<<20 || rules.DailyBytes != 1<<30 || rules.PhotoSide != 1280 || rules.MaxPhotos != 10 {
+	if rules.FileBytes != 10<<20 || rules.SelfBytes != 50<<20 || rules.DailyBytes != 1<<30 || rules.PhotoSide != 1920 || rules.MaxPhotos != 10 {
 		t.Fatalf("правила по умолчанию — числа решений, получено %+v", rules)
 	}
 	if rules.Week != int64((7 * 24 * time.Hour).Seconds()) || len(rules.Blocked) == 0 {

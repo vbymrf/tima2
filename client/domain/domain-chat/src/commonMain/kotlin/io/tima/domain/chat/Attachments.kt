@@ -52,7 +52,8 @@ interface AttachmentBodies {
 data class MediaRules(
     val fileBytes: Long = 10L * 1024 * 1024,
     val selfBytes: Long = 50L * 1024 * 1024,
-    val photoSide: Int = 1280,
+    /** Большая сторона фото отдельным файлом — 1920 (заказчик 2026-10-24; было 1280). */
+    val photoSide: Int = 1920,
     val maxPhotos: Int = 10,
     val blockedNames: List<String> = emptyList(),
 ) {
@@ -104,7 +105,7 @@ class SendAttachments(
     /** Правила сервера — на этот раз (ПЛАН-(ИФ) ИФ2). */
     suspend fun rules(): MediaRules = source.rules()
 
-    /** Подготовленное фото: большая сторона — по правилам сервера (1280). */
+    /** Подготовленное фото: большая сторона — по правилам сервера (1920). */
     class Photo(val full: ByteArray, val width: Int, val height: Int)
 
     suspend fun photos(chatId: String, level: Int, peerId: String?, photos: List<Photo>): AttachResult {

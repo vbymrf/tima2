@@ -83,7 +83,7 @@ func MediaRulesFromEnv() MediaRules {
 		FileBytes:  envInt("TIMA_MEDIA_FILE_MB", 10) << 20,
 		SelfBytes:  envInt("TIMA_MEDIA_SELF_MB", 50) << 20,
 		DailyBytes: envInt("TIMA_MEDIA_DAILY_MB", 1024) << 20,
-		PhotoSide:  int(envInt("TIMA_MEDIA_PHOTO_SIDE", 1280)),
+		PhotoSide:  int(envInt("TIMA_MEDIA_PHOTO_SIDE", 1920)), // заказчик 2026-10-24: было 1280
 		MaxPhotos:  int(envInt("TIMA_MEDIA_MAX_PHOTOS", 10)),
 		TermDays:   int(envInt("TIMA_MEDIA_TERM_DAYS", 7)),
 	}
