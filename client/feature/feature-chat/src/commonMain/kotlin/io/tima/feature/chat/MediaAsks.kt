@@ -171,7 +171,7 @@ fun MediaWidgetAsk(
     var notVideo by remember { mutableStateOf(false) }
     var linkSays by remember { mutableStateOf<String?>(null) }
     val links = ComposedMedia.splitLinks(url)
-    val once = io.tima.core.ui.rememberOnePress()
+    val once = io.tima.core.ui.rememberOnePress(MediaAskTags.OK)
     val list = kind != "stream" && links.size > 1
     val left = 30 - ComposedMedia.count(doc)
     val prober = rememberOwnPlayer()
@@ -362,7 +362,7 @@ fun MarksAsk(
     }
     var hidden by remember(chosen) { mutableStateOf(existing?.hidden ?: false) }
     var trouble by remember { mutableStateOf<String?>(null) }
-    val once = io.tima.core.ui.rememberOnePress()
+    val once = io.tima.core.ui.rememberOnePress("media.ask.marks")
     val target = chosen?.let { ComposedMedia.target(doc, it) }
     val targetUrl = when (target) {
         is ComposedWidget.Video -> target.url

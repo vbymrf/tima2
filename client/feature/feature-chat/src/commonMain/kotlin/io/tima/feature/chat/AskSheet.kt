@@ -68,7 +68,7 @@ fun AskSheet(
     var chosen by remember(options) { mutableStateOf(options.firstOrNull()?.first) }
     var left by remember(fields) { mutableStateOf(emptySet<Int>()) }
     // «Готово» — один раз: окно уходит с экрана на следующей отрисовке, второе нажатие до неё сделало бы копию.
-    val once = io.tima.core.ui.rememberOnePress()
+    val once = io.tima.core.ui.rememberOnePress("chat:ask.ok")
     ProvidePlace(TextPlace.MENU) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),

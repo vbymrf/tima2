@@ -152,6 +152,8 @@ internal enum class EditorTab(val key: String, val buttons: List<String>) {
  */
 @Composable
 private fun GridAsk(onInsert: (lines: Int, columns: Int) -> Unit) {
+    // «Вставить» — один раз: второе нажатие до перерисовки вставило бы второй ряд (заказчик 2026-10-24).
+    val once = io.tima.core.ui.rememberOnePress("editor:grid.ok")
     val colors = Tima.colors
     val w = Tima.words.editor
     var lines by remember { mutableStateOf(1) }
@@ -166,7 +168,7 @@ private fun GridAsk(onInsert: (lines: Int, columns: Int) -> Unit) {
         io.tima.core.ui.Chip(
             w.gridInsert,
             kind = io.tima.core.ui.ChipKind.Selected,
-            onClick = { onInsert(lines, columns) },
+            onClick = { once.press { onInsert(lines, columns) } },
             modifier = Modifier.testTag("editor:grid.ok"),
         )
     }
@@ -642,7 +644,7 @@ private fun HeaderToggle(glyph: String, on: Boolean, tag: String, onClick: () ->
 private fun SendButton(ready: Boolean, broken: Boolean, onClick: () -> Unit) {
     val colors = Tima.colors
     // Один раз: второе нажатие до закрытия окна отправило бы то же сообщение ещё раз (заказчик 2026-10-24).
-    val once = io.tima.core.ui.rememberOnePress()
+    val once = io.tima.core.ui.rememberOnePress(EditorTags.SEND)
     val fill = when {
         broken -> colors.alarm
         ready -> colors.navigation
@@ -888,6 +890,7 @@ private val MEDIA_WIDGETS = setOf("video", "marks", "audio", "stream")
  */
 @Composable
 private fun WidgetsAsk(onPick: (String) -> Unit) {
+    val once = io.tima.core.ui.rememberOnePress("editor:widgets")
     val colors = Tima.colors
     val w = Tima.words.editor
     Row(
@@ -900,7 +903,7 @@ private fun WidgetsAsk(onPick: (String) -> Unit) {
             "poll" to w.widgetPoll, "event" to w.widgetEvent,
         )
         for ((key, label) in items) {
-            io.tima.core.ui.Chip(label, kind = io.tima.core.ui.ChipKind.Neutral, onClick = { onPick(key) }, modifier = Modifier.testTag("editor:widgets.$key"))
+            io.tima.core.ui.Chip(label, kind = io.tima.core.ui.ChipKind.Neutral, onClick = { once.press { onPick(key) } }, modifier = Modifier.testTag("editor:widgets.$key"))
         }
     }
 }

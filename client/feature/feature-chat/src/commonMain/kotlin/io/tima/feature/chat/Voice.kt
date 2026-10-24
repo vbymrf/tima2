@@ -364,6 +364,7 @@ internal fun VoiceArea(voice: VoiceInput, onClose: () -> Unit) {
     }
     // Отправка — один раз: она идёт в фоне, и до закрытия окна второе нажатие отправило бы голосовое ещё раз.
     var sending by remember { mutableStateOf(false) }
+    val once = io.tima.core.ui.rememberOnePress(VoiceTags.SEND)
     fun send() {
         if (sending) return
         sending = true
@@ -433,7 +434,7 @@ internal fun VoiceArea(voice: VoiceInput, onClose: () -> Unit) {
                 }
             }
             Box(
-                Modifier.size(44.dp).background(colors.navigation, CircleShape).clickable { send() }.testTag(VoiceTags.SEND),
+                Modifier.size(44.dp).background(colors.navigation, CircleShape).clickable { once.press(::send) }.testTag(VoiceTags.SEND),
                 contentAlignment = Alignment.Center,
             ) {
                 Caption("➤", fontSize = 20.sp, color = colors.onAccent)

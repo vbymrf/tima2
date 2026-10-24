@@ -71,6 +71,8 @@ fun MyColorSheet(
     busy: Boolean = false,
     trouble: String? = null,
 ) {
+    // Выбор оттенка — один раз до перерисовки (заказчик 2026-10-24).
+    val once = io.tima.core.ui.rememberOnePress("chat:mycolor")
     val colors = Tima.colors
     val words = Tima.words.chat
     val dark = LocalStripLook.current.dark
@@ -146,7 +148,7 @@ fun MyColorSheet(
                                         .then(
                                             if (index == mine) Modifier.border(3.dp, colors.text, RoundedCornerShape(6.dp)) else Modifier,
                                         )
-                                        .clickable(enabled = !busy && !blocked) { onPick(index) },
+                                        .clickable(enabled = !busy && !blocked) { once.press { onPick(index) } },
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     if (holder != null) {

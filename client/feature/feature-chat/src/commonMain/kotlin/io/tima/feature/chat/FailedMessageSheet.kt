@@ -58,6 +58,8 @@ fun FailedMessageSheet(
     /** Повтор — только у отказанного; `null` — кнопки нет. */
     onRetry: (() -> Unit)? = null,
 ) {
+    // «Отправить снова», «Удалить», «Сообщить» — один раз: второе «Отправить снова» ушло бы вторым сообщением.
+    val once = io.tima.core.ui.rememberOnePress("chat:failed")
     val colors = Tima.colors
     val words = Tima.words.chat
     ProvidePlace(TextPlace.MENU) {
@@ -110,11 +112,11 @@ fun FailedMessageSheet(
                 if (waiting) Tertiary(words.waitingAbout(attempts, secondsLeft), lineOne = true)
             }
             if (onRetry != null) {
-                ListLine(onClick = onRetry, middle = { Name(words.sendAgain) }, right = { Tertiary("›", lineOne = true) })
+                ListLine(onClick = { once.press(onRetry) }, middle = { Name(words.sendAgain) }, right = { Tertiary("›", lineOne = true) })
             }
-            ListLine(onClick = onDelete, middle = { Name(words.deleteMessage) }, right = { Tertiary("›", lineOne = true) })
+            ListLine(onClick = { once.press(onDelete) }, middle = { Name(words.deleteMessage) }, right = { Tertiary("›", lineOne = true) })
             if (onReport != null) {
-                ListLine(onClick = onReport, middle = { Name(words.reportProblem) }, right = { Tertiary("›", lineOne = true) })
+                ListLine(onClick = { once.press(onReport) }, middle = { Name(words.reportProblem) }, right = { Tertiary("›", lineOne = true) })
             }
         }
     }

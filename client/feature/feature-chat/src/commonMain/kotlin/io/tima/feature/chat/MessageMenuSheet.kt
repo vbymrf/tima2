@@ -88,6 +88,9 @@ fun MessageMenuSheet(
     // Выбор своей кнопки раскрывается на месте: три действия под одним пунктом, а не три пункта
     // в общем ряду — так в меню своего столько же строк, сколько у чужого.
     var choosing by remember { mutableStateOf(false) }
+    // Пункт — один раз: второе нажатие до закрытия меню сделало бы то же ещё раз (заказчик 2026-10-24).
+    val once = io.tima.core.ui.rememberOnePress(MessageMenuTags.SHEET)
+    fun one(action: () -> Unit): () -> Unit = { once.press(action) }
     ProvidePlace(TextPlace.MENU) {
     Box(
         modifier = modifier
@@ -121,25 +124,25 @@ fun MessageMenuSheet(
                     Item(words.menuChange, MessageMenuTags.CHANGE, mark = if (choosing) "⌄" else "›") { choosing = !choosing }
                 }
                 if (choosing) {
-                    onEdit?.let { Item(words.menuEdit, MessageMenuTags.EDIT, inner = true, onClick = it) }
-                    onDeleteForMe?.let { Item(words.menuDeleteForMe, MessageMenuTags.DELETE_ME, inner = true, onClick = it) }
-                    onDeleteForAll?.let { Item(words.menuDeleteForAll, MessageMenuTags.DELETE_ALL, inner = true, onClick = it) }
+                    onEdit?.let { Item(words.menuEdit, MessageMenuTags.EDIT, inner = true, onClick = one(it)) }
+                    onDeleteForMe?.let { Item(words.menuDeleteForMe, MessageMenuTags.DELETE_ME, inner = true, onClick = one(it)) }
+                    onDeleteForAll?.let { Item(words.menuDeleteForAll, MessageMenuTags.DELETE_ALL, inner = true, onClick = one(it)) }
                 }
             } else {
-                onReply?.let { Item(words.menuReply, MessageMenuTags.REPLY, onClick = it) }
+                onReply?.let { Item(words.menuReply, MessageMenuTags.REPLY, onClick = one(it)) }
             }
             onPin?.let {
                 Item(
                     if (pinned) Tima.words.showcase.menuUnpin else Tima.words.showcase.menuPin,
                     if (pinned) PinTags.MENU_UNPIN else PinTags.MENU_PIN,
-                    onClick = it,
+                    onClick = one(it),
                 )
             }
-            onShare?.let { Item(words.menuShare, MessageMenuTags.SHARE, onClick = it) }
-            onCopy?.let { Item(words.menuCopy, MessageMenuTags.COPY, onClick = it) }
-            onSave?.let { Item(words.fileSaveAs, MessageMenuTags.SAVE, onClick = it) }
-            onPick?.let { Item(words.menuPick, MessageMenuTags.PICK, onClick = it) }
-            onCarry?.let { Item(words.menuCarry, MessageMenuTags.CARRY, onClick = it) }
+            onShare?.let { Item(words.menuShare, MessageMenuTags.SHARE, onClick = one(it)) }
+            onCopy?.let { Item(words.menuCopy, MessageMenuTags.COPY, onClick = one(it)) }
+            onSave?.let { Item(words.fileSaveAs, MessageMenuTags.SAVE, onClick = one(it)) }
+            onPick?.let { Item(words.menuPick, MessageMenuTags.PICK, onClick = one(it)) }
+            onCarry?.let { Item(words.menuCarry, MessageMenuTags.CARRY, onClick = one(it)) }
         }
     }
     }

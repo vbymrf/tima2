@@ -509,6 +509,13 @@ fun Root(
             if (what == io.tima.feature.chat.PlayerEvent.OPENED) audioHub?.stop()
             Journal.note(LogCode.PLAYER, playerWord(what), "подробно" to detail)
         }) {
+        // Лишние нажатия «Готово», «Вставить», «Отправить» — в журнал, одной строкой на серию (заказчик 2026-10-24, 2#).
+        DisposableEffect(Unit) {
+            val off = io.tima.core.ui.OnePressLog.listen { tag, skipped, spanMs ->
+                Journal.note(LogCode.TAP_REPEAT, "повтор нажатия", "кнопка" to tag, "лишних" to skipped, "мс" to spanMs)
+            }
+            onDispose { off() }
+        }
         androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize()) {
         // «Сейчас играет» — над любым окном, пока звучит «Аудио» или «Поток» (ПЛАН-(ВМ) Р22).
         io.tima.feature.chat.NowPlayingBar(audioHub)
@@ -4167,6 +4174,9 @@ private fun App(
                         problemDraft = problemDraft,
                         problemPhotos = problemPhotos,
                         problemKind = problemKind,
+                        draftSteps = {
+                            io.tima.domain.chat.DraftSteps.report(LoggedDrafts(environment.drafts).withSuffix(io.tima.domain.chat.DraftSteps.SUFFIX))
+                        },
                         reporting = reporting,
                         diaryPolicy = diaryPolicy,
                         callsLog = callsLog,
@@ -5226,6 +5236,15 @@ private fun Chat(
             .distinctUntilChanged()
             .flowOn(Dispatchers.Default)
     }.collectAsState(initial = emptySet())
+    // Повтор нажатия — в шаги открытого черновика (2#); проскочившая копия виджета — в журнал (3#).
+    DisposableEffect(store) {
+        store.copyLog = { kind -> Journal.note(LogCode.EDITOR, "возможная копия", "вид" to kind) }
+        val off = io.tima.core.ui.OnePressLog.listen { tag, skipped, _ -> store.draftNote(io.tima.domain.chat.DraftSteps.repeat(tag, skipped)) }
+        onDispose {
+            off()
+            store.copyLog = null
+        }
+    }
     // «Прочитано» — то новое, что сейчас на экране (ПЛАН-(ОП)): время написания позднейшего входящего.
     val newestIncoming = state.lines.filter { !it.outgoing }.maxOfOrNull { it.atMs }
     LaunchedEffect(newestIncoming, live) { if (live != null && newestIncoming != null) live.read(chatId, newestIncoming) }
@@ -6330,6 +6349,8 @@ private fun Settings(
     reporting: Reporting,
     /** Снимок состояния — считается в момент открытия экрана отчёта. */
     snapshot: () -> Snapshot,
+    /** Шаги неотправленных черновиков редактора — блоком в отчёт о проблеме (заказчик 2026-10-24). */
+    draftSteps: () -> String = { "" },
     /** Где платформа держит выбранный срок хранения журнала. */
     diaryPolicy: AppearanceStore,
     /** Журнал звонков: сколько его держит телефон и сколько сейчас лежит (Ж5). */
@@ -6581,7 +6602,7 @@ private fun Settings(
             // текст — к тому времени начало поломки успело бы вытесниться.
             SettingsItem.PROBLEM -> Problem(
                 problemFacts, origin, reporting, scope, platform, snapshot,
-                draft = problemDraft, photos = problemPhotos, kind = problemKind,
+                draft = problemDraft, photos = problemPhotos, kind = problemKind, draftSteps = draftSteps,
             )
 
             // Предложение — та же отправка с очередью, но без журнала (заказчик 2026-10-07).
@@ -6965,6 +6986,7 @@ private fun Problem(
     draft: String = "",
     photos: List<io.tima.feature.shell.ProblemPhoto> = emptyList(),
     kind: io.tima.feature.shell.ProblemKind = io.tima.feature.shell.ProblemKind.Other,
+    draftSteps: () -> String = { "" },
 ) {
     val store = remember {
         ProblemStore(
@@ -6973,7 +6995,9 @@ private fun Problem(
             // человек закроет его силой, а система добьёт процесс.
             log = { days ->
                 Journal.diary.flush()
-                Journal.diary.dump(days.toLong() * Diary.DAY)
+                // Шаги неотправленных черновиков — после журнала, без номеров переписок (В3#).
+                val steps = runCatching(draftSteps).getOrDefault("")
+                Journal.diary.dump(days.toLong() * Diary.DAY) + if (steps.isEmpty()) "" else "\n" + steps
             },
             sender = { report ->
                 val result = reporting.send(

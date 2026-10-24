@@ -54,7 +54,7 @@ fun ChoiceSheet(
 ) {
     val colors = Tima.colors
     // Выбор — один раз: второе нажатие до перерисовки вставило бы копию.
-    val once = io.tima.core.ui.rememberOnePress()
+    val once = io.tima.core.ui.rememberOnePress("chat:choice")
     ProvidePlace(place) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
@@ -105,7 +105,7 @@ fun ManyChoiceSheet(
     val chosen = remember { mutableStateListOf<Int>() }
     var list by remember { mutableStateOf(false) }
     val limit = if (list) maxList else max
-    val once = io.tima.core.ui.rememberOnePress()
+    val once = io.tima.core.ui.rememberOnePress("chat:many")
     ProvidePlace(TextPlace.MENU) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),

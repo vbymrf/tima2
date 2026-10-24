@@ -16,6 +16,13 @@ class LoggedDrafts(private val inner: Drafts) : Drafts {
         null
     }
 
+    override fun withSuffix(suffix: String): List<String> = try {
+        inner.withSuffix(suffix)
+    } catch (e: Throwable) {
+        Journal.trouble(LogCode.DRAFT, "шаги черновиков не открылись", "причина" to (e.message ?: e::class.simpleName))
+        emptyList()
+    }
+
     override fun save(chatId: String, text: String) {
         try {
             inner.save(chatId, text)

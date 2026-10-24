@@ -14,3 +14,7 @@ INSERT OR REPLACE INTO drafts(chat_id, body_enc, updated_at) VALUES (?, ?, ?);
 
 dropDraft:
 DELETE FROM drafts WHERE chat_id = ?;
+
+-- Шаги черновиков редактора — все разом, для отчёта о проблеме (2026-10-24).
+draftsLike:
+SELECT body_enc FROM drafts WHERE chat_id LIKE ?;

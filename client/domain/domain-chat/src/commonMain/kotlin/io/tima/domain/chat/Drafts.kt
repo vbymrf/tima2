@@ -11,4 +11,7 @@ interface Drafts {
 
     /** Сохранить; пустой — убрать. */
     fun save(chatId: String, text: String)
+
+    /** Все записи с ключом на [suffix] — шаги черновиков для отчёта о проблеме (2026-10-24); нет — пусто. */
+    fun withSuffix(suffix: String): List<String> = emptyList()
 }

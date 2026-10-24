@@ -1,5 +1,7 @@
 package io.tima.feature.chat
 
+import io.tima.domain.chat.CopyWatch
+import io.tima.domain.chat.DraftSteps
 import io.tima.domain.chat.FoundMessage
 import io.tima.domain.chat.GroupKind
 import io.tima.domain.chat.MessageFinder
@@ -57,6 +59,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.withContext
 
 /**
@@ -205,6 +208,45 @@ class ChatStore(
     private val finder: MessageFinder? = null,
 ) {
 
+    /**
+     * Шаги черновика редактора (заказчик 2026-10-24, 1#): виды и числа, рядом с черновиком под тем же ключом
+     * покоя; ушло сообщение — стёрты; корзина — стёрты вместе с «Вернуть»; в отчёт о проблеме — все.
+     */
+    private var steps: List<String> = emptyList()
+    private val stepsKey: String get() = chatId + DraftSteps.SUFFIX
+
+    /** Проскочившая копия виджета (3#) — в журнал: вид; «сообщение …» — из скрепки. */
+    var copyLog: ((kind: String) -> Unit)? = null
+    private val copies = CopyWatch()
+
+    private fun nowMs(): Long = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+
+    private fun clock(ms: Long): String {
+        val t = kotlinx.datetime.Instant.fromEpochMilliseconds(ms)
+            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).time
+        fun two(n: Int) = n.toString().padStart(2, '0')
+        return "${two(t.hour)}:${two(t.minute)}:${two(t.second)}"
+    }
+
+    /** Шаг черновика — в список и на диск. */
+    private fun stepped(what: String) {
+        steps = DraftSteps.append(steps, DraftSteps.line(clock(nowMs()), what))
+        val port = drafts ?: return
+        val text = steps.joinToString("\n")
+        scope.launch { withContext(io) { port.save(stepsKey, text) } }
+    }
+
+    private fun clearSteps() {
+        steps = emptyList()
+        val port = drafts ?: return
+        scope.launch { withContext(io) { port.save(stepsKey, "") } }
+    }
+
+    /** Строка в шаги открытого черновика — повтор нажатия и подобное (2#). */
+    fun draftNote(what: String) {
+        if (_state.value.editorOpen && _state.value.editDoc == null) stepped(what)
+    }
+
     /** Отложенная запись черновика: не на каждое нажатие клавиши. */
     private var draftSave: kotlinx.coroutines.Job? = null
 
@@ -249,6 +291,7 @@ class ChatStore(
                 if (!saved.isNullOrEmpty() && _state.value.draft.isEmpty()) _state.value = _state.value.copy(draft = saved)
                 // Собранное в редакторе — тоже черновик (Решения §10.1: «назад» сохраняет).
                 val doc = composer?.let { c -> withContext(io) { port.load(editorKey) }?.let(c::load) }
+                steps = withContext(io) { port.load(stepsKey) }?.takeIf { it.isNotBlank() }?.split('\n').orEmpty()
                 if (doc != null && !doc.isEmpty && _state.value.composed == null) _state.value = _state.value.copy(composed = doc)
                 // Основное, ждавшее номера продолжения, — пережило перезапуск (Решения §11.3): уйдёт
                 // само, как только продолжение получит номер, а не останется черновиком без подкладки.
@@ -933,12 +976,14 @@ class ChatStore(
         val doc = s.composed ?: ComposedDoc.of(s.draft)
         _state.value = s.copy(editorOpen = true, composed = doc, draft = "", droppedComposed = null, notice = null)
         if (s.draft.isNotEmpty()) keepDraft("")
+        stepped(DraftSteps.OPENED)
         return doc
     }
 
     /** «Назад» из редактора: собранное остаётся черновиком, в строке — чип (Решения §9). */
     fun editorBack(doc: ComposedDoc) {
         val kept = doc.takeUnless { it.isEmpty }
+        if (_state.value.editDoc == null) stepped(DraftSteps.CLOSED)
         _state.value = _state.value.copy(editorOpen = false, composed = kept)
         keepComposed(kept)
     }
@@ -951,6 +996,16 @@ class ChatStore(
     fun editorDraft(doc: ComposedDoc) {
         if (!_state.value.editorOpen || _state.value.editDoc != null) return
         val kept = doc.takeUnless { it.isEmpty }
+        val before = _state.value.composed
+        // Шаг — виды и числа (1#); тот же виджет того же адреса за 2 с — возможная копия (3#).
+        DraftSteps.step(before, kept)?.let(::stepped)
+        for (w in DraftSteps.added(before, kept)) {
+            if (copies.seen(w, nowMs())) {
+                val kind = DraftSteps.kindOf(w)
+                copyLog?.invoke(kind)
+                stepped(DraftSteps.copy(kind))
+            }
+        }
         _state.value = _state.value.copy(composed = kept)
         keepComposed(kept)
     }
@@ -968,7 +1023,10 @@ class ChatStore(
         }
         _state.value = when (result) {
             is ComposedResult.Queued -> _state.value.copy(editorOpen = false, composed = null, replyTo = null, notice = showcaseNotice())
-                .also { keepComposed(null) }
+                .also {
+                    keepComposed(null)
+                    clearSteps()
+                }
             ComposedResult.Empty -> _state.value
             is ComposedResult.Invalid -> _state.value.copy(
                 notice = ChatNotice.Said(words().editor.cannotSend + ": " + result.problems.firstOrNull().orEmpty()),
@@ -991,6 +1049,7 @@ class ChatStore(
      */
     fun sendWidget(widget: ComposedWidget): ComposedResult? {
         val c = composer ?: return null
+        if (copies.seen(widget, nowMs())) copyLog?.invoke(DraftSteps.sentCopy(DraftSteps.kindOf(widget)))
         val result = c.send(chatId, ComposedDoc(listOf(ComposedItem.Widget(widget))), _state.value.level, null)
         val said = when (result) {
             is ComposedResult.Invalid -> words().editor.cannotSend + ": " + result.problems.firstOrNull().orEmpty()
@@ -1163,6 +1222,7 @@ class ChatStore(
             kotlinx.coroutines.delay(UNDO_DROP_MS)
             _state.value = _state.value.copy(droppedComposed = null)
             keepComposed(null)
+            clearSteps()
         }
     }
 
