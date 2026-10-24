@@ -66,7 +66,10 @@ import io.tima.core.media.rememberOwnPlayer
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
+import io.tima.core.ui.ProvidePlace
+import io.tima.core.ui.TextPlace
 import io.tima.core.ui.Tima
+import io.tima.core.ui.TimaType
 import io.tima.core.ui.words
 import io.tima.domain.chat.M3u8
 import io.tima.domain.chat.MediaLinks
@@ -462,6 +465,17 @@ private fun PlayerContent(
         }
     }
 
+    // Название — размером текста сообщений, по их группе в «Шрифтах и размерах» (заказчик 2026-10-24).
+    val titleText: @Composable (Modifier) -> Unit = { m ->
+        ProvidePlace(TextPlace.MESSAGES) {
+            Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = m)
+        }
+    }
+    // Крестик — на сером круге, как все кнопки окна; в полном экране тоже (заказчик 2026-10-24).
+    val close: @Composable () -> Unit = {
+        PlayerIconButton(PlayerIcon.CLOSE, Tima.words.call.close, lit = false, tag = PlayerTags.CLOSE, onClick = onClose)
+    }
+
     // Касание где угодно в полном экране показывает кнопки поверх видео на 3 с; на паузе они видны всегда.
     var touches by remember { mutableStateOf(0) }
     var overlay by remember { mutableStateOf(true) }
@@ -489,10 +503,8 @@ private fun PlayerContent(
         Column(Modifier.fillMaxSize().then(if (full) Modifier else Modifier.systemBarsPadding())) {
             if (!full) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = Modifier.weight(1f))
-                    Box(Modifier.size(40.dp).clickable(onClick = onClose).testTag(PlayerTags.CLOSE), contentAlignment = Alignment.Center) {
-                        Caption("✕", fontSize = 20.sp, color = onVideo)
-                    }
+                    titleText(Modifier.weight(1f))
+                    close()
                 }
             }
             // Место видео — одно и то же в обоих видах: движок не пересоздаётся при входе в полный экран.
@@ -600,22 +612,43 @@ private fun PlayerContent(
             val slot = remember(template, density) {
                 with(density) { measurer.measure(template, androidx.compose.ui.text.TextStyle(fontSize = 14.sp)).size.width.toDp() + 8.dp }
             }
-            val controls: @Composable (Modifier) -> Unit = { m ->
-                Row(m, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Ряд кнопок: ▶, время в поле постоянной ширины, «Метки» (если есть), звук; затем «Перезапустить»,
+            // выход из полного экрана и ✕. Телефон боком — одним рядом, ✕ правее выхода; стоит — места нет:
+            // последние три вторым рядом, все сразу (заказчик 2026-10-24).
+            val controls: @Composable (Modifier, Boolean, Boolean) -> Unit = { m, oneRow, centered ->
+                val along = if (centered) Alignment.CenterHorizontally else Alignment.Start
+                val first: @Composable () -> Unit = {
                     playButton()
                     Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.width(slot))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (request.marks.isNotEmpty()) {
-                            PlayerIconButton(PlayerIcon.MARKS, words.playerMarks, lit = marksOpen, tag = PlayerTags.MARKS) { marksOpen = !marksOpen }
+                }
+                val icons: @Composable () -> Unit = {
+                    if (request.marks.isNotEmpty()) {
+                        PlayerIconButton(PlayerIcon.MARKS, words.playerMarks, lit = marksOpen, tag = PlayerTags.MARKS) { marksOpen = !marksOpen }
+                    }
+                    sound()
+                }
+                val last: @Composable () -> Unit = {
+                    restart()
+                    PlayerIconButton(PlayerIcon.FULL_EXIT, words.playerFullExit, lit = false, tag = PlayerTags.FULL) { screen.exit() }
+                    close()
+                }
+                if (oneRow) {
+                    Row(m, horizontalArrangement = Arrangement.spacedBy(12.dp, along), verticalAlignment = Alignment.CenterVertically) {
+                        first()
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            icons()
+                            last()
                         }
-                        sound()
-                        restart()
-                        PlayerIconButton(PlayerIcon.FULL_EXIT, words.playerFullExit, lit = false, tag = PlayerTags.FULL) { screen.exit() }
+                    }
+                } else {
+                    Column(m, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = along) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            first()
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { icons() }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { last() }
                     }
                 }
-            }
-            val titleText: @Composable (Modifier) -> Unit = { m ->
-                Caption(title, fontSize = 15.sp, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = m)
             }
             val ownUpright = engine == PlayerEngine.OWN && !sideways
             if (ownUpright) {
@@ -627,17 +660,18 @@ private fun PlayerContent(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     bar()
-                    controls(Modifier)
+                    controls(Modifier.fillMaxWidth(), false, false)
                 }
             } else {
-                // Кнопки вверху: название первой строкой, под ним одним рядом ▶ от левого края, время, значки —
-                // в одну строку с названием они вставали в два ряда (заказчик 2026-10-23).
+                // Кнопки вверху — группой по середине (заказчик 2026-10-24). Правый верхний угол не перекрываем:
+                // там у проигрывателя сайта две кнопки (качество, настройки) — название до него не доходит, а
+                // большой отступ под названием опускает наши кнопки ниже тех двух.
                 Column(
-                    Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(TITLE_GAP),
                 ) {
-                    titleText(Modifier)
-                    controls(Modifier)
+                    titleText(Modifier.padding(end = SITE_CORNER))
+                    controls(Modifier.fillMaxWidth(), sideways, true)
                 }
                 if (engine != PlayerEngine.WEB) {
                     Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp)) { bar() }
@@ -660,7 +694,13 @@ private fun PlayerContent(
     }
 }
 
-private enum class PlayerIcon { MARKS, SOUND_ON, SOUND_OFF, RESTART, FULL, FULL_EXIT }
+private enum class PlayerIcon { MARKS, SOUND_ON, SOUND_OFF, RESTART, FULL, FULL_EXIT, CLOSE }
+
+/** Правый верхний угол — две кнопки проигрывателя сайта (качество, настройки): наше туда не заходит. */
+private val SITE_CORNER = 104.dp
+
+/** Отступ под названием в полном экране: наши кнопки — ниже двух кнопок сайта в углу. */
+private val TITLE_GAP = 16.dp
 
 /**
  * Подсказка над полосой, пока палец её держит: кадр (у прямого файла, когда успел прочитаться) и время.
@@ -692,7 +732,7 @@ private fun SeekPeek(fraction: Float, atMs: Long, image: androidx.compose.ui.gra
 
 /**
  * Кнопка-значок окна — без слов (заказчик 2026-10-23): «Перезапустить» (круговая стрелка), «На весь экран»
- * (уголки наружу), выход (уголки внутрь). [lit] — горит зелёным. Подпись — для озвучки.
+ * (уголки наружу), выход (уголки внутрь), закрыть окно (крестик). [lit] — горит зелёным. Подпись — для озвучки.
  */
 @Composable
 private fun PlayerIconButton(icon: PlayerIcon, label: String, lit: Boolean, tag: String, onClick: () -> Unit) {
@@ -755,6 +795,11 @@ private fun PlayerIconButton(icon: PlayerIcon, label: String, lit: Boolean, tag:
                     }
                     drawPath(head, ink)
                 }
+                PlayerIcon.CLOSE -> {
+                    val e = s * 0.18f
+                    drawLine(ink, Offset(e, e), Offset(s - e, s - e), w, StrokeCap.Round)
+                    drawLine(ink, Offset(s - e, e), Offset(e, s - e), w, StrokeCap.Round)
+                }
                 PlayerIcon.FULL, PlayerIcon.FULL_EXIT -> {
                     val e = s * 0.34f
                     val out = icon == PlayerIcon.FULL
@@ -785,6 +830,8 @@ private fun PlayerMarks(
 ) {
     val colors = Tima.colors
     val current = if (enabled) currentMark(marks, positionMs) else -1
+    // Размер — как у меток в сообщении (заказчик 2026-10-24): главная строка сообщений, по их группе.
+    ProvidePlace(TextPlace.MESSAGES) {
     Column(
         Modifier.fillMaxWidth().heightIn(max = maxHeight).verticalScroll(rememberScrollState()).alpha(if (enabled) 1f else 0.4f).testTag("player:marks"),
         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -795,10 +842,11 @@ private fun PlayerMarks(
                     .clickable(enabled = enabled) { onSeek(m.atMs) }.padding(horizontal = 6.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Caption(io.tima.domain.chat.markTime(m.atMs), fontSize = 14.sp, weight = FontWeight.SemiBold, color = colors.link)
-                Caption(m.text, fontSize = 14.sp, color = io.tima.core.ui.TimaFixed.onVideo, modifier = Modifier.weight(1f))
+                Caption(io.tima.domain.chat.markTime(m.atMs), fontSize = TimaType.sz4, weight = FontWeight.SemiBold, color = colors.link)
+                Caption(m.text, fontSize = TimaType.sz4, color = io.tima.core.ui.TimaFixed.onVideo, modifier = Modifier.weight(1f))
             }
         }
+    }
     }
 }
 

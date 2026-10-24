@@ -95,6 +95,10 @@ private class AndroidWebPlayer(private val context: Context) : WebPlayer {
     }.also { web = it }
 
     fun youtubeView(): YouTubePlayerView = youtube ?: YouTubePlayerView(context).apply {
+        // Во всё место, как WebView выше: с `WRAP_CONTENT` (так ставит `AndroidView`) плеер сам берёт высоту
+        // 9/16 ширины — боком на Samsung 2340 × 9/16 = 1316 при высоте 1080, и кадр уходил за верх и низ
+        // (заказчик 2026-10-24). Во всё место — YouTube сам вписывает кадр с полями.
+        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         enableAutomaticInitialization = false
         initialize(object : AbstractYouTubePlayerListener() {
             override fun onReady(youTubePlayer: YouTubePlayer) {
