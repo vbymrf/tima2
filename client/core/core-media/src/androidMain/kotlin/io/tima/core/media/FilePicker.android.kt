@@ -76,6 +76,48 @@ actual fun rememberFileSaver(onDone: (Boolean) -> Unit): (name: String, mime: St
     }
 }
 
+/** Android: место выбирает системное окно создания файла; пишется кусками в его поток. */
+@Composable
+actual fun rememberSaveTarget(onTarget: (SaveTarget?) -> Unit): (name: String, mime: String, source: String) -> Unit {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri: Uri? ->
+        val out = uri?.let { runCatching { context.contentResolver.openOutputStream(it) }.getOrNull() }
+        if (uri == null || out == null) {
+            onTarget(null)
+            return@rememberLauncherForActivityResult
+        }
+        onTarget(object : SaveTarget {
+            override fun write(bytes: ByteArray, count: Int) = out.write(bytes, 0, count)
+            override fun finish(ok: Boolean) {
+                runCatching { out.close() }
+                if (!ok) runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            }
+        })
+    }
+    return { name, _, _ -> launcher.launch(name) }
+}
+
+/** Android: «Загрузчик» системы — в «Загрузки», ход в шторке. */
+@Composable
+actual fun rememberSystemDownload(): ((url: String, name: String, mime: String) -> Boolean)? {
+    val context = LocalContext.current
+    return remember(context) {
+        { url, name, mime ->
+            runCatching {
+                val manager = context.getSystemService(android.app.DownloadManager::class.java) ?: return@runCatching false
+                val request = android.app.DownloadManager.Request(Uri.parse(url))
+                    .setTitle(name)
+                    .setMimeType(mime)
+                    .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
+                    .addRequestHeader("User-Agent", MEDIA_USER_AGENT)
+                manager.enqueue(request)
+                true
+            }.getOrDefault(false)
+        }
+    }
+}
+
 @Composable
 actual fun rememberFolderSaver(onDone: (Int) -> Unit): (List<SavedFile>) -> Unit {
     val context = LocalContext.current

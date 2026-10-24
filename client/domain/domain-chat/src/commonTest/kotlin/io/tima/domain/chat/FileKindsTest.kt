@@ -36,6 +36,16 @@ class FileKindsTest {
     }
 
     @Test
+    fun имя_для_сохранения_без_пути_и_с_честным_расширением() {
+        assertEquals("passwd", FileKinds.safeName("../../etc/passwd", null))
+        assertEquals("ab.txt", FileKinds.safeName("a<b>.txt", null))
+        assertEquals("file", FileKinds.safeName("...", null))
+        val exe = FileKinds.verdict("котик.jpg", "MZ".encodeToByteArray() + ByteArray(10))
+        assertEquals("котик.jpg.exe", FileKinds.safeName("котик.jpg", exe))
+        assertEquals("отчёт.pdf", FileKinds.safeName("отчёт.pdf", FileKinds.verdict("отчёт.pdf", "%PDF".encodeToByteArray())))
+    }
+
+    @Test
     fun документ_office_как_архив_не_подмена() {
         val docx = "PK".encodeToByteArray() + ByteArray(30) + "word/document.xml".encodeToByteArray()
         val v = FileKinds.verdict("договор.docx", docx)

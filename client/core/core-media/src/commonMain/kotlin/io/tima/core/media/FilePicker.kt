@@ -26,6 +26,29 @@ expect fun rememberPhotosPicker(max: Int, onPicked: (List<PickedImage>) -> Unit)
 @Composable
 expect fun rememberFileSaver(onDone: (Boolean) -> Unit): (name: String, mime: String, bytes: ByteArray) -> Unit
 
+/** Куда писать файл кусками — «Сохранить как» файла по ссылке любого размера (заказчик 2026-10-24). */
+interface SaveTarget {
+    fun write(bytes: ByteArray, count: Int)
+
+    /** Конец: [ok] — дописан; нет — недописанное убирается. */
+    fun finish(ok: Boolean)
+}
+
+/**
+ * Выбрать, куда сохранить файл [name] вида [mime], скачанный с [source]; [onTarget] — куда писать, `null` —
+ * передумал. ПК помечает сохранённый файл как скачанный из интернета (Zone.Identifier): при запуске
+ * программы Windows предупредит, как о скачанной браузером.
+ */
+@Composable
+expect fun rememberSaveTarget(onTarget: (SaveTarget?) -> Unit): (name: String, mime: String, source: String) -> Unit
+
+/**
+ * Системная загрузка: Android — «Загрузчик» (любой размер, ход в шторке, качает и при закрытой TIMA,
+ * файл в «Загрузках»; качает система, а не TIMA). `null` — у платформы такой нет; `false` — не взялась.
+ */
+@Composable
+expect fun rememberSystemDownload(): ((url: String, name: String, mime: String) -> Boolean)?
+
 /** Файл для сохранения группой: имя, вид, байты. */
 class SavedFile(val name: String, val mime: String, val bytes: ByteArray)
 

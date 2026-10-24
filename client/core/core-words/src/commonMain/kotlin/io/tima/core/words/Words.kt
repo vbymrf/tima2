@@ -1515,7 +1515,12 @@ interface ChatWords {
     val cloudSaving: String
     val cloudSaved: String
     val cloudSaveFailed: String
-    fun cloudTooBig(mb: Int): String
+    /** Android: качает «Загрузчик» системы — ход в шторке, файл в «Загрузках». */
+    val cloudSystemDownload: String
+    /** Ход загрузки кусками: скачано и, если сервер назвал, всего. */
+    fun cloudProgress(done: String, total: String?): String
+    val cloudCancel: String
+    val cloudCancelled: String
     /** Программа — красным: опасность. */
     val fileProgram: String
     /** Архив, документ с макросами, страница, двойное расширение. */
@@ -3811,7 +3816,10 @@ object RussianWords : Words {
         override val cloudSaving = "Скачиваем…"
         override val cloudSaved = "Сохранено"
         override val cloudSaveFailed = "Не скачалось — откройте в браузере"
-        override fun cloudTooBig(mb: Int) = "Файл больше $mb МБ — сохраните его из браузера"
+        override val cloudSystemDownload = "Скачивание пошло — ход в шторке, файл ляжет в «Загрузки»"
+        override fun cloudProgress(done: String, total: String?) = if (total != null) "Скачано $done из $total" else "Скачано $done"
+        override val cloudCancel = "Отменить скачивание"
+        override val cloudCancelled = "Скачивание отменено"
         override val fileProgram = "Это программа. Открывайте, только если доверяете отправителю"
         override val fileRisky = "Может быть опасным: внутри бывает программа"
         override fun fileDisguised(named: String, real: String) = "Файл назван как «$named», а на деле это «$real». Не открывайте"

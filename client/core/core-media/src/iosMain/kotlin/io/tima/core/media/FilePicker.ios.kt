@@ -14,3 +14,10 @@ actual fun rememberFileSaver(onDone: (Boolean) -> Unit): (name: String, mime: St
 
 @Composable
 actual fun rememberFolderSaver(onDone: (Int) -> Unit): (List<SavedFile>) -> Unit = { onDone(0) }
+
+
+@Composable
+actual fun rememberSaveTarget(onTarget: (SaveTarget?) -> Unit): (name: String, mime: String, source: String) -> Unit = { _, _, _ -> onTarget(null) }
+
+@Composable
+actual fun rememberSystemDownload(): ((url: String, name: String, mime: String) -> Boolean)? = null

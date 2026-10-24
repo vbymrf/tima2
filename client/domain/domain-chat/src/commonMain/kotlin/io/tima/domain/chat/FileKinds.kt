@@ -104,6 +104,25 @@ object FileKinds {
         }
     }
 
+    /**
+     * Имя для «Сохранить как» (заказчик 2026-10-24): имя от сервера может нести путь («../../x»), служебные
+     * знаки и чужое расширение — пути и служебных знаков нет, длина разумная; подмена — к имени
+     * дописывается настоящее расширение («котик.jpg.exe»): система и человек видят, что это программа.
+     */
+    fun safeName(name: String, verdict: Verdict?): String {
+        val base = name.substringAfterLast('/').substringAfterLast('\\')
+            .filter { it.code >= 32 && it !in "<>:\"|?*" }
+            .trim().trimStart('.').take(120)
+            .ifBlank { "file" }
+        val real = verdict?.takeIf { it.disguised }?.kind?.key?.let(REAL_EXT::get) ?: return base
+        return if (extOf(base) == real) base else "$base.$real"
+    }
+
+    private val REAL_EXT = mapOf(
+        "program-windows" to "exe", "program-android" to "apk", "program-linux" to "bin", "program-mac" to "bin",
+        "program-script" to "sh", "archive" to "zip", "pdf" to "pdf", "page" to "html",
+    )
+
     private fun decode(s: String): String {
         val bytes = ArrayList<Byte>()
         var i = 0

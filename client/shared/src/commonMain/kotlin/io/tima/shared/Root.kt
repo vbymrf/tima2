@@ -497,7 +497,11 @@ fun Root(
                         Journal.note(LogCode.CLOUD_FILE, "файл по ссылке", "сайт" to io.tima.domain.chat.MediaLinks.hostOf(url).orEmpty(), "ответил" to (p != null), "вид" to p?.let { io.tima.domain.chat.FileKinds.sniff(it.head) }.orEmpty())
                     }
                 },
-                whole = { url, limit -> mediaCards.whole(url, limit) },
+                download = { url, sink, progress ->
+                    mediaCards.download(url, sink, progress).also { n ->
+                        Journal.note(LogCode.CLOUD_FILE, "сохранить как", "сайт" to io.tima.domain.chat.MediaLinks.hostOf(url).orEmpty(), "вышло" to (n != null), "байт" to (n ?: 0))
+                    }
+                },
             )
         }
         io.tima.feature.chat.LinkGate(playerPorts = playerPorts, cloudPorts = cloudPorts, onPlayer = { what, detail ->

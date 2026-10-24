@@ -230,7 +230,7 @@ private fun LinkWidget(link: RichBlock.Link) {
             }
             Caption(link.title.ifBlank { hostOf(link.url) }, fontSize = TimaType.sz4, weight = FontWeight.Bold)
             if (link.description.isNotBlank()) Caption(link.description, fontSize = TimaType.sz5, color = Tima.colors.text2)
-            Caption(hostOf(link.url), fontSize = TimaType.sz5, weight = FontWeight.SemiBold, color = color, lineOne = true)
+            Caption(hostText(link.url, color), fontSize = TimaType.sz5, weight = FontWeight.SemiBold, lineOne = true)
         }
         // Текстом с названием — название цветом ссылки; синяя полоса справа на рамке пузыря, как у
         // нажимаемого вставленного (заказчик 2026-10-21).
@@ -285,6 +285,23 @@ private fun Modifier.edgeStripe(color: androidx.compose.ui.graphics.Color): Modi
 /** Домен ссылки — то, что человек видит до перехода (Решения §4). */
 internal fun hostOf(url: String): String = io.tima.domain.chat.LinkSafety.displayHost(url)
 
+/**
+ * Домен для показа — буквами, а не латинские буквы тоном ниже цвета ссылки (заказчик 2026-10-24): адрес
+ * «кавказия.рф» читается, а чужая «а» в «pаypal.com» видна. [color] — цвет латиницы.
+ */
+@Composable
+internal fun hostText(url: String, color: androidx.compose.ui.graphics.Color = Tima.colors.link): androidx.compose.ui.text.AnnotatedString {
+    val host = hostOf(url)
+    val other = androidx.compose.ui.graphics.lerp(color, Tima.colors.text, 0.4f)
+    return androidx.compose.ui.text.buildAnnotatedString {
+        for (c in host) {
+            val at = length
+            append(c)
+            addStyle(androidx.compose.ui.text.SpanStyle(color = if (io.tima.domain.chat.LinkSafety.nonLatin(c)) other else color), at, length)
+        }
+    }
+}
+
 /** Путь ссылки без схемы и домена — обрезается он, а не домен. */
 internal fun pathOf(url: String): String = url.substringAfter("://").substringAfter('/', "").let { if (it.isEmpty()) "" else "/$it" }
 
@@ -304,7 +321,7 @@ private fun CloudWidget(cloud: RichBlock.Cloud) {
         Caption(Tima.words.chat.cloudKind(cloud.kind), fontSize = TimaType.sz5, weight = FontWeight.Bold, color = Tima.colors.text2)
         Column(Modifier.weight(1f)) {
             Caption(cloud.title.ifBlank { hostOf(cloud.url) }, fontSize = TimaType.sz4, lineOne = true)
-            Tertiary(hostOf(cloud.url), lineOne = true)
+            Caption(hostText(cloud.url, Tima.colors.text3), fontSize = TimaType.sz6, weight = FontWeight.SemiBold, lineOne = true)
         }
     }
 }

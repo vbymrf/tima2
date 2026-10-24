@@ -71,6 +71,56 @@ actual fun rememberFileSaver(onDone: (Boolean) -> Unit): (name: String, mime: St
     }
 }
 
+/** ПК: место — файловый диалог; пишется кусками; дописанный файл помечается как скачанный из интернета. */
+@Composable
+actual fun rememberSaveTarget(onTarget: (SaveTarget?) -> Unit): (name: String, mime: String, source: String) -> Unit {
+    val scope = rememberCoroutineScope()
+    return { name, _, source ->
+        scope.launch {
+            val file = withContext(Dispatchers.IO) {
+                val dialog = FileDialog(null as Frame?, "Сохранить как", FileDialog.SAVE)
+                dialog.file = name
+                dialog.isVisible = true
+                val dir = dialog.directory
+                val chosen = dialog.file
+                if (dir == null || chosen == null) null else File(dir, chosen)
+            }
+            val out = file?.let { runCatching { java.io.FileOutputStream(it) }.getOrNull() }
+            if (file == null || out == null) {
+                onTarget(null)
+                return@launch
+            }
+            onTarget(object : SaveTarget {
+                override fun write(bytes: ByteArray, count: Int) = out.write(bytes, 0, count)
+                override fun finish(ok: Boolean) {
+                    runCatching { out.close() }
+                    if (ok) markFromInternet(file, source) else runCatching { file.delete() }
+                }
+            })
+        }
+    }
+}
+
+/** ПК: системной загрузки нет — пишет сама TIMA ([rememberSaveTarget]). */
+@Composable
+actual fun rememberSystemDownload(): ((url: String, name: String, mime: String) -> Boolean)? = null
+
+/**
+ * Пометка «скачано из интернета» (Zone.Identifier, зона 3) — как ставят браузеры и почта: при запуске
+ * программы Windows спросит, а SmartScreen проверит. Не Windows или файловая система без потоков — без
+ * пометки. `true` — поставлена.
+ */
+internal fun markFromInternet(file: File, source: String): Boolean {
+    if (!System.getProperty("os.name").orEmpty().startsWith("Windows")) return false
+    val host = source.substringBefore('?').substringBefore('#')
+    return runCatching {
+        java.io.FileOutputStream(file.absolutePath + ":Zone.Identifier").use {
+            it.write("[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=$host\r\n".toByteArray())
+        }
+        true
+    }.getOrDefault(false)
+}
+
 @Composable
 actual fun rememberFolderSaver(onDone: (Int) -> Unit): (List<SavedFile>) -> Unit {
     val scope = rememberCoroutineScope()

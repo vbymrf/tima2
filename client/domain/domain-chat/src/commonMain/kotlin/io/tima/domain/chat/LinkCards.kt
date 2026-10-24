@@ -50,16 +50,23 @@ object LinkSafety {
     }
 
     /**
-     * Домен для показа (Решения §4): из самой ссылки, без `www.`. Часть имени, в которой буквы **разных
-     * алфавитов** (латиница вперемешку с кириллицей или греческим — «раураl.com» с русскими «а»), —
-     * показывается как `xn--…`: похожие буквы не выдают себя за чужой сайт. Имя целиком на одном
-     * алфавите («пример.рф») остаётся как есть.
+     * Домен для показа (Решения §4): из самой ссылки, без `www.`, **буквами, как его поймёт человек**:
+     * `xn--80aa4ar0b.xn--p1ai` — «кавказия.рф» (заказчик 2026-10-24: «фактически скрываем адрес»). Чужой
+     * сайт под видом своего («раураl.com» с русскими «а») выдают не `xn--…`, а цвет: не латинские буквы
+     * окно рисует другим тоном ([nonLatin]). Испорченная часть `xn--…` остаётся как есть.
      */
     fun displayHost(url: String): String {
         val host = (hostOf(url) ?: url.substringAfter("://").substringBefore('/')).removePrefix("www.")
-        if (host.all { it.code < 128 }) return host
-        return host.split('.').joinToString(".") { label -> if (mixedScripts(label)) "xn--" + Punycode.encode(label) else label }
+        return host.split('.').joinToString(".") { label ->
+            if (label.startsWith("xn--")) Punycode.decode(label.removePrefix("xn--"))?.takeIf { it.isNotEmpty() } ?: label else label
+        }
     }
+
+    /** Буква не латинская (кириллица, греческий и прочее) — её окно показывает другим тоном. */
+    fun nonLatin(c: Char): Boolean = c.code >= 128
+
+    /** Есть ли в имени буквы разных алфавитов — латиница вперемешку с кириллицей или греческим. */
+    fun mixed(host: String): Boolean = host.split('.').any(::mixedScripts)
 
     private enum class Script { LATIN, CYRILLIC, GREEK, OTHER }
 
@@ -137,6 +144,56 @@ internal object Punycode {
             n++
         }
         return out.toString()
+    }
+
+    /** Часть имени из `xn--…` (без приставки) — обратно буквами; испорчена — `null`. */
+    fun decode(input: String): String? {
+        var n = INITIAL_N.toLong()
+        var i = 0L
+        var bias = INITIAL_BIAS
+        val b = input.lastIndexOf('-')
+        val out = mutableListOf<Int>()
+        if (b > 0) for (c in input.substring(0, b)) if (c.code >= 128) return null else out += c.code
+        var at = if (b > 0) b + 1 else 0
+        while (at < input.length) {
+            val old = i
+            var w = 1L
+            var k = BASE
+            while (true) {
+                if (at >= input.length) return null
+                val d = value(input[at++]) ?: return null
+                i += d * w
+                val t = when { k <= bias -> TMIN; k >= bias + TMAX -> TMAX; else -> k - bias }
+                if (d < t) break
+                w *= (BASE - t)
+                k += BASE
+                if (w > Int.MAX_VALUE || i > Int.MAX_VALUE) return null
+            }
+            bias = adapt((i - old).toInt(), out.size + 1, old == 0L)
+            n += i / (out.size + 1)
+            i %= (out.size + 1)
+            if (n > 0x10FFFF) return null
+            out.add(i.toInt(), n.toInt())
+            i++
+        }
+        return buildString {
+            for (cp in out) {
+                if (cp > 0xFFFF) {
+                    val v = cp - 0x10000
+                    append((0xD800 + (v shr 10)).toChar())
+                    append((0xDC00 + (v and 0x3FF)).toChar())
+                } else {
+                    append(cp.toChar())
+                }
+            }
+        }
+    }
+
+    private fun value(c: Char): Int? = when (c) {
+        in '0'..'9' -> c - '0' + 26
+        in 'a'..'z' -> c - 'a'
+        in 'A'..'Z' -> c - 'A'
+        else -> null
     }
 
     private fun digit(d: Int): Char = if (d < 26) 'a' + d else '0' + (d - 26)

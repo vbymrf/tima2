@@ -62,10 +62,60 @@ class LinkCardsOverHttp(
         got(url, limit, range = true, whole = false)?.let { io.tima.domain.chat.CloudPeek(it.url, it.type, it.size, it.name, it.bytes) }
     }.getOrNull()
 
-    /** Файл по ссылке целиком — «Сохранить как»; больше [limit] или нельзя — `null`. */
-    suspend fun whole(url: String, limit: Int): io.tima.domain.chat.CloudPeek? = runCatching {
-        got(url, limit, range = false, whole = true)?.let { io.tima.domain.chat.CloudPeek(it.url, it.type, it.size, it.name, it.bytes) }
-    }.getOrNull()
+    /**
+     * Файл по ссылке целиком — «Сохранить как» любого размера (заказчик 2026-10-24): кусками в [sink], сколько
+     * пришло — в [progress]. Те же запреты и переходы, что у карточки; предела на весь запрос нет — только
+     * на молчание сети. Отмена корутины обрывает загрузку. Вышло — сколько байт, нет — `null`.
+     */
+    suspend fun download(url: String, sink: suspend (ByteArray, Int) -> Unit, progress: (Long) -> Unit = {}): Long? {
+        var at = url
+        repeat(MAX_REDIRECTS + 1) {
+            if (!LinkSafety.allowed(at)) return null
+            if (inside(LinkSafety.hostOf(at) ?: return null)) return null
+            val here = at
+            var next: String? = null
+            val done = stream.prepareGet(at).execute { resp ->
+                val location = resp.headers[HttpHeaders.Location]
+                when {
+                    resp.status.value in 300..399 && location != null -> {
+                        next = resolve(here, location)
+                        null
+                    }
+                    resp.status.isSuccess() -> {
+                        val channel = resp.bodyAsChannel()
+                        val buffer = ByteArray(64 * 1024)
+                        var total = 0L
+                        while (true) {
+                            val n = channel.readAvailable(buffer, 0, buffer.size)
+                            if (n <= 0) break
+                            sink(buffer, n)
+                            total += n
+                            progress(total)
+                        }
+                        total
+                    }
+                    else -> -1L
+                }
+            }
+            when {
+                next != null -> at = next!!
+                done == null || done < 0 -> return null
+                else -> return done
+            }
+        }
+        return null
+    }
+
+    /** Клиент загрузки файла: без предела на весь запрос — большой файл идёт минутами; молчание — отказ. */
+    private val stream: HttpClient by lazy {
+        HttpClient(httpEngine()) {
+            followRedirects = false
+            install(HttpTimeout) {
+                connectTimeoutMillis = TIMEOUT_MS
+                socketTimeoutMillis = 30_000L
+            }
+        }
+    }
 
     /** Адрес после переходов и байты до предела; запрещённый адрес или ошибка — `null`. */
     private suspend fun fetch(start: String, limit: Int): Pair<String, ByteArray>? =
