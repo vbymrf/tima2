@@ -1591,6 +1591,11 @@ interface ChatWords {
     val playerFull: String
     val playerFullExit: String
     val playerAuto: String
+
+    /** Кнопка своего проигрывателя справа вверху (заказчик 2026-10-24): меню — качество и скорость. */
+    val playerSettings: String
+    val playerQuality: String
+    val playerSpeed: String
     val playerMute: String
     val playerUnmute: String
     val playerMarks: String
@@ -3906,6 +3911,9 @@ object RussianWords : Words {
         override val playerFull = "На весь экран"
         override val playerFullExit = "Выйти из полного экрана"
         override val playerAuto = "Авто"
+        override val playerSettings = "Качество и скорость"
+        override val playerQuality = "Качество"
+        override val playerSpeed = "Скорость"
         override val playerMute = "Выключить звук"
         override val playerUnmute = "Включить звук"
         override val playerMarks = "Метки"

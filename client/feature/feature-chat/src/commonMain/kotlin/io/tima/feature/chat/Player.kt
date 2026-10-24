@@ -164,7 +164,8 @@ object PlayerTags {
     const val WINDOW = "player:window"
     const val PLAY = "player:play"
     const val BAR = "player:bar"
-    const val SPEED = "player:speed"
+    /** Скорость в меню своего проигрывателя: `player:speed.1`, `player:speed.1.5`, `player:speed.2`. */
+    fun speed(value: Float) = "player:speed." + (if (value == value.toInt().toFloat()) value.toInt().toString() else value.toString())
     const val BROWSER = "player:browser"
     const val OTHER = "player:other"
     const val CLOSE = "player:close"
@@ -173,7 +174,9 @@ object PlayerTags {
     const val MARKS = "player:marks.open"
     const val PEEK = "player:peek"
     const val FULL = "player:full"
-    const val QUALITY = "player:quality"
+    /** Кнопка своего проигрывателя справа вверху — меню качества и скорости (заказчик 2026-10-24). */
+    const val SETTINGS = "player:settings"
+    const val SETTINGS_MENU = "player:settings.menu"
     fun quality(height: Int) = "player:quality.$height"
 }
 
@@ -486,6 +489,23 @@ private fun PlayerContent(
         PlayerIconButton(PlayerIcon.CLOSE, Tima.words.call.close, lit = false, tag = PlayerTags.CLOSE, onClick = onClose)
     }
 
+    // Свой проигрыватель: справа вверху, левее ✕, — меню качества и скорости (заказчик 2026-10-24). Качеств
+    // нет — только скорость; эфир без качеств — кнопки нет.
+    val hasQuality = engine == PlayerEngine.OWN && variants.size > 1
+    val hasSpeed = engine == PlayerEngine.OWN && !state.live
+    val settings: @Composable () -> Unit = {
+        if (hasQuality || hasSpeed) {
+            PlayerIconButton(PlayerIcon.SETTINGS, words.playerSettings, lit = qualityOpen, tag = PlayerTags.SETTINGS) { qualityOpen = !qualityOpen }
+        }
+    }
+    // Справа вверху своего проигрывателя: меню, ✕ — во всех видах (заказчик 2026-10-24).
+    val corner: @Composable () -> Unit = {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            settings()
+            close()
+        }
+    }
+
     // Касание где угодно в полном экране показывает кнопки поверх видео на 3 с; на паузе они видны всегда.
     var touches by remember { mutableStateOf(0) }
     var overlay by remember { mutableStateOf(true) }
@@ -514,7 +534,7 @@ private fun PlayerContent(
             if (!full) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     titleText(Modifier.weight(1f))
-                    close()
+                    corner()
                 }
             }
             // Место видео — одно и то же в обоих видах: движок не пересоздаётся при входе в полный экран.
@@ -545,23 +565,6 @@ private fun PlayerContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (!state.live && engine == PlayerEngine.OWN) {
-                            Chip(
-                                speedName(state.speed),
-                                kind = ChipKind.Quiet,
-                                onClick = { own?.setSpeed(when (state.speed) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f }) },
-                                modifier = Modifier.testTag(PlayerTags.SPEED),
-                            )
-                        }
-                        // Качество — когда своему движку есть из чего выбрать (8а); «Авто» подбирает по сети.
-                        if (engine == PlayerEngine.OWN && variants.size > 1) {
-                            Chip(
-                                if (quality == 0) words.playerAuto else "${quality}p",
-                                kind = if (qualityOpen) ChipKind.Selected else ChipKind.Quiet,
-                                onClick = { qualityOpen = !qualityOpen },
-                                modifier = Modifier.testTag(PlayerTags.QUALITY),
-                            )
-                        }
                         // Смена движка — видна всегда, когда движков больше одного (§3.1); надпись называет тот,
                         // на который переключит: «Браузерный» или «Встроенный проигрыватель» (заказчик 2026-10-23).
                         if (order.size > 1) {
@@ -579,27 +582,6 @@ private fun PlayerContent(
                             onBrowser(request.url)
                         }, modifier = Modifier.testTag(PlayerTags.BROWSER))
                     }
-                    if (qualityOpen && engine == PlayerEngine.OWN) {
-                        Row(
-                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            for (h in listOf(0) + variants.map { it.quality }) {
-                                Chip(
-                                    if (h == 0) words.playerAuto else "${h}p",
-                                    kind = if (h == quality) ChipKind.Selected else ChipKind.Quiet,
-                                    modifier = Modifier.testTag(PlayerTags.quality(h)),
-                                    onClick = {
-                                        qualityOpen = false
-                                        if (h != quality) {
-                                            quality = h
-                                            reopen(PlayerEvent.QUALITY, if (h == 0) "auto" else "${h}p")
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                    }
                     if (request.marks.isNotEmpty()) {
                         PlayerMarks(request.marks, state.positionMs, enabled = !state.elsewhere) { ms -> seek(ms); play() }
                     }
@@ -610,7 +592,7 @@ private fun PlayerContent(
         // постоянной ширины (с часами, если видео длиннее часа), за временем — «Метки» (если есть), звук,
         // «Перезапустить», выход — одним рядом. Название — строкой выше. Низ — кнопкам сайта, у своего движка —
         // нашей полосе. Свой движок с вертикальным видео (телефон стоит) — всё наше внизу, как в окне.
-        if (full && (overlay || !state.playing || dragAt != null || marksOpen)) {
+        if (full && (overlay || !state.playing || dragAt != null || marksOpen || qualityOpen)) {
             val shade = colors.viewer.copy(alpha = 0.5f)
             val measurer = androidx.compose.ui.text.rememberTextMeasurer()
             val density = androidx.compose.ui.platform.LocalDensity.current
@@ -646,7 +628,7 @@ private fun PlayerContent(
                 val last: @Composable () -> Unit = {
                     restart()
                     PlayerIconButton(PlayerIcon.FULL_EXIT, words.playerFullExit, lit = false, tag = PlayerTags.FULL) { screen.exit() }
-                    close()
+                    if (engine != PlayerEngine.OWN) close()
                 }
                 if (oneRow) {
                     Row(m, horizontalArrangement = Arrangement.spacedBy(12.dp, along), verticalAlignment = Alignment.CenterVertically) {
@@ -668,8 +650,12 @@ private fun PlayerContent(
             }
             val ownUpright = engine == PlayerEngine.OWN && !sideways
             if (ownUpright) {
-                Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    titleText(Modifier)
+                Row(
+                    Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    titleText(Modifier.weight(1f))
+                    corner()
                 }
                 Column(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp),
@@ -691,7 +677,16 @@ private fun PlayerContent(
                             .padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(TITLE_GAP),
                     ) {
-                        titleText(Modifier.padding(end = SITE_CORNER))
+                        if (bare) {
+                            // Браузерный — без названия (заказчик 2026-10-24); место под ним остаётся: оно опускает
+                            // наши кнопки ниже двух кнопок сайта в углу.
+                            titleText(Modifier.padding(end = SITE_CORNER).alpha(0f))
+                        } else {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                titleText(Modifier.weight(1f))
+                                corner()
+                            }
+                        }
                         controls(Modifier.fillMaxWidth(), sideways, true)
                     }
                 }
@@ -713,10 +708,53 @@ private fun PlayerContent(
                 }
             }
         }
+        // Меню качества и скорости своего проигрывателя — под кнопкой справа вверху (заказчик 2026-10-24).
+        if (qualityOpen && (hasQuality || hasSpeed)) {
+            Column(
+                Modifier.align(Alignment.TopEnd).then(if (full) Modifier else Modifier.systemBarsPadding())
+                    .padding(top = 60.dp, end = 12.dp).width(200.dp)
+                    .background(colors.viewer.copy(alpha = 0.9f), RoundedCornerShape(10.dp)).padding(8.dp)
+                    .testTag(PlayerTags.SETTINGS_MENU),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                val item: @Composable (String, Boolean, String, () -> Unit) -> Unit = { label, on, tag, pick ->
+                    Caption(
+                        label, fontSize = TimaType.sz4, weight = if (on) FontWeight.Bold else FontWeight.Normal,
+                        color = if (on) colors.onAccent else onVideo, lineOne = true,
+                        modifier = Modifier.fillMaxWidth()
+                            .background(if (on) colors.navigation else colors.viewer.copy(alpha = 0f), RoundedCornerShape(6.dp))
+                            .clickable(onClick = pick).padding(horizontal = 8.dp, vertical = 6.dp).testTag(tag),
+                    )
+                }
+                ProvidePlace(TextPlace.MENU) {
+                    if (hasQuality) {
+                        Caption(words.playerQuality, fontSize = TimaType.sz5, color = onVideo.copy(alpha = 0.7f), modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                        for (h in listOf(0) + variants.map { it.quality }) {
+                            item(if (h == 0) words.playerAuto else "${h}p", h == quality, PlayerTags.quality(h)) {
+                                qualityOpen = false
+                                if (h != quality) {
+                                    quality = h
+                                    reopen(PlayerEvent.QUALITY, if (h == 0) "auto" else "${h}p")
+                                }
+                            }
+                        }
+                    }
+                    if (hasSpeed) {
+                        Caption(words.playerSpeed, fontSize = TimaType.sz5, color = onVideo.copy(alpha = 0.7f), modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+                        for (v in listOf(1f, 1.5f, 2f)) {
+                            item(speedName(v), state.speed == v, PlayerTags.speed(v)) {
+                                qualityOpen = false
+                                own?.setSpeed(v)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
-private enum class PlayerIcon { MARKS, SOUND_ON, SOUND_OFF, RESTART, FULL, FULL_EXIT, CLOSE }
+private enum class PlayerIcon { MARKS, SOUND_ON, SOUND_OFF, RESTART, FULL, FULL_EXIT, CLOSE, SETTINGS }
 
 /**
  * Кнопки, время и название — на белом, без затемняющей панели: браузерный проигрыватель в полном экране
@@ -832,6 +870,16 @@ private fun PlayerIconButton(icon: PlayerIcon, label: String, lit: Boolean, tag:
                         close()
                     }
                     drawPath(head, ink)
+                }
+                PlayerIcon.SETTINGS -> {
+                    // Шестерёнка: кольцо и восемь зубцов.
+                    val c = Offset(s / 2, s / 2)
+                    drawCircle(ink, s * 0.2f, c, style = stroke)
+                    for (k in 0 until 8) {
+                        val a = (k * 45.0 * kotlin.math.PI / 180).toFloat()
+                        val d = Offset(cos(a), sin(a))
+                        drawLine(ink, Offset(c.x + d.x * s * 0.32f, c.y + d.y * s * 0.32f), Offset(c.x + d.x * s * 0.46f, c.y + d.y * s * 0.46f), w, StrokeCap.Round)
+                    }
                 }
                 PlayerIcon.CLOSE -> {
                     val e = s * 0.18f
