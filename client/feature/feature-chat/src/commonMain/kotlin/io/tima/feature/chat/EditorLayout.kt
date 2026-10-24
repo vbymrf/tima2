@@ -435,7 +435,7 @@ private fun EditorCell(
                 textAlign = alignOf(look.align),
             ),
             cursorBrush = SolidColor(colors.navigation),
-            visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks, color = io.tima.core.ui.paletteColor(look.color)),
+            visualTransformation = rememberTypedView(shown, marks, open = false, color = io.tima.core.ui.paletteColor(look.color)),
             modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp)
                 .focusRequester(cellFocus)
                 .onFocusChanged { if (it.isFocused) model.focusedCell(index, c) }

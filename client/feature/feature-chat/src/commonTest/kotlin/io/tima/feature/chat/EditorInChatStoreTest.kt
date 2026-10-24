@@ -94,12 +94,12 @@ class EditorInChatStoreTest {
         runCurrent()
         s.draftChanged("**жирный**")
         s.sendPressed()
-        s.marksChanged(false)
         s.draftChanged("\\*\\*жирный\\*\\*")
         s.sendPressed()
         assertEquals(listOf("знаки:**жирный**", "знаки:\\*\\*жирный\\*\\*"), sent)
-        s.draftChanged("в редактор")
-        assertFalse(s.openEditor()!!.marks, "редактор открыт с той же галочкой")
+        // Набранное со знаками переезжает в редактор — тем же разбором, без галочки (ADR-0053).
+        s.draftChanged("**в** редактор")
+        assertEquals("**в** редактор", (s.openEditor()!!.items.single() as ComposedItem.Text).source)
     }
 
     @Test
@@ -207,13 +207,11 @@ class EditorInChatStoreTest {
         m.remove(0)
         // Текст и пустой текст под виджетом сошлись — один кусок (заказчик 2026-10-21).
         assertEquals(listOf("a"), m.doc.items.map { (it as ComposedItem.Text).source })
-        m.toggleMarks()
-        assertFalse(m.doc.marks)
+        val before = m.doc.level
         m.level(3)
         assertEquals(3, m.doc.level)
         m.undo()
-        m.undo()
-        assertTrue(m.doc.marks, "знаки и уровень отменяются, как и всё")
+        assertEquals(before, m.doc.level, "уровень отменяется, как и всё")
     }
 
     @Test

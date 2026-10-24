@@ -131,3 +131,44 @@ internal fun rememberTypedView(
         }
     }
 }
+
+/**
+ * Вид строки ввода (заказчик 2026-10-24, ADR-0053): текст со знаками md как набран, поверх — знаки серым и
+ * стиль, к которому придём, по [marks] — тому же разбору, что уходит при отправке (`QuickMarkdown.typing`).
+ * Знаки остаются буквами поля: курсор и стирание идут по ним, сдвига мест нет. Заголовок — жирным той же
+ * величины: поле не прыгает по высоте.
+ */
+@Composable
+internal fun rememberMarkdownView(text: String, marks: TypingMarks?): VisualTransformation {
+    val colors = Tima.colors
+    val marker = colors.text3
+    val quote = colors.text2
+    val highlight = colors.activity.copy(alpha = 0.35f)
+    val code = colors.functional
+    val tag = colors.confirmed
+    return remember(text, marks, marker, quote, highlight, code, tag) {
+        VisualTransformation { field ->
+            // Поле успело смениться раньше вида — показать как есть.
+            if (field.text != text || marks == null) return@VisualTransformation TransformedText(field, OffsetMapping.Identity)
+            val b = AnnotatedString.Builder(text)
+            for (m in marks.of(text)) {
+                val style = when (m.style) {
+                    TypingStyle.MARKER, TypingStyle.OPEN -> SpanStyle(color = marker)
+                    TypingStyle.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
+                    TypingStyle.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
+                    TypingStyle.UNDERLINE -> SpanStyle(textDecoration = TextDecoration.Underline)
+                    TypingStyle.STRIKE -> SpanStyle(textDecoration = TextDecoration.LineThrough)
+                    TypingStyle.HIGHLIGHT -> SpanStyle(background = highlight)
+                    TypingStyle.CODE -> SpanStyle(fontFamily = FontFamily.Monospace, background = code)
+                    TypingStyle.MENTION, TypingStyle.HASHTAG -> SpanStyle(color = tag)
+                    TypingStyle.HEADING -> SpanStyle(fontWeight = FontWeight.ExtraBold)
+                    TypingStyle.QUOTE -> SpanStyle(fontStyle = FontStyle.Italic, color = quote)
+                }
+                val a = m.start.coerceIn(0, text.length)
+                val e = m.end.coerceIn(0, text.length)
+                if (e > a) b.addStyle(style, a, e)
+            }
+            TransformedText(b.toAnnotatedString(), OffsetMapping.Identity)
+        }
+    }
+}

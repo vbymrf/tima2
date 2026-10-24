@@ -6,22 +6,22 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Правка набранного без знаков (ADR-0048): отрезки и виды строк идут за правкой; «Знаки md»
- * превращают набранную пару и знак строки в оформление сразу.
+ * Правка набранного в редакторе: отрезки и виды строк идут за правкой; набранный знак md — текст
+ * (ADR-0053: знаки разбирает только строка ввода, при отправке).
  */
 class TypedEditsTest {
 
     private fun typed(text: String, vararg spans: TypedSpan) = TypedEdits.normalized(Typed.plain(text).copy(spans = spans.toList()))
 
     /** Набрать [s] на месте [at] — как поле: новый текст и курсор за набранным. */
-    private fun type(t: Typed, at: Int, s: String, pending: Set<InlineKind>? = null, convert: Boolean = true): TypedEdits.Change =
-        TypedEdits.change(t, t.text.substring(0, at) + s + t.text.substring(at), at + s.length, pending, convert)
+    private fun type(t: Typed, at: Int, s: String, pending: Set<InlineKind>? = null): TypedEdits.Change =
+        TypedEdits.change(t, t.text.substring(0, at) + s + t.text.substring(at), at + s.length, pending)
 
-    private fun typeAll(t: Typed, s: String, convert: Boolean = true): TypedEdits.Change {
+    private fun typeAll(t: Typed, s: String): TypedEdits.Change {
         var c = TypedEdits.Change(t, t.text.length)
         for (ch in s) {
             val at = c.cursor ?: c.typed.text.length
-            c = type(c.typed, at, ch.toString(), convert = convert).let { if (it.cursor == null) it.copy(cursor = at + 1) else it }
+            c = type(c.typed, at, ch.toString()).let { if (it.cursor == null) it.copy(cursor = at + 1) else it }
         }
         return c
     }
@@ -46,58 +46,21 @@ class TypedEditsTest {
     }
 
     @Test
-    fun набранная_пара_сразу_становится_оформлением() {
-        val c = typeAll(Typed.plain("это "), "**жир**")
-        assertEquals("это жир", c.typed.text)
-        assertEquals(listOf(TypedSpan(InlineKind.BOLD, 4, 7)), c.typed.spans)
-        assertEquals(7, c.cursor)
-        for ((sign, kind) in listOf("*" to InlineKind.ITALIC, "++" to InlineKind.UNDERLINE, "~~" to InlineKind.STRIKE, "==" to InlineKind.HIGHLIGHT, "`" to InlineKind.CODE)) {
-            val k = typeAll(Typed.plain(""), "${sign}сл$sign")
-            assertEquals("сл", k.typed.text, sign)
-            assertEquals(listOf(TypedSpan(kind, 0, 2)), k.typed.spans, sign)
-        }
-    }
-
-    @Test
-    fun знаки_выключены_остаются_текстом() {
-        val c = typeAll(Typed.plain(""), "**жир** # x", convert = false)
+    fun знаки_md_в_редакторе_остаются_текстом() {
+        val c = typeAll(Typed.plain(""), "**жир** # x")
         assertEquals("**жир** # x", c.typed.text)
         assertTrue(c.typed.spans.isEmpty())
-    }
-
-    @Test
-    fun незакрытая_пара_и_звёздочка_в_жирном_не_курсив() {
-        val open = typeAll(Typed.plain(""), "**жир*")
-        assertEquals("**жир*", open.typed.text, "одна закрывающая звёздочка из двух — ещё не пара")
-        assertTrue(open.typed.spans.isEmpty())
-        val spaced = typeAll(Typed.plain(""), "a ** b **")
-        assertTrue(spaced.typed.spans.isEmpty(), "у пробела знак не работает")
-    }
-
-    @Test
-    fun знак_строки_в_её_начале_становится_видом() {
-        for ((sign, kind) in listOf("# " to LineKind.HEADING1, "## " to LineKind.HEADING2, "### " to LineKind.HEADING3, "- " to LineKind.LIST1, "--> " to LineKind.QUOTE)) {
-            val c = typeAll(Typed.plain(""), sign)
-            assertEquals("", c.typed.text, sign)
-            assertEquals(listOf(kind), c.typed.lines, sign)
-        }
-        val code = typeAll(Typed.plain(""), "```")
-        assertEquals(listOf(LineKind.CODE), code.typed.lines)
-        val divider = typeAll(Typed.plain("a\n"), "---")
-        assertEquals("a\n\n", divider.typed.text)
-        assertEquals(listOf(LineKind.PARAGRAPH, LineKind.DIVIDER, LineKind.PARAGRAPH), divider.typed.lines)
-        assertEquals(3, divider.cursor, "писать — под разделителем")
-        // Где вида строки нет — знак строки остаётся текстом.
-        val cell = TypedEdits.change(Typed.plain("#"), "# ", 2, null, convert = true, lineSigns = false)
-        assertEquals("# ", cell.typed.text)
+        val line = typeAll(Typed.plain(""), "# ")
+        assertEquals("# ", line.typed.text)
+        assertEquals(listOf(LineKind.PARAGRAPH), line.typed.lines, "знак строки — не вид строки")
     }
 
     @Test
     fun перевод_строки_продолжает_список_и_заголовок() {
         val list = Typed("пункт", listOf(LineKind.LIST1))
-        val next = type(list, 5, "\n", convert = false).typed
+        val next = type(list, 5, "\n").typed
         assertEquals(listOf(LineKind.LIST1, LineKind.LIST1), next.lines)
-        val ended = type(next, 6, "\n", convert = false)
+        val ended = type(next, 6, "\n")
         assertEquals("пункт\n", ended.typed.text, "пустой пункт — список кончился, перевода нет")
         assertEquals(listOf(LineKind.LIST1, LineKind.PARAGRAPH), ended.typed.lines)
         val heading = Typed("Заг", listOf(LineKind.HEADING1))
@@ -109,7 +72,7 @@ class TypedEditsTest {
     @Test
     fun стёртый_перевод_перед_пунктом_снимает_вид() {
         val t = Typed("a\nпункт", listOf(LineKind.PARAGRAPH, LineKind.LIST1))
-        val c = TypedEdits.change(t, "aпункт", 1, null, convert = true)
+        val c = TypedEdits.change(t, "aпункт", 1, null)
         assertEquals("a\nпункт", c.typed.text)
         assertEquals(listOf(LineKind.PARAGRAPH, LineKind.PARAGRAPH), c.typed.lines)
         assertEquals(2, c.cursor)
@@ -118,9 +81,9 @@ class TypedEditsTest {
     @Test
     fun стёртое_слово_уносит_отрезок_замена_сохраняет() {
         val t = typed("a жир b", TypedSpan(InlineKind.BOLD, 2, 5))
-        assertTrue(TypedEdits.change(t, "a  b", 2, null, convert = true).typed.spans.isEmpty())
+        assertTrue(TypedEdits.change(t, "a  b", 2, null).typed.spans.isEmpty())
         // Подсказка клавиатуры заменила слово целиком — оформление остаётся.
-        assertEquals(listOf(TypedSpan(InlineKind.BOLD, 2, 6)), TypedEdits.change(t, "a жиры b", 6, null, convert = true).typed.spans)
+        assertEquals(listOf(TypedSpan(InlineKind.BOLD, 2, 6)), TypedEdits.change(t, "a жиры b", 6, null).typed.spans)
     }
 
     @Test
@@ -141,6 +104,6 @@ class TypedEditsTest {
     fun отрезок_не_идёт_через_перевод_строки_и_в_код() {
         val t = TypedEdits.normalized(Typed("ab\ncd", listOf(LineKind.PARAGRAPH, LineKind.CODE), listOf(TypedSpan(InlineKind.BOLD, 0, 5))))
         assertEquals(listOf(TypedSpan(InlineKind.BOLD, 0, 2)), t.spans)
-        assertNull(TypedEdits.change(Typed.plain(""), "x", 1, null, convert = true).cursor)
+        assertNull(TypedEdits.change(Typed.plain(""), "x", 1, null).cursor)
     }
 }

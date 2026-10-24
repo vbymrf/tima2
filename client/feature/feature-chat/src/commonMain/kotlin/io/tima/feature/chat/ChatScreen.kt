@@ -456,8 +456,6 @@ fun ChatScreen(
             onSet = onSet,
             onSend = onSend,
             source = source,
-            // «Знаки md» выключены — набранный знак остаётся текстом; при правке своего — включены (ADR-0045).
-            marks = state.marks || state.editing > 0,
             onEditor = onEditor,
             composed = composed,
             onComposedDrop = onComposedDrop,

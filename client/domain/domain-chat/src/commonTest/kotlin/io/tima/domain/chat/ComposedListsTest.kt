@@ -109,11 +109,4 @@ class ComposedListsTest {
         assertTrue(!ListFit.tooNarrow(wide.copy(flat = true)), "без отступа — помещается")
     }
 
-    @Test
-    fun ступень_без_родителя_в_строке_ввода() {
-        val c = TypedEdits.change(Typed.plain("  -"), "  - ", 4, null, convert = true, untitled = "Без имени")
-        assertEquals("Без имени\n", c.typed.text)
-        assertEquals(listOf(LineKind.LIST1, LineKind.LIST2), c.typed.lines)
-        assertEquals(10, c.cursor)
-    }
 }

@@ -224,13 +224,8 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         } else {
             before
         }
-        val change = TypedEdits.change(
-            start, typed.text, typed.selection.end, pending, convert = doc.marks,
-            lineSigns = !(inList(at) && at.widget == Spot.TITLE),
-            // В содержимом пункта вложенный пункт — ступенью, а не строкой со знаком.
-            listSigns = !inList(at),
-            untitled = untitled,
-        )
+        // Знаки md — текст: оформление в редакторе только кнопками (заказчик 2026-10-24, ADR-0053).
+        val change = TypedEdits.change(start, typed.text, typed.selection.end, pending)
         pending = null
         val after = change.typed
         val cursor = change.cursor
@@ -532,12 +527,6 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         val list = listHere ?: return
         typingIn = null
         publish(push = true, snapshot.copy(doc = doc.copy(items = doc.items.toMutableList().apply { set(focus, list.copy(open = open, flat = flat)) })))
-    }
-
-    /** «Знаки md» — шаг истории: отменяется, как и всё остальное. */
-    fun toggleMarks() {
-        typingIn = null
-        publish(push = true, snapshot.copy(doc = doc.copy(marks = !doc.marks)))
     }
 
     fun level(level: Int) {

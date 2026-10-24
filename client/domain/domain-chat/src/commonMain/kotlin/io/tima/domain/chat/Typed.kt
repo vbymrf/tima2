@@ -82,40 +82,26 @@ object PlainTyped : TypedSource {
 }
 
 /**
- * Правка набранного (ADR-0048): поле сменило текст — отрезки и виды строк идут следом; кнопки
- * ставят отрезок и вид строки. Чистые функции: одно и то же у редактора и строки ввода.
+ * Правка набранного в редакторе: поле сменило текст — отрезки и виды строк идут следом; кнопки
+ * ставят отрезок и вид строки. Знаков md здесь нет (заказчик 2026-10-24, ADR-0053): набранный знак —
+ * текст, оформление — кнопками. Знаки разбирает одна логика — быстрое оформление строки ввода
+ * (`QuickMarkdown`), при отправке.
  */
 object TypedEdits {
 
-    /** Итог правки; [cursor] — куда встать, если набранное переделано (знаки стали оформлением). */
+    /** Итог правки; [cursor] — куда встать, если набранное переделано. */
     data class Change(val typed: Typed, val cursor: Int? = null)
-
-    /** Знаки строки, превращающиеся сразу (ADR-0048 §1). */
-    private val LINE_SIGNS = listOf(
-        "### " to LineKind.HEADING3, "## " to LineKind.HEADING2, "# " to LineKind.HEADING1,
-        "    - " to LineKind.LIST3, "  - " to LineKind.LIST2, "- " to LineKind.LIST1, "--> " to LineKind.QUOTE,
-    )
-
-    /** Знаки пары — длинные первыми: `**` раньше `*`. */
-    private val PAIRS = listOf(InlineKind.BOLD, InlineKind.UNDERLINE, InlineKind.STRIKE, InlineKind.HIGHLIGHT, InlineKind.ITALIC, InlineKind.CODE)
 
     /**
      * Поле сменило текст на [after], курсор — [cursor]. Набранное внутри и в конце оформленного
      * продолжает его, в начале — нет (Word); [pending] — что наденется на набранное вместо этого
-     * (Ж без выделения). [convert] — «Знаки md» включены: закрытая пара и знак строки сразу
-     * становятся оформлением; [lineSigns] — знаки строки (выключены там, где вида строки нет);
-     * [listSigns] — и знак пункта (в содержимом пункта списка его нет: вложенный — ступенью пункта);
-     * [untitled] — заголовок пункта, который встаёт над пунктом ступени без родителя.
+     * (Ж без выделения).
      */
     fun change(
         before: Typed,
         after: String,
         cursor: Int,
         pending: Set<InlineKind>?,
-        convert: Boolean,
-        lineSigns: Boolean = true,
-        listSigns: Boolean = true,
-        untitled: String = "",
     ): Change {
         val old = before.text
         val (p, oldEnd, newEnd) = diff(old, after, cursor)
@@ -158,80 +144,8 @@ object TypedEdits {
         if (inserted.isNotEmpty()) for (kind in InlineKind.entries) {
             spans = if (kind in inherited) spans + TypedSpan(kind, p, p + inserted.length) else without(spans, kind, p, p + inserted.length)
         }
-        var typed = normalized(Typed(after, lines, spans))
-
-        if (!convert || deleted.isNotEmpty() || inserted.isEmpty() || '\n' in inserted) return Change(typed)
-        val c = p + inserted.length
-        if (lineSigns) lineSign(typed, c, listSigns, untitled)?.let { return it }
-        return pairClosed(typed, c) ?: Change(typed)
+        return Change(normalized(Typed(after, lines, spans)))
     }
-
-    /** Знак строки набран в её начале — строка получает вид, знак уходит. */
-    private fun lineSign(t: Typed, c: Int, listSigns: Boolean, untitled: String): Change? {
-        val line = t.lineAt(c)
-        if (t.lines[line] != LineKind.PARAGRAPH) return null
-        val start = t.lineStart(line)
-        val end = t.lineEnd(line)
-        val head = t.text.substring(start, c)
-        val whole = t.text.substring(start, end)
-        LINE_SIGNS.firstOrNull { it.first == head && (listSigns || it.second !in LISTS) }?.let { (sign, kind) ->
-            val cut = remove(t, start, start + sign.length)
-            val (next, shift) = parents(cut.copy(lines = cut.lines.toMutableList().apply { set(line, kind) }), untitled)
-            return Change(next, shift(start))
-        }
-        if (c == end && whole == "```") {
-            val cut = remove(t, start, end)
-            return Change(cut.copy(lines = cut.lines.toMutableList().apply { set(line, LineKind.CODE) }), start)
-        }
-        if (c == end && whole == "---") {
-            // Разделитель — строка без текста; писать дальше — с новой строки под ним.
-            val cut = remove(t, start, end)
-            val text = cut.text.substring(0, start) + "\n" + cut.text.substring(start)
-            val lines = cut.lines.toMutableList().apply { set(line, LineKind.DIVIDER); add(line + 1, LineKind.PARAGRAPH) }
-            return Change(normalized(Typed(text, lines, replaced(cut.spans, start, start, 1))), start + 1)
-        }
-        return null
-    }
-
-    /** Набран закрывающий знак пары — пара стала оформлением, знаки ушли. */
-    private fun pairClosed(t: Typed, c: Int): Change? {
-        val line = t.lineAt(c)
-        if (t.lines[line] == LineKind.CODE) return null
-        val ls = t.lineStart(line)
-        val text = t.text
-        fun inCode(i: Int) = t.spans.any { it.kind == InlineKind.CODE && it.start <= i && i < it.end }
-        for (kind in PAIRS) {
-            val sign = kind.sign
-            val l = sign.length
-            val q = c - l
-            if (q - 1 < ls || !text.regionMatches(q, sign, 0, l)) continue
-            val prev = text[q - 1]
-            if (prev.isWhitespace() || inCode(q) || inCode(q - 1)) continue
-            // Одиночная звёздочка — не половина двойной.
-            if (kind == InlineKind.ITALIC && prev == '*') continue
-            var o = q - l - 1
-            while (o >= ls) {
-                val fits = text.regionMatches(o, sign, 0, l) && !text[o + l].isWhitespace() && !inCode(o) &&
-                    (kind != InlineKind.ITALIC || (text.getOrNull(o - 1) != '*' && text.getOrNull(o + 1) != '*')) &&
-                    (kind != InlineKind.BOLD || text.getOrNull(o - 1) != '*')
-                if (fits) break
-                if (kind == InlineKind.CODE && text[o] == '`') { o = -1; break }
-                o--
-            }
-            if (o < ls) continue
-            val inner = o + l until q
-            var cut = remove(remove(t, q, c), o, o + l)
-            var spans = cut.spans + TypedSpan(kind, o, o + inner.count())
-            if (kind == InlineKind.CODE) spans = spans.filter { it.kind == InlineKind.CODE || it.end <= o || it.start >= o + inner.count() }
-            cut = normalized(cut.copy(spans = spans))
-            return Change(cut, c - 2 * l)
-        }
-        return null
-    }
-
-    /** Вырезать [from]…[to] из одной строки (знаки внутри строки — перевода строки там нет). */
-    private fun remove(t: Typed, from: Int, to: Int): Typed =
-        normalized(Typed(t.text.removeRange(from, to), t.lines, replaced(t.spans, from, to, 0)))
 
     /** Строка после перевода в конце строки [kind]. */
     /** Вид сохраняется на новой строке (заказчик 2026-10-19: «Закрепляем тип Абзац»); у разделителя — абзац. */

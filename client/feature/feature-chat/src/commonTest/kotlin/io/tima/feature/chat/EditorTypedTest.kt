@@ -91,27 +91,16 @@ class EditorTypedTest {
     }
 
     @Test
-    fun набранная_пара_становится_жирным_знаки_выключены_остаются_текстом() {
+    fun знаки_md_в_редакторе_текст_оформление_кнопками() {
+        // ADR-0053: знаки разбирает только строка ввода; в редакторе набранный знак — буква.
         val m = model("")
-        m.type("**жир**")
-        assertEquals("жир", m.field.text)
-        assertEquals(3, m.field.selection.start)
-        assertEquals("**жир**", m.focusedText)
-        val off = model("")
-        off.toggleMarks()
-        off.type("**жир**")
-        assertEquals("**жир**", off.field.text)
-        assertTrue(off.focusedTyped!!.spans.isEmpty())
-    }
-
-    @Test
-    fun знак_строки_даёт_заголовок() {
-        val m = model("")
-        m.type("# Сбор")
-        assertEquals("Сбор", m.field.text)
-        assertEquals(listOf(LineKind.HEADING1), m.focusedTyped!!.lines)
-        assertEquals("# Сбор", m.focusedText)
-        assertEquals(ParagraphKind.HEADING1, m.paragraphHere)
+        m.type("**жир** # Сбор")
+        assertEquals("**жир** # Сбор", m.field.text)
+        assertTrue(m.focusedTyped!!.spans.isEmpty())
+        val line = model("")
+        line.type("# Сбор")
+        assertEquals("# Сбор", line.field.text)
+        assertEquals(listOf(LineKind.PARAGRAPH), line.focusedTyped!!.lines)
     }
 
     @Test
@@ -170,12 +159,13 @@ class EditorTypedTest {
         }
     }
 
-    /** ADR-0049 §4: «- » — пункт; перевод строки — новый пункт; в пустом — конец списка. */
+    /** ADR-0049 §4: список кнопкой (знаков md в редакторе нет, ADR-0053); перевод строки — новый пункт; в пустом — конец. */
     @Test
     fun список_набором_и_кнопками() {
         val m = model("")
         m.untitled = "Без имени"
-        m.typeHere("- раз")
+        m.paragraph(ParagraphKind.LIST)
+        m.typeHere("раз")
         var list = m.doc.items.first() as ComposedItem.ItemList
         assertEquals(listOf("раз"), list.items.map { it.title })
         assertEquals(Spot(0, 0, Spot.TITLE), m.spot)
@@ -222,7 +212,8 @@ class EditorTypedTest {
     @Test
     fun свойства_списка() {
         val m = model("")
-        m.typeHere("- a")
+        m.paragraph(ParagraphKind.LIST)
+        m.typeHere("a")
         m.listProps(open = false, flat = true)
         val list = m.doc.items.first() as ComposedItem.ItemList
         assertTrue(!list.open && list.flat)
@@ -257,7 +248,8 @@ class EditorTypedTest {
     @Test
     fun enter_кнопкой_даёт_второй_пункт() {
         val m = model("")
-        m.typeHere("- раз")
+        m.paragraph(ParagraphKind.LIST)
+        m.typeHere("раз")
         m.enterItem(0, 0)
         assertEquals(listOf("раз", ""), (m.doc.items[0] as ComposedItem.ItemList).items.map { it.title })
         assertEquals(Spot(0, 1, Spot.TITLE), m.spot)
@@ -284,7 +276,8 @@ class EditorTypedTest {
     fun ступень_без_родителя_получает_без_имени() {
         val m = model("")
         m.untitled = "Без имени"
-        m.typeHere("  - вложенный")
+        m.paragraph(ParagraphKind.LIST2)
+        m.typeHere("вложенный")
         val list = m.doc.items.first() as ComposedItem.ItemList
         assertEquals(listOf(1 to "Без имени", 2 to "вложенный"), list.items.map { it.depth to it.title })
         assertEquals(Spot(0, 1, Spot.TITLE), m.spot)

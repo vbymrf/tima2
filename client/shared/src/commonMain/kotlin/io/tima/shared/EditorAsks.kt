@@ -160,8 +160,5 @@ internal const val LINK_FILE_TAG = "chat:ask.file"
 /** Цвет ссылки, выбранный в «Вставить ссылку» последним: имя палитры, пусто — цвет ссылок у читающего. */
 internal const val LINK_COLOR_KEY = "link.color"
 
-/** «Знаки md» (ADR-0048): `0` — выключены; одна галочка на редактор и строку ввода. */
-internal const val MARKS_KEY = "editor.marks"
-
 /** Ключ выключателя карточек ссылок в настройках аккаунта: `"0"` — выключены, нет или иное — включены. */
 internal const val LINK_CARDS_KEY = "link.cards"

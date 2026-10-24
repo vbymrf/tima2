@@ -142,7 +142,7 @@ internal enum class EditorTab(val key: String, val buttons: List<String>) {
     TEXT("text", listOf("paragraph", "bold", "italic", "underline", "strike", "highlight", "code", "symbol")),
     INSERT("insert", listOf("widget", "picture", "link", "emoji", "picks", "underlay", "cloud", "place", "contact", "reply", "paste")),
     LAYOUT("layout", listOf("up", "down", "row", "delete", "colAdd", "colRemove", "lineAdd", "lineRemove", "joinLeft", "joinUp", "split")),
-    STYLE("style", listOf("view", "props", "background", "color", "size", "align", "padding", "divider", "reset", "json", "marks")),
+    STYLE("style", listOf("view", "props", "background", "color", "size", "align", "padding", "divider", "reset", "json")),
     LEVEL("level", emptyList()),
 }
 
@@ -214,7 +214,6 @@ internal fun editorGlyph(key: String): String = when (key) {
     "code" -> "</>"
     "symbol" -> "Ω"
     "paste" -> "📋"
-    "marks" -> "md"
     "picture" -> "🖼"
     "link" -> "🔗"
     "emoji" -> "🙂"
@@ -288,8 +287,6 @@ fun EditorScreen(
     onDraft: ((ComposedDoc) -> Unit)? = null,
     /** Название в шапке; `null` — «Редактор». Правка своего сообщения — «Изменение». */
     title: String? = null,
-    /** «Знаки md» переключены — одна галочка на редактор и строку ввода (ADR-0048). */
-    onMarks: ((Boolean) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val w = Tima.words.editor
@@ -357,12 +354,6 @@ fun EditorScreen(
             "highlight" -> model.inline(InlineKind.HIGHLIGHT)
             // Одна кнопка «Код» (ADR-0049 §5): в строке — код в строке, целые строки — блок кода.
             "code" -> model.code()
-            // «Знаки md» (ADR-0048): включены — закрытая пара сразу оформление, выключены — знаки текстом.
-            "marks" -> {
-                model.toggleMarks()
-                hint = if (model.doc.marks) w.marksOn else w.marksOff
-                onMarks?.invoke(model.doc.marks)
-            }
             "symbol" -> { keyboard?.hide(); toggle("symbol") }
             "emoji" -> { keyboard?.hide(); toggle("emoji") }
             // Из HTML — только текст и простое оформление (Решения §5); HTML нет — текст как есть.
@@ -447,7 +438,7 @@ fun EditorScreen(
             LevelRibbon(levels, level) { picked -> model.level(picked) }
         } else {
             Ribbon(
-                tab, marksOn = doc.marks, active = if (showPreview) active + "view" else active, paragraph = w.paragraph(model.paragraphHere.name),
+                tab, active = if (showPreview) active + "view" else active, paragraph = w.paragraph(model.paragraphHere.name),
                 scroll = ribbonScroll, onPress = ::press,
                 hidden = if (tab == EditorTab.STYLE) (io.tima.domain.chat.ComposedStyle.VISUAL - styleKeys.toSet()).toSet() else emptySet(),
             )
@@ -746,7 +737,6 @@ private fun LevelList(levels: List<MessageCircle>, current: Int, onPick: (Int) -
 @Composable
 private fun Ribbon(
     tab: EditorTab,
-    marksOn: Boolean,
     active: Set<String>,
     paragraph: String,
     scroll: androidx.compose.foundation.ScrollState,
@@ -792,8 +782,8 @@ private fun Ribbon(
                     }
                     continue
                 }
-                // Нажата: «Знаки md» включены; Ж, К… — оформление под курсором или ждёт буквы (Word).
-                val on = (key == "marks" && marksOn) || key in active
+                // Нажата: Ж, К… — оформление под курсором или ждёт буквы (Word).
+                val on = key in active
                 Column(
                     Modifier.width(width).clickable { onPress(key) }.padding(vertical = 4.dp).testTag(EditorTags.button(key)),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -942,7 +932,7 @@ private fun EditorItemView(
                     keyboard?.show()
                 }
             }
-            val view = rememberTypedView(shown, marks, open = model.doc.marks, color = io.tima.core.ui.paletteColor(look.color))
+            val view = rememberTypedView(shown, marks, open = false, color = io.tima.core.ui.paletteColor(look.color))
             // Кусок со стилем, а в нём блоки разного вида (абзац, заголовок, цитата…) — у получателя это
             // разные плашки; здесь между ними черта (заказчик 2026-10-24: «разделитель появляется между
             // типами, если задан стиль»). Без стиля зазора у получателя не видно — и черты нет.

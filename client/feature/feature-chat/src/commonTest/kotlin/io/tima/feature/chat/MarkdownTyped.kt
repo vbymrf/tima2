@@ -64,5 +64,14 @@ internal object MarkdownTyped : TypedSource {
         }.joinToString("\n")
     }
 
-    override fun of(text: String) = emptyList<TypingSpan>()
+    /** Вид строки ввода: только пары `**…**` — знаки серым, между ними жирный (ADR-0053). */
+    override fun of(text: String): List<TypingSpan> = Regex("""\*\*([^*]+)\*\*""").findAll(text).flatMap { m ->
+        val a = m.range.first
+        val e = m.range.last + 1
+        listOf(
+            TypingSpan(io.tima.domain.chat.TypingStyle.MARKER, a, a + 2),
+            TypingSpan(io.tima.domain.chat.TypingStyle.BOLD, a + 2, e - 2),
+            TypingSpan(io.tima.domain.chat.TypingStyle.MARKER, e - 2, e),
+        )
+    }.toList()
 }

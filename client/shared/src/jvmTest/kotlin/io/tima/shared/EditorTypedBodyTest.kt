@@ -33,20 +33,19 @@ class EditorTypedBodyTest {
     }
 
     @Test
-    fun набранное_знаками_уходит_оформленным() {
+    fun знаки_md_в_редакторе_уходят_текстом() {
+        // ADR-0053: в редакторе знаки md — буквы; оформление — кнопками.
         val m = model()
-        m.type("# Сбор\nв **9:00** у входа")
-        assertEquals("Сбор\nв 9:00 у входа", m.field.text, "в поле знаков нет")
+        m.type("# Сбор в **9:00**")
+        assertEquals("# Сбор в **9:00**", m.field.text)
         val content = ComposedBodiesOverKodium.content(m.doc)
-        assertEquals(listOf("Сбор", "в 9:00 у входа"), content.nodes)
-        assertEquals(BlockType.HEADING, content.markup!!.blocks[0].type)
-        assertEquals(EntityType.BOLD, content.markup!!.entities.single().type)
+        assertEquals("# Сбор в **9:00**", content.plainText())
+        assertFalse(content.hasMarkup, "ни заголовка, ни жирного")
     }
 
     @Test
     fun знаки_выключены_уходят_текстом() {
         val m = model()
-        m.toggleMarks()
         m.type("# 2*3 = **шесть**")
         assertEquals("# 2*3 = **шесть**", m.field.text)
         val content = ComposedBodiesOverKodium.content(m.doc)
@@ -79,10 +78,12 @@ class EditorTypedBodyTest {
                 if (doc.items[spot.item] is io.tima.domain.chat.ComposedItem.ItemList) changedItem(spot.item, spot.cell, spot.widget, v) else changed(spot.item, v)
             }
         }
-        m.typeHere("- Заглавие\nПодборка")
+        // Знаков md в редакторе нет (ADR-0053): список и код — кнопками.
+        m.paragraph(io.tima.domain.chat.ParagraphKind.LIST)
+        m.typeHere("Заглавие\nПодборка")
         m.paragraph(io.tima.domain.chat.ParagraphKind.LIST2)
         m.focusedItem(0, 1, io.tima.domain.chat.Spot.TEXT)
-        m.typeHere("```")
+        m.code()
         m.typeHere("код без форматирования")
         m.select(io.tima.domain.chat.Spot(0, 1))
         m.insert(io.tima.domain.chat.ComposedItem.Widget(io.tima.domain.chat.ComposedWidget.Quoted("group", "g-1", 42)))
@@ -96,7 +97,11 @@ class EditorTypedBodyTest {
     @Test
     fun черновик_туда_и_обратно() {
         val m = model()
-        m.type("# пункт **жирный**\n--> цитата")
+        // Оформление в редакторе — кнопками (ADR-0053).
+        m.type("пункт жирный")
+        m.changed(0, TextFieldValue(m.field.text, TextRange(6, 12)))
+        m.inline(InlineKind.BOLD)
+        m.paragraph(io.tima.domain.chat.ParagraphKind.HEADING1)
         val saved = ComposedBodiesOverKodium.save(m.doc)
         val back = EditorModel(ComposedBodiesOverKodium.load(saved)!!, TypedOverQuickMarkdown)
         assertEquals(m.focusedTyped, back.typedAt(io.tima.domain.chat.Spot(0)))

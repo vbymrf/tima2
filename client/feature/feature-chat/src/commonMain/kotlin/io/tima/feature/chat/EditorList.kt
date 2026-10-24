@@ -119,7 +119,7 @@ internal fun EditorList(
                         onValueChange = { v -> model.changedItem(index, i, Spot.TITLE, v) },
                         textStyle = itemText,
                         cursorBrush = SolidColor(colors.navigation),
-                        visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks, color = io.tima.core.ui.paletteColor(blockStyleOf(item.style).color)),
+                        visualTransformation = rememberTypedView(shown, marks, open = false, color = io.tima.core.ui.paletteColor(blockStyleOf(item.style).color)),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         keyboardActions = KeyboardActions(onNext = { model.enterItem(index, i) }),
@@ -147,7 +147,7 @@ internal fun EditorList(
                                 onValueChange = { v -> model.changedItem(index, i, Spot.TEXT, v) },
                                 textStyle = itemText,
                                 cursorBrush = SolidColor(colors.navigation),
-                                visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks, color = io.tima.core.ui.paletteColor(blockStyleOf(item.style).color)),
+                                visualTransformation = rememberTypedView(shown, marks, open = false, color = io.tima.core.ui.paletteColor(blockStyleOf(item.style).color)),
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 24.dp).focusRequester(focus)
                                     .onFocusChanged { if (it.isFocused) model.focusedItem(index, i, Spot.TEXT) }
                                     .testTag(EditorTags.listText(index, i)),

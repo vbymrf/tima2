@@ -24,8 +24,6 @@ interface EditorWords {
     /** Строка в разделителе: что выбрано — `text`, `row`, `cell`, `widget`. */
     fun selected(what: String): String
     val cannotSend: String
-    val marksOn: String
-    val marksOff: String
     /** Раздел ещё не сделан — следующим срезом. */
     val soon: String
 
@@ -209,7 +207,6 @@ object RussianEditorWords : EditorWords {
         "code" -> "Код"
         "symbol" -> "Символ"
         "paste" -> "С оформл."
-        "marks" -> "Знаки md"
         "picture" -> "Картинка"
         "link" -> "Ссылка"
         "emoji" -> "Эмоджи"
@@ -273,8 +270,6 @@ object RussianEditorWords : EditorWords {
         else -> "текст"
     }
     override val cannotSend = "Отправить нельзя"
-    override val marksOn = "Знаки md включены: знаки становятся оформлением"
-    override val marksOff = "Знаки md выключены: текст уходит как набран"
     override val soon = "Этот раздел — следующим срезом редактора"
     override fun linkMode(key: String) = when (key) {
         "button" -> "Кнопкой"
@@ -454,7 +449,6 @@ object EnglishEditorWords : EditorWords {
         "code" -> "Code"
         "symbol" -> "Symbol"
         "paste" -> "Formatted"
-        "marks" -> "md signs"
         "picture" -> "Picture"
         "link" -> "Link"
         "emoji" -> "Emoji"
@@ -518,8 +512,6 @@ object EnglishEditorWords : EditorWords {
         else -> "text"
     }
     override val cannotSend = "Cannot send"
-    override val marksOn = "md signs on: signs become formatting"
-    override val marksOff = "md signs off: text is sent as typed"
     override val soon = "This section comes with the next editor slice"
     override fun linkMode(key: String) = when (key) {
         "button" -> "Button"
@@ -695,7 +687,6 @@ object SpanishEditorWords : EditorWords {
         "code" -> "Código"
         "symbol" -> "Símbolo"
         "paste" -> "Con formato"
-        "marks" -> "Signos md"
         "picture" -> "Imagen"
         "link" -> "Enlace"
         "emoji" -> "Emoji"
@@ -759,8 +750,6 @@ object SpanishEditorWords : EditorWords {
         else -> "texto"
     }
     override val cannotSend = "No se puede enviar"
-    override val marksOn = "Signos md activados: los signos se convierten en formato"
-    override val marksOff = "Signos md desactivados: el texto se envía tal cual"
     override val soon = "Esta sección llega con la siguiente parte del editor"
     override fun linkMode(key: String) = when (key) {
         "button" -> "Botón"
