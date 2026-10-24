@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -468,7 +469,16 @@ private fun PlayerContent(
     // Название — размером текста сообщений, по их группе в «Шрифтах и размерах» (заказчик 2026-10-24).
     val titleText: @Composable (Modifier) -> Unit = { m ->
         ProvidePlace(TextPlace.MESSAGES) {
-            Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = m)
+            if (LocalLightButtons.current) {
+                Box(m) {
+                    Caption(
+                        title, fontSize = TimaType.sz4, weight = FontWeight.Bold, color = colors.viewer, lineOne = true,
+                        modifier = Modifier.background(onVideo, RoundedCornerShape(14.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            } else {
+                Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, color = onVideo, lineOne = true, modifier = m)
+            }
         }
     }
     // Крестик — на сером круге, как все кнопки окна; в полном экране тоже (заказчик 2026-10-24).
@@ -619,7 +629,13 @@ private fun PlayerContent(
                 val along = if (centered) Alignment.CenterHorizontally else Alignment.Start
                 val first: @Composable () -> Unit = {
                     playButton()
-                    Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.width(slot))
+                    if (LocalLightButtons.current) {
+                        Box(Modifier.width(slot + 12.dp).background(onVideo, RoundedCornerShape(14.dp)).padding(horizontal = 6.dp, vertical = 4.dp)) {
+                            Caption(time, color = colors.viewer, fontSize = 14.sp, lineOne = true)
+                        }
+                    } else {
+                        Caption(time, color = onVideo, fontSize = 14.sp, lineOne = true, modifier = Modifier.width(slot))
+                    }
                 }
                 val icons: @Composable () -> Unit = {
                     if (request.marks.isNotEmpty()) {
@@ -666,12 +682,18 @@ private fun PlayerContent(
                 // Кнопки вверху — группой по середине (заказчик 2026-10-24). Правый верхний угол не перекрываем:
                 // там у проигрывателя сайта две кнопки (качество, настройки) — название до него не доходит, а
                 // большой отступ под названием опускает наши кнопки ниже тех двух.
-                Column(
-                    Modifier.align(Alignment.TopCenter).fillMaxWidth().background(shade).padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(TITLE_GAP),
-                ) {
-                    titleText(Modifier.padding(end = SITE_CORNER))
-                    controls(Modifier.fillMaxWidth(), sideways, true)
+                // Браузерный — без затемняющей панели, кнопки на белом круге (заказчик 2026-10-24): лучше видно и
+                // системные кнопки не затемняются. Встроенный — как был, на панели.
+                val bare = engine == PlayerEngine.WEB
+                CompositionLocalProvider(LocalLightButtons provides bare) {
+                    Column(
+                        Modifier.align(Alignment.TopCenter).fillMaxWidth().then(if (bare) Modifier else Modifier.background(shade))
+                            .padding(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(TITLE_GAP),
+                    ) {
+                        titleText(Modifier.padding(end = SITE_CORNER))
+                        controls(Modifier.fillMaxWidth(), sideways, true)
+                    }
                 }
                 if (engine != PlayerEngine.WEB) {
                     Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(shade).padding(horizontal = 12.dp, vertical = 8.dp)) { bar() }
@@ -695,6 +717,12 @@ private fun PlayerContent(
 }
 
 private enum class PlayerIcon { MARKS, SOUND_ON, SOUND_OFF, RESTART, FULL, FULL_EXIT, CLOSE }
+
+/**
+ * Кнопки, время и название — на белом, без затемняющей панели: браузерный проигрыватель в полном экране
+ * (заказчик 2026-10-24).
+ */
+private val LocalLightButtons = androidx.compose.runtime.staticCompositionLocalOf { false }
 
 /** Правый верхний угол — две кнопки проигрывателя сайта (качество, настройки): наше туда не заходит. */
 private val SITE_CORNER = 104.dp
@@ -737,9 +765,19 @@ private fun SeekPeek(fraction: Float, atMs: Long, image: androidx.compose.ui.gra
 @Composable
 private fun PlayerIconButton(icon: PlayerIcon, label: String, lit: Boolean, tag: String, onClick: () -> Unit) {
     val colors = Tima.colors
-    val ink = if (lit) colors.onAccent else io.tima.core.ui.TimaFixed.onVideo
+    val light = LocalLightButtons.current
+    val ink = when {
+        lit -> colors.onAccent
+        light -> colors.viewer
+        else -> io.tima.core.ui.TimaFixed.onVideo
+    }
+    val ground = when {
+        lit -> colors.navigation
+        light -> io.tima.core.ui.TimaFixed.onVideo
+        else -> io.tima.core.ui.TimaFixed.onVideo.copy(alpha = 0.18f)
+    }
     Box(
-        Modifier.size(40.dp).background(if (lit) colors.navigation else io.tima.core.ui.TimaFixed.onVideo.copy(alpha = 0.18f), CircleShape)
+        Modifier.size(40.dp).background(ground, CircleShape)
             .clickable(onClick = onClick).semantics { contentDescription = label }.testTag(tag),
         contentAlignment = Alignment.Center,
     ) {
