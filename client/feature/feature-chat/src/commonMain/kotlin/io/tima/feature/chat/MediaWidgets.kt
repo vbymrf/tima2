@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.sp
 import io.tima.core.media.OwnPlayer
 import io.tima.core.media.decodeImage
 import io.tima.core.media.mediaUri
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
@@ -355,7 +357,8 @@ internal fun speedName(speed: Float) = when (speed) {
 
 /**
  * Полоса «сейчас играет» (ПЛАН-(ВМ) Р22): «Аудио» или «Поток» играет — над любым окном приложения,
- * и в переписке, и на списке чатов: ▶/⏸, описание, ✕ — остановить.
+ * и в переписке, и на списке чатов: ▶/⏸, описание, ✕ — остановить. Крупно, по «Шапкам» «Шрифтов и
+ * размеров» (заказчик 2026-10-24): описание — главной строкой шапки, ▶ и ✕ — кругами, как в окне видео.
  */
 @Composable
 fun NowPlayingBar(hub: AudioHub?) {
@@ -363,20 +366,26 @@ fun NowPlayingBar(hub: AudioHub?) {
     val now by hub.now.collectAsState()
     val n = now ?: return
     val colors = Tima.colors
+    ProvidePlace(TextPlace.HEADERS) {
     Row(
         // Над окном, под строкой состояния телефона.
-        Modifier.fillMaxWidth().background(colors.softAccent).statusBarsPadding().padding(horizontal = 12.dp, vertical = 4.dp).testTag("media:now"),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxWidth().background(colors.softAccent).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).testTag("media:now"),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Caption(
-            if (n.playing) "❚❚" else "▶", fontSize = 16.sp, color = colors.navigation,
-            modifier = Modifier.clickable { hub.toggle(AudioItem(n.url, hub.description, n.durationMs, n.live), hub.queueNow) }.padding(4.dp),
-        )
-        Caption(hub.description.ifBlank { MediaLinks.fileName(n.url) }, fontSize = TimaType.sz5, weight = FontWeight.SemiBold, lineOne = true, modifier = Modifier.weight(1f))
-        if (n.live && n.playing) Caption(Tima.words.chat.playerLive, fontSize = TimaType.sz5, color = colors.alarm)
-        else if (!n.live) Tertiary(voiceTime(n.positionMs), lineOne = true)
-        Caption("✕", fontSize = 16.sp, modifier = Modifier.clickable { hub.close() }.padding(4.dp).testTag("media:now.close"))
+        Box(
+            Modifier.size(40.dp).background(colors.navigation, CircleShape)
+                .clickable { hub.toggle(AudioItem(n.url, hub.description, n.durationMs, n.live), hub.queueNow) },
+            contentAlignment = Alignment.Center,
+        ) { Caption(if (n.playing) "❚❚" else "▶", fontSize = TimaType.sz3, color = colors.onAccent) }
+        Caption(hub.description.ifBlank { MediaLinks.fileName(n.url) }, fontSize = TimaType.sz3, weight = FontWeight.Bold, lineOne = true, modifier = Modifier.weight(1f))
+        if (n.live && n.playing) Caption(Tima.words.chat.playerLive, fontSize = TimaType.sz4, color = colors.alarm)
+        else if (!n.live) Caption(voiceTime(n.positionMs), fontSize = TimaType.sz4, color = colors.text2, lineOne = true)
+        Box(
+            Modifier.size(40.dp).background(colors.functional, CircleShape).clickable { hub.close() }.testTag("media:now.close"),
+            contentAlignment = Alignment.Center,
+        ) { Caption("✕", fontSize = TimaType.sz3, weight = FontWeight.Bold, color = colors.text2) }
+    }
     }
 }
 
