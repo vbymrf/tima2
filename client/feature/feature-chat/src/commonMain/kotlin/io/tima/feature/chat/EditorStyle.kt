@@ -135,7 +135,8 @@ internal fun StylePanel(key: String, model: EditorModel, problems: (ComposedDoc)
     val w = Tima.words.editor
     val spot = model.spot
     val style = ComposedStyle.styleAt(model.doc, spot)
-    fun set(prop: String, value: String?) = model.layout { d, s -> ComposedStyle.with(d, s, prop, value) to s }
+    // В куске-тексте — блоку своего вида под курсором, как его увидит получатель (заказчик 2026-10-24).
+    fun set(prop: String, value: String?) = model.styled { d, s -> ComposedStyle.with(d, s, prop, value) }
 
     @Composable
     fun palette(prop: String) {
@@ -365,7 +366,7 @@ private fun JsonStyle(model: EditorModel, spot: Spot, style: Map<String, String>
             } else {
                 val found = problems(ComposedStyle.setStyle(model.doc, spot, parsed))
                 if (found.isNotEmpty()) trouble = found.first()
-                else model.layout { d, s -> ComposedStyle.setStyle(d, s, parsed) to s }
+                else model.styled { d, s -> ComposedStyle.setStyle(d, s, parsed) }
             }
         },
         modifier = Modifier.testTag("editor:style.json.apply"),

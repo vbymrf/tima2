@@ -30,6 +30,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
@@ -396,7 +397,7 @@ fun EditorScreen(
             // «Стиль → Свойства» (ADR-0050 §2): свойства выбранного блока.
             "props" -> toggle("style.props")
             "background", "color", "size", "align", "padding", "divider", "json" -> toggle("style.$key")
-            "reset" -> model.layout { d, s -> io.tima.domain.chat.ComposedStyle.setStyle(d, s, emptyMap()) to s }
+            "reset" -> model.styled { d, s -> io.tima.domain.chat.ComposedStyle.setStyle(d, s, emptyMap()) }
             else -> if (onButton?.invoke(key) != true) hint = w.soon
         }
     }
@@ -941,6 +942,12 @@ private fun EditorItemView(
                     keyboard?.show()
                 }
             }
+            val view = rememberTypedView(shown, marks, open = model.doc.marks)
+            // Кусок со стилем, а в нём блоки разного вида (абзац, заголовок, цитата…) — у получателя это
+            // разные плашки; здесь между ними черта (заказчик 2026-10-24: «разделитель появляется между
+            // типами, если задан стиль»). Без стиля зазора у получателя не видно — и черты нет.
+            val starts = if (item.style.isEmpty()) emptyList() else remember(shown) { io.tima.domain.chat.ComposedBlocks.starts(shown) }
+            var laid by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
             BasicTextField(
                 value = value,
                 onValueChange = { v -> if (chosen) model.changed(index, v) else { model.focused(index); model.changed(index, v) } },
@@ -950,9 +957,29 @@ private fun EditorItemView(
                     textAlign = alignOf(look.align),
                 ),
                 cursorBrush = SolidColor(colors.navigation),
-                visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks),
+                visualTransformation = view,
+                onTextLayout = { laid = it },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(vertical = 4.dp)
                     .styled(look)
+                    .then(
+                        if (starts.isEmpty()) {
+                            Modifier
+                        } else {
+                            Modifier.drawWithContent {
+                                drawContent()
+                                val layout = laid ?: return@drawWithContent
+                                val shownText = value.text
+                                val map = view.filter(androidx.compose.ui.text.AnnotatedString(shownText)).offsetMapping
+                                for (line in starts) {
+                                    val at = shown.lineStart(line).coerceAtMost(shownText.length)
+                                    val off = runCatching { map.originalToTransformed(at) }.getOrNull() ?: continue
+                                    if (off > layout.layoutInput.text.length) continue
+                                    val y = layout.getLineTop(layout.getLineForOffset(off))
+                                    drawLine(colors.line, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), 1.dp.toPx())
+                                }
+                            }
+                        },
+                    )
                     .then(if (tooWide) Modifier.border(2.dp, colors.alarm, RoundedCornerShape(6.dp)).padding(4.dp) else Modifier)
                     .focusRequester(focus)
                     .onFocusChanged { if (it.isFocused) model.focused(index) }

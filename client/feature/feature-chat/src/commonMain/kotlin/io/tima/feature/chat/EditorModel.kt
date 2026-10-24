@@ -645,6 +645,21 @@ class EditorModel(initial: ComposedDoc, val source: TypedSource = PlainTyped) {
         field = fieldOf(snapshot)
     }
 
+    /**
+     * Стиль выбранного (заказчик 2026-10-24): в куске-тексте — **блоку своего вида** под курсором (абзац,
+     * заголовок, цитата, список, код, разделитель), как его увидит получатель: кусок режется на месте
+     * блока. Ряд, ячейка, пункт списка, виджет — как прежде, целиком.
+     */
+    fun styled(op: (ComposedDoc, Spot) -> ComposedDoc) {
+        val t = focusedTyped
+        if (t == null || spot.cell >= 0 || doc.items.getOrNull(spot.item) !is ComposedItem.Text) {
+            layout { d, s -> op(d, s) to s }
+            return
+        }
+        val cut = io.tima.domain.chat.ComposedBlocks.cut(doc, spot.item, selection(t).first, source)
+        layout { _, _ -> op(cut.doc, Spot(cut.item)) to Spot(cut.item) }
+    }
+
     /** Убрать кусок [index]; последний текст остаётся — писать должно быть куда. */
     fun remove(index: Int) = layout { d, _ -> ComposedLayout.removeAt(d, Spot(index)) }
 
