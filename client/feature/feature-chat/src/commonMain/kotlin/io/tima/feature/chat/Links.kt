@@ -1,6 +1,9 @@
 package io.tima.feature.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +43,9 @@ import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
+import io.tima.core.ui.LocalTextScale
+import io.tima.core.ui.ProvidePlace
+import io.tima.core.ui.TextPlace
 import io.tima.core.ui.words
 import kotlinx.coroutines.launch
 
@@ -51,6 +57,8 @@ object LinkTags {
     const val ASK_OPEN = "msg:link.ask.open"
     const val ASK_CANCEL = "msg:link.ask.cancel"
     const val ASK_COPY = "msg:link.ask.copy"
+    /** Рамка с адресом — длинный прокручивается внутри. */
+    const val ASK_URL = "msg:link.ask.url"
 }
 
 /**
@@ -267,11 +275,15 @@ private fun LinkAsk(url: String, blocked: Boolean, onOpen: () -> Unit, onCancel:
             verticalAlignment = Alignment.Top,
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Tertiary(w.linkAskOpen, lineOne = true)
-                Caption(hostText(url), fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-                Caption(url, fontSize = TimaType.sz5, color = colors.text2)
-                if (url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
-                if (checking) Tertiary(w.linkChecking, lineOne = true)
+                ProvidePlace(TextPlace.HEADERS) {
+                    GateTitle(w.linkAskOpen)
+                    Caption(hostText(url), fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+                }
+                ProvidePlace(TextPlace.MENU) {
+                    UrlBox(url)
+                    if (url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
+                    if (checking) Tertiary(w.linkChecking, lineOne = true)
+                }
             }
             IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
         }
@@ -294,9 +306,11 @@ private fun MessageAsk(ask: GateAsk.Message, onOpen: () -> Unit, onCancel: () ->
             verticalAlignment = Alignment.Top,
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Tertiary(w.messageAsk, lineOne = true)
-                ask.name?.let { Caption(it, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold) }
-                Caption(ask.preview ?: w.quotedElsewhere, fontSize = TimaType.sz5, color = Tima.colors.text2, maxLines = 3)
+                ProvidePlace(TextPlace.HEADERS) { GateTitle(w.messageAsk) }
+                ProvidePlace(TextPlace.MESSAGES) {
+                    ask.name?.let { Caption(it, fontSize = TimaType.sz4, weight = FontWeight.ExtraBold) }
+                    Caption(ask.preview ?: w.quotedElsewhere, fontSize = TimaType.sz4, color = Tima.colors.text2, maxLines = 3)
+                }
             }
             IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
         }
@@ -396,34 +410,42 @@ private fun CloudFileAsk(
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Tertiary(if (fromLink) w.linkIsFile else w.cloudFileTitle, lineOne = true)
-                    Caption(ask.title.ifBlank { name.ifBlank { hostOf(ask.url) } }, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+                    ProvidePlace(TextPlace.HEADERS) {
+                        GateTitle(if (fromLink) w.linkIsFile else w.cloudFileTitle)
+                        Caption(ask.title.ifBlank { name.ifBlank { hostOf(ask.url) } }, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+                    }
                 }
                 IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
             }
             // Что за файл: описание, расширение, размер — одной строкой.
-            Caption(
-                listOfNotNull(w.fileKindName(verdict.kind.key), ext.takeIf { it.isNotEmpty() }?.uppercase(), size, name.takeIf { it.isNotBlank() && it != ask.title }).joinToString(" · "),
-                fontSize = TimaType.sz5, weight = FontWeight.Bold,
-            )
-            Caption(hostText(peek?.url ?: ask.url), fontSize = TimaType.sz4, weight = FontWeight.Bold)
-            Caption(ask.url, fontSize = TimaType.sz5, color = colors.text2)
-            when {
-                verdict.disguised -> Caption(w.fileDisguised(w.fileKindName(named.key), w.fileKindName(verdict.kind.key)), fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.alarm, modifier = Modifier.testTag(CloudTags.WARN))
-                verdict.kind.danger == io.tima.domain.chat.FileKinds.Danger.PROGRAM -> Caption(w.fileProgram, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.alarm, modifier = Modifier.testTag(CloudTags.WARN))
-                verdict.kind.danger == io.tima.domain.chat.FileKinds.Danger.RISKY -> Caption(w.fileRisky, fontSize = TimaType.sz5, color = colors.alarm, modifier = Modifier.testTag(CloudTags.WARN))
-                else -> Unit
+            ProvidePlace(TextPlace.MENU) {
+                Caption(
+                    listOfNotNull(w.fileKindName(verdict.kind.key), ext.takeIf { it.isNotEmpty() }?.uppercase(), size, name.takeIf { it.isNotBlank() && it != ask.title }).joinToString(" · "),
+                    fontSize = TimaType.sz5, weight = FontWeight.Bold,
+                )
             }
-            if (ask.url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
-            when {
-                checking -> Tertiary(w.cloudChecking, lineOne = true)
-                ports.peek != null && peek == null -> Tertiary(w.cloudNoAnswer)
-                else -> Unit
+            ProvidePlace(TextPlace.HEADERS) {
+                Caption(hostText(peek?.url ?: ask.url), fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
             }
-            progress?.let { done ->
-                Tertiary(w.cloudProgress(sizeText(done, w.sizeUnits), peek?.size?.let { sizeText(it, w.sizeUnits) }))
+            ProvidePlace(TextPlace.MENU) {
+                UrlBox(ask.url)
+                when {
+                    verdict.disguised -> Caption(w.fileDisguised(w.fileKindName(named.key), w.fileKindName(verdict.kind.key)), fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.alarm, modifier = Modifier.testTag(CloudTags.WARN))
+                    verdict.kind.danger == io.tima.domain.chat.FileKinds.Danger.PROGRAM -> Caption(w.fileProgram, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.alarm, modifier = Modifier.testTag(CloudTags.WARN))
+                    verdict.kind.danger == io.tima.domain.chat.FileKinds.Danger.RISKY -> Caption(w.fileRisky, fontSize = TimaType.sz5, color = colors.alarm, modifier = Modifier.testTag(CloudTags.WARN))
+                    else -> Unit
+                }
+                if (ask.url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
+                when {
+                    checking -> Tertiary(w.cloudChecking, lineOne = true)
+                    ports.peek != null && peek == null -> Tertiary(w.cloudNoAnswer)
+                    else -> Unit
+                }
+                progress?.let { done ->
+                    Tertiary(w.cloudProgress(sizeText(done, w.sizeUnits), peek?.size?.let { sizeText(it, w.sizeUnits) }))
+                }
+                said?.let { Tertiary(it) }
             }
-            said?.let { Tertiary(it) }
         }
         if (ask.blocked) {
             GoItem(true, CloudTags.OPEN, onOpen)
@@ -467,22 +489,55 @@ private fun CloudFileAsk(
 private fun GoItem(blocked: Boolean, tag: String, onOpen: () -> Unit) {
     val w = Tima.words.chat
     if (blocked) {
-        ListLine(
-            modifier = Modifier.testTag(tag),
-            middle = { Tertiary(w.gateBlocked, lineOne = true) },
-        )
+        ProvidePlace(TextPlace.MENU) {
+            ListLine(
+                modifier = Modifier.testTag(tag),
+                middle = { Tertiary(w.gateBlocked, lineOne = true) },
+            )
+        }
     } else {
         LinkItem(w.linkGo, tag, onOpen)
     }
 }
 
+/** Действие окна перехода — строкой меню, по группе «Меню и настройки» (заказчик 2026-10-24). */
 @Composable
-private fun LinkItem(title: String, tag: String, onClick: () -> Unit) = ListLine(
-    modifier = Modifier.testTag(tag),
-    onClick = onClick,
-    middle = { Name(title) },
-    right = { Tertiary("›", lineOne = true) },
-)
+private fun LinkItem(title: String, tag: String, onClick: () -> Unit) = ProvidePlace(TextPlace.MENU) {
+    ListLine(
+        modifier = Modifier.testTag(tag),
+        onClick = onClick,
+        middle = { Name(title) },
+        right = { Tertiary("›", lineOne = true) },
+    )
+}
+
+/**
+ * Первая строка окна перехода — «Перейти по ссылке?», «Файл по ссылке»… — крупно и зелёным нашей шапки
+ * (заказчик 2026-10-24); размер — по группе, которую задал вызывающий (шапки).
+ */
+@Composable
+private fun GateTitle(text: String) =
+    Caption(text, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold, color = Tima.colors.navigation)
+
+/**
+ * Адрес целиком — в рамке до трёх строк, длинный прокручивается внутри (заказчик 2026-10-24, 2а#): окно не
+ * растёт и действия не уезжают за край. Сайт над рамкой виден всегда.
+ */
+@Composable
+private fun UrlBox(url: String) {
+    val colors = Tima.colors
+    val lines = with(androidx.compose.ui.platform.LocalDensity.current) { (TimaType.sz5 * LocalTextScale.current * 1.25f * 3).toDp() }
+    Box(
+        Modifier.fillMaxWidth()
+            .border(1.dp, colors.line, RoundedCornerShape(6.dp))
+            .heightIn(max = lines + 8.dp)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .testTag(LinkTags.ASK_URL),
+    ) {
+        Caption(url, fontSize = TimaType.sz5, color = colors.text2)
+    }
+}
 
 /** Синий пузырь «Перейти» — цвет ссылок из «Цветов». */
 @Composable
