@@ -38,10 +38,16 @@ internal fun linePrefix(kind: LineKind): String = when (kind) {
  * он ждёт закрывающего.
  */
 @Composable
-internal fun rememberTypedView(typed: Typed, marks: TypingMarks?, open: Boolean): VisualTransformation {
+internal fun rememberTypedView(
+    typed: Typed,
+    marks: TypingMarks?,
+    open: Boolean,
+    /** Цвет текста из стиля куска: цитата берёт его, как у получателя; нет — серым (заказчик 2026-10-24). */
+    color: androidx.compose.ui.graphics.Color? = null,
+): VisualTransformation {
     val colors = Tima.colors
     val marker = colors.text3
-    val quote = colors.text2
+    val quote = color ?: colors.text2
     val highlight = colors.activity.copy(alpha = 0.35f)
     val code = colors.functional
     val tag = colors.confirmed

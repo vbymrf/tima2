@@ -942,7 +942,7 @@ private fun EditorItemView(
                     keyboard?.show()
                 }
             }
-            val view = rememberTypedView(shown, marks, open = model.doc.marks)
+            val view = rememberTypedView(shown, marks, open = model.doc.marks, color = io.tima.core.ui.paletteColor(look.color))
             // Кусок со стилем, а в нём блоки разного вида (абзац, заголовок, цитата…) — у получателя это
             // разные плашки; здесь между ними черта (заказчик 2026-10-24: «разделитель появляется между
             // типами, если задан стиль»). Без стиля зазора у получателя не видно — и черты нет.
