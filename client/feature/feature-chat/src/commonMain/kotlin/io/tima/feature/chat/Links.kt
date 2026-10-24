@@ -70,10 +70,13 @@ sealed interface GateAsk {
     data class CloudFile(val url: String, val title: String, override val blocked: Boolean = false) : GateAsk
 }
 
+/** До скольких МБ «Сохранить как» качает сама TIMA в выбранное место; больше — «Загрузчик» в «Загрузки». */
+const val CLOUD_TIMA_MB = 50
+
 /**
  * Что окну файла по ссылке нужно снаружи: начало файла (вид, размер, первые байты) и загрузка файла
- * кусками для «Сохранить как» любого размера — тем же безопасным загрузчиком, что карточки ссылок.
- * `null` — сети нет (снимки).
+ * кусками для «Сохранить как» — тем же безопасным загрузчиком, что карточки ссылок. `null` — сети нет
+ * (снимки).
  */
 class CloudPorts(
     val peek: (suspend (url: String) -> io.tima.domain.chat.CloudPeek?)? = null,
@@ -170,19 +173,48 @@ fun LinkGate(
         Box(Modifier.fillMaxSize()) {
             content()
             when (val ask = asked) {
-                is GateAsk.Link -> LinkAsk(
-                    url = ask.url,
-                    blocked = ask.blocked,
-                    onOpen = {
-                        asked = null
-                        if (MediaLinks.playsHere(ask.url)) {
-                            playing = PlayRequest(ask.url, startMs = (MediaLinks.startSeconds(ask.url) ?: 0) * 1000L)
-                        } else {
-                            runCatching { uri.openUri(ask.url) }
-                        }
-                    },
-                    onCancel = { asked = null },
-                )
+                is GateAsk.Link -> {
+                    // По ссылке не страница, а файл (заказчик 2026-10-24, 2а#) — окно файла: что за файл и не
+                    // программа ли. Узнаётся тем же коротким запросом, что у «Облака», только по нажатию.
+                    // Видео и звук, которые играют у нас, — не файл: окно проигрывания.
+                    val media = MediaLinks.playsHere(ask.url)
+                    var checked by remember(ask) { mutableStateOf<Pair<Boolean, io.tima.domain.chat.CloudPeek?>?>(null) }
+                    androidx.compose.runtime.LaunchedEffect(ask) {
+                        val peek = cloudPorts.peek
+                        if (media || peek == null) return@LaunchedEffect
+                        val p = peek(ask.url)
+                        checked = io.tima.domain.chat.FileKinds.isFile(ask.url, p) to p
+                    }
+                    val found = checked
+                    if (found != null && found.first) {
+                        CloudFileAsk(
+                            GateAsk.CloudFile(ask.url, "", ask.blocked),
+                            ports = cloudPorts,
+                            onOpen = {
+                                asked = null
+                                runCatching { uri.openUri(ask.url) }
+                            },
+                            onCancel = { asked = null },
+                            preloaded = found.second,
+                            fromLink = true,
+                        )
+                    } else {
+                        LinkAsk(
+                            url = ask.url,
+                            blocked = ask.blocked,
+                            checking = !media && cloudPorts.peek != null && found == null,
+                            onOpen = {
+                                asked = null
+                                if (media) {
+                                    playing = PlayRequest(ask.url, startMs = (MediaLinks.startSeconds(ask.url) ?: 0) * 1000L)
+                                } else {
+                                    runCatching { uri.openUri(ask.url) }
+                                }
+                            },
+                            onCancel = { asked = null },
+                        )
+                    }
+                }
                 is GateAsk.Message -> MessageAsk(
                     ask,
                     onOpen = {
@@ -224,7 +256,7 @@ fun LinkGate(
  * «Перейти» недоступно.
  */
 @Composable
-private fun LinkAsk(url: String, blocked: Boolean, onOpen: () -> Unit, onCancel: () -> Unit) {
+private fun LinkAsk(url: String, blocked: Boolean, onOpen: () -> Unit, onCancel: () -> Unit, checking: Boolean = false) {
     val colors = Tima.colors
     val w = Tima.words.chat
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -239,6 +271,7 @@ private fun LinkAsk(url: String, blocked: Boolean, onOpen: () -> Unit, onCancel:
                 Caption(hostText(url), fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
                 Caption(url, fontSize = TimaType.sz5, color = colors.text2)
                 if (url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
+                if (checking) Tertiary(w.linkChecking, lineOne = true)
             }
             IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
         }
@@ -299,25 +332,35 @@ object CloudTags {
  * Окно файла по ссылке «Облака» (заказчик 2026-10-24) — как у нашего файла: сверху имя, что за файл
  * (по имени из адреса и по началу самого файла), размер, сайт и адрес; опасность — красным: программа,
  * «может быть опасным», подмена (назван картинкой, а внутри программа). «Открыть в браузере» — файл
- * отдаётся браузеру, TIMA его не открывает и не ставит; «Сохранить как» — любого размера: Android —
- * «Загрузчик» системы, ПК — кусками в выбранный файл с пометкой «скачано из интернета»; «Скопировать ссылку».
+ * отдаётся браузеру, TIMA его не открывает и не ставит; «Сохранить как» — до 50 МБ кусками в выбранный файл
+ * (ПК — с пометкой «скачано из интернета»), больше — «Загрузчик» Android в «Загрузки»; «Скопировать ссылку».
  */
 @Composable
-private fun CloudFileAsk(ask: GateAsk.CloudFile, ports: CloudPorts, onOpen: () -> Unit, onCancel: () -> Unit) {
+private fun CloudFileAsk(
+    ask: GateAsk.CloudFile,
+    ports: CloudPorts,
+    onOpen: () -> Unit,
+    onCancel: () -> Unit,
+    /** Начало файла уже спросили (ссылка, по которой файл) — второй раз не спрашиваем. */
+    preloaded: io.tima.domain.chat.CloudPeek? = null,
+    /** Пришли от обычной ссылки: «по ссылке не страница, а файл» (2а#). */
+    fromLink: Boolean = false,
+) {
     val colors = Tima.colors
     val w = Tima.words.chat
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    var peek by remember(ask.url) { mutableStateOf<io.tima.domain.chat.CloudPeek?>(null) }
-    var checking by remember(ask.url) { mutableStateOf(ports.peek != null) }
+    var peek by remember(ask.url) { mutableStateOf(preloaded) }
+    var checking by remember(ask.url) { mutableStateOf(ports.peek != null && preloaded == null) }
     var said by remember(ask.url) { mutableStateOf<String?>(null) }
     androidx.compose.runtime.LaunchedEffect(ask.url) {
+        if (preloaded != null) return@LaunchedEffect
         val p = ports.peek ?: return@LaunchedEffect
         peek = p(ask.url)
         checking = false
     }
-    // «Сохранить как» любого размера (заказчик 2026-10-24, 1а#): Android — «Загрузчик» системы; нет его —
-    // место выбирает человек, файл пишется кусками, с ходом и отменой.
+    // «Сохранить как» (заказчик 2026-10-24): до 50 МБ — место выбирает человек, файл пишется кусками, с ходом
+    // и отменой; больше — «Загрузчик» Android в «Загрузки».
     val system = io.tima.core.media.rememberSystemDownload()
     var progress by remember(ask.url) { mutableStateOf<Long?>(null) }
     var job by remember(ask.url) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -353,7 +396,7 @@ private fun CloudFileAsk(ask: GateAsk.CloudFile, ports: CloudPorts, onOpen: () -
         ) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Tertiary(w.cloudFileTitle, lineOne = true)
+                    Tertiary(if (fromLink) w.linkIsFile else w.cloudFileTitle, lineOne = true)
                     Caption(ask.title.ifBlank { name.ifBlank { hostOf(ask.url) } }, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
                 }
                 IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
@@ -399,8 +442,11 @@ private fun CloudFileAsk(ask: GateAsk.CloudFile, ports: CloudPorts, onOpen: () -
         } else if (ports.download != null || system != null) {
             LinkItem(Tima.words.chat.fileSaveAs, CloudTags.SAVE) {
                 val from = peek?.url ?: ask.url
-                if (system != null && io.tima.domain.chat.LinkSafety.allowed(from) && system(from, fileName, mime)) {
-                    said = w.cloudSystemDownload
+                // До 50 МБ (и размер неизвестен) — место выбирает человек, качает TIMA; больше — «Загрузчик»
+                // Android в «Загрузки», и человеку это сказано (заказчик 2026-10-24).
+                val big = (peek?.size ?: 0) > CLOUD_TIMA_MB * 1024L * 1024L
+                if (big && system != null && io.tima.domain.chat.LinkSafety.allowed(from) && system(from, fileName, mime)) {
+                    said = w.cloudBigToSystem(CLOUD_TIMA_MB)
                 } else if (ports.download != null) {
                     said = w.cloudSaving
                     target(fileName, mime, from)

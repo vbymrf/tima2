@@ -105,6 +105,21 @@ object FileKinds {
     }
 
     /**
+     * По ссылке файл, а не страница (заказчик 2026-10-24, 2а#): сайт назвал имя файла (`Content-Disposition`)
+     * или отдаёт не HTML; не ответил — по окончанию адреса (`.apk`, `.pdf`…). Страница и неизвестное
+     * окончание — не файл.
+     */
+    fun isFile(url: String, peek: CloudPeek?): Boolean {
+        if (peek != null) {
+            if (peek.name != null) return true
+            val type = peek.type?.lowercase()
+            if (type != null) return !(type.startsWith("text/html") || type.startsWith("application/xhtml"))
+        }
+        val key = ofName(nameOf(url)).key
+        return key != "unknown" && key != "page"
+    }
+
+    /**
      * Имя для «Сохранить как» (заказчик 2026-10-24): имя от сервера может нести путь («../../x»), служебные
      * знаки и чужое расширение — пути и служебных знаков нет, длина разумная; подмена — к имени
      * дописывается настоящее расширение («котик.jpg.exe»): система и человек видят, что это программа.

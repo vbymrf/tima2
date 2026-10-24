@@ -63,7 +63,19 @@ internal fun EditorAskSheet(
         cancel = cw.cancel,
         options = options,
         extra = when {
-            ask == "link" -> ({ _ -> io.tima.feature.chat.PaletteRow(color, "chat:ask.color", only = io.tima.feature.chat.LinkColors) { color = it.orEmpty() } })
+            ask == "link" -> ({ now ->
+                // Ушли с поля адреса, а по нему файл (по окончанию) — сказать об этом, без предупреждений
+                // (заказчик 2026-10-24, 2а#): отправитель видит, что отправляет не страницу.
+                val url = now.values.firstOrNull().orEmpty()
+                if (0 in now.left && url.isNotBlank()) {
+                    val full = if ("://" in url) url else "https://$url"
+                    if (io.tima.domain.chat.FileKinds.isFile(full, null)) {
+                        val kind = io.tima.domain.chat.FileKinds.ofName(io.tima.domain.chat.FileKinds.nameOf(full))
+                        io.tima.core.ui.Tertiary(cw.linkFileIs(cw.fileKindName(kind.key)), modifier = androidx.compose.ui.Modifier.testTag(LINK_FILE_TAG))
+                    }
+                }
+                io.tima.feature.chat.PaletteRow(color, "chat:ask.color", only = io.tima.feature.chat.LinkColors) { color = it.orEmpty() }
+            })
             // Окно «Облака» прежнее; ушли с поля ссылки — вид файла по ней, без предупреждений (отправителю
             // их не показываем, заказчик 2026-10-24); у видео и аудио — ещё «Добавить метки».
             ask == "cloud" -> ({ now ->
@@ -98,7 +110,8 @@ internal fun EditorAskSheet(
                         scope.launch {
                             val card = cards.card(url)
                             if (card == null) {
-                                onNotice(cardFailed)
+                                // По ссылке файл — карточку собрать не из чего; сказать почему (2а#).
+                                onNotice(if (io.tima.domain.chat.FileKinds.isFile(url, null)) cw.cardIsFile else cardFailed)
                                 put(ComposedWidget.Link(url, v[1], "button", color = color))
                                 return@launch
                             }
@@ -140,6 +153,9 @@ internal const val CLOUD_MARKS_TAG = "chat:ask.marks"
 
 /** Вид файла по ссылке в форме «Облака» — после ухода с поля ссылки (2026-10-24). */
 internal const val CLOUD_KIND_TAG = "chat:ask.kind"
+
+/** «По ссылке — файл: …» в форме ссылки — после ухода с поля адреса (2026-10-24). */
+internal const val LINK_FILE_TAG = "chat:ask.file"
 
 /** Цвет ссылки, выбранный в «Вставить ссылку» последним: имя палитры, пусто — цвет ссылок у читающего. */
 internal const val LINK_COLOR_KEY = "link.color"

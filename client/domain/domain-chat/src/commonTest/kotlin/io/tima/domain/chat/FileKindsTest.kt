@@ -46,6 +46,17 @@ class FileKindsTest {
     }
 
     @Test
+    fun по_ссылке_файл_или_страница() {
+        val none = ByteArray(0)
+        assertTrue(FileKinds.isFile("https://x.ru/get?id=1", CloudPeek("https://x.ru/get?id=1", "text/html", null, "отчёт.pdf", none)), "сайт назвал имя файла")
+        assertTrue(FileKinds.isFile("https://x.ru/get?id=1", CloudPeek("https://x.ru/get?id=1", "application/octet-stream", 10, null, none)))
+        assertFalse(FileKinds.isFile("https://x.ru/news", CloudPeek("https://x.ru/news", "text/html; charset=utf-8", null, null, none)))
+        assertTrue(FileKinds.isFile("https://x.ru/a/app.apk", null), "сайт не ответил — по окончанию")
+        assertFalse(FileKinds.isFile("https://x.ru/index.html", null))
+        assertFalse(FileKinds.isFile("https://x.ru/news/42", null))
+    }
+
+    @Test
     fun документ_office_как_архив_не_подмена() {
         val docx = "PK".encodeToByteArray() + ByteArray(30) + "word/document.xml".encodeToByteArray()
         val v = FileKinds.verdict("договор.docx", docx)

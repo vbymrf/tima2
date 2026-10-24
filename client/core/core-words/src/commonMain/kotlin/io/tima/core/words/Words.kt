@@ -1521,6 +1521,13 @@ interface ChatWords {
     fun cloudProgress(done: String, total: String?): String
     val cloudCancel: String
     val cloudCancelled: String
+    /** Больше [mb] МБ — качает «Загрузчик» Android в «Загрузки» (заказчик 2026-10-24). */
+    fun cloudBigToSystem(mb: Int): String
+    /** Обычная ссылка, а по ней файл (2а#): заголовок окна, проверка, строка у отправителя, карточка — кнопкой. */
+    val linkIsFile: String
+    val linkChecking: String
+    fun linkFileIs(kind: String): String
+    val cardIsFile: String
     /** Программа — красным: опасность. */
     val fileProgram: String
     /** Архив, документ с макросами, страница, двойное расширение. */
@@ -3820,6 +3827,11 @@ object RussianWords : Words {
         override fun cloudProgress(done: String, total: String?) = if (total != null) "Скачано $done из $total" else "Скачано $done"
         override val cloudCancel = "Отменить скачивание"
         override val cloudCancelled = "Скачивание отменено"
+        override fun cloudBigToSystem(mb: Int) = "Файл больше $mb МБ — его скачивает «Загрузчик» Android в «Загрузки», ход в шторке"
+        override val linkIsFile = "По ссылке не страница, а файл"
+        override val linkChecking = "Проверяем, что по ссылке…"
+        override fun linkFileIs(kind: String) = "По ссылке — файл: $kind"
+        override val cardIsFile = "По ссылке файл, а не страница — вставлено кнопкой"
         override val fileProgram = "Это программа. Открывайте, только если доверяете отправителю"
         override val fileRisky = "Может быть опасным: внутри бывает программа"
         override fun fileDisguised(named: String, real: String) = "Файл назван как «$named», а на деле это «$real». Не открывайте"
