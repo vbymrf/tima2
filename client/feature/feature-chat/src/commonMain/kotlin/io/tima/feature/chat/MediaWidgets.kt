@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
@@ -230,6 +231,27 @@ internal fun RichBlock.hiddenOnly(): Boolean = when (this) {
     else -> false
 }
 
+/**
+ * Дуга, бегущая вокруг круглой кнопки ▶ (заказчик 2026-10-23 — у видео, 2026-10-24 — у голосового и «Аудио»):
+ * [active] — крутится, нет — не рисуется. Рисуется за краем кнопки, на [gap] от него.
+ */
+@Composable
+internal fun Modifier.spinArc(active: Boolean, color: androidx.compose.ui.graphics.Color, gap: androidx.compose.ui.unit.Dp = 4.dp): Modifier {
+    if (!active) return this
+    val turn = rememberInfiniteTransition(label = "spin").animateFloat(
+        0f, 360f, infiniteRepeatable(tween(1000, easing = androidx.compose.animation.core.LinearEasing)), label = "spin",
+    ).value
+    return this.drawWithContent {
+        drawContent()
+        val g = gap.toPx()
+        drawArc(
+            color, startAngle = turn - 90f, sweepAngle = 100f, useCenter = false,
+            topLeft = Offset(-g, -g), size = Size(size.width + g * 2, size.height + g * 2),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round),
+        )
+    }
+}
+
 /** Номер текущей метки на [positionMs]; до первой — -1. */
 internal fun currentMark(marks: List<MediaMark>, positionMs: Long): Int = marks.indexOfLast { it.atMs <= positionMs }
 
@@ -262,7 +284,9 @@ internal fun AudioWidget(audio: RichBlock.Audio) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PlayCircle(mine?.playing == true, enabled = hub != null && mine?.failed != true, tag = MediaTags.AUDIO_PLAY) {
+        // Дуга бежит, пока грузится и играет (заказчик 2026-10-24); на паузе — стоит.
+        val spinning = mine != null && !mine.failed && (mine.playing || !mine.started || mine.buffering)
+        PlayCircle(mine?.playing == true, enabled = hub != null && mine?.failed != true, tag = MediaTags.AUDIO_PLAY, spinning = spinning) {
             hub?.toggle(audio.item(from), blocks.audios().map { it.item(from) })
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -307,7 +331,10 @@ internal fun StreamWidget(stream: RichBlock.Stream) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PlayCircle(mine?.playing == true, enabled = hub != null, tag = "msg:stream.play") { hub?.toggle(stream.item(from), emptyList()) }
+        PlayCircle(
+            mine?.playing == true, enabled = hub != null, tag = "msg:stream.play",
+            spinning = mine != null && !mine.failed && (mine.playing || !mine.started || mine.buffering),
+        ) { hub?.toggle(stream.item(from), emptyList()) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Caption(stream.description.ifBlank { MediaLinks.hostOf(stream.url).orEmpty() }, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true, modifier = Modifier.weight(1f))
@@ -329,10 +356,10 @@ internal fun StreamWidget(stream: RichBlock.Stream) {
 }
 
 @Composable
-private fun PlayCircle(playing: Boolean, enabled: Boolean, tag: String, onClick: () -> Unit) {
+private fun PlayCircle(playing: Boolean, enabled: Boolean, tag: String, spinning: Boolean = false, onClick: () -> Unit) {
     val colors = Tima.colors
     Box(
-        Modifier.size(40.dp).background(if (enabled) colors.navigation else colors.line, CircleShape)
+        Modifier.size(40.dp).spinArc(spinning, colors.navigation).background(if (enabled) colors.navigation else colors.line, CircleShape)
             .clickable(enabled = enabled, onClick = onClick).testTag(tag),
         contentAlignment = Alignment.Center,
     ) {
@@ -416,6 +443,8 @@ data class AudioNow(
     val speed: Float = 1f,
     val live: Boolean = false,
     val started: Boolean = false,
+    /** Ждёт данных посреди проигрывания — дуга вокруг ▶. */
+    val buffering: Boolean = false,
     val failed: Boolean = false,
     /** Эфир: название песни, если поток его сообщает. */
     val title: String? = null,
@@ -470,6 +499,7 @@ class AudioHub(private val scope: CoroutineScope, private val player: OwnPlayer)
                     speed = s.speed,
                     live = it.live,
                     started = s.started,
+                    buffering = s.buffering,
                     failed = s.error != null,
                     title = s.title,
                     listenedMs = listenedFrom?.takeIf { s.playing }?.elapsedNow()?.inWholeMilliseconds ?: _now.value?.listenedMs ?: 0,

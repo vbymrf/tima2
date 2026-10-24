@@ -227,8 +227,10 @@ internal fun VoiceView(m: RichMedia) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Дуга бежит, пока грузится и играет, — как у видео (заказчик 2026-10-24).
+        val spinning = mine != null && !mine.failed && (mine.loading || mine.playing)
         Box(
-            Modifier.size(40.dp).background(if (gone) colors.line else colors.navigation, CircleShape)
+            Modifier.size(40.dp).spinArc(spinning, colors.navigation).background(if (gone) colors.line else colors.navigation, CircleShape)
                 .clickable(enabled = !gone && hub != null) { hub?.toggle(m) }.testTag(VOICE_PLAY_TAG),
             contentAlignment = Alignment.Center,
         ) {

@@ -417,26 +417,9 @@ private fun PlayerContent(
     // Видео грузится («кружится») — вокруг ▶ бежит белая дуга (заказчик 2026-10-23).
     val spinning = !failed && engine != null && (state.buffering || !state.started)
     val playButton: @Composable () -> Unit = {
-        val turn = if (spinning) {
-            rememberInfiniteTransition(label = "spin").animateFloat(
-                0f, 360f, infiniteRepeatable(tween(1000, easing = LinearEasing)), label = "spin",
-            ).value
-        } else {
-            null
-        }
         Box(
             Modifier.size(44.dp)
-                .drawWithContent {
-                    drawContent()
-                    if (turn != null) {
-                        val gap = 4.dp.toPx()
-                        drawArc(
-                            onVideo, startAngle = turn - 90f, sweepAngle = 100f, useCenter = false,
-                            topLeft = Offset(-gap, -gap), size = Size(size.width + gap * 2, size.height + gap * 2),
-                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round),
-                        )
-                    }
-                }
+                .spinArc(spinning, onVideo)
                 .background(colors.navigation, CircleShape)
                 .clickable(enabled = !failed) { if (state.playing) pause() else play() }
                 .testTag(PlayerTags.PLAY),
