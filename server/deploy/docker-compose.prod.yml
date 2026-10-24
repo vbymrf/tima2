@@ -56,6 +56,8 @@ services:
       CALL_VIDEO_HEIGHT: ${CALL_VIDEO_HEIGHT:-}
       CALL_VIDEO_FPS: ${CALL_VIDEO_FPS:-}
       CALL_VIDEO_BITRATE: ${CALL_VIDEO_BITRATE:-}
+      # Большая сторона фото отдельным файлом (ПЛАН-(ИФ) ИФ2, ADR-0052). Пусто — умолчание сервера.
+      TIMA_MEDIA_PHOTO_SIDE: ${TIMA_MEDIA_PHOTO_SIDE:-}
       # Сервис отладки на loopback контейнера (наружу НЕ проброшен). Доступ:
       #   docker compose -f deploy/docker-compose.prod.yml exec backend wget -qO- 127.0.0.1:6060/debug/stats
       TIMA_DEBUG_ADDR: 127.0.0.1:6060
