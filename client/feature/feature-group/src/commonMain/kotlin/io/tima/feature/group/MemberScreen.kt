@@ -206,6 +206,7 @@ private fun ContactsSheet(
 ) {
     val colors = Tima.colors
     val words = Tima.words.social
+    ProvidePlace(TextPlace.MENU) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -254,6 +255,7 @@ private fun ContactsSheet(
                 }
             }
         }
+    }
     }
 }
 

@@ -8020,6 +8020,7 @@ private fun ContactSoundSheet(
     // Имя файла у себя — своё на каждый выбор: общий файл нескольких людей не затирается
     // выбором одного из них.
     val file = rememberSoundFilePicker("ring_c" + msNow(), onPick)
+    io.tima.core.ui.ProvidePlace(io.tima.core.ui.TextPlace.MENU) {
     Box(
         Modifier.fillMaxSize().background(Tima.colors.text.copy(alpha = 0.45f)).clickable(onClick = onClose),
         contentAlignment = Alignment.BottomCenter,
@@ -8040,6 +8041,7 @@ private fun ContactSoundSheet(
             }
             trouble?.let { Secondary(it) }
         }
+    }
     }
 }
 

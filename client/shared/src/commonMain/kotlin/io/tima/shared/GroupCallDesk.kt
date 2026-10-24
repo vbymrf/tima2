@@ -453,6 +453,7 @@ fun GroupCallOverlays(
     val words = Tima.words.groupCall
     desk.setup?.let { ask ->
         if (desk.viewing) {
+            ProvidePlace(TextPlace.MENU) {
             Box(
                 Modifier.fillMaxSize().background(Tima.colors.text.copy(alpha = 0.45f)).clickable { desk.viewing = false },
                 contentAlignment = Alignment.BottomCenter,
@@ -463,8 +464,10 @@ fun GroupCallOverlays(
                     io.tima.feature.call.GroupViewChoice(groupView, onCollapse = { desk.viewing = false })
                 }
             }
+            }
             return true
         }
+        ProvidePlace(TextPlace.MENU) {
         Box(
             Modifier.fillMaxSize().background(Tima.colors.text.copy(alpha = 0.45f)).clickable { desk.closeSetup() },
             contentAlignment = Alignment.BottomCenter,
@@ -493,6 +496,7 @@ fun GroupCallOverlays(
                     )
                 }
             }
+        }
         }
         return true
     }

@@ -2,6 +2,8 @@ package io.tima.feature.chat
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.IconButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.heightIn
@@ -289,6 +291,7 @@ private fun ChosenSheet(count: Int, sections: List<Section>, onMove: (String) ->
 @Composable
 private fun PointerPreview(line: ChatLine, authorOf: (ChatLine) -> String?, onOpen: () -> Unit, onClose: () -> Unit) {
     val colors = Tima.colors
+    ProvidePlace(TextPlace.MESSAGES) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onClose),
         contentAlignment = Alignment.BottomCenter,
@@ -314,6 +317,7 @@ private fun PointerPreview(line: ChatLine, authorOf: (ChatLine) -> String?, onOp
                 wrap = true,
             )
         }
+    }
     }
 }
 

@@ -322,6 +322,7 @@ private fun MessageAsk(ask: GateAsk.Message, onOpen: () -> Unit, onCancel: () ->
 @Composable
 private fun GateSheet(onCancel: () -> Unit, content: @Composable () -> Unit) {
     val colors = Tima.colors
+    ProvidePlace(TextPlace.MENU) {
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
         contentAlignment = Alignment.BottomCenter,
@@ -330,6 +331,7 @@ private fun GateSheet(onCancel: () -> Unit, content: @Composable () -> Unit) {
             Modifier.fillMaxWidth().padding(top = TimaZones.zone1).background(colors.surface).clickable(enabled = false) {}
                 .testTag(LinkTags.ASK),
         ) { content() }
+    }
     }
 }
 

@@ -198,6 +198,9 @@ fun TabRow(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = Tima.colors
+    // По «Вкладкам окон» (заказчик 2026-10-24: «размеры не соответствуют цифрам в настройках»): до этого
+    // ряд не был привязан ни к одной группе и стоял на 13 при любом выборе — рос только второй ряд.
+    ProvidePlace(TextPlace.TABS) {
     FlowRow(
         modifier = modifier
             .fillMaxWidth()
@@ -219,6 +222,7 @@ fun TabRow(
             )
         }
         trailing?.invoke()
+    }
     }
 }
 

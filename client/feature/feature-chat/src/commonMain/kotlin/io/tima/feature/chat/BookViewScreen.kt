@@ -670,6 +670,7 @@ fun BookViewSheet(
     var ledger by remember { mutableStateOf(false) }
     // «?» журнала — подокно «что делают кнопки» (заказчик 2026-10-01).
     var ledgerHelp by remember { mutableStateOf(false) }
+    ProvidePlace(TextPlace.MENU) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -798,5 +799,6 @@ fun BookViewSheet(
                 )
             }
         }
+    }
     }
 }

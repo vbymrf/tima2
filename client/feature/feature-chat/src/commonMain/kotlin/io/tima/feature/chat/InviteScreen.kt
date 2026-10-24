@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.ListLine
 import io.tima.core.ui.Name
@@ -43,6 +45,7 @@ fun InviteScreen(
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
+    ProvidePlace(TextPlace.MENU) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -74,6 +77,7 @@ fun InviteScreen(
 
             trouble?.let { ListLine(middle = { Tertiary(it, lineOne = false) }) }
         }
+    }
     }
 }
 

@@ -66,6 +66,8 @@ fun WindowHeader(
     right: (@Composable () -> Unit)? = null,
 ) {
     val colors = Tima.colors
+    // Шапка окна — по «Шапкам», как шапка подокна (заказчик 2026-10-24): до этого не была привязана.
+    ProvidePlace(TextPlace.HEADERS) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -115,6 +117,7 @@ fun WindowHeader(
             // Признак ставит плашка, а не тот, кто кладёт в неё кнопки, — см. LocalInPlate.
             right?.let { CompositionLocalProvider(LocalInPlate provides true) { it() } }
         }
+    }
     }
 }
 
