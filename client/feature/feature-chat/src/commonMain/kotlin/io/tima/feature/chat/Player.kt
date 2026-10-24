@@ -872,13 +872,10 @@ private fun PlayerIconButton(icon: PlayerIcon, label: String, lit: Boolean, tag:
                     drawPath(head, ink)
                 }
                 PlayerIcon.SETTINGS -> {
-                    // Шестерёнка: кольцо и восемь зубцов.
-                    val c = Offset(s / 2, s / 2)
-                    drawCircle(ink, s * 0.2f, c, style = stroke)
-                    for (k in 0 until 8) {
-                        val a = (k * 45.0 * kotlin.math.PI / 180).toFloat()
-                        val d = Offset(cos(a), sin(a))
-                        drawLine(ink, Offset(c.x + d.x * s * 0.32f, c.y + d.y * s * 0.32f), Offset(c.x + d.x * s * 0.46f, c.y + d.y * s * 0.46f), w, StrokeCap.Round)
+                    // Три вертикальные черты (заказчик 2026-10-24: шестерёнка читалась как «яркость»).
+                    for (k in 0..2) {
+                        val x = s * (0.2f + 0.3f * k)
+                        drawLine(ink, Offset(x, s * 0.12f), Offset(x, s * 0.88f), w, StrokeCap.Round)
                     }
                 }
                 PlayerIcon.CLOSE -> {
