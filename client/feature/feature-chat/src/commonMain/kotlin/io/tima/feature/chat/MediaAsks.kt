@@ -64,6 +64,21 @@ data class MediaProbe(val kind: MediaLinks.Kind, val durationMs: Long = 0)
 internal fun videoAskLink(url: String, description: String): ComposedWidget.Link =
     ComposedWidget.Link(url, title = description.trim(), mode = "button")
 
+/**
+ * «Облако» с видом «Видео» или «Аудио» (заказчик 2026-10-24): ссылка, которая играет в окне TIMA, —
+ * нашим виджетом «Видео» или «Аудио», описание — из «Названия», пусто — имя файла (Р27). Не играет
+ * (страница диска, архив) или вид другой — `null`: остаётся файл в облаке, как был.
+ */
+fun cloudMediaWidget(url: String, title: String, kind: String?, doc: ComposedDoc): ComposedWidget? {
+    val k = MediaLinks.kindOf(url) ?: return null
+    val description = ComposedMedia.unique(doc, title.trim().ifBlank { MediaLinks.fileName(url) })
+    return when {
+        kind == "video" && k != MediaLinks.Kind.AUDIO_FILE -> ComposedWidget.Video(url, description)
+        kind == "audio" && k == MediaLinks.Kind.AUDIO_FILE -> ComposedWidget.Audio(url, description)
+        else -> null
+    }
+}
+
 /** Что форме вставки нужно от ведущего редактор: сеть и загрузка картинки. */
 class MediaAskPorts(
     /** m3u8: видео, запись или эфир и длительность записи; не узнали — `null`. */

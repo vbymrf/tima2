@@ -3,6 +3,7 @@ package io.tima.shared
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.testTag
 import io.tima.core.ui.Tima
 import io.tima.core.ui.words
 import io.tima.domain.chat.ComposedWidget
@@ -34,8 +35,16 @@ internal fun EditorAskSheet(
     linkColor: String = "",
     /** Выбран цвет ссылки — запомнить до следующего раза (заказчик 2026-10-19). */
     onLinkColor: (String) -> Unit = {},
+    /** Документ редактора — описание видео и аудио из «Облака» не должно совпасть с уже вставленным. */
+    doc: io.tima.domain.chat.ComposedDoc? = null,
+    /**
+     * «Облако» видео или аудио → наш виджет и, если отмечено «Добавить метки», форма меток к нему без
+     * числа (заказчик 2026-10-24). `null` — виджетов медиа здесь нет (личная страница): облако как было.
+     */
+    onMarks: ((bind: String) -> Unit)? = null,
 ) {
     var color by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(linkColor) }
+    var withMarks by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val cw = Tima.words.chat
     val ew = Tima.words.editor
     val modes = if (cardsOn) listOf("plain", "button", "card") else listOf("plain", "button")
@@ -53,7 +62,21 @@ internal fun EditorAskSheet(
         ok = cw.ok,
         cancel = cw.cancel,
         options = options,
-        extra = if (ask == "link") ({ io.tima.feature.chat.PaletteRow(color, "chat:ask.color", only = io.tima.feature.chat.LinkColors) { color = it.orEmpty() } }) else null,
+        extra = when {
+            ask == "link" -> ({ _ -> io.tima.feature.chat.PaletteRow(color, "chat:ask.color", only = io.tima.feature.chat.LinkColors) { color = it.orEmpty() } })
+            // Окно «Облака» прежнее; у видео и аудио — ещё «Добавить метки» (заказчик 2026-10-24).
+            ask == "cloud" && onMarks != null -> ({ chosen ->
+                if (chosen == "video" || chosen == "audio") {
+                    io.tima.core.ui.Chip(
+                        ew.cloudMarks,
+                        kind = if (withMarks) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Quiet,
+                        onClick = { withMarks = !withMarks },
+                        modifier = androidx.compose.ui.Modifier.testTag(CLOUD_MARKS_TAG),
+                    )
+                }
+            })
+            else -> null
+        },
         onCancel = onClose,
         onDone = { v ->
             val url = v[0].trim().let { if (it.isEmpty() || "://" in it) it else "https://$it" }
@@ -80,7 +103,18 @@ internal fun EditorAskSheet(
                 }
                 "cloud" -> if (url.isNotEmpty()) {
                     onClose()
-                    put(ComposedWidget.Cloud(url, v.getOrNull(2) ?: "file", v[1]))
+                    val kind = v.getOrNull(2) ?: "file"
+                    // Видео и аудио, которые играют в окне TIMA, — нашим виджетом (заказчик 2026-10-24).
+                    val media = if (onMarks != null && doc != null) io.tima.feature.chat.cloudMediaWidget(url, v[1], kind, doc) else null
+                    if (media == null) {
+                        put(ComposedWidget.Cloud(url, kind, v[1]))
+                    } else {
+                        put(media)
+                        if (withMarks) {
+                            val bind = (media as? ComposedWidget.Video)?.description ?: (media as ComposedWidget.Audio).description
+                            onMarks?.invoke(bind)
+                        }
+                    }
                 }
                 "place" -> io.tima.core.media.PlaceText.parse(v[0])?.let { (lat, lon) ->
                     onClose()
@@ -94,6 +128,9 @@ internal fun EditorAskSheet(
         },
     )
 }
+
+/** «Добавить метки» в «Облаке» у видео и аудио. */
+internal const val CLOUD_MARKS_TAG = "chat:ask.marks"
 
 /** Цвет ссылки, выбранный в «Вставить ссылку» последним: имя палитры, пусто — цвет ссылок у читающего. */
 internal const val LINK_COLOR_KEY = "link.color"

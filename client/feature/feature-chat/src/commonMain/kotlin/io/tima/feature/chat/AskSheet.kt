@@ -51,8 +51,8 @@ fun AskSheet(
     /** Ошибка ответа словами; `null` — ошибки нет. */
     trouble: String? = null,
     options: List<Pair<String, String>> = emptyList(),
-    /** Что ещё спросить под полями — например, цвет ссылки (2026-10-19). */
-    extra: (@Composable () -> Unit)? = null,
+    /** Что ещё спросить под полями — например, цвет ссылки (2026-10-19); получает выбранный вариант. */
+    extra: (@Composable (chosen: String?) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     var values by remember(fields) { mutableStateOf(fields.map { "" }) }
@@ -91,7 +91,7 @@ fun AskSheet(
                     }
                 }
             }
-            extra?.invoke()
+            extra?.invoke(chosen)
             if (trouble != null) Caption(trouble, fontSize = TimaType.sz5, color = colors.alarm)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip(

@@ -91,7 +91,6 @@ interface EditorWords {
     val levelWord: String
     val widgetPoll: String
     val widgetEvent: String
-    val widgetClips: String
     val widgetAudio: String
     val widgetSoon: String
     // ── Видео, звук и метки по ссылке (ПЛАН-(ВМ) §3.6–§3.8) ──
@@ -118,6 +117,9 @@ interface EditorWords {
 
     /** Ссылка в форме «Видео» не играет в окне TIMA — уйдёт кнопкой-ссылкой (заказчик 2026-10-23). */
     val notVideo: String
+
+    /** «Облако» с видом «Видео» или «Аудио»: после вставки — форма меток (заказчик 2026-10-24). */
+    val cloudMarks: String
     val isService: String
     val notStream: String
     val probing: String
@@ -327,7 +329,6 @@ object RussianEditorWords : EditorWords {
     override val levelWord = "уровень"
     override val widgetPoll = "Опрос"
     override val widgetEvent = "Мероприятие"
-    override val widgetClips = "Видеоклипы"
     override val widgetAudio = "Аудио"
     override val widgetSoon = "Этот виджет появится следующими срезами"
     override val widgetVideo = "Видео"
@@ -350,6 +351,7 @@ object RussianEditorWords : EditorWords {
     override val isAudio = "Это звук — вставьте виджетом «Аудио»"
     override val isVideo = "Это видео — вставьте виджетом «Видео»"
     override val isStream = "Это эфир — вставьте виджетом «Поток»"
+    override val cloudMarks = "Добавить метки"
     override val notVideo = "Ссылка не является видео — откроется в браузере. Вставится кнопкой-ссылкой с названием из «Описания»"
     override val isService = "Ссылку на сервис «Аудио» не принимает — вставьте обычной ссылкой"
     override val notStream = "Поток — это ссылка на m3u8"
@@ -557,7 +559,6 @@ object EnglishEditorWords : EditorWords {
     override val levelWord = "level"
     override val widgetPoll = "Poll"
     override val widgetEvent = "Event"
-    override val widgetClips = "Video clips"
     override val widgetAudio = "Audio"
     override val widgetSoon = "This widget comes in the next slices"
     override val widgetVideo = "Video"
@@ -580,6 +581,7 @@ object EnglishEditorWords : EditorWords {
     override val isAudio = "This is audio — insert it as «Audio»"
     override val isVideo = "This is video — insert it as «Video»"
     override val isStream = "This is a live stream — insert it as «Stream»"
+    override val cloudMarks = "Add marks"
     override val notVideo = "This link is not a video — it opens in the browser. It will be inserted as a link button named by «Description»"
     override val isService = "«Audio» does not take service links — insert a plain link"
     override val notStream = "A stream is an m3u8 link"
@@ -783,7 +785,6 @@ object SpanishEditorWords : EditorWords {
     override val levelWord = "nivel"
     override val widgetPoll = "Encuesta"
     override val widgetEvent = "Evento"
-    override val widgetClips = "Videoclips"
     override val widgetAudio = "Audio"
     override val widgetSoon = "Este widget llegará en las próximas partes"
     override val widgetVideo = "Vídeo"
@@ -806,6 +807,7 @@ object SpanishEditorWords : EditorWords {
     override val isAudio = "Es audio — insértalo como «Audio»"
     override val isVideo = "Es vídeo — insértalo como «Vídeo»"
     override val isStream = "Es una emisión — insértala como «Emisión»"
+    override val cloudMarks = "Añadir marcas"
     override val notVideo = "Este enlace no es un vídeo — se abre en el navegador. Se insertará como botón de enlace con el nombre de «Descripción»"
     override val isService = "«Audio» no acepta enlaces de servicios — inserta un enlace normal"
     override val notStream = "Una emisión es un enlace m3u8"

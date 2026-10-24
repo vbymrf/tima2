@@ -391,7 +391,7 @@ fun EditorScreen(
             // «Убрать» — ряд целиком (заказчик 2026-10-21); корзина в шапке удаляет выбранное, как была.
             "delete" -> model.removeRow()
             // Раздел «Стиль» (§10.2): на выбранное.
-            // «Вставка → Виджет» (ПЛАН-(ВД)): опрос, мероприятие, видеоклипы, аудио.
+            // «Вставка → Виджет» (ПЛАН-(ВД), ПЛАН-(ВМ)): видео, метки, аудио, поток, опрос, мероприятие.
             "widget" -> toggle("widgets")
             // «Стиль → Свойства» (ADR-0050 §2): свойства выбранного блока.
             "props" -> toggle("style.props")
@@ -889,7 +889,10 @@ internal fun ParagraphList(current: ParagraphKind, onPick: (ParagraphKind) -> Un
 /** Виджеты медиа по ссылке (ПЛАН-(ВМ) §3.6–§3.8): вставляет форма ведущего редактор. */
 private val MEDIA_WIDGETS = setOf("video", "marks", "audio", "stream")
 
-/** «Вставка → Виджет»: видео, метки, аудио, поток (ПЛАН-(ВМ)); опрос, мероприятие, клипы — пока заглушки (ПЛАН-(ВД)). */
+/**
+ * «Вставка → Виджет»: видео, метки, аудио, поток (ПЛАН-(ВМ)); опрос, мероприятие — пока заглушки (ПЛАН-(ВД)).
+ * «Видеоклипы» убраны (заказчик 2026-10-24: «он не нужен»).
+ */
 @Composable
 private fun WidgetsAsk(onPick: (String) -> Unit) {
     val colors = Tima.colors
@@ -901,7 +904,7 @@ private fun WidgetsAsk(onPick: (String) -> Unit) {
     ) {
         val items = listOf(
             "video" to w.widgetVideo, "marks" to w.widgetMarks, "audio" to w.widgetAudio, "stream" to w.widgetStream,
-            "poll" to w.widgetPoll, "event" to w.widgetEvent, "clips" to w.widgetClips,
+            "poll" to w.widgetPoll, "event" to w.widgetEvent,
         )
         for ((key, label) in items) {
             io.tima.core.ui.Chip(label, kind = io.tima.core.ui.ChipKind.Neutral, onClick = { onPick(key) }, modifier = Modifier.testTag("editor:widgets.$key"))

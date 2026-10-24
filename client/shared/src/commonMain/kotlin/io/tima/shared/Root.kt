@@ -5814,6 +5814,9 @@ private fun Chat(
                 put = ::put,
                 onNotice = { editorNotice = it },
                 onClose = { editorAsk = null },
+                doc = editorModel.doc,
+                // «Облако» видео или аудио → метки без числа: одна пустая строка (заказчик 2026-10-24).
+                onMarks = { bind -> editorMarks = bind to 1 },
             )
         }
         editorMedia?.let { kind ->
