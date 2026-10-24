@@ -134,21 +134,6 @@ class ComposedBodiesTest {
         assertEquals(3, ComposedFromContent.quotedLines(io.tima.crypto.MarkupWidget(cut = "cut")))
     }
 
-    /**
-     * «2в» (заказчик 2026-10-24): кусок со стилем — абзац, заголовок, абзац — при правке снова один кусок
-     * с тем же стилем и собирается обратно в то же строение; два абзаца разных кусков не склеиваются.
-     */
-    @Test
-    fun кусок_со_стилем_при_правке_снова_один() {
-        val purple = mapOf("background" to "purple")
-        val doc = ComposedDoc(listOf(ComposedItem.Text("раз\n# Заглавие\nдва", purple), ComposedItem.Text("три"), ComposedItem.Text("четыре")))
-        val content = bodies.content(doc)
-        val back = ComposedFromContent.doc(content)!!
-        assertEquals(3, back.items.size, back.items.toString())
-        assertEquals(purple, back.items[0].style)
-        assertEquals(content.markup, bodies.content(back).markup, "строение то же")
-    }
-
     /** «Списком» (заказчик 2026-10-20): пункт без заголовка, под ним вставленное — доходит до получателя пунктом. */
     @Test
     fun вставленное_списком_пункт_без_заголовка() {

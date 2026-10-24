@@ -43,38 +43,19 @@ internal object ComposedFromContent {
         if (content.media.indices.any { it !in used }) return null
 
         val items = mutableListOf<ComposedItem>()
-        // Текстовые блоки подряд с одним стилем — снова один кусок, каким его писали (заказчик 2026-10-24,
-        // «2в»): абзац, заголовок, абзац — не три куска. Два абзаца или две цитаты подряд не склеиваются —
-        // обратно они разобрались бы одним блоком, и строение разошлось бы.
-        val run = mutableListOf<MarkupBlock>()
-        fun flush(): Boolean {
-            if (run.isEmpty()) return true
-            val text = textOf(content, markup, run.map { it.copy(style = emptyMap()) }) ?: return false
-            items += ComposedItem.Text(text, run.first().style)
-            run.clear()
-            return true
-        }
         for (b in markup.blocks) {
-            val textual = b.type != BlockType.FLEX && b.type !in WIDGETS && b.type != BlockType.TABLE && b.type != BlockType.LIST
-            if (textual) {
-                val last = run.lastOrNull()
-                val joins = last != null && last.style == b.style &&
-                    !(last.type == b.type && (b.type == BlockType.PARAGRAPH || b.type == BlockType.QUOTE))
-                if (!joins && !flush()) return null
-                run += b
-                continue
-            }
-            if (!flush()) return null
             items += when {
                 b.type == BlockType.FLEX -> flex(content, markup, b) ?: return null
                 b.type in WIDGETS -> ComposedItem.Widget(widget(content, b) ?: return null, b.style)
                 // Таблица быстрого оформления — только в старых сообщениях: в редакторе её больше нет
                 // (заказчик 2026-10-18), такое сообщение показывается как раньше и не правится.
                 b.type == BlockType.TABLE -> return null
-                else -> itemList(content, markup, b) ?: return null
+                b.type == BlockType.LIST -> itemList(content, markup, b) ?: return null
+                // Каждый текстовый блок — свой кусок: склеенные, два простых абзаца разобрались бы
+                // обратно одним абзацем, и строение разошлось бы.
+                else -> ComposedItem.Text(textOf(content, markup, listOf(b.copy(style = emptyMap()))) ?: return null, b.style)
             }
         }
-        if (!flush()) return null
         return ComposedDoc(items.ifEmpty { listOf(ComposedItem.Text("")) })
     }
 

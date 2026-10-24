@@ -952,9 +952,6 @@ private fun EditorItemView(
                 cursorBrush = SolidColor(colors.navigation),
                 visualTransformation = rememberTypedView(shown, marks, open = model.doc.marks),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(vertical = 4.dp)
-                    // Граница куска (заказчик 2026-10-24, «2в»): стиль — у куска целиком, и видно, где он
-                    // кончается; у получателя кусок — одной плашкой. Кусок один — рамка ни к чему.
-                    .then(if (model.doc.items.size > 1) Modifier.border(1.dp, colors.line, RoundedCornerShape(6.dp)) else Modifier)
                     .styled(look)
                     .then(if (tooWide) Modifier.border(2.dp, colors.alarm, RoundedCornerShape(6.dp)).padding(4.dp) else Modifier)
                     .focusRequester(focus)

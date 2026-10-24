@@ -52,40 +52,18 @@ import io.tima.domain.chat.SpanKind
 fun RichBody(content: RichContent, modifier: Modifier = Modifier) {
     androidx.compose.runtime.CompositionLocalProvider(LocalRichMedia provides content.media, LocalRichBlocks provides content.blocks) {
         Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            // Кусок со стилем — одной плашкой, как в редакторе (заказчик 2026-10-24, «2в»).
-            val pieces = remember(content.blocks) { io.tima.domain.chat.RichPlates.of(content.blocks) }
-            var previous: RichBlock? = null
-            for (piece in pieces) {
-                when (piece) {
-                    is io.tima.domain.chat.RichPlates.Piece.Plate -> RichPlate(piece)
-                    is io.tima.domain.chat.RichPlates.Piece.One -> {
-                        val block = piece.block
-                        if (block is RichBlock.Underlay && LocalRefDepth.current == 0) {
-                            // Подкладка — как ещё одно сообщение внутри пузыря (заказчик 2026-10-20): во всю его
-                            // ширину; соседние подкладки разделены тонкой линией цвета рамки.
-                            if (previous is RichBlock.Underlay) UnderlaySeparator()
-                            androidx.compose.runtime.CompositionLocalProvider(LocalUnderlayBleed provides true) { RichBlockViewOf(block) }
-                        } else {
-                            RichBlockViewOf(block)
-                        }
-                    }
+            for ((i, block) in content.blocks.withIndex()) {
+                if (block is RichBlock.Underlay && LocalRefDepth.current == 0) {
+                    // Подкладка — как ещё одно сообщение внутри пузыря (заказчик 2026-10-20): во всю его
+                    // ширину; соседние подкладки разделены тонкой линией цвета рамки.
+                    if (content.blocks.getOrNull(i - 1) is RichBlock.Underlay) UnderlaySeparator()
+                    androidx.compose.runtime.CompositionLocalProvider(LocalUnderlayBleed provides true) { RichBlockViewOf(block) }
+                } else {
+                    RichBlockViewOf(block)
                 }
-                previous = (piece as? io.tima.domain.chat.RichPlates.Piece.One)?.block
             }
         }
     }
-}
-
-/** Плашка куска: фон, поля и разделитель — у неё; цвет, размер и выравнивание — блокам внутри, как в ячейке. */
-@Composable
-private fun RichPlate(plate: io.tima.domain.chat.RichPlates.Piece.Plate) {
-    val text = plate.style.over(LocalCellText.current).copy(background = null, padding = null, divider = null, dividerColor = null)
-    Column(Modifier.fillMaxWidth().styled(plate.style), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        androidx.compose.runtime.CompositionLocalProvider(LocalCellText provides text) {
-            for (b in plate.blocks) RichBlockViewOf(b)
-        }
-    }
-    DividerAfter(plate.style)
 }
 
 /** Текст блока со стилем: цвет и размер — по именам и ступеням, фон и поля — у блока. */
