@@ -47,9 +47,12 @@ import io.tima.core.ui.TimaZones
 import io.tima.core.ui.words
 
 /** Пункты скрепки — девять плиток (Решения §9; ВЫБОР-РЕАЛИЗАЦИИ §11.2а). */
-enum class AttachItem(val tag: String) {
+enum class AttachItem(val tag: String, val cloud: Boolean = false) {
     FILE("file"), DOCUMENT("document"), PICTURE("picture"), CAMERA("camera"), AUDIO("audio"),
     VIDEO("video"), CONTACT("contact"), PLACE("place"), LINK("link"),
+
+    /** Раздел «Из облака» (заказчик 2026-10-24): ссылка и название; видео и звук, что играют у нас, — виджетом. */
+    CLOUD_FILE("cloud.file", cloud = true), CLOUD_VIDEO("cloud.video", cloud = true), CLOUD_AUDIO("cloud.audio", cloud = true),
 }
 
 /** Метки строки ввода для сценариев (СЦЕНАРИИ-ПО-ОКНАМ.md). */
@@ -61,6 +64,7 @@ object InputTags {
     const val AREA_CLOSE = "chat:area.close"
     const val EMOJI_AREA = "chat:emoji.area"
     const val ATTACH_AREA = "chat:attach.area"
+    const val ATTACH_CLOUD = "chat:attach.cloud"
     fun attach(item: AttachItem) = "attach:${item.tag}"
 }
 
@@ -329,9 +333,10 @@ internal fun EmojiArea(onClose: () -> Unit, onPick: (String) -> Unit) {
 @Composable
 private fun AttachArea(items: List<AttachItem>, onClose: () -> Unit, onPick: (AttachItem) -> Unit) {
     val words = Tima.words.chat
-    AreaFrame(words.attachArea, onClose, InputTags.ATTACH_AREA) {
+    @Composable
+    fun tiles(list: List<AttachItem>) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (item in items) {
+            for (item in list) {
                 // Ярлычок и подпись — одна нажимаемая плитка (Решения §9).
                 Column(
                     Modifier.width(96.dp).background(Tima.colors.surface, RoundedCornerShape(10.dp))
@@ -343,6 +348,15 @@ private fun AttachArea(items: List<AttachItem>, onClose: () -> Unit, onPick: (At
                     Tertiary(words.attachItem(item.tag), lineOne = true)
                 }
             }
+        }
+    }
+    AreaFrame(words.attachArea, onClose, InputTags.ATTACH_AREA) {
+        tiles(items.filterNot { it.cloud })
+        // «Из облака» — своим разделом с подписью (заказчик 2026-10-24).
+        val cloud = items.filter { it.cloud }
+        if (cloud.isNotEmpty()) {
+            Tertiary(words.attachCloud, lineOne = true, modifier = Modifier.testTag(InputTags.ATTACH_CLOUD))
+            tiles(cloud)
         }
     }
 }
@@ -357,6 +371,9 @@ private fun glyphOf(item: AttachItem) = when (item) {
     AttachItem.CONTACT -> "👤"
     AttachItem.PLACE -> "📍"
     AttachItem.LINK -> "🔗"
+    AttachItem.CLOUD_FILE -> "📄"
+    AttachItem.CLOUD_VIDEO -> "🎬"
+    AttachItem.CLOUD_AUDIO -> "🎵"
 }
 
 @Composable

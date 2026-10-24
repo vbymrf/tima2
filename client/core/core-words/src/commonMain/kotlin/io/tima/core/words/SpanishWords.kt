@@ -1364,8 +1364,13 @@ object SpanishWords : Words {
             "video" -> "Vídeo"
             "contact" -> "Contactos"
             "place" -> "Mapa"
+            "cloud.file" -> "Archivo"
+            "cloud.video" -> "Vídeo"
+            "cloud.audio" -> "Música"
             else -> "Enlace"
         }
+        override val attachCloud = "Desde la nube"
+        override val cloudTitleHint = "Título — puede quedar vacío: se usa el nombre del archivo"
         override fun composedInEditor(rows: Int) = "Hecho en el editor · $rows " + if (rows == 1) "fila" else "filas"
         override val undo = "Deshacer"
         override fun mediaSummary(kind: String, count: Int, name: String) = when (kind) {

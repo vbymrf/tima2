@@ -1364,8 +1364,13 @@ object EnglishWords : Words {
             "video" -> "Video"
             "contact" -> "Contacts"
             "place" -> "Map"
+            "cloud.file" -> "File"
+            "cloud.video" -> "Video"
+            "cloud.audio" -> "Music"
             else -> "Link"
         }
+        override val attachCloud = "From the cloud"
+        override val cloudTitleHint = "Title — may be empty: the file name is used"
         override fun composedInEditor(rows: Int) = "Composed in the editor · $rows " + if (rows == 1) "row" else "rows"
         override val undo = "Undo"
         override fun mediaSummary(kind: String, count: Int, name: String) = when (kind) {

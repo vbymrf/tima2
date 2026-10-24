@@ -5105,7 +5105,15 @@ private fun Chat(
     val myPlace = io.tima.core.media.rememberMyPlace { p ->
         if (p != null) store.sendPlace(p.first, p.second) else { askTrouble = placeNoAccess; asking = AttachAsk.Place }
     }
-    val attachItems = io.tima.feature.chat.AttachItem.entries.filter { it != io.tima.feature.chat.AttachItem.CAMERA || camera != null }
+    // В группе файлы — только ссылкой (Решения §2): верхние «Файл», «Документ», «Аудио», «Видео» там убраны —
+    // их делает раздел «Из облака» (заказчик 2026-10-24, 1г#).
+    val byLinkOnly = setOf(
+        io.tima.feature.chat.AttachItem.FILE, io.tima.feature.chat.AttachItem.DOCUMENT,
+        io.tima.feature.chat.AttachItem.AUDIO, io.tima.feature.chat.AttachItem.VIDEO,
+    )
+    val attachItems = io.tima.feature.chat.AttachItem.entries.filter {
+        (it != io.tima.feature.chat.AttachItem.CAMERA || camera != null) && !(store.filesByLink && it in byLinkOnly)
+    }
     var linkAsk by remember { mutableStateOf(false) }
     val attachHandler: (io.tima.feature.chat.AttachItem) -> Unit = { item ->
         // В группе файлы — только ссылкой на облако (Решения §2).
@@ -5122,6 +5130,9 @@ private fun Chat(
             // Ссылка — тем же окном, что «Вставить ссылку» в редакторе (заказчик 2026-10-19): вид,
             // название, цвет; уходит отдельным сообщением в своём пузыре.
             io.tima.feature.chat.AttachItem.LINK -> linkAsk = true
+            io.tima.feature.chat.AttachItem.CLOUD_FILE -> asking = AttachAsk.FromCloud("file")
+            io.tima.feature.chat.AttachItem.CLOUD_VIDEO -> asking = AttachAsk.FromCloud("video")
+            io.tima.feature.chat.AttachItem.CLOUD_AUDIO -> asking = AttachAsk.FromCloud("audio")
         }
     }
     // «Сохранить как» (Решения §6): скачать у почтальона, открыть ключом из тела, отдать системе.
@@ -6065,6 +6076,7 @@ private fun Chat(
         val w = Tima.words.chat
         val (title, fields) = when (ask) {
             is AttachAsk.Cloud -> w.linkPlace to listOf(w.linkPlace)
+            is AttachAsk.FromCloud -> (w.attachCloud + " · " + w.attachItem("cloud." + ask.kind)) to listOf(w.linkPlace, w.cloudTitleHint)
             AttachAsk.Place -> w.attachItem("place") to listOf(w.placeAsk)
             AttachAsk.Contact -> w.attachItem("contact") to listOf(Tima.words.chat.contact, "+7")
         }
@@ -6074,10 +6086,29 @@ private fun Chat(
             ok = w.ok,
             cancel = w.cancel,
             trouble = askTrouble,
+            // «Из облака»: ушли с поля ссылки — что по ней (видео сайта, файл, вид файла), без предупреждений.
+            extra = if (ask is AttachAsk.FromCloud) ({ now ->
+                    val url = now.values.firstOrNull().orEmpty()
+                    if (0 in now.left && url.isNotBlank()) {
+                        val full = if ("://" in url) url else "https://$url"
+                        val said = if (ask.kind == "file") {
+                            w.cloudFileIs(w.fileKindName(io.tima.domain.chat.FileKinds.ofName(io.tima.domain.chat.FileKinds.nameOf(full)).key))
+                        } else {
+                            io.tima.feature.chat.linkKindText(full, Tima.words.editor, w)
+                                ?: w.cloudFileIs(w.fileKindName(io.tima.domain.chat.FileKinds.ofName(io.tima.domain.chat.FileKinds.nameOf(full)).key))
+                        }
+                        io.tima.core.ui.Tertiary(said, modifier = androidx.compose.ui.Modifier.testTag(CLOUD_KIND_TAG))
+                    }
+            }) else null,
             onCancel = { asking = null; askTrouble = null },
             onDone = { values ->
                 when (ask) {
                     is AttachAsk.Cloud -> { store.sendLink(values[0], cloudKind = ask.kind); asking = null }
+                    // Отдельным сообщением: видео и звук, что играют у нас, — виджетом, без меток (2а#).
+                    is AttachAsk.FromCloud -> if (values[0].isNotBlank()) {
+                        store.sendWidget(io.tima.feature.chat.cloudAttachWidget(values[0], values.getOrElse(1) { "" }, ask.kind))
+                        asking = null
+                    }
                     AttachAsk.Place -> {
                         val point = io.tima.core.media.PlaceText.parse(values[0])
                         if (point == null) askTrouble = w.placeAsk else { store.sendPlace(point.first, point.second); asking = null; askTrouble = null }
@@ -8111,6 +8142,9 @@ const val SEARCH_CLOSE_TAG: String = "search:close"
 private sealed interface AttachAsk {
     /** Файл в группе — ссылкой на облако; [kind]: `file`, `document`, `audio`, `video`. */
     data class Cloud(val kind: String) : AttachAsk
+
+    /** Раздел скрепки «Из облака» (заказчик 2026-10-24): ссылка и название; [kind] — `file`, `video`, `audio`. */
+    data class FromCloud(val kind: String) : AttachAsk
     data object Place : AttachAsk
     data object Contact : AttachAsk
 }

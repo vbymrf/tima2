@@ -1557,6 +1557,12 @@ interface ChatWords {
     val emojiArea: String
     val attachArea: String
     fun attachItem(tag: String): String
+
+    /** Раздел скрепки «Из облака» (заказчик 2026-10-24): файл, видео, музыка — ссылкой. */
+    val attachCloud: String
+
+    /** Поле названия в окне «Из облака»: можно пусто — возьмётся имя файла из ссылки. */
+    val cloudTitleHint: String
     fun composedInEditor(rows: Int): String
     val undo: String
     /** Строка списка у сообщения без текста: `PHOTO` — фото, `FILE` — файл с именем. */
@@ -3876,8 +3882,13 @@ object RussianWords : Words {
             "video" -> "Видео"
             "contact" -> "Контакты"
             "place" -> "Карта"
+            "cloud.file" -> "Файл"
+            "cloud.video" -> "Видео"
+            "cloud.audio" -> "Музыка"
             else -> "Ссылка"
         }
+        override val attachCloud = "Из облака"
+        override val cloudTitleHint = "Название — можно пусто: возьмём имя файла"
         override fun composedInEditor(rows: Int) = "Оформлено в редакторе · " + when {
             rows % 10 == 1 && rows % 100 != 11 -> "$rows ряд"
             rows % 10 in 2..4 && rows % 100 !in 12..14 -> "$rows ряда"

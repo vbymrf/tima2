@@ -91,7 +91,7 @@ fun cloudMediaWidget(url: String, title: String, kind: String?, doc: ComposedDoc
  * поток; не играет, а по окончанию файл — вид файла («По ссылке — файл: Картинка»). Страница — `null`: о ней
  * говорит подсказка «не является видео».
  */
-private fun linkKindText(url: String, ew: io.tima.core.words.EditorWords, cw: io.tima.core.words.ChatWords): String? {
+fun linkKindText(url: String, ew: io.tima.core.words.EditorWords, cw: io.tima.core.words.ChatWords): String? {
     val ext = io.tima.domain.chat.FileKinds.extOf(io.tima.domain.chat.FileKinds.nameOf(url))
     return when (MediaLinks.kindOf(url)) {
         MediaLinks.Kind.YOUTUBE -> ew.linkPlays("youtube", ext)
@@ -104,6 +104,17 @@ private fun linkKindText(url: String, ew: io.tima.core.words.EditorWords, cw: io
             cw.linkFileIs(cw.fileKindName(io.tima.domain.chat.FileKinds.ofName(io.tima.domain.chat.FileKinds.nameOf(url)).key))
         } else null
     }
+}
+
+/**
+ * Что уходит из скрепки «Из облака» (заказчик 2026-10-24, 1в#): видео или звук, что играют в окне TIMA, —
+ * нашим виджетом «Видео» или «Аудио», без меток; файл и не играющее — «файлом в облаке» с видом. Название
+ * пусто — имя файла из ссылки.
+ */
+fun cloudAttachWidget(url: String, title: String, kind: String): ComposedWidget {
+    val clean = url.trim().let { if ("://" in it) it else "https://$it" }
+    val media = if (kind == "video" || kind == "audio") cloudMediaWidget(clean, title, kind, ComposedDoc(emptyList())) else null
+    return media ?: ComposedWidget.Cloud(clean, kind, title.trim().ifBlank { io.tima.domain.chat.FileKinds.nameOf(clean) })
 }
 
 /** Что форме вставки нужно от ведущего редактор: сеть и загрузка картинки. */

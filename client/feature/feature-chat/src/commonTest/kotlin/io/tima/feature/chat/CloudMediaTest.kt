@@ -34,4 +34,17 @@ class CloudMediaTest {
         val second = assertIs<ComposedWidget.Video>(cloudMediaWidget("https://x.ru/2.mp4", "День", "video", doc))
         assertEquals(false, second.description == "День")
     }
+
+    @Test
+    fun скрепка_из_облака_файл_облаком_видео_и_звук_виджетом() {
+        val file = assertIs<ComposedWidget.Cloud>(cloudAttachWidget("x.ru/docs/%D0%BE%D1%82%D1%87%D1%91%D1%82.pdf", "", "file"))
+        assertEquals("https://x.ru/docs/%D0%BE%D1%82%D1%87%D1%91%D1%82.pdf", file.url, "без схемы — https")
+        assertEquals("отчёт.pdf", file.title, "без названия — имя файла")
+        assertEquals("file", file.kind)
+        assertEquals("День", assertIs<ComposedWidget.Video>(cloudAttachWidget("https://x.ru/day.mp4", "День", "video")).description)
+        assertIs<ComposedWidget.Audio>(cloudAttachWidget("https://x.ru/song.mp3", "", "audio"))
+        val page = assertIs<ComposedWidget.Cloud>(cloudAttachWidget("https://disk.yandex.ru/i/abc", "Фильм", "video"))
+        assertEquals("video", page.kind, "не играет — облаком с видом")
+        assertEquals("Фильм", page.title)
+    }
 }
