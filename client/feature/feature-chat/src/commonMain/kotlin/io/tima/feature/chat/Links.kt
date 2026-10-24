@@ -41,6 +41,7 @@ import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
 import io.tima.core.ui.words
+import kotlinx.coroutines.launch
 
 /** Метки ссылок (СЦЕНАРИИ-ПО-ОКНАМ, «Переписка»). */
 object LinkTags {
@@ -64,6 +65,30 @@ sealed interface GateAsk {
 
     /** Переход к сообщению: кто и что в нём; [go] — сам переход. */
     data class Message(val name: String?, val preview: String?, val go: () -> Unit, override val blocked: Boolean = false) : GateAsk
+
+    /** Файл по ссылке «Облака» (заказчик 2026-10-24): что за файл, опасен ли, открыть, сохранить. */
+    data class CloudFile(val url: String, val title: String, override val blocked: Boolean = false) : GateAsk
+}
+
+/**
+ * Что окну файла по ссылке нужно снаружи: начало файла (вид, размер, первые байты) и файл целиком для
+ * «Сохранить как» — тем же безопасным загрузчиком, что карточки ссылок. `null` — сети нет (снимки).
+ */
+class CloudPorts(
+    val peek: (suspend (url: String) -> io.tima.domain.chat.CloudPeek?)? = null,
+    val whole: (suspend (url: String, limit: Int) -> io.tima.domain.chat.CloudPeek?)? = null,
+)
+
+/** Сколько «Сохранить как» скачивает сам; больше — браузером. */
+const val CLOUD_SAVE_MB = 50
+
+/** Как открыть файл по ссылке «Облака» здесь: окном файла, а нет окна — как ссылку. */
+@Composable
+internal fun rememberCloudOpen(): (url: String, title: String) -> Unit {
+    val gate = LocalGate.current
+    val blocked = LocalGateBlocked.current
+    val link = rememberLinkOpen()
+    return { url, title -> if (gate != null) gate(GateAsk.CloudFile(url, title, blocked)) else link(url) }
 }
 
 /**
@@ -128,6 +153,8 @@ fun LinkGate(
     onPlayer: (what: PlayerEvent, detail: String) -> Unit = { _, _ -> },
     /** Поток сайтов и память движка по сайту (ПЛАН-(ВМ) §3.3, §3.4). */
     playerPorts: PlayerPorts = PlayerPorts(),
+    /** Окно файла по ссылке «Облака»: начало файла и файл целиком (2026-10-24). */
+    cloudPorts: CloudPorts = CloudPorts(),
     content: @Composable () -> Unit,
 ) {
     var asked by remember { mutableStateOf<GateAsk?>(null) }
@@ -162,6 +189,15 @@ fun LinkGate(
                     onOpen = {
                         asked = null
                         ask.go()
+                    },
+                    onCancel = { asked = null },
+                )
+                is GateAsk.CloudFile -> CloudFileAsk(
+                    ask,
+                    ports = cloudPorts,
+                    onOpen = {
+                        asked = null
+                        runCatching { uri.openUri(ask.url) }
                     },
                     onCancel = { asked = null },
                 )
@@ -248,6 +284,108 @@ private fun GateSheet(onCancel: () -> Unit, content: @Composable () -> Unit) {
             Modifier.fillMaxWidth().padding(top = TimaZones.zone1).background(colors.surface).clickable(enabled = false) {}
                 .testTag(LinkTags.ASK),
         ) { content() }
+    }
+}
+
+/** Метки окна файла по ссылке. */
+object CloudTags {
+    const val SHEET = "msg:cloud.ask"
+    const val OPEN = "msg:cloud.open"
+    const val SAVE = "msg:cloud.save"
+    const val COPY = "msg:cloud.copy"
+    const val WARN = "msg:cloud.warn"
+}
+
+/**
+ * Окно файла по ссылке «Облака» (заказчик 2026-10-24) — как у нашего файла: сверху имя, что за файл
+ * (по имени из адреса и по началу самого файла), размер, сайт и адрес; опасность — красным: программа,
+ * «может быть опасным», подмена (назван картинкой, а внутри программа). «Открыть в браузере» — файл
+ * отдаётся браузеру, TIMA его не открывает и не ставит; «Сохранить как» — скачать до [CLOUD_SAVE_MB] МБ;
+ * «Скопировать ссылку».
+ */
+@Composable
+private fun CloudFileAsk(ask: GateAsk.CloudFile, ports: CloudPorts, onOpen: () -> Unit, onCancel: () -> Unit) {
+    val colors = Tima.colors
+    val w = Tima.words.chat
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var peek by remember(ask.url) { mutableStateOf<io.tima.domain.chat.CloudPeek?>(null) }
+    var checking by remember(ask.url) { mutableStateOf(ports.peek != null) }
+    var said by remember(ask.url) { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(ask.url) {
+        val p = ports.peek ?: return@LaunchedEffect
+        peek = p(ask.url)
+        checking = false
+    }
+    val saver = io.tima.core.media.rememberFileSaver { ok -> said = if (ok) w.cloudSaved else null }
+    val name = peek?.name ?: io.tima.domain.chat.FileKinds.nameOf(peek?.url ?: ask.url).ifBlank { ask.title }
+    val verdict = io.tima.domain.chat.FileKinds.verdict(name, peek?.head)
+    val named = io.tima.domain.chat.FileKinds.ofName(name)
+    val ext = io.tima.domain.chat.FileKinds.extOf(name)
+    val size = peek?.size?.let { sizeText(it, w.sizeUnits) }
+    GateSheet(onCancel) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2).testTag(CloudTags.SHEET),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Tertiary(w.cloudFileTitle, lineOne = true)
+                    Caption(ask.title.ifBlank { name.ifBlank { hostOf(ask.url) } }, fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
+                }
+                IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
+            }
+            // Что за файл: описание, расширение, размер — одной строкой.
+            Caption(
+                listOfNotNull(w.fileKindName(verdict.kind.key), ext.takeIf { it.isNotEmpty() }?.uppercase(), size, name.takeIf { it.isNotBlank() && it != ask.title }).joinToString(" · "),
+                fontSize = TimaType.sz5, weight = FontWeight.Bold,
+            )
+            Caption(hostOf(peek?.url ?: ask.url), fontSize = TimaType.sz4, weight = FontWeight.Bold, color = colors.link)
+            Caption(ask.url, fontSize = TimaType.sz5, color = colors.text2)
+            when {
+                verdict.disguised -> Caption(w.fileDisguised(w.fileKindName(named.key), w.fileKindName(verdict.kind.key)), fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.alarm, modifier = Modifier.testTag(CloudTags.WARN))
+                verdict.kind.danger == io.tima.domain.chat.FileKinds.Danger.PROGRAM -> Caption(w.fileProgram, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = colors.alarm, modifier = Modifier.testTag(CloudTags.WARN))
+                verdict.kind.danger == io.tima.domain.chat.FileKinds.Danger.RISKY -> Caption(w.fileRisky, fontSize = TimaType.sz5, color = colors.alarm, modifier = Modifier.testTag(CloudTags.WARN))
+                else -> Unit
+            }
+            if (ask.url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
+            when {
+                checking -> Tertiary(w.cloudChecking, lineOne = true)
+                ports.peek != null && peek == null -> Tertiary(w.cloudNoAnswer)
+                else -> Unit
+            }
+            said?.let { Tertiary(it) }
+        }
+        if (ask.blocked) {
+            GoItem(true, CloudTags.OPEN, onOpen)
+        } else {
+            LinkItem(w.cloudOpen, CloudTags.OPEN, onOpen)
+        }
+        val whole = ports.whole
+        if (whole != null) {
+            LinkItem(Tima.words.chat.fileSaveAs, CloudTags.SAVE) {
+                val limit = CLOUD_SAVE_MB * 1024 * 1024
+                if ((peek?.size ?: 0) > limit) {
+                    said = w.cloudTooBig(CLOUD_SAVE_MB)
+                    return@LinkItem
+                }
+                said = w.cloudSaving
+                scope.launch {
+                    val got = whole(ask.url, limit)
+                    if (got == null) {
+                        said = w.cloudSaveFailed
+                    } else {
+                        said = null
+                        val fileName = got.name ?: name.ifBlank { "file" }
+                        saver(fileName, got.type ?: io.tima.core.media.FileRules.mimeOf(fileName), got.head)
+                    }
+                }
+            }
+        }
+        LinkItem(w.linkCopy, CloudTags.COPY) {
+            clipboard.setText(AnnotatedString(ask.url))
+            onCancel()
+        }
     }
 }
 

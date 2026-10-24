@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
@@ -30,6 +31,9 @@ import io.tima.core.ui.Tertiary
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
+
+/** Что сейчас в вопросе: выбранный вариант, значения полей и поля, с которых ушли (заполненными). */
+data class AskNow(val chosen: String?, val values: List<String>, val left: Set<Int>)
 
 /**
  * Короткий вопрос над перепиской: ссылка, место руками, контакт руками (ВЫБОР-РЕАЛИЗАЦИИ §11.2а:
@@ -51,12 +55,16 @@ fun AskSheet(
     /** Ошибка ответа словами; `null` — ошибки нет. */
     trouble: String? = null,
     options: List<Pair<String, String>> = emptyList(),
-    /** Что ещё спросить под полями — например, цвет ссылки (2026-10-19); получает выбранный вариант. */
-    extra: (@Composable (chosen: String?) -> Unit)? = null,
+    /**
+     * Что ещё показать под полями — цвет ссылки (2026-10-19), «Добавить метки», вид файла по ссылке
+     * (2026-10-24): видит выбранный вариант, значения полей и поля, с которых ушли.
+     */
+    extra: (@Composable (AskNow) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     var values by remember(fields) { mutableStateOf(fields.map { "" }) }
     var chosen by remember(options) { mutableStateOf(options.firstOrNull()?.first) }
+    var left by remember(fields) { mutableStateOf(emptySet<Int>()) }
     Box(
         Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onCancel),
         contentAlignment = Alignment.BottomCenter,
@@ -76,7 +84,8 @@ fun AskSheet(
                     textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
                     cursorBrush = SolidColor(colors.navigation),
                     modifier = Modifier.fillMaxWidth().background(colors.functional, RoundedCornerShape(8.dp))
-                        .padding(10.dp).testTag("chat:ask.$i"),
+                        .padding(10.dp).testTag("chat:ask.$i")
+                        .onFocusChanged { f -> if (!f.isFocused && values[i].isNotBlank()) left = left + i },
                 )
             }
             if (options.isNotEmpty()) {
@@ -91,7 +100,7 @@ fun AskSheet(
                     }
                 }
             }
-            extra?.invoke(chosen)
+            extra?.invoke(AskNow(chosen, values.map { it.trim() }, left))
             if (trouble != null) Caption(trouble, fontSize = TimaType.sz5, color = colors.alarm)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip(

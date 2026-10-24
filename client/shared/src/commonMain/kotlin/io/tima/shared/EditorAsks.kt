@@ -64,9 +64,15 @@ internal fun EditorAskSheet(
         options = options,
         extra = when {
             ask == "link" -> ({ _ -> io.tima.feature.chat.PaletteRow(color, "chat:ask.color", only = io.tima.feature.chat.LinkColors) { color = it.orEmpty() } })
-            // Окно «Облака» прежнее; у видео и аудио — ещё «Добавить метки» (заказчик 2026-10-24).
-            ask == "cloud" && onMarks != null -> ({ chosen ->
-                if (chosen == "video" || chosen == "audio") {
+            // Окно «Облака» прежнее; ушли с поля ссылки — вид файла по ней, без предупреждений (отправителю
+            // их не показываем, заказчик 2026-10-24); у видео и аудио — ещё «Добавить метки».
+            ask == "cloud" -> ({ now ->
+                val url = now.values.firstOrNull().orEmpty()
+                if (0 in now.left && url.isNotBlank()) {
+                    val kind = io.tima.domain.chat.FileKinds.ofName(io.tima.domain.chat.FileKinds.nameOf(if ("://" in url) url else "https://$url"))
+                    io.tima.core.ui.Tertiary(cw.cloudFileIs(cw.fileKindName(kind.key)), modifier = androidx.compose.ui.Modifier.testTag(CLOUD_KIND_TAG))
+                }
+                if (onMarks != null && (now.chosen == "video" || now.chosen == "audio")) {
                     io.tima.core.ui.Chip(
                         ew.cloudMarks,
                         kind = if (withMarks) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Quiet,
@@ -131,6 +137,9 @@ internal fun EditorAskSheet(
 
 /** «Добавить метки» в «Облаке» у видео и аудио. */
 internal const val CLOUD_MARKS_TAG = "chat:ask.marks"
+
+/** Вид файла по ссылке в форме «Облака» — после ухода с поля ссылки (2026-10-24). */
+internal const val CLOUD_KIND_TAG = "chat:ask.kind"
 
 /** Цвет ссылки, выбранный в «Вставить ссылку» последним: имя палитры, пусто — цвет ссылок у читающего. */
 internal const val LINK_COLOR_KEY = "link.color"

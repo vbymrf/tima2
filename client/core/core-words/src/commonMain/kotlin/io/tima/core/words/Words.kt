@@ -1502,6 +1502,30 @@ interface ChatWords {
     // ── Виджеты в сообщении (ADR-0044 §3) ──
     val pictureMissing: String
     fun cloudKind(kind: String): String
+
+    /**
+     * Окно файла по ссылке «Облака» (заказчик 2026-10-24): что за файл, опасен ли, «Открыть» — браузером,
+     * «Сохранить как», «Скопировать ссылку». [fileKindName] — описание вида (`FileKinds.Kind.key`).
+     */
+    val cloudFileTitle: String
+    fun fileKindName(key: String): String
+    val cloudChecking: String
+    val cloudNoAnswer: String
+    val cloudOpen: String
+    val cloudSaving: String
+    val cloudSaved: String
+    val cloudSaveFailed: String
+    fun cloudTooBig(mb: Int): String
+    /** Программа — красным: опасность. */
+    val fileProgram: String
+    /** Архив, документ с макросами, страница, двойное расширение. */
+    val fileRisky: String
+    /** Подмена: назван одним, а внутри программа. */
+    fun fileDisguised(named: String, real: String): String
+    /** Наш файл-программа (2а#): «Открыть» нет — установка шла бы от имени TIMA. */
+    val fileProgramOwn: String
+    /** Форма «Облака» у отправителя — вид файла по ссылке, без предупреждений. */
+    fun cloudFileIs(kind: String): String
     val place: String
     val contact: String
     /** Вставленное из другой переписки, которого нет на устройстве. */
@@ -3762,6 +3786,37 @@ object RussianWords : Words {
             else -> "Не удалено: $code"
         }
         override val pictureMissing = "Картинка не загрузилась"
+        override val cloudFileTitle = "Файл по ссылке"
+        override fun fileKindName(key: String) = when (key) {
+            "program-android" -> "Программа Android"
+            "program-windows" -> "Программа Windows"
+            "program-mac" -> "Программа macOS"
+            "program-linux" -> "Программа Linux"
+            "program-script" -> "Скрипт — программа"
+            "document-macro" -> "Документ с макросами"
+            "archive" -> "Архив"
+            "pdf" -> "Документ PDF"
+            "document" -> "Документ"
+            "table" -> "Таблица"
+            "slides" -> "Презентация"
+            "image" -> "Картинка"
+            "audio" -> "Звук"
+            "video" -> "Видео"
+            "page" -> "Веб-страница"
+            else -> "Файл"
+        }
+        override val cloudChecking = "Проверяем файл…"
+        override val cloudNoAnswer = "Сервер файла не ответил — вид известен только по имени"
+        override val cloudOpen = "Открыть в браузере"
+        override val cloudSaving = "Скачиваем…"
+        override val cloudSaved = "Сохранено"
+        override val cloudSaveFailed = "Не скачалось — откройте в браузере"
+        override fun cloudTooBig(mb: Int) = "Файл больше $mb МБ — сохраните его из браузера"
+        override val fileProgram = "Это программа. Открывайте, только если доверяете отправителю"
+        override val fileRisky = "Может быть опасным: внутри бывает программа"
+        override fun fileDisguised(named: String, real: String) = "Файл назван как «$named», а на деле это «$real». Не открывайте"
+        override val fileProgramOwn = "Программу TIMA не открывает: «Сохранить как», затем установите из приложения «Файлы» — Android спросит разрешение"
+        override fun cloudFileIs(kind: String) = "Вид файла: $kind"
         override fun cloudKind(kind: String) = when (kind) {
             "document" -> "Документ"
             "audio" -> "Аудио"

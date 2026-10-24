@@ -291,9 +291,13 @@ internal fun pathOf(url: String): String = url.substringAfter("://").substringAf
 @Composable
 private fun CloudWidget(cloud: RichBlock.Cloud) {
     val open = rememberLinkOpen()
+    val file = rememberCloudOpen()
+    // Звук и видео, которые играют у нас, — окном проигрывания; остальное — окном файла по ссылке:
+    // что за файл и не программа ли он (заказчик 2026-10-24).
+    val plays = cloud.kind in setOf("audio", "video") && io.tima.domain.chat.MediaLinks.playsHere(cloud.url)
     Row(
         Modifier.fillMaxWidth().background(Tima.colors.functional, RoundedCornerShape(8.dp))
-            .clickable { open(cloud.url) }.padding(8.dp),
+            .clickable { if (plays) open(cloud.url) else file(cloud.url, cloud.title) }.padding(8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

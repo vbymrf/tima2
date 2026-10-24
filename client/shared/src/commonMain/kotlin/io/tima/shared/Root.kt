@@ -489,7 +489,18 @@ fun Root(
           io.tima.feature.chat.LocalMediaActions provides mediaActions,
       ) {
         // Ссылки из сообщений — через окно «Перейти по ссылке?» с доменом (заказчик 2026-10-19): одно на приложение.
-        io.tima.feature.chat.LinkGate(playerPorts = playerPorts, onPlayer = { what, detail ->
+        // Окно файла по ссылке «Облака»: начало файла и файл целиком — безопасным загрузчиком карточек (2026-10-24).
+        val cloudPorts = remember(mediaCards) {
+            io.tima.feature.chat.CloudPorts(
+                peek = { url ->
+                    mediaCards.peek(url).also { p ->
+                        Journal.note(LogCode.CLOUD_FILE, "файл по ссылке", "сайт" to io.tima.domain.chat.MediaLinks.hostOf(url).orEmpty(), "ответил" to (p != null), "вид" to p?.let { io.tima.domain.chat.FileKinds.sniff(it.head) }.orEmpty())
+                    }
+                },
+                whole = { url, limit -> mediaCards.whole(url, limit) },
+            )
+        }
+        io.tima.feature.chat.LinkGate(playerPorts = playerPorts, cloudPorts = cloudPorts, onPlayer = { what, detail ->
             // Окно видео открылось — звук в сообщениях встаёт на паузу: играет что-то одно.
             if (what == io.tima.feature.chat.PlayerEvent.OPENED) audioHub?.stop()
             Journal.note(LogCode.PLAYER, playerWord(what), "подробно" to detail)
@@ -5611,8 +5622,13 @@ private fun Chat(
         // «Удалить у себя» — сообщение, в котором файл. Чего платформа не умеет — пункта нет.
         val owner = state.lines.firstOrNull { l -> l.rich?.media?.any { it.mediaId == file.mediaId } == true }
         val named = file.name.ifBlank { "file" }
+        // Программа (apk и подобные) — «Открыть» нет (заказчик 2026-10-24, 2а#): установщик Android считал бы,
+        // что ставит TIMA, а у неё есть разрешение ставить приложения — для своего обновления. «Сохранить
+        // как» и установка из «Файлов» — тогда Android спросит разрешение у «Файлов».
+        val program = io.tima.domain.chat.FileKinds.ofName(named).danger == io.tima.domain.chat.FileKinds.Danger.PROGRAM ||
+            file.mime == "application/vnd.android.package-archive"
         val items = buildList<Pair<String, () -> Unit>> {
-            if (openFile != null) add(photoWords.fileOpen to {
+            if (openFile != null && !program) add(photoWords.fileOpen to {
                 scope.launch {
                     val plain = plainOf(file, store::said) ?: return@launch
                     val opened = openFile(plain, file.mime, named)
@@ -5629,7 +5645,9 @@ private fun Chat(
         }
         io.tima.feature.chat.ChoiceSheet(
             title = file.name.ifBlank { file.mime },
-            items = items.map { io.tima.feature.chat.Choice(title = it.first) },
+            items = items.map { (title, _) ->
+                io.tima.feature.chat.Choice(title = title, about = if (program && title == photoWords.fileSaveAs) photoWords.fileProgramOwn else "")
+            },
             empty = file.name,
             onCancel = { fileFor = null },
             onPick = { i ->
