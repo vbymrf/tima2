@@ -1467,6 +1467,14 @@ interface ChatWords {
     val editImpossible: String
     /** Ссылки (заказчик 2026-10-19): «Перейти» под абзацем и окно с доменом перед переходом. */
     val linkGo: String
+
+    /**
+     * Ссылка на видео или звук, которые играют в окне TIMA (заказчик 2026-10-24): «Посмотреть» или
+     * «Прослушать» — у нас, «Перейти» — в браузере; подсказка под тем, что по ссылке.
+     */
+    val linkWatch: String
+    val linkListen: String
+    fun linkPlayHint(listen: Boolean): String
     val linkAskOpen: String
     val linkCopy: String
     /** Окно перехода к сообщению (заказчик 2026-10-20); в редакторе переход недоступен. */
@@ -3775,6 +3783,10 @@ object RussianWords : Words {
         override val editInEditor = "Такое сообщение правится в редакторе"
         override val editImpossible = "Это сообщение изменить нельзя"
         override val linkGo = "Перейти"
+        override val linkWatch = "Посмотреть"
+        override val linkListen = "Прослушать"
+        override fun linkPlayHint(listen: Boolean) =
+            if (listen) "«Прослушать» — в окне TIMA, «Перейти» — в браузере" else "«Посмотреть» — в окне TIMA, «Перейти» — в браузере"
         override val linkAskOpen = "Перейти по ссылке? Проверьте сайт:"
         override val linkCopy = "Скопировать ссылку"
         override val messageAsk = "Перейти к сообщению?"

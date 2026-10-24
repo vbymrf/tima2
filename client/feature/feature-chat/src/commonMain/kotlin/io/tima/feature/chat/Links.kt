@@ -55,6 +55,8 @@ object LinkTags {
     const val GO = "msg:link.go"
     const val ASK = "msg:link.ask"
     const val ASK_OPEN = "msg:link.ask.open"
+    /** «Посмотреть» или «Прослушать» — в окне TIMA (2026-10-24). */
+    const val ASK_PLAY = "msg:link.ask.play"
     const val ASK_CANCEL = "msg:link.ask.cancel"
     const val ASK_COPY = "msg:link.ask.copy"
     /** Рамка с адресом — длинный прокручивается внутри. */
@@ -207,19 +209,21 @@ fun LinkGate(
                             fromLink = true,
                         )
                     } else {
+                        // Видео и звук, которые играют у нас: «Посмотреть» или «Прослушать» — окно TIMA, «Перейти» —
+                        // браузер (заказчик 2026-10-24); что по ссылке — словами.
                         LinkAsk(
                             url = ask.url,
                             blocked = ask.blocked,
                             checking = !media && cloudPorts.peek != null && found == null,
                             onOpen = {
                                 asked = null
-                                if (media) {
-                                    playing = PlayRequest(ask.url, startMs = (MediaLinks.startSeconds(ask.url) ?: 0) * 1000L)
-                                } else {
-                                    runCatching { uri.openUri(ask.url) }
-                                }
+                                runCatching { uri.openUri(ask.url) }
                             },
                             onCancel = { asked = null },
+                            onPlay = if (media) ({
+                                asked = null
+                                playing = PlayRequest(ask.url, startMs = (MediaLinks.startSeconds(ask.url) ?: 0) * 1000L)
+                            }) else null,
                         )
                     }
                 }
@@ -264,9 +268,19 @@ fun LinkGate(
  * «Перейти» недоступно.
  */
 @Composable
-private fun LinkAsk(url: String, blocked: Boolean, onOpen: () -> Unit, onCancel: () -> Unit, checking: Boolean = false) {
+private fun LinkAsk(
+    url: String,
+    blocked: Boolean,
+    onOpen: () -> Unit,
+    onCancel: () -> Unit,
+    checking: Boolean = false,
+    /** Видео или звук, которые играют у нас: «Посмотреть» или «Прослушать». `null` — обычная ссылка. */
+    onPlay: (() -> Unit)? = null,
+) {
     val colors = Tima.colors
     val w = Tima.words.chat
+    val kind = if (onPlay != null) MediaLinks.kindOf(url) else null
+    val listen = kind == MediaLinks.Kind.AUDIO_FILE
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     GateSheet(onCancel) {
         Row(
@@ -280,6 +294,11 @@ private fun LinkAsk(url: String, blocked: Boolean, onOpen: () -> Unit, onCancel:
                     Caption(hostText(url), fontSize = TimaType.sz3, weight = FontWeight.ExtraBold)
                 }
                 ProvidePlace(TextPlace.MENU) {
+                    // Что по ссылке и где проиграем (заказчик 2026-10-24).
+                    kind?.let { k ->
+                        Caption(Tima.words.editor.linkPlays(mediaKey(k), io.tima.domain.chat.FileKinds.extOf(io.tima.domain.chat.FileKinds.nameOf(url))), fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                        Tertiary(w.linkPlayHint(listen))
+                    }
                     UrlBox(url)
                     if (url.startsWith("http://")) Caption(Tima.words.editor.unsafeLink, fontSize = TimaType.sz5, color = colors.alarm)
                     if (checking) Tertiary(w.linkChecking, lineOne = true)
@@ -287,12 +306,23 @@ private fun LinkAsk(url: String, blocked: Boolean, onOpen: () -> Unit, onCancel:
             }
             IconButton(glyph = "✕", onClick = onCancel, modifier = Modifier.testTag(LinkTags.ASK_CANCEL))
         }
+        if (onPlay != null && !blocked) LinkItem(if (listen) w.linkListen else w.linkWatch, LinkTags.ASK_PLAY, onPlay)
         GoItem(blocked, LinkTags.ASK_OPEN, onOpen)
         LinkItem(w.linkCopy, LinkTags.ASK_COPY) {
             clipboard.setText(AnnotatedString(url))
             onCancel()
         }
     }
+}
+
+/** Слово словаря для вида ссылки на видео или звук (`EditorWords.linkPlays`). */
+private fun mediaKey(kind: MediaLinks.Kind): String = when (kind) {
+    MediaLinks.Kind.YOUTUBE -> "youtube"
+    MediaLinks.Kind.RUTUBE -> "rutube"
+    MediaLinks.Kind.VK_VIDEO -> "vk"
+    MediaLinks.Kind.VIDEO_FILE -> "video"
+    MediaLinks.Kind.AUDIO_FILE -> "audio"
+    MediaLinks.Kind.STREAM -> "stream"
 }
 
 /** Окно перехода к сообщению: автор, строка из сообщения, «Перейти» (в редакторе — недоступно), «✕». */
