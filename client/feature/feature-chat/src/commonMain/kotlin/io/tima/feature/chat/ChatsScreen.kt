@@ -153,12 +153,11 @@ fun ChatsScreen(
         // отдельно от готового. Место входа — каталог окна 2, там же, где остальные
         // группы и каналы.
         WithCluster(
+            // Надписью «Написать», а не кругом со стрелкой (заказчик 2026-10-24, 5а#): открывает поиск
+            // по нику или телефону, найденному — «Написать».
             cluster = {
-                ButtonCircle(onClick = onNew, live = true, modifier = Modifier.testTag(CHATS_NEW_TAG)) {
-                    Arrow(Side.Right, color = colors.onAccent)
-                }
+                io.tima.core.ui.Button(label = words.write, onClick = onNew, modifier = Modifier.testTag(CHATS_NEW_TAG))
             },
-            caption = words.write,
             modifier = Modifier.weight(1f),
         ) {
             when {

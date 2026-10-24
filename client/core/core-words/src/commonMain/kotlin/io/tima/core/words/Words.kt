@@ -1680,6 +1680,15 @@ interface ChatWords {
     val newMessage: String
     val newChat: String
     val whomToWrite: String
+
+    /** «Позвонить» во вкладке «Звонки» — окно поиска как у «Нового контакта» (заказчик 2026-10-24, 5а#). */
+    val whomToCall: String
+    val callAudio: String
+    val callVideo: String
+    val callGroup: String
+
+    /** Найденного — в контакты отдельной кнопкой: само «Написать» и «Позвонить» в книгу не добавляет. */
+    val toContacts: String
     val phoneInTima: String
     val noSuchNumber: String
     val searching: String
@@ -3977,6 +3986,11 @@ object RussianWords : Words {
         override val newMessage = "новое сообщение"
         override val newChat = "Новая переписка"
         override val whomToWrite = "Кому написать"
+        override val whomToCall = "Кому позвонить"
+        override val callAudio = "Аудио"
+        override val callVideo = "Видео"
+        override val callGroup = "Групповой"
+        override val toContacts = "В контакты"
         override val phoneInTima = "Номер телефона в TIMA"
         override val noSuchNumber = "Этого номера в TIMA нет — позовите человека"
         override val searching = "Ищем…"

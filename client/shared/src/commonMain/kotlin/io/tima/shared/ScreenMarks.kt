@@ -59,6 +59,10 @@ object PopupCode {
     // Подменяют весь экран — ветки `App` со своим `return`, в порядке проверки.
     const val INVITE = "invite"
     const val CONTACT_NEW = "contact.new"
+
+    /** То же подокно поиска: «Написать» из «Чатов» и «Позвонить» из «Звонков» (заказчик 2026-10-24). */
+    const val FIND_WRITE = "find.write"
+    const val FIND_CALL = "find.call"
     const val SECTIONS = "sections"
     const val COMMUNITY_SECTIONS = "community.sections"
     const val COMMUNITY_VIEW = "community.view"

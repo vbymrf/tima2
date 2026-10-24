@@ -1246,6 +1246,8 @@ private fun App(
     // «открыто, но некого» не стало возможным состоянием.
     var inviting by remember { mutableStateOf<BookEntry?>(null) }
     var newContact by remember { mutableStateOf(false) }
+    // Зачем открыто подокно поиска человека: завести контакт, «Написать», «Позвонить» (заказчик 2026-10-24, 5а#).
+    var findPurpose by remember { mutableStateOf(io.tima.feature.chat.FindPurpose.Contact) }
 
     // Обновление живёт на уровне окна, а не внутри вкладки настроек, и причина не в
     // экономии: у него два потребителя. Вкладка «Обновление» — один; второй — порог
@@ -2270,8 +2272,33 @@ private fun App(
             onSection = contacts::changedSection,
             // Закрытие — сохранили или ушли — чистит форму: иначе следующее открытие
             // показывало прошлого человека и работало как правка (заказчик 2026-09-26).
-            onSave = { contacts.save { contacts.reset(); newContact = false } },
+            // «В контакты» из «Написать» и «Позвонить» подокно не закрывает: дальше — само действие.
+            onSave = {
+                if (findPurpose == io.tima.feature.chat.FindPurpose.Contact) contacts.save { contacts.reset(); newContact = false } else contacts.save { }
+            },
             onBack = { contacts.reset(); newContact = false },
+            purpose = findPurpose,
+            // Найденному — переписка: есть — открыть, нет — завести (заказчик 2026-10-24, 5а#). В книгу не кладём.
+            onWrite = { userId ->
+                val entry = bookState.all.firstOrNull { it.userId == userId }
+                val name = (entry?.let(personOfBook) ?: contactsState.foundPerson)?.line(bookState.view.look(), io.tima.feature.chat.PERSON_FIRST_LINE)
+                val phone = entry?.phone ?: contactsState.normalized
+                contacts.reset()
+                newContact = false
+                where = Where.Chat(openPersonalChat(userId, name, phone, "написать"), name)
+            },
+            onCall = if (callHost.possible) ({ userId, way ->
+                val entry = bookState.all.firstOrNull { it.userId == userId }
+                val name = (entry?.let(personOfBook) ?: contactsState.foundPerson)?.line(bookState.view.look(), io.tima.feature.chat.PERSON_FIRST_LINE).orEmpty()
+                contacts.reset()
+                newContact = false
+                when (way) {
+                    io.tima.feature.chat.CallWay.Audio -> callPerson(userId, name, false)
+                    io.tima.feature.chat.CallWay.Video -> callPerson(userId, name, true)
+                    // Групповой — настройка, где он уже отмечен (ГЗ7), как со страницы человека.
+                    io.tima.feature.chat.CallWay.Group -> groupDesk.fromPerson(userId)
+                }
+            }) else null,
             onOpenPerson = { userId ->
                 contacts.reset()
                 newContact = false
@@ -2286,7 +2313,14 @@ private fun App(
             onFindNick = contacts::searchNick,
             onPickNick = contacts::pickNick,
         )
-        ScreenMarks(place, PopupCode.CONTACT_NEW)
+        ScreenMarks(
+            place,
+            when (findPurpose) {
+                io.tima.feature.chat.FindPurpose.Contact -> PopupCode.CONTACT_NEW
+                io.tima.feature.chat.FindPurpose.Write -> PopupCode.FIND_WRITE
+                io.tima.feature.chat.FindPurpose.Call -> PopupCode.FIND_CALL
+            },
+        )
         return
     }
 
@@ -3509,7 +3543,11 @@ private fun App(
                             where = Where.Chat(openPersonalChat(id, person.name, person.phone, "контакты"), person.name)
                         }
                     },
-                    onNew = { where = Where.New },
+                    // «Написать» — поиск по нику или телефону, как «Новый контакт» (заказчик 2026-10-24, 5а#).
+                    onNew = {
+                        findPurpose = io.tima.feature.chat.FindPurpose.Write
+                        newContact = true
+                    },
                     onSettings = toSettings,
                     onSwitchWindows = { windowSwitcher = true },
                     onNeighbourWindow = switchWindow,
@@ -3522,7 +3560,14 @@ private fun App(
                     chatSections = chatSections,
                     chatSection = chatSection,
                     onChooseChatSection = { chatSection = it },
-                    onAddContact = { newContact = true },
+                    onAddContact = {
+                        findPurpose = io.tima.feature.chat.FindPurpose.Contact
+                        newContact = true
+                    },
+                    onNewCall = if (callHost.possible) ({
+                        findPurpose = io.tima.feature.chat.FindPurpose.Call
+                        newContact = true
+                    }) else null,
                     // Аватар в строке книги ведёт на личную страницу; остальная строка —
                     // в переписку. Того, кого нет в TIMa, открывать нечем: страница
                     // принадлежит аккаунту, а не номеру.
@@ -7437,6 +7482,8 @@ private fun PhoneWindow(
     onCallPerson: ((BookEntry) -> Unit)? = null,
     /** Видеозвонок из строки книги — Ж3. `null` — звонить нечем. */
     onVideoCallPerson: ((BookEntry) -> Unit)? = null,
+    /** «Позвонить» во вкладке «Звонки» — поиск человека (заказчик 2026-10-24, 5а#). `null` — звонить нечем. */
+    onNewCall: (() -> Unit)? = null,
     onInvite: (BookEntry) -> Unit,
     /** Кто я: строка журнала у двоих читается по-разному, и без этого её не прочесть. */
     myUserId: String = "",
@@ -7700,6 +7747,7 @@ private fun PhoneWindow(
                     faceOf = faceOfCall,
                     look = look,
                     onCallAgain = onCallAgain,
+                    onNewCall = onNewCall,
                     onOpen = { record ->
                         if (record.group) onOpenGroupCall(record) else onOpenUser?.invoke(record.other(myUserId))
                     },

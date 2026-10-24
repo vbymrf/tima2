@@ -115,9 +115,22 @@ fun CallsScreen(
     flagged: (CallRecord) -> Boolean = { false },
     /** Кто человек строки для меня: в книге, незнакомый, заблокирован (2026-10-08). */
     kindOf: (CallRecord) -> PersonKind = { PersonKind.Known },
+    /**
+     * «Позвонить» внизу (заказчик 2026-10-24, 5а#): поиск по нику или телефону, найденному — «Аудио»,
+     * «Видео», «Групповой». `null` — звонить нечем, кнопки нет.
+     */
+    onNewCall: (() -> Unit)? = null,
 ) {
     Box(modifier.fillMaxSize()) {
-        Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf)
+        if (onNewCall != null) {
+            io.tima.core.ui.WithCluster(
+                cluster = { io.tima.core.ui.Button(label = Tima.words.chat.call, onClick = onNewCall, modifier = Modifier.testTag(CALLS_NEW_TAG)) },
+            ) {
+                Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf)
+            }
+        } else {
+            Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf)
+        }
         note?.let {
             Caption(
                 it,
@@ -349,6 +362,9 @@ const val CALL_AGAIN_TAG: String = "calls:again"
 
 /** Метка короткого слова поверх журнала. */
 const val CALLS_NOTE_TAG: String = "calls:note"
+
+/** «Позвонить» внизу вкладки «Звонки» (заказчик 2026-10-24). */
+const val CALLS_NEW_TAG: String = "calls:new"
 
 // Светлые тона стрелок (заказчик 2026-10-08). Исходящий — светло-синий, как его прежде
 // рисовал Samsung; отменённый, не дозвонился, занято, оборвался — по направлению.

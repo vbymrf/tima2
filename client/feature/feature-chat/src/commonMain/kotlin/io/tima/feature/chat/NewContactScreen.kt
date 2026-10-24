@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.tima.core.ui.Button
@@ -96,13 +97,30 @@ fun NewContactScreen(
     onBy: (AddBy) -> Unit = {},
     /** Аватар найденного; `null` — буквы. */
     face: String? = null,
+    /**
+     * Зачем ищут (заказчик 2026-10-24, 5а#): завести контакт, написать или позвонить. У «Написать» и
+     * «Позвонить» имени и раздела нет — найденному сразу действие, а в контакты — отдельной кнопкой.
+     */
+    purpose: FindPurpose = FindPurpose.Contact,
+    /** «Написать» найденному: переписка есть — открыть, нет — завести. */
+    onWrite: ((String) -> Unit)? = null,
+    /** «Аудио», «Видео», «Групповой» найденному. */
+    onCall: ((String, CallWay) -> Unit)? = null,
 ) {
     var picking by remember { mutableStateOf(false) }
     val colors = Tima.colors
     val words = Tima.words.chat
+    val contact = purpose == FindPurpose.Contact
     Box(Modifier.fillMaxSize()) {
     Column(modifier.fillMaxSize().background(colors.surface)) {
-        SubwindowHeader(title = words.newContact, onBack = onBack)
+        SubwindowHeader(
+            title = when (purpose) {
+                FindPurpose.Contact -> words.newContact
+                FindPurpose.Write -> words.whomToWrite
+                FindPurpose.Call -> words.whomToCall
+            },
+            onBack = onBack,
+        )
 
         Box(
             modifier = Modifier
@@ -238,6 +256,13 @@ fun NewContactScreen(
                     )
                 }
 
+                // «Написать» и «Позвонить»: найденному — действие, имя и раздел не спрашиваются.
+                if (!contact) {
+                    FindActions(state, purpose, onWrite, onCall, onSave)
+                    state.trouble?.let { Trouble(it) }
+                    return@Column
+                }
+
                 Caption(words.nameYouCall, fontSize = TimaType.sz5, weight = FontWeight.Bold)
                 Field(value = state.name, onChange = onName, hint = words.optional)
 
@@ -340,6 +365,52 @@ fun NewContactScreen(
     }
     }
 }
+/** Зачем ищут человека в подокне «Новый контакт» (заказчик 2026-10-24, 5а#). */
+enum class FindPurpose { Contact, Write, Call }
+
+/** Каким звонком позвонить найденному. */
+enum class CallWay { Audio, Video, Group }
+
+object FindTags {
+    const val WRITE = "find:write"
+    const val AUDIO = "find:call.audio"
+    const val VIDEO = "find:call.video"
+    const val GROUP = "find:call.group"
+    const val TO_CONTACTS = "find:contacts"
+}
+
+/**
+ * Действия над найденным: «Написать» или «Аудио · Видео · Групповой» и отдельно «В контакты» — само
+ * действие в книгу не добавляет (5а#). Уже в контактах — тихая строка, кнопки нет. Никого не нашли —
+ * действий нет: писать и звонить можно только тому, кто в TIMA.
+ */
+@Composable
+private fun FindActions(
+    state: NewContactState,
+    purpose: FindPurpose,
+    onWrite: ((String) -> Unit)?,
+    onCall: ((String, CallWay) -> Unit)?,
+    onToContacts: () -> Unit,
+) {
+    val words = Tima.words.chat
+    val who = state.foundUserId ?: return
+    if (purpose == FindPurpose.Write && onWrite != null) {
+        Button(label = words.write, onClick = { onWrite(who) }, modifier = Modifier.testTag(FindTags.WRITE))
+    }
+    if (purpose == FindPurpose.Call && onCall != null) {
+        Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+            Button(label = words.callAudio, onClick = { onCall(who, CallWay.Audio) }, modifier = Modifier.testTag(FindTags.AUDIO))
+            Button(label = words.callVideo, onClick = { onCall(who, CallWay.Video) }, modifier = Modifier.testTag(FindTags.VIDEO))
+            Button(label = words.callGroup, kind = ButtonKind.Quiet, onClick = { onCall(who, CallWay.Group) }, modifier = Modifier.testTag(FindTags.GROUP))
+        }
+    }
+    if (state.already != null) {
+        Tertiary(Tima.words.page.alreadyInContacts)
+    } else if (state.canSave) {
+        Button(label = words.toContacts, kind = ButtonKind.Quiet, onClick = onToContacts, modifier = Modifier.testTag(FindTags.TO_CONTACTS))
+    }
+}
+
 /**
  * Новый раздел книги — то же подокно, второй его смысл.
  *
