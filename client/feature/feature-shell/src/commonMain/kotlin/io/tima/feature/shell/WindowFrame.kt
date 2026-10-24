@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.InCenter
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.Name
@@ -143,7 +145,12 @@ fun WindowFrame(
                     // каждого вызывающего: пять копий одного условия разошлись бы.
                     enabled = onNeighbourWindow != null && LayoutLocal.current.phone,
                 ),
-        ) { content() }
+        ) {
+            // Содержимое вкладок — по «Спискам» (заказчик 2026-10-24: «Чаты, Контакты подчиняются Спискам,
+            // а Звонки, Каталог, Указатели — нет. Сделай единый»). Здесь, в каркасе, а не в каждой вкладке:
+            // новая вкладка получает размер сама; переписка, кнопки окон и подокна задают своё внутри.
+            ProvidePlace(TextPlace.LISTS) { content() }
+        }
     }
 }
 
