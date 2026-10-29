@@ -351,15 +351,16 @@ func (s *Store) ChatRecovery(ctx context.Context, chatID, requesterDevice, reque
 			rows.Close()
 			return out, err
 		}
+		// «Потеряно» — только сообщения, которого на сервере нет (план КК, КК1, модель Р5). Обёрток у других
+		// может не быть — ключ лежит на их устройствах (КК9), и ответит тот, у кого он есть.
+		_ = others
 		switch {
 		case !present:
 			out.Lost = append(out.Lost, id)
 		case mine:
 			out.Ready = append(out.Ready, id)
-		case others:
-			out.Recoverable = append(out.Recoverable, id)
 		default:
-			out.Lost = append(out.Lost, id)
+			out.Recoverable = append(out.Recoverable, id)
 		}
 	}
 	rows.Close()
@@ -411,12 +412,19 @@ func (s *Store) ChatRecovery(ctx context.Context, chatID, requesterDevice, reque
 		return out, nil
 	}
 
+	// Помощники — все живые устройства сторон переписки, а не только держатели обёрток (КК1): ключ сообщения
+	// хранится на устройстве (КК9), обёртка на сервере живёт до доставки (КК10).
 	rows, err = s.pool.Query(ctx, `
-		SELECT DISTINCT k.recipient, (d.user_id = $3) AS own
-		FROM personal_message_keys k
-		JOIN devices d ON d.device_id = k.recipient AND d.revoked_at IS NULL
-		WHERE k.chat_id = $1 AND k.recipient <> $2 AND k.message_id = ANY($4::bigint[])`,
-		chatID, requesterDevice, requesterUser, out.Recoverable)
+		SELECT d.device_id::text, (d.user_id = $3) AS own
+		FROM devices d
+		WHERE d.revoked_at IS NULL AND d.device_id <> $2
+		  AND d.user_id IN (
+		    SELECT sender_id FROM personal_messages WHERE chat_id = $1
+		    UNION
+		    SELECT d2.user_id FROM personal_message_keys k JOIN devices d2 ON d2.device_id = k.recipient WHERE k.chat_id = $1
+		    UNION
+		    SELECT $3::uuid)`,
+		chatID, requesterDevice, requesterUser)
 	if err != nil {
 		return out, err
 	}

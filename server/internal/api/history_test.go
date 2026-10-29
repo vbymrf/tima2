@@ -116,6 +116,17 @@ func TestChatRecoverCertifiedNeedsNoPhrase(t *testing.T) {
 	if err != nil || len(plan.Recoverable) != 1 || plan.Recoverable[0] != 3301 || len(plan.Lost) != 1 || plan.Lost[0] != 999999 || len(plan.Helpers) == 0 {
 		t.Fatalf("разбор у компьютера: %+v %v, ждали вернуть [3301], потеряно [999999], помощники есть", plan, err)
 	}
+	// План КК, КК1: помощники — все живые устройства сторон, и без обёртки (ключ лежит на устройстве):
+	// у отправителя обёртки под себя нет, а спросить его надо.
+	peerAsked := false
+	for _, h := range plan.Helpers {
+		if h.DeviceID == peer.id && !h.Own {
+			peerAsked = true
+		}
+	}
+	if !peerAsked {
+		t.Fatalf("собеседник без обёртки не спрошен: %+v", plan.Helpers)
+	}
 	// У телефона ключ есть — помощников не будят, а ему самому говорят «забери историю».
 	var phoneOut struct {
 		Helpers int     `json:"helpers"`
