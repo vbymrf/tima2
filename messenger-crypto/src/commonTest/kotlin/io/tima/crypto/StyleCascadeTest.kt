@@ -67,7 +67,7 @@ class StyleCascadeTest {
     }
 
     @Test
-    fun `фон блока именем палитры остаётся, кодом цвета — нет`() {
+    fun `фон блока именем палитры остаётся а кодом цвета — нет`() {
         // ADR-0044 §4: фон ряда, ячейки, таблицы — внутри пузыря, экран не заливает.
         val named = StyleCascade.resolve(
             mode = ReaderMode.AS_AUTHOR,

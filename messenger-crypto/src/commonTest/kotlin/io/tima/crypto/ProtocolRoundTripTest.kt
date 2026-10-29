@@ -52,7 +52,7 @@ class ProtocolRoundTripTest {
 
     /** План КК, КК13: ключа подписи автора нет — открыть можно, подпись проверяется отдельно, когда он придёт. */
     @Test
-    fun `без ключа подписи - открывается без проверки, подпись проверяется отдельно`() {
+    fun `без ключа подписи - открывается без проверки и подпись проверяется отдельно`() {
         val message = seal()
         val opened = PersonalMessageSealer.openWithWrappedKeyUnverified(message, "recipient-dev-1", recipientDeviceKey).getOrThrow()
         assertEquals(payload.toHex(), opened.toHex())
