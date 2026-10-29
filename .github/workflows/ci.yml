@@ -72,40 +72,6 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1   # v4.4.4
-      # ── Форки крипто в mavenLocal ────────────────────────────────────────
-      # Появилось в К3, когда клиент получил core-encryption и через него
-      # composite-зависимость на messenger-crypto.
-      #
-      # Почему это нужно ЗДЕСЬ, а не только в messenger-crypto: composite build
-      # подставляет проект вместо зависимости, но транзитивные зависимости этого
-      # проекта резолвятся репозиториями ПОТРЕБИТЕЛЯ. Без публикации клиент
-      # найдёт asia.hombre:kyber в mavenCentral — без вариантов под Apple, — и
-      # падение будет выглядеть как «No matching variant of asia.hombre:kyber»,
-      # то есть укажет куда угодно, кроме пропущенного шага.
-      #
-      # Тесты форков здесь не идут, и исключать их не надо: publishToMavenLocal от
-      # тестовых задач не зависит. Первая версия этого шага звала «-x test» — и
-      # падала, потому что в multiplatform-модуле задачи с именем «test» нет вовсе, а
-      # Gradle на исключении несуществующей задачи останавливается. Прогон форков на
-      # симуляторе делает отдельная задача «крипто · iOS-симулятор».
-      # ── ПОЧЕМУ НЕ `| tail -3` ────────────────────────────────────────────
-      # Так было до 2026-09-14, и это стоило целого круга CI: шаг падал, а в
-      # журнале оставалось «BUILD FAILED in 1m 1s» — три последние строки, среди
-      # которых причины нет никогда. Настоящая ошибка (сверка контрольных сумм)
-      # печатается выше и обрезалась. Теперь при удаче печатается хвост, при
-      # падении — весь вывод.
-      - name: 'форки крипто · в mavenLocal'
-        run: |
-          set -o pipefail
-          for f in KeccakKotlin KyberKotlin; do
-            if ! (cd "third-party/$f" && ./gradlew publishToMavenLocal --console=plain) > "/tmp/$f.log" 2>&1; then
-              echo "::group::$f — полный вывод"; cat "/tmp/$f.log"; echo "::endgroup::"
-              msg=$(grep -aE 'What went wrong|artifact failed|Dependency verification|^\s+- |Could not|error:' "/tmp/$f.log" | head -n 20 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
-              echo "::error::$f не опубликовался:%0A${msg}"
-              exit 1
-            fi
-            tail -3 "/tmp/$f.log"
-          done
       - name: 'jvm · сборка и тесты'
         working-directory: client
         run: |
@@ -167,40 +133,6 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1   # v4.4.4
-      # ── Форки крипто в mavenLocal ────────────────────────────────────────
-      # Появилось в К3, когда клиент получил core-encryption и через него
-      # composite-зависимость на messenger-crypto.
-      #
-      # Почему это нужно ЗДЕСЬ, а не только в messenger-crypto: composite build
-      # подставляет проект вместо зависимости, но транзитивные зависимости этого
-      # проекта резолвятся репозиториями ПОТРЕБИТЕЛЯ. Без публикации клиент
-      # найдёт asia.hombre:kyber в mavenCentral — без вариантов под Apple, — и
-      # падение будет выглядеть как «No matching variant of asia.hombre:kyber»,
-      # то есть укажет куда угодно, кроме пропущенного шага.
-      #
-      # Тесты форков здесь не идут, и исключать их не надо: publishToMavenLocal от
-      # тестовых задач не зависит. Первая версия этого шага звала «-x test» — и
-      # падала, потому что в multiplatform-модуле задачи с именем «test» нет вовсе, а
-      # Gradle на исключении несуществующей задачи останавливается. Прогон форков на
-      # симуляторе делает отдельная задача «крипто · iOS-симулятор».
-      # ── ПОЧЕМУ НЕ `| tail -3` ────────────────────────────────────────────
-      # Так было до 2026-09-14, и это стоило целого круга CI: шаг падал, а в
-      # журнале оставалось «BUILD FAILED in 1m 1s» — три последние строки, среди
-      # которых причины нет никогда. Настоящая ошибка (сверка контрольных сумм)
-      # печатается выше и обрезалась. Теперь при удаче печатается хвост, при
-      # падении — весь вывод.
-      - name: 'форки крипто · в mavenLocal'
-        run: |
-          set -o pipefail
-          for f in KeccakKotlin KyberKotlin; do
-            if ! (cd "third-party/$f" && ./gradlew publishToMavenLocal --console=plain) > "/tmp/$f.log" 2>&1; then
-              echo "::group::$f — полный вывод"; cat "/tmp/$f.log"; echo "::endgroup::"
-              msg=$(grep -aE 'What went wrong|artifact failed|Dependency verification|^\s+- |Could not|error:' "/tmp/$f.log" | head -n 20 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')
-              echo "::error::$f не опубликовался:%0A${msg}"
-              exit 1
-            fi
-            tail -3 "/tmp/$f.log"
-          done
       - name: 'ios · окружение'
         run: |
           echo "arch: $(uname -m)"
@@ -338,15 +270,11 @@ jobs:
   # доказывает — в v1 реализация ML-KEM в Kodium компилировалась, проходила
   # тесты и при этом заполняла матрицу энтропией на 3 % (ADR-0005 Поправка-1).
   #
-  # Три шага в одной задаче, и порядок обязателен: форки публикуются в
-  # mavenLocal, потом messenger-crypto их оттуда берёт. Разные задачи GitHub
-  # Actions не делят mavenLocal — на отдельном раннере кэша не будет.
-  #
-  # Прогон самих форков заодно служит доказательством к PR в апстрим (вариант D):
-  # автор, судя по закомментированным таргетам, прогнать их на симуляторе не
-  # может, а мы можем.
+  # До 2026-10-29 здесь же гонялись и публиковались в mavenLocal форки KyberKotlin
+  # и KeccakKotlin. ML-KEM теперь из Kodium 1.1.0 (ADR-0005 Поправка-3, ПЛАН-(КМ)),
+  # и задача — только векторы messenger-crypto на симуляторе.
   third-party-ios:
-    name: 'крипто · iOS-симулятор (гейт К2)'
+    name: 'крипто · векторы на симуляторе iOS (гейт К2)'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
@@ -354,37 +282,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: 'keccak · тесты на симуляторе iOS'
-        working-directory: third-party/KeccakKotlin
-        run: |
-          set -o pipefail
-          ./gradlew iosSimulatorArm64Test --console=plain 2>&1 | tee /tmp/gradle.log
-      - name: 'keccak · публикация в mavenLocal'
-        working-directory: third-party/KeccakKotlin
-        # Кyber берёт keccak как обычную зависимость; вариантов Apple в Central нет,
-        # поэтому свой keccak сначала кладём в локальный репозиторий.
-        run: |
-          set -o pipefail
-          ./gradlew publishToMavenLocal --console=plain 2>&1 | tee -a /tmp/gradle.log
-      - name: 'kyber · тесты на симуляторе iOS'
-        working-directory: third-party/KyberKotlin
-        run: |
-          set -o pipefail
-          ./gradlew iosSimulatorArm64Test --console=plain 2>&1 | tee -a /tmp/gradle.log
-      # Публикация kyber была пропущена: keccak публиковался, а kyber только
-       # тестировался. messenger-crypto зависит именно от kyber, поэтому без этого
-      # шага он на iOS не собрался бы — и причина выглядела бы как «нет варианта
-      # под iosSimulatorArm64», то есть указывала бы куда угодно, кроме сюда.
-      - name: 'kyber · публикация в mavenLocal'
-        working-directory: third-party/KyberKotlin
-        run: |
-          set -o pipefail
-          ./gradlew publishToMavenLocal --console=plain 2>&1 | tee -a /tmp/gradle.log
       - name: 'крипто · ВЕКТОРЫ на симуляторе iOS'
         working-directory: messenger-crypto
         run: |
           set -o pipefail
-          ./gradlew iosSimulatorArm64Test --console=plain 2>&1 | tee -a /tmp/gradle.log
+          ./gradlew iosSimulatorArm64Test --console=plain 2>&1 | tee /tmp/gradle.log
       - name: 'крипто · пересчёт прогона на iOS'
         if: always()
         working-directory: messenger-crypto
@@ -410,7 +312,7 @@ jobs:
           # CrossImplementationTest с BouncyCastle там не существует.
           if [ "$t" -lt 70 ]; then echo "::error::на симуляторе запущено всего $t тестов, ожидалось не меньше 70"; bad=1; fi
           exit $bad
-      - name: 'форки · вывод Gradle в аннотацию'
+      - name: 'крипто iOS · вывод Gradle в аннотацию'
         if: failure()
         run: |
           msg=$(grep -aE 'error:|FAILURE:|What went wrong|Caused by|not found|Could not|Unresolved|no matching|Cannot|^> |^e: ' /tmp/gradle.log | tail -n 30 | sed 's/%/%25/g' | tr -d '\r' | awk '{printf "%s%%0A", $0}')

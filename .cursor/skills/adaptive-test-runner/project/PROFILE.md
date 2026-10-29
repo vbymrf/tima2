@@ -63,12 +63,10 @@ proves:    The canonical test vectors match BYTE FOR BYTE on an iOS simulator �
 stack:     gradle
 setup:     none
 run:
-  - # macOS only. The order is mandatory: forks must reach mavenLocal first.
-  - Push-Location third-party/KeccakKotlin; .\gradlew publishToMavenLocal; Pop-Location
-  - Push-Location third-party/KyberKotlin;  .\gradlew publishToMavenLocal; Pop-Location
+  - # macOS only.
   - Push-Location messenger-crypto; .\gradlew iosSimulatorArm64Test; Pop-Location
 artifact:  messenger-crypto/build/test-results/iosSimulatorArm64Test/TEST-*.xml
-requires:  macOS with Xcode; JDK 17; both forks in mavenLocal under the upstream coordinates
+requires:  macOS with Xcode; JDK 17
 forbids:   treating successful compilation as proof; calling the tier skipped on a machine without Xcode
 expects:   at least 70 tests, 0 failures, 0 errors, 0 skipped. Fewer than jvmTest — CrossImplementationTest is JVM-only
 frozen:    —
@@ -80,12 +78,10 @@ last_run:  2026-09-14, CI 34893985607 on commit 43ecc26 — 94 tests, 0 failures
 > the matrix with 3 % entropy (ADR-0005 Поправка-1). The claim «crypto works on iOS»
 > is earned by vectors matching byte for byte, never by a green build.
 >
-> **Why the forks are published first.** Upstream `asia.hombre:kyber` and
-> `asia.hombre:keccak` publish no Apple artifacts; the forks in `third-party/` carry
-> the same coordinates and differ only by enabled targets. `mavenLocal` precedes
-> `mavenCentral` in `messenger-crypto/settings.gradle.kts` for exactly this reason.
-> Skip the publish and the failure reads as «no variant for iosSimulatorArm64» —
-> pointing anywhere except at the missing step.
+> **No forks since 2026-10-29.** Until then the tier first published the KyberKotlin and
+> KeccakKotlin forks from `third-party/` into `mavenLocal` (upstream had no Apple
+> artifacts). ML-KEM now comes from Kodium 1.1.0, which publishes iOS itself
+> (ADR-0005 Поправка-3, ПЛАН-(КМ)); `mavenLocal` is gone from both builds.
 >
 > On Windows this tier cannot run: linking and simulator runs need a Mac. Klib
 > cross-compilation does work, so `compileTestKotlinIosSimulatorArm64` is the most a
