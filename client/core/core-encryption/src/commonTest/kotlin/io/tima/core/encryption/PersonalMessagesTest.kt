@@ -47,6 +47,16 @@ class PersonalMessagesTest {
             recipients = devices.map { (id, who) -> RecipientDevice(id, who.encryptionPublic) },
         ).getOrThrow()
 
+    /** План КК, КК13: без ключа подписи автора — открыть без проверки; подпись проверяется отдельно. */
+    @Test
+    fun без_ключа_подписи_открывается_и_подпись_проверяется_отдельно() {
+        val envelope = sealTo("dev-получатель" to recipient)
+        val got = PersonalMessages.openUnverified(envelope, "dev-получатель", recipient).getOrThrow()
+        assertEquals("Съешь ещё этих мягких французских булок 🥖", got.content.plainText())
+        kotlin.test.assertTrue(PersonalMessages.signatureMatches(envelope, sender.signingPublic))
+        kotlin.test.assertFalse(PersonalMessages.signatureMatches(envelope, senderSecond.signingPublic))
+    }
+
     @Test
     fun сообщение_собирается_и_читается_получателем() {
         val envelope = sealTo("dev-получатель" to recipient)

@@ -152,6 +152,30 @@ class InboxTest {
         assertEquals(null, store.byKey("chat-1", 5)?.firstReason, "открытое не носит причин")
     }
 
+    /** План КК, КК13: открытое без проверки подписи помечено, конверт сохранён; дальше — подтвердить или скрыть. */
+    @Test
+    fun непроверенное_помечено_и_конверт_ждёт_проверки() {
+        accept()
+        inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор", unverified = true) })
+        assertTrue("chat-1/5" in store.unverifiedRows)
+        val stash = inbox.unverifiedEnvelopes().single()
+        assertTrue(envelope.contentEquals(stash.envelope))
+
+        inbox.verified("chat-1", 5)
+        assertTrue("chat-1/5" !in store.unverifiedRows)
+        assertTrue(inbox.unverifiedEnvelopes().isEmpty())
+    }
+
+    @Test
+    fun непроверенное_с_несошедшейся_подписью_снова_нечитаемое() {
+        accept()
+        inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор", unverified = true) })
+        inbox.forged("chat-1", 5, envelope, "подпись не сходится")
+        assertEquals(IncomingState.UNDECRYPTABLE, store.byKey("chat-1", 5)?.state)
+        assertEquals("подпись не сходится", store.byKey("chat-1", 5)?.undecryptableReason)
+        assertEquals(null, store.body("chat-1", 5), "содержимое скрыто")
+    }
+
     @Test
     fun отвергнутый_конверт_остаётся_видимым_а_не_исчезает() {
         // Молчаливое исчезновение — худший вариант: подмена становится незаметной.

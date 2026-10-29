@@ -63,6 +63,26 @@ class DeviceTrustGate(private val settings: Settings) {
     }
 
     /**
+     * Отозванные устройства из ответа, ключам подписи которых можно доверять (план КК, КК13): цепочка та
+     * же, что у действующих, но заверять их могли и уже отозванные КПУ — они в
+     * [DeviceKeysResult.Devices.revokedSigningKeys]. Режим тот же: в «требовать» — только заверенные.
+     */
+    suspend fun admitRevoked(userId: String, answer: DeviceKeysResult.Devices): List<io.tima.core.network.RevokedDeviceKey> {
+        val mode = answer.trustMode
+        if (mode == MODE_OFF) return answer.revoked
+        val identity = answer.identityPub
+        val remembered = known(userId)
+        val changed = identity != null && remembered != null && !remembered.contentEquals(identity)
+        val asks = (answer.signingKeys + answer.revokedSigningKeys).map { DeviceTrustCheck.SigningKey(it.askId, it.askPub, it.askSig) }
+        val (trusted, untrusted) = answer.revoked.partition { r ->
+            val d = r.device
+            !changed && DeviceTrustCheck.trusted(identity, asks, d.encryptionPub, d.signingPub, d.certBy, d.certAskId, d.certSig)
+        }
+        for (r in untrusted) note(userId, r.device.deviceId, "отозванное устройство не заверено", trouble = false, mode = mode)
+        return if (mode == MODE_REQUIRE) trusted else answer.revoked
+    }
+
+    /**
      * Кому отдать ключи по просьбе (`recovery.msg_request`, `recovery.gk_request`) — строже
      * [admit] и **в любом режиме** (заказчик 2026-10-06): устройство заверено, либо просьба
      * подписана ключом личности из фразы над `tima.recover.v1|<[scopeId]>|<устройство>`. Не

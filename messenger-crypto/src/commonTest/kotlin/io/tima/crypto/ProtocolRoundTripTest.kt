@@ -50,6 +50,16 @@ class ProtocolRoundTripTest {
         assertEquals(payload.toHex(), opened.toHex())
     }
 
+    /** План КК, КК13: ключа подписи автора нет — открыть можно, подпись проверяется отдельно, когда он придёт. */
+    @Test
+    fun `без ключа подписи - открывается без проверки, подпись проверяется отдельно`() {
+        val message = seal()
+        val opened = PersonalMessageSealer.openWithWrappedKeyUnverified(message, "recipient-dev-1", recipientDeviceKey).getOrThrow()
+        assertEquals(payload.toHex(), opened.toHex())
+        assertTrue(PersonalMessageSealer.signatureMatches(message, senderDeviceKey.getPublicKey().signingKey))
+        assertTrue(!PersonalMessageSealer.signatureMatches(message, Kodium.generateKeyPair().getPublicKey().signingKey))
+    }
+
     @Test
     fun `мультиустройство - второе устройство отправителя тоже читает`() {
         val message = seal()

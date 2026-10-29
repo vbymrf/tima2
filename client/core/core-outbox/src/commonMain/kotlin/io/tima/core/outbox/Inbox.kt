@@ -101,6 +101,9 @@ data class IncomingEntry(
     }
 }
 
+/** Конверт сообщения, открытого без проверки подписи (КК13). */
+class UnverifiedEnvelope(val chatId: String, val messageId: Long, val envelope: ByteArray)
+
 /** Чем закончилась попытка разобрать конверт. */
 sealed interface OpenOutcome {
     /**
@@ -140,6 +143,11 @@ sealed interface OpenOutcome {
         val editOf: Long = 0,
         /** «Только продолжение» (Решения §11.3) — открытое поле кадра; в ленте само не показывается. */
         val onlyContinuation: Boolean = false,
+        /**
+         * Открыто **без проверки подписи** (план КК, КК13): ключа подписи автора нет ни у кого. Показывается
+         * с пометкой «Не подтверждено»; конверт сохраняется, подпись проверяется, когда ключ придёт.
+         */
+        val unverified: Boolean = false,
     ) : OpenOutcome
 
     /**
@@ -203,7 +211,23 @@ interface InboxStore {
         kind: Int = KIND_TEXT,
         editOf: Long = 0,
         onlyContinuation: Boolean = false,
+        unverified: Boolean = false,
     )
+
+    /** Конверт открытого без проверки подписи (КК13) — для повторной проверки, когда придёт ключ. */
+    fun stashUnverified(chatId: String, messageId: Long, envelope: ByteArray)
+
+    /** Все конверты, ждущие проверки подписи. */
+    fun unverifiedEnvelopes(): List<UnverifiedEnvelope>
+
+    /** Подпись сошлась: пометка «Не подтверждено» снимается, конверт больше не нужен. */
+    fun verified(chatId: String, messageId: Long)
+
+    /**
+     * Подпись НЕ сошлась: содержимое больше не показывается — строка нечитаемая с причиной, на месте
+     * тела снова конверт.
+     */
+    fun forged(chatId: String, messageId: Long, envelope: ByteArray, reason: String)
 
     /**
      * Перевести всё разобранное этой переписки в «прочитано».
@@ -282,7 +306,9 @@ class Inbox(
                     outcome.kind,
                     outcome.editOf,
                     outcome.onlyContinuation,
+                    outcome.unverified,
                 )
+                if (outcome.unverified) store.stashUnverified(entry.chatId, entry.messageId, entry.envelope)
                 entry.copy(state = IncomingState.STORED, kind = outcome.kind, undecryptableReason = null, firstReason = null)
             }
             is OpenOutcome.NoKey -> entry.copy(
@@ -334,6 +360,16 @@ class Inbox(
 
     /** Всё нечитаемое — чтобы перед повтором подтянуть то, чего не хватало (ключи подписи). */
     fun undecryptable(): List<IncomingEntry> = store.undecryptable()
+
+    /** Конверты непроверенного (КК13). */
+    fun unverifiedEnvelopes(): List<UnverifiedEnvelope> = store.unverifiedEnvelopes()
+
+    /** Подпись непроверенного сошлась (КК13). */
+    fun verified(chatId: String, messageId: Long) = store.verified(chatId, messageId)
+
+    /** Подпись непроверенного не сошлась (КК13): строка снова нечитаемая. */
+    fun forged(chatId: String, messageId: Long, envelope: ByteArray, reason: String) =
+        store.forged(chatId, messageId, envelope, reason)
 
     /** Запись по номеру — повтор разбора спрашивает, чем кончилось у каждой. */
     fun entry(chatId: String, messageId: Long): IncomingEntry? = store.byKey(chatId, messageId)

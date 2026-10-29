@@ -165,10 +165,16 @@ object GroupMessages {
         sealed: SealedGroupMessage,
         senderSigningPublic: ByteArray,
         groupKey: ByteArray,
+    ): Result<ReceivedGroupMessage> = openSealed(sealed, senderSigningPublic, groupKey)
+
+    /** `null` вместо ключа подписи — открыть без проверки подписи (КК13); только через [openUnverified]. */
+    private fun openSealed(
+        sealed: SealedGroupMessage,
+        senderSigningPublic: ByteArray?,
+        groupKey: ByteArray,
     ): Result<ReceivedGroupMessage> = runCatching {
         val commitment = sealed.keyCommitment
-        val canonical = canonical(sealed.meta, sealed.payload, commitment, sealed.editOf)
-        if (!MessageSigner.verify(senderSigningPublic, canonical, sealed.signature)) {
+        if (senderSigningPublic != null && !signatureMatches(sealed, senderSigningPublic)) {
             throw VerificationFailure("Подпись сообщения группы не прошла проверку")
         }
         // Версия 2: обязательство в подписи обязано сойтись с ключом, которым открываем. Не
@@ -201,12 +207,16 @@ object GroupMessages {
     fun openPlain(
         sealed: SealedGroupMessage,
         senderSigningPublic: ByteArray,
+    ): Result<ReceivedGroupMessage> = openPlainSealed(sealed, senderSigningPublic)
+
+    private fun openPlainSealed(
+        sealed: SealedGroupMessage,
+        senderSigningPublic: ByteArray?,
     ): Result<ReceivedGroupMessage> = runCatching {
         require(sealed.meta.gkVersion == 0) {
             "у открытого сообщения версии ключа нет: ненулевая означает шифр"
         }
-        val canonical = canonical(sealed.meta, sealed.payload, null, sealed.editOf)
-        if (!MessageSigner.verify(senderSigningPublic, canonical, sealed.signature)) {
+        if (senderSigningPublic != null && !signatureMatches(sealed, senderSigningPublic)) {
             throw VerificationFailure("Подпись сообщения группы не прошла проверку")
         }
         val body = MessageSerializer.decodeBody(sealed.payload).getOrThrow()
@@ -253,34 +263,104 @@ object GroupMessages {
         /** Правка (ADR-0045): номер исправляемого из кадра; не 0 — подпись версии 3. */
         editOf: Long = 0,
     ): Result<ReceivedGroupMessage> = openAny(
-        sealed = SealedGroupMessage(
-            meta = GroupMessageMeta(
-                groupId = groupId,
-                senderId = senderId,
-                senderDevice = senderDevice,
-                kind = kind,
-                createdAtUnixMs = createdAtUnixMs,
-                threadRoot = threadRoot.toULong(),
-                replyTo = replyTo.toULong(),
-                gkVersion = gkVersion,
-            ),
-            payload = payload,
-            signature = signature,
-            keyCommitment = keyCommitment,
-            editOf = editOf,
-        ),
+        sealed = sealedOf(groupId, senderId, senderDevice, kind, createdAtUnixMs, threadRoot, replyTo, gkVersion, payload, signature, keyCommitment, editOf),
         senderSigningPublic = senderSigningPublic,
         groupKey = groupKey,
+    )
+
+    /**
+     * Открыть **без проверки подписи** — ключа подписи автора нет ни у кого (план КК, КК13, Р10). Сообщение
+     * показывается с пометкой «Не подтверждено»; подпись проверяется [signatureMatches], когда ключ придёт.
+     * Обязательство по ключу группы проверяется как обычно. Вызывающий обязан пометить результат.
+     */
+    @Suppress("LongParameterList")
+    fun openUnverified(
+        groupId: String,
+        senderId: String,
+        senderDevice: String,
+        kind: Int,
+        createdAtUnixMs: Long,
+        threadRoot: Long,
+        replyTo: Long,
+        gkVersion: Int,
+        payload: ByteArray,
+        signature: ByteArray,
+        groupKey: ByteArray,
+        keyCommitment: ByteArray? = null,
+        editOf: Long = 0,
+    ): Result<ReceivedGroupMessage> = openAny(
+        sealed = sealedOf(groupId, senderId, senderDevice, kind, createdAtUnixMs, threadRoot, replyTo, gkVersion, payload, signature, keyCommitment, editOf),
+        senderSigningPublic = null,
+        groupKey = groupKey,
+    )
+
+    /** Сошлась ли подпись автора — по полям кадра, без расшифровки (повторная проверка, КК13). */
+    @Suppress("LongParameterList")
+    fun signatureMatches(
+        groupId: String,
+        senderId: String,
+        senderDevice: String,
+        kind: Int,
+        createdAtUnixMs: Long,
+        threadRoot: Long,
+        replyTo: Long,
+        gkVersion: Int,
+        payload: ByteArray,
+        signature: ByteArray,
+        senderSigningPublic: ByteArray,
+        keyCommitment: ByteArray? = null,
+        editOf: Long = 0,
+    ): Boolean = signatureMatches(
+        sealedOf(groupId, senderId, senderDevice, kind, createdAtUnixMs, threadRoot, replyTo, gkVersion, payload, signature, keyCommitment, editOf),
+        senderSigningPublic,
+    )
+
+    private fun signatureMatches(sealed: SealedGroupMessage, senderSigningPublic: ByteArray): Boolean =
+        MessageSigner.verify(
+            senderSigningPublic,
+            canonical(sealed.meta, sealed.payload, sealed.keyCommitment.takeIf { sealed.meta.gkVersion != 0 }, sealed.editOf),
+            sealed.signature,
+        )
+
+    @Suppress("LongParameterList")
+    private fun sealedOf(
+        groupId: String,
+        senderId: String,
+        senderDevice: String,
+        kind: Int,
+        createdAtUnixMs: Long,
+        threadRoot: Long,
+        replyTo: Long,
+        gkVersion: Int,
+        payload: ByteArray,
+        signature: ByteArray,
+        keyCommitment: ByteArray?,
+        editOf: Long,
+    ) = SealedGroupMessage(
+        meta = GroupMessageMeta(
+            groupId = groupId,
+            senderId = senderId,
+            senderDevice = senderDevice,
+            kind = kind,
+            createdAtUnixMs = createdAtUnixMs,
+            threadRoot = threadRoot.toULong(),
+            replyTo = replyTo.toULong(),
+            gkVersion = gkVersion,
+        ),
+        payload = payload,
+        signature = signature,
+        keyCommitment = keyCommitment,
+        editOf = editOf,
     )
 
     /** Открыть по тому, шифровано ли: нулевая версия ключа — открытое сообщение. */
     private fun openAny(
         sealed: SealedGroupMessage,
-        senderSigningPublic: ByteArray,
+        senderSigningPublic: ByteArray?,
         groupKey: ByteArray,
     ): Result<ReceivedGroupMessage> =
-        if (sealed.meta.gkVersion == 0) openPlain(sealed, senderSigningPublic)
-        else open(sealed, senderSigningPublic, groupKey)
+        if (sealed.meta.gkVersion == 0) openPlainSealed(sealed, senderSigningPublic)
+        else openSealed(sealed, senderSigningPublic, groupKey)
 }
 
 /** Готовое к отправке сообщение группы: то, что уходит в `POST /groups/{id}/messages`. */

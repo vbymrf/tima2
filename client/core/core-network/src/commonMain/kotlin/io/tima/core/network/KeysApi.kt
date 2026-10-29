@@ -36,12 +36,18 @@ class KeysApi(
     private val token: () -> String,
 ) {
 
-    suspend fun devicesOf(userId: String): DeviceKeysResult {
+    /**
+     * @param withRevoked отдать и отозванные устройства (план КК, КК13) — **только для проверки подписи**
+     *   сообщений, записанных до отзыва. Под отозванное заворачивать нельзя, поэтому они приходят
+     *   отдельным полем [DeviceKeysResult.Devices.revoked], а [DeviceKeysResult.Devices.devices] тот же.
+     */
+    suspend fun devicesOf(userId: String, withRevoked: Boolean = false): DeviceKeysResult {
         require(userId.isNotBlank()) { "user_id пустой" }
         val response = try {
             client.get(route.api("/api/v1/keys/devices")) {
                 header("Authorization", "Bearer ${token()}")
                 parameter("user_id", userId)
+                if (withRevoked) parameter("revoked", "1")
             }
         } catch (e: Throwable) {
             return DeviceKeysResult.Offline(classifyFailure(e))
@@ -77,10 +83,30 @@ class KeysApi(
             }.orEmpty()
         }.getOrDefault(emptyList())
         val mode = body?.get("trust_mode")?.jsonPrimitive?.content ?: TRUST_OFF
+        // Отозванные (КК13): испорченная запись пропускается — её сообщения останутся «Не подтверждено».
+        val revoked = body?.get("revoked_devices")?.jsonArray?.mapNotNull { el ->
+            runCatching { el.jsonObject.toRevoked() }.getOrNull()
+        }.orEmpty()
+        val revokedAsks = body?.get("revoked_signing_keys")?.jsonArray?.mapNotNull { el ->
+            val o = el.jsonObject
+            val id = o["ask_id"]?.jsonPrimitive?.content ?: return@mapNotNull null
+            val pub = o["ask_pub"]?.jsonPrimitive?.content?.let { decodeBase64Url(it) } ?: return@mapNotNull null
+            val sig = o["ask_sig"]?.jsonPrimitive?.content?.let { decodeBase64Url(it) } ?: return@mapNotNull null
+            SigningKeyRecord(id, pub, sig)
+        }.orEmpty()
 
         // Пустой список — не ошибка сети и не «нет такого человека»: у аккаунта могли
         // отозвать все устройства. Отправлять при этом некому, и решать это выше.
-        return DeviceKeysResult.Devices(devices, identity, signingKeys, mode)
+        return DeviceKeysResult.Devices(devices, identity, signingKeys, mode, revoked, revokedAsks)
+    }
+
+    private fun JsonObject.toRevoked(): RevokedDeviceKey {
+        val device = toDevice()
+        return RevokedDeviceKey(
+            device = device,
+            revokedAtMs = this["revoked_at_unix_ms"]!!.jsonPrimitive.content.toLong(),
+            reason = this["revoked_reason"]?.jsonPrimitive?.content.orEmpty(),
+        )
     }
 
     private fun JsonObject.toDevice(): DeviceKeyRecord {
@@ -233,6 +259,12 @@ data class DeviceKeyRecord(
     }
 }
 
+/**
+ * Отозванное устройство (план КК, КК13): ключ подписи для сообщений, записанных до отзыва, время и
+ * причина. Записать после отзыва устройство не может — сервер отказывает отозванному в каждом запросе.
+ */
+class RevokedDeviceKey(val device: DeviceKeyRecord, val revokedAtMs: Long, val reason: String)
+
 /** Ключ шифрования устройства на эпоху и подпись его ключом подписи (ПЛАН-(ПС) ПС3). */
 class EpochKeyRecord(val epoch: String, val encryptionPub: ByteArray, val signature: ByteArray)
 
@@ -248,6 +280,10 @@ sealed interface DeviceKeysResult {
         val identityPub: ByteArray? = null,
         val signingKeys: List<SigningKeyRecord> = emptyList(),
         val trustMode: String = "off",
+        /** Отозванные устройства — только при `withRevoked` (КК13); заворачивать под них нельзя. */
+        val revoked: List<RevokedDeviceKey> = emptyList(),
+        /** Отозванные ключи подписи устройств: ими заверены отозванные устройства. */
+        val revokedSigningKeys: List<SigningKeyRecord> = emptyList(),
     ) : DeviceKeysResult
     data class Refused(val status: Int, val code: String) : DeviceKeysResult
     data class Offline(val link: LinkState) : DeviceKeysResult

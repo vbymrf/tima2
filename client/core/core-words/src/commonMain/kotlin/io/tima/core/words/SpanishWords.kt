@@ -1518,6 +1518,8 @@ object SpanishWords : Words {
         override val messageUnavailable = "mensaje no disponible"
 
         override val messageUnavailableAsk = "Mensaje no disponible, solicitar"
+        override val unverifiedMark = "Sin confirmar: no se comprobó la firma del autor"
+        override val unverifiedWhy = "Nadie tiene la clave de firma del dispositivo del autor. El autor y la hora los indica el servidor y no se pueden comprobar con la firma. La marca desaparecerá cuando se encuentre la clave."
         override val messageKeyLost = "Mensaje no disponible: no queda clave"
         override val decrypting = "descifrando…"
         override val addToSelf = "Traer a mi página"

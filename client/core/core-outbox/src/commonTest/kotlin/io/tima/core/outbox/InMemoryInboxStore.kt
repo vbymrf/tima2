@@ -53,12 +53,38 @@ class InMemoryInboxStore : InboxStore {
         kind: Int,
         editOf: Long,
         onlyContinuation: Boolean,
+        unverified: Boolean,
     ) {
         if (failOnEntryBody) error("диск отказал")
+        if (unverified) unverifiedRows += key(chatId, messageId) else unverifiedRows -= key(chatId, messageId)
         bodies[key(chatId, messageId)] = body
         authors[key(chatId, messageId)] = senderId
         levels[key(chatId, messageId)] = level
         kinds[key(chatId, messageId)] = kind
+    }
+
+    /** Помеченные «Не подтверждено» (КК13). */
+    val unverifiedRows = mutableSetOf<String>()
+    private val stash = LinkedHashMap<String, UnverifiedEnvelope>()
+
+    override fun stashUnverified(chatId: String, messageId: Long, envelope: ByteArray) {
+        stash[key(chatId, messageId)] = UnverifiedEnvelope(chatId, messageId, envelope)
+    }
+
+    override fun unverifiedEnvelopes(): List<UnverifiedEnvelope> = stash.values.toList()
+
+    override fun verified(chatId: String, messageId: Long) {
+        unverifiedRows -= key(chatId, messageId)
+        stash -= key(chatId, messageId)
+    }
+
+    override fun forged(chatId: String, messageId: Long, envelope: ByteArray, reason: String) {
+        unverifiedRows -= key(chatId, messageId)
+        stash -= key(chatId, messageId)
+        bodies -= key(chatId, messageId)
+        rows[key(chatId, messageId)]?.let {
+            rows[it.key] = it.copy(state = IncomingState.UNDECRYPTABLE, envelope = envelope, undecryptableReason = reason)
+        }
     }
 
     /** Вид содержимого разобранного — по нему видно, что системное доехало системным. */

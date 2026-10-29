@@ -1,0 +1,19 @@
+-- Схема 25 → 26: подпись автора (план КК, КК13; заказчик 2026-10-29 «Показывать с пометкой, ключи
+-- подписи хранить»): пометка «Не подтверждено», ключи подписи авторов, конверты для повторной проверки.
+ALTER TABLE messages ADD COLUMN unverified INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE sender_keys (
+    device_id      TEXT    NOT NULL PRIMARY KEY,
+    user_id        TEXT    NOT NULL,
+    signing_pub    BLOB    NOT NULL,
+    -- Когда отозвано, по часам сервера; 0 — действующее.
+    revoked_at     INTEGER NOT NULL DEFAULT 0,
+    revoked_reason TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE TABLE unverified_envelopes (
+    dedup_key    TEXT    NOT NULL PRIMARY KEY,
+    chat_id      TEXT    NOT NULL,
+    server_id    INTEGER NOT NULL,
+    envelope_enc BLOB    NOT NULL
+);

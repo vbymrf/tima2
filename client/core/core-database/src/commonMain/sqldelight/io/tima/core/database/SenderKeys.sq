@@ -1,0 +1,42 @@
+-- Ключи подписи устройств авторов (план КК, КК13; заказчик 2026-10-29 «ключи подписи хранить»).
+--
+-- До этого они жили только в памяти приёмника и после перезапуска пропадали: устройство, отозванное
+-- раньше, чем мы сходили за его ключом, оставляло свои сообщения нечитаемыми навсегда (беда 2026-10-24).
+-- Ключ открытый, поэтому без шифра покоя. Закрепляется при первой встрече: другой ключ у того же
+-- устройства — тревога, а не замена.
+--
+-- unverified_envelopes — конверты сообщений, открытых без проверки подписи (КК13): по ним подпись
+-- проверяется, когда ключ придёт. Конверт под шифром покоя, как и тело.
+CREATE TABLE sender_keys (
+    device_id      TEXT    NOT NULL PRIMARY KEY,
+    user_id        TEXT    NOT NULL,
+    signing_pub    BLOB    NOT NULL,
+    -- Когда отозвано, по часам сервера; 0 — действующее.
+    revoked_at     INTEGER NOT NULL DEFAULT 0,
+    revoked_reason TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE TABLE unverified_envelopes (
+    dedup_key    TEXT    NOT NULL PRIMARY KEY,
+    chat_id      TEXT    NOT NULL,
+    server_id    INTEGER NOT NULL,
+    envelope_enc BLOB    NOT NULL
+);
+
+senderKey:
+SELECT * FROM sender_keys WHERE device_id = ?;
+
+putSenderKey:
+INSERT OR IGNORE INTO sender_keys(device_id, user_id, signing_pub, revoked_at, revoked_reason) VALUES (?, ?, ?, ?, ?);
+
+markSenderRevoked:
+UPDATE sender_keys SET revoked_at = ?, revoked_reason = ? WHERE device_id = ?;
+
+stashUnverified:
+INSERT OR REPLACE INTO unverified_envelopes(dedup_key, chat_id, server_id, envelope_enc) VALUES (?, ?, ?, ?);
+
+unverifiedEnvelopes:
+SELECT * FROM unverified_envelopes;
+
+dropUnverified:
+DELETE FROM unverified_envelopes WHERE dedup_key = ?;

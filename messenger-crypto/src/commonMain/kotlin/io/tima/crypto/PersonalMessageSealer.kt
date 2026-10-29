@@ -117,9 +117,37 @@ class PersonalMessageSealer(private val escrowModule: EscrowModule) {
             senderSigningPub: ByteArray,
             wrapEphemeralOverride: ByteArray? = null,
         ): Result<ByteArray> = runCatching {
-            if (!MessageSigner.verify(senderSigningPub, message.canonicalBytes(), message.signature)) {
+            if (!signatureMatches(message, senderSigningPub)) {
                 throw VerificationFailure("Подпись конверта не прошла проверку")
             }
+            unwrapAndOpen(message, myDeviceId, myDeviceKey, wrapEphemeralOverride)
+        }
+
+        /**
+         * Открыть **без проверки подписи** — ключа подписи автора нет ни у кого (план КК, КК13, Р10): сообщение
+         * показывается с пометкой «Не подтверждено», а подпись проверяется [signatureMatches], когда ключ
+         * придёт. Обязательство по ключу проверяется как обычно: оно защищает от двух текстов под двумя
+         * путями доставки, и автор здесь ни при чём. Вызывающий обязан пометить результат непроверенным.
+         */
+        fun openWithWrappedKeyUnverified(
+            message: SealedPersonalMessage,
+            myDeviceId: String,
+            myDeviceKey: KodiumPrivateKey,
+            wrapEphemeralOverride: ByteArray? = null,
+        ): Result<ByteArray> = runCatching {
+            unwrapAndOpen(message, myDeviceId, myDeviceKey, wrapEphemeralOverride)
+        }
+
+        /** Сошлась ли подпись автора — без расшифровки (повторная проверка непроверенного, КК13). */
+        fun signatureMatches(message: SealedPersonalMessage, senderSigningPub: ByteArray): Boolean =
+            MessageSigner.verify(senderSigningPub, message.canonicalBytes(), message.signature)
+
+        private fun unwrapAndOpen(
+            message: SealedPersonalMessage,
+            myDeviceId: String,
+            myDeviceKey: KodiumPrivateKey,
+            wrapEphemeralOverride: ByteArray?,
+        ): ByteArray {
             val wrapped = message.wrappedKeys[myDeviceId]
                 ?: throw IllegalStateException("Нет wrapped_key для устройства $myDeviceId")
             val wrapEphemeral = wrapEphemeralOverride ?: message.senderEphemeralPub
@@ -133,7 +161,7 @@ class PersonalMessageSealer(private val escrowModule: EscrowModule) {
             ) {
                 throw VerificationFailure("Обязательство по ключу не сошлось: пути доставки ведут к разным ключам")
             }
-            EnvelopeCipher.open(messageKey, message.encryptedPayload).getOrThrow()
+            return EnvelopeCipher.open(messageKey, message.encryptedPayload).getOrThrow()
         }
     }
 }

@@ -47,6 +47,31 @@ class GroupMessagesTest {
         assertEquals(7, got.meta.gkVersion)
     }
 
+    /** План КК, КК13: ключа подписи автора нет — открыть без проверки, подпись проверить отдельно, когда он придёт. */
+    @Test
+    fun без_ключа_подписи_открывается_и_подпись_проверяется_отдельно() {
+        val s = seal()
+        fun open() = GroupMessages.openUnverified(
+            groupId = meta.groupId, senderId = meta.senderId, senderDevice = meta.senderDevice, kind = meta.kind,
+            createdAtUnixMs = meta.createdAtUnixMs, threadRoot = 0, replyTo = 0, gkVersion = meta.gkVersion,
+            payload = s.payload, signature = s.signature, groupKey = key, keyCommitment = s.keyCommitment,
+        )
+        assertEquals("Собираемся в 19:00 🥁", open().getOrThrow().content.plainText())
+        fun matches(pub: ByteArray) = GroupMessages.signatureMatches(
+            groupId = meta.groupId, senderId = meta.senderId, senderDevice = meta.senderDevice, kind = meta.kind,
+            createdAtUnixMs = meta.createdAtUnixMs, threadRoot = 0, replyTo = 0, gkVersion = meta.gkVersion,
+            payload = s.payload, signature = s.signature, senderSigningPublic = pub, keyCommitment = s.keyCommitment,
+        )
+        assertTrue(matches(author.signingPublic))
+        assertTrue(!matches(foreign.signingPublic), "чужой ключ подтвердил подпись")
+        // Обязательство по ключу проверяется и без подписи: чужим ключом группы не открыть.
+        assertTrue(GroupMessages.openUnverified(
+            groupId = meta.groupId, senderId = meta.senderId, senderDevice = meta.senderDevice, kind = meta.kind,
+            createdAtUnixMs = meta.createdAtUnixMs, threadRoot = 0, replyTo = 0, gkVersion = meta.gkVersion,
+            payload = s.payload, signature = s.signature, groupKey = otherKey, keyCommitment = s.keyCommitment,
+        ).isFailure)
+    }
+
     @Test
     fun payload_не_содержит_открытого_текста() {
         // Смысл всего слоя. Проверка дешёвая и ловит худшее из возможного — отправку

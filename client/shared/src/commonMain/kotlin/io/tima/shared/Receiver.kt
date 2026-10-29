@@ -211,8 +211,21 @@ class Receiver(
     private var live = false
         private set
 
-    /** Ключи подписи по устройству отправителя: спрашиваются один раз на устройство. */
-    private val senderKeys = HashMap<String, ByteArray>()
+    /**
+     * Ключи подписи по устройству отправителя: память поверх местной базы (план КК, КК13 — «ключи подписи
+     * хранить»). В сеть — один раз на устройство, и с отозванными.
+     */
+    private val senderKeys = HashMap<String, io.tima.core.database.SenderKey>()
+
+    /** Ключи подписи на устройстве: переживают перезапуск и отзыв устройства автора. */
+    private val storedKeys = io.tima.core.database.SqlSenderKeys(environment.db)
+
+    /**
+     * Устройства, о которых сервер ответил, но ключа не дал вовсе — ни среди действующих, ни среди отозванных:
+     * строка устройства стёрта. Их сообщения открываются без проверки подписи с пометкой «Не подтверждено»
+     * (Р10). Промах сети сюда не попадает: тогда сообщение ждёт, как раньше.
+     */
+    private val absentSenders = HashSet<String>()
 
     private val book = SqlChatBook(environment.db, environment.cipher)
 
@@ -895,7 +908,32 @@ class Receiver(
             groupKeys.key(frame.groupId, frame.gkVersion)
                 ?: return OpenOutcome.NoKey("нет ключа версии ${frame.gkVersion}")
         }
-        val captionKey = senderKeys[frame.senderDevice]
+        val sender = senderKeys[frame.senderDevice]
+        // Ключа нет ни у кого — открыть без проверки подписи, с пометкой «Не подтверждено» (Р10, КК13).
+        if (sender == null && frame.senderDevice in absentSenders) {
+            return GroupMessages.openUnverified(
+                groupId = frame.groupId,
+                senderId = frame.senderId,
+                senderDevice = frame.senderDevice,
+                kind = frame.kind,
+                createdAtUnixMs = frame.createdAtUnixMs,
+                threadRoot = frame.threadRoot,
+                replyTo = frame.replyTo,
+                gkVersion = frame.gkVersion,
+                payload = frame.payload,
+                signature = frame.signature,
+                groupKey = groupKey,
+                keyCommitment = frame.keyCommitment,
+                editOf = frame.editOf,
+            ).fold(
+                onSuccess = {
+                    Journal.note(LogCode.DEVICE_TRUST, "открыто без проверки подписи — ключа автора нет", "группа" to frame.groupId.take(8), "устройство" to frame.senderDevice.take(8))
+                    OpenOutcome.Opened(it.body, it.meta.senderId, frame.level, frame.threadRoot, editOf = frame.editOf, onlyContinuation = frame.onlyContinuation, unverified = true)
+                },
+                onFailure = { OpenOutcome.Rejected("сообщение группы не открылось: ${it.message}") },
+            )
+        }
+        val captionKey = sender?.signingPub
             ?: return OpenOutcome.NoKey("ключ подписи отправителя не получен")
 
         // Метаданные собирает фасад: их раскладка входит в подписываемые байты, и
@@ -917,8 +955,9 @@ class Receiver(
             editOf = frame.editOf,
         ).fold(
             // Номер исправляемого — из кадра: подпись версии 3 сошлась, значит он тот, что подписал автор.
+            // Подпись отозванного по краже сошлась, но автора не подтверждает (Р11): до отзыва писать мог и вор.
             onSuccess = {
-                OpenOutcome.Opened(it.body, it.meta.senderId, frame.level, frame.threadRoot, editOf = frame.editOf, onlyContinuation = frame.onlyContinuation)
+                OpenOutcome.Opened(it.body, it.meta.senderId, frame.level, frame.threadRoot, editOf = frame.editOf, onlyContinuation = frame.onlyContinuation, unverified = !sender.confirms)
             },
             onFailure = { OpenOutcome.Rejected("сообщение группы не открылось: ${it.message}") },
         )
@@ -1189,10 +1228,14 @@ class Receiver(
         // с головы. Поэтому переписка и автор берутся у РАЗОБРАННОЙ, а не отсюда.
         var opened: Pair<String, String>? = null
         environment.incoming.openNext(held) { entry ->
+            // Ключ — отправителя РАЗОБРАННОЙ записи: очередь берётся с головы (КК13 — с пометкой непроверенного).
+            val own = envelopeSender(entry.envelope)
+            val entryKey = own?.let { senderKeys[it.deviceId] } ?: key.takeIf { own?.deviceId == sender?.deviceId }
             val outcome = when {
-                sender == null -> OpenOutcome.Rejected("конверт не разбирается")
-                key == null -> OpenOutcome.NoKey("ключ подписи отправителя не получен")
-                else -> open(entry, key)
+                sender == null || own == null -> OpenOutcome.Rejected("конверт не разбирается")
+                entryKey != null -> open(entry, entryKey.signingPub, unverified = !entryKey.confirms)
+                own.deviceId in absentSenders -> open(entry, null, unverified = true)
+                else -> OpenOutcome.NoKey("ключ подписи отправителя не получен")
             }
             if (outcome is OpenOutcome.Opened) opened = entry.chatId to outcome.senderId
             noted(entry, outcome)
@@ -1455,8 +1498,10 @@ class Receiver(
                     val key = s?.let { senderKeys[it.deviceId] }
                     when {
                         s == null -> OpenOutcome.Rejected("конверт не разбирается")
-                        key == null -> OpenOutcome.NoKey("ключ подписи отправителя не получен")
-                        else -> open(entry, key)
+                        key != null -> open(entry, key.signingPub, unverified = !key.confirms)
+                        // Ключа нет ни у кого — без проверки подписи, «Не подтверждено» (Р10, КК13).
+                        s.deviceId in absentSenders -> open(entry, null, unverified = true)
+                        else -> OpenOutcome.NoKey("ключ подписи отправителя не получен")
                     }
                 }
                 noted(entry, outcome)
@@ -1464,13 +1509,21 @@ class Receiver(
         }
     }
 
-    private fun open(entry: IncomingEntry, captionKey: ByteArray): OpenOutcome =
-        PersonalMessages.open(
-            envelopeBytes = entry.envelope,
-            myDeviceId = session.deviceId,
-            me = identity,
-            senderSigningPublic = captionKey,
-        ).fold(
+    /**
+     * @param captionKey ключ подписи автора; `null` — его нет ни у кого, открыть без проверки подписи (КК13).
+     * @param unverified пометить «Не подтверждено»: без проверки или подпись отозванного по краже (Р11).
+     */
+    private fun open(entry: IncomingEntry, captionKey: ByteArray?, unverified: Boolean = false): OpenOutcome =
+        (if (captionKey == null) {
+            PersonalMessages.openUnverified(entry.envelope, session.deviceId, identity)
+        } else {
+            PersonalMessages.open(
+                envelopeBytes = entry.envelope,
+                myDeviceId = session.deviceId,
+                me = identity,
+                senderSigningPublic = captionKey,
+            )
+        }).fold(
             // Записываются БАЙТЫ ТЕЛА, как пришли, а не текст: столбец читается кодеком,
             // и запись текстом означала бы «расшифровано и не читается» — состояние, в
             // котором это и нашлось на живом прогоне.
@@ -1485,7 +1538,7 @@ class Receiver(
                 postman.received(io.tima.core.encryption.TextBodyCodec.decodeLine(it.body)?.rich)
                 // Правка, заменившая фото (ADR-0052), — новое фото забирается так же сразу.
                 if (it.meta.editOf > 0u) postman.receivedMedia(io.tima.core.encryption.TextBodyCodec.editedMedia(it.body))
-                OpenOutcome.Opened(it.body, it.meta.senderId, kind = it.meta.kind, editOf = it.meta.editOf.toLong())
+                OpenOutcome.Opened(it.body, it.meta.senderId, kind = it.meta.kind, editOf = it.meta.editOf.toLong(), unverified = unverified)
             },
             // Подпись не сошлась или обёртки для нас нет — разные беды, и причина
             // доносится дословно: человеку видно «не читается», нам — почему.
@@ -1552,6 +1605,8 @@ class Receiver(
      * @return сколько записей открылось.
      */
     suspend fun reopenUnreadable(): Int = reopenLock.withLock {
+        // Заодно — непроверенное (КК13): поводы те же — пришли ключи, ответили на просьбу.
+        runCatching { reverifyUnconfirmed() }
         val stuck = environment.incoming.undecryptable()
         if (stuck.isEmpty()) return@withLock 0
         // Ключ подписи — и у кадра группы (план КК, КК2; беда 2026-10-24, вариант 1): до этого
@@ -1586,16 +1641,75 @@ class Receiver(
     /** Повтор идёт из канала (ключи группы), из «Запросить ключ» и с экрана — не вперемешку. */
     private val reopenLock = kotlinx.coroutines.sync.Mutex()
 
-    private suspend fun captionKey(userId: String, deviceId: String): ByteArray? {
+    /**
+     * Ключ подписи устройства автора: память → местная база → сервер, с отозванными (план КК, КК13).
+     *
+     * Записанный ключ закрепляется: другой ключ у того же устройства — тревога, принимается прежний.
+     * Сервер ответил, а устройства нет ни среди действующих, ни среди отозванных — оно в [absentSenders].
+     */
+    private suspend fun captionKey(userId: String, deviceId: String): io.tima.core.database.SenderKey? {
         senderKeys[deviceId]?.let { return it }
-        val outcome = network.keys.devicesOf(userId)
+        runCatching { storedKeys.get(deviceId) }.getOrNull()?.let {
+            senderKeys[deviceId] = it
+            return it
+        }
+        val outcome = network.keys.devicesOf(userId, withRevoked = true)
         if (outcome !is DeviceKeysResult.Devices) return null
         // Подпись принимается только от доверенного устройства (ДУ3): сообщение с устройства
         // вора в строгом режиме не проходит проверку подписи.
-        for (device in environment.trustGate.admit(userId, outcome)) {
-            senderKeys[device.deviceId] = device.signingPub
+        val admitted = environment.trustGate.admit(userId, outcome).map { io.tima.core.database.SenderKey(it.deviceId, userId, it.signingPub) } +
+            environment.trustGate.admitRevoked(userId, outcome).map {
+                io.tima.core.database.SenderKey(it.device.deviceId, userId, it.device.signingPub, it.revokedAtMs, it.reason)
+            }
+        for (key in admitted) {
+            val same = runCatching { storedKeys.put(key) }.getOrDefault(true)
+            if (!same) {
+                Journal.trouble(LogCode.DEVICE_TRUST, "ключ подписи устройства не тот, что при первой встрече — сервер подменил?", "кто" to userId.take(8), "устройство" to key.deviceId.take(8))
+                continue
+            }
+            senderKeys[key.deviceId] = runCatching { storedKeys.get(key.deviceId) }.getOrNull() ?: key
         }
+        val listed = outcome.devices.any { it.deviceId == deviceId } || outcome.revoked.any { it.device.deviceId == deviceId }
+        if (!listed) absentSenders += deviceId
         return senderKeys[deviceId]
+    }
+
+    /**
+     * Проверить подпись у открытого без проверки (план КК, КК13): ключ пришёл — сошлась — пометка снимается;
+     * не сошлась — содержимое прячется, строка снова нечитаемая. Ключа всё ещё нет или он от отозванного по
+     * краже — ждёт дальше.
+     *
+     * @return сколько подтверждено.
+     */
+    suspend fun reverifyUnconfirmed(): Int {
+        val stash = runCatching { environment.incoming.unverifiedEnvelopes() }.getOrDefault(emptyList())
+        var confirmed = 0
+        for (item in stash) {
+            val group = if (GroupFrame.isGroupFrame(item.envelope)) GroupFrame.parse(item.envelope) else null
+            val sender = if (group != null) group.senderId to group.senderDevice else envelopeSender(item.envelope)?.let { it.userId to it.deviceId }
+            if (sender == null) continue
+            val key = captionKey(sender.first, sender.second) ?: continue
+            if (!key.confirms) continue
+            val matches = if (group != null) {
+                GroupMessages.signatureMatches(
+                    groupId = group.groupId, senderId = group.senderId, senderDevice = group.senderDevice, kind = group.kind,
+                    createdAtUnixMs = group.createdAtUnixMs, threadRoot = group.threadRoot, replyTo = group.replyTo,
+                    gkVersion = group.gkVersion, payload = group.payload, signature = group.signature,
+                    senderSigningPublic = key.signingPub, keyCommitment = group.keyCommitment, editOf = group.editOf,
+                )
+            } else {
+                PersonalMessages.signatureMatches(item.envelope, key.signingPub)
+            }
+            if (matches) {
+                environment.incoming.verified(item.chatId, item.messageId)
+                confirmed++
+            } else {
+                environment.incoming.forged(item.chatId, item.messageId, item.envelope, "подпись не сходится")
+                Journal.trouble(LogCode.MSG_UNREADABLE, "подпись непроверенного не сошлась — содержимое скрыто", "переписка" to item.chatId.take(8), "сообщение" to item.messageId)
+            }
+        }
+        if (stash.isNotEmpty()) Journal.note(LogCode.DEVICE_TRUST, "непроверенное проверено заново", "было" to stash.size, "подтверждено" to confirmed)
+        return confirmed
     }
 
     private class SentBy(val userId: String, val deviceId: String, val createdAtMs: Long, val editOf: Long = 0)

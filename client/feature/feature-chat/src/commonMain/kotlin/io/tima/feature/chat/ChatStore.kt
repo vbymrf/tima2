@@ -619,7 +619,11 @@ class ChatStore(
     fun replyStarted(line: ChatLine) {
         if (line.serverId <= 0) return
         _state.value = _state.value.copy(
-            replyTo = ReplyDraft(line.serverId, line.senderId.orEmpty(), line.text?.take(REPLY_PREVIEW)),
+            // Цитата непроверенного несёт его пометку (КК13): иначе ответ выглядел бы подтверждением автора.
+            replyTo = ReplyDraft(
+                line.serverId, line.senderId.orEmpty(),
+                line.text?.take(REPLY_PREVIEW)?.let { if (line.unverified) words().chat.unverifiedMark + " — " + it else it },
+            ),
             editing = 0,
         )
     }
@@ -778,6 +782,8 @@ class ChatStore(
      * забирает окно — у него доступ к файлам. `null` — пересылать нечего.
      */
     fun forwardOf(line: ChatLine): Forwarded? {
+        // Непроверенное не пересылается (КК13): у получателя пометка потерялась бы, а автор остался бы.
+        if (line.unverified) return null
         if (line.deleted) return null
         val port = edit
         if (port != null && line.serverId > 0) {

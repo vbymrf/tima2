@@ -1518,6 +1518,8 @@ object EnglishWords : Words {
         override val messageUnavailable = "message unavailable"
 
         override val messageUnavailableAsk = "Message unavailable, request"
+        override val unverifiedMark = "Unverified: the author's signature was not checked"
+        override val unverifiedWhy = "Nobody has the signing key of the author's device. The author and time come from the server and cannot be checked by signature. The mark disappears once the key is found."
         override val messageKeyLost = "Message unavailable: no key left"
         override val decrypting = "decrypting…"
         override val addToSelf = "Bring to my page"

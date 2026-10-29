@@ -121,6 +121,26 @@ class PersonalMessages(escrowKey: EscrowEpochKey) {
             myDeviceId: String,
             me: DeviceIdentity,
             senderSigningPublic: ByteArray,
+        ): Result<ReceivedMessage> = openChecked(envelopeBytes, myDeviceId, me, senderSigningPublic)
+
+        /**
+         * Открыть **без проверки подписи** — ключа подписи автора нет ни у кого (план КК, КК13, Р10). Вызывающий
+         * обязан пометить сообщение «Не подтверждено»; подпись проверяется [signatureMatches], когда ключ придёт.
+         */
+        fun openUnverified(envelopeBytes: ByteArray, myDeviceId: String, me: DeviceIdentity): Result<ReceivedMessage> =
+            openChecked(envelopeBytes, myDeviceId, me, null)
+
+        /** Сошлась ли подпись автора — без расшифровки (повторная проверка непроверенного, КК13). */
+        fun signatureMatches(envelopeBytes: ByteArray, senderSigningPublic: ByteArray): Boolean {
+            val sealed = MessageSerializer.decodeEnvelope(HistoryFrame.split(envelopeBytes).second).getOrNull() ?: return false
+            return PersonalMessageSealer.signatureMatches(sealed, senderSigningPublic)
+        }
+
+        private fun openChecked(
+            envelopeBytes: ByteArray,
+            myDeviceId: String,
+            me: DeviceIdentity,
+            senderSigningPublic: ByteArray?,
         ): Result<ReceivedMessage> = runCatching {
             // Конверт истории (ИУ3) несёт эфемерал обёртки помощника рядом с собой.
             val (wrapEphemeral, envelope) = HistoryFrame.split(envelopeBytes)
@@ -130,13 +150,17 @@ class PersonalMessages(escrowKey: EscrowEpochKey) {
             var failure: Throwable? = null
             var opened: ByteArray? = null
             for (key in me.decryptKeys) {
-                val attempt = PersonalMessageSealer.openWithWrappedKey(
-                    message = sealed,
-                    myDeviceId = myDeviceId,
-                    myDeviceKey = key,
-                    senderSigningPub = senderSigningPublic,
-                    wrapEphemeralOverride = wrapEphemeral,
-                )
+                val attempt = if (senderSigningPublic == null) {
+                    PersonalMessageSealer.openWithWrappedKeyUnverified(sealed, myDeviceId, key, wrapEphemeral)
+                } else {
+                    PersonalMessageSealer.openWithWrappedKey(
+                        message = sealed,
+                        myDeviceId = myDeviceId,
+                        myDeviceKey = key,
+                        senderSigningPub = senderSigningPublic,
+                        wrapEphemeralOverride = wrapEphemeral,
+                    )
+                }
                 opened = attempt.getOrNull()
                 if (opened != null) break
                 failure = attempt.exceptionOrNull()

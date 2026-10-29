@@ -4,6 +4,7 @@ import io.tima.core.outbox.FieldCipher
 import io.tima.core.outbox.InboxStore
 import io.tima.core.outbox.IncomingEntry
 import io.tima.core.outbox.IncomingState
+import io.tima.core.outbox.UnverifiedEnvelope
 
 /**
  * [InboxStore] поверх той же таблицы `messages`.
@@ -91,6 +92,7 @@ class SqlInboxStore(
         kind: Int,
         editOf: Long,
         onlyContinuation: Boolean,
+        unverified: Boolean,
     ) {
         q.updateParsed(
             body_enc = cipher.seal(body),
@@ -108,8 +110,35 @@ class SqlInboxStore(
             edit_of = editOf,
             // «Только продолжение» — открытым полем кадра (Решения §11.3).
             only_continuation = if (onlyContinuation) 1L else 0L,
+            // «Не подтверждено» (КК13): открыто без проверки подписи.
+            unverified = if (unverified) 1L else 0L,
             dedup_key = keyOf(chatId, messageId),
         )
+    }
+
+    private val keys = db.senderKeysQueries
+
+    override fun stashUnverified(chatId: String, messageId: Long, envelope: ByteArray) {
+        keys.stashUnverified(keyOf(chatId, messageId), chatId, messageId, cipher.seal(envelope))
+    }
+
+    override fun unverifiedEnvelopes(): List<UnverifiedEnvelope> =
+        keys.unverifiedEnvelopes().executeAsList().mapNotNull { row ->
+            cipher.open(row.envelope_enc)?.let { UnverifiedEnvelope(row.chat_id, row.server_id, it) }
+        }
+
+    override fun verified(chatId: String, messageId: Long) {
+        db.transaction {
+            q.markVerified(keyOf(chatId, messageId))
+            keys.dropUnverified(keyOf(chatId, messageId))
+        }
+    }
+
+    override fun forged(chatId: String, messageId: Long, envelope: ByteArray, reason: String) {
+        db.transaction {
+            q.markForged(IncomingState.UNDECRYPTABLE.ordinal.toLong(), reason, cipher.seal(envelope), keyOf(chatId, messageId))
+            keys.dropUnverified(keyOf(chatId, messageId))
+        }
     }
 
     /**

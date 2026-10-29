@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Color
 import io.tima.core.ui.IconButton
@@ -1088,6 +1089,8 @@ private fun BubbleOf(
     when {
         // Удалено у всех (Решения §8): строка осталась, содержимого нет.
         line.deleted -> Chip(Tima.words.chat.deleted, kind = ChipKind.Quiet)
+        // «Не подтверждено» (план КК, КК13): текст приглушён, под ним пометка; нажатие — пояснение.
+        text != null && line.unverified -> Unverified { if (rich != null) RichBody(rich) else PlainWithLinks(text) }
         // Оформленное (ПЛАН-(РС) РС4) — блоками; обычное — текстом, как было.
         text != null && rich != null -> RichBody(rich)
         // Простое — ссылки в нём синие и нажимаются, под текстом «Перейти» (заказчик 2026-10-19).
@@ -1128,6 +1131,23 @@ private fun BubbleOf(
         NarrowChoice(line.level) { to -> onNarrow(line.serverId, line.level, to); onNarrowed() }
     }
 }
+
+/**
+ * Сообщение, открытое без проверки подписи (план КК, КК13; заказчик 2026-10-29 «Показывать с пометкой»):
+ * текст приглушён, под ним «Не подтверждено»; нажатие на пометку раскрывает пояснение.
+ */
+@Composable
+private fun Unverified(body: @Composable () -> Unit) {
+    var why by remember { mutableStateOf(false) }
+    Column {
+        Box(Modifier.graphicsLayer(alpha = UNVERIFIED_ALPHA)) { body() }
+        Chip(Tima.words.chat.unverifiedMark, kind = ChipKind.Quiet, modifier = Modifier.testTag("chat:unverified"), onClick = { why = !why })
+        if (why) io.tima.core.ui.Caption(Tima.words.chat.unverifiedWhy)
+    }
+}
+
+/** Насколько приглушён текст непроверенного сообщения. */
+private const val UNVERIFIED_ALPHA = 0.6f
 
 /**
  * «Добавить себе» — полная и без слова.

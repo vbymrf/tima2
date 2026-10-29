@@ -157,6 +157,7 @@ class SqlChatFeed(
         threadRoot = thread_root,
         kind = kind.toInt(),
         onlyContinuation = only_continuation != 0L,
+        unverified = unverified != 0L,
     )
 
     /**

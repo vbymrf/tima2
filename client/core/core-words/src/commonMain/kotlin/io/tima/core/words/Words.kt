@@ -1355,6 +1355,10 @@ interface ChatWords {
     val messageUnavailable: String
     /** Недоступное сообщение личной переписки — с просьбой ключей (2026-10-06). */
     val messageUnavailableAsk: String
+    /** «Не подтверждено» (план КК, КК13): открыто без проверки подписи автора. */
+    val unverifiedMark: String
+    /** Пояснение по нажатию на пометку «Не подтверждено». */
+    val unverifiedWhy: String
     /** Недоступное сообщение, к которому ключа не осталось ни у кого — просить незачем. */
     val messageKeyLost: String
     val decrypting: String
@@ -4046,6 +4050,8 @@ object RussianWords : Words {
         }
         override val messageUnavailable = "сообщение недоступно"
         override val messageUnavailableAsk = "Сообщение недоступно, запросить"
+        override val unverifiedMark = "Не подтверждено: подпись автора не проверена"
+        override val unverifiedWhy = "Ключа подписи устройства автора нет ни у кого. Автора и время назвал сервер — проверить их подписью нельзя. Когда ключ найдётся, пометка снимется сама."
         override val messageKeyLost = "Сообщение недоступно: ключа не осталось"
         override val decrypting = "расшифровывается…"
         override val addToSelf = "Добавить себе"
