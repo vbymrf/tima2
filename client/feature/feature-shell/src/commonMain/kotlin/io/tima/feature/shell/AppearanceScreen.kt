@@ -298,6 +298,7 @@ private fun Inside(
                 value = naming,
                 onChange = { naming = it },
                 hint = words.appearance.saveName,
+                sentences = true,
             )
             // Предупреждение, а не отказ: перезаписать своё же — законное намерение, и
             // человек вправе его исполнить. Но узнать об этом он должен ДО нажатия.

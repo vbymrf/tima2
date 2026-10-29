@@ -244,7 +244,7 @@ private fun SectionEditor(
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
         Caption(words.newSectionName, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-        Field(value = name, onChange = { name = it }, hint = Tima.words.chat.sectionExample)
+        Field(value = name, onChange = { name = it }, hint = Tima.words.chat.sectionExample, sentences = true)
 
         Caption(words.sectionIcon, fontSize = TimaType.sz5, weight = FontWeight.Bold)
         FlowRow(

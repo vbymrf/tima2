@@ -389,8 +389,8 @@ private fun NamingStep(
 ) {
     val words = Tima.words.wizard
     Caption(words.naming, fontSize = TimaType.sz2, weight = FontWeight.ExtraBold)
-    Field(value = state.title, onChange = onTitle, modifier = Modifier.testTag(WizardTags.TITLE), hint = words.groupName)
-    Field(value = state.description, onChange = onDescription, modifier = Modifier.testTag(WizardTags.DESCRIPTION), hint = words.descriptionAbout)
+    Field(value = state.title, onChange = onTitle, modifier = Modifier.testTag(WizardTags.TITLE), hint = words.groupName, sentences = true)
+    Field(value = state.description, onChange = onDescription, modifier = Modifier.testTag(WizardTags.DESCRIPTION), hint = words.descriptionAbout, sentences = true)
 
     // Раздел — здесь же, на шаге имени (Р5): человек называет вещь и говорит, куда её
     // положить, одним движением. «Общий» первым; заведённые разделы; поле для нового.
@@ -420,7 +420,7 @@ private fun NamingStep(
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { Field(value = state.newShelf, onChange = onNewShelf, hint = words.newShelfHint) }
+            Box(Modifier.weight(1f)) { Field(value = state.newShelf, onChange = onNewShelf, hint = words.newShelfHint, sentences = true) }
             Button(
                 label = words.createShelf,
                 kind = if (state.newShelf.isNotBlank()) ButtonKind.Action else ButtonKind.Quiet,

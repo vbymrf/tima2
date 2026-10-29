@@ -249,6 +249,7 @@ private fun WidgetOptions(model: EditorModel, spot: Spot) {
             BasicTextField(
                 value = widget.title,
                 onValueChange = { put(widget.copy(title = it.take(LINK_TITLE_MAX))) },
+                keyboardOptions = io.tima.core.ui.TextKeyboard,
                 textStyle = TextStyle(fontSize = TimaType.sz5, color = Tima.colors.text),
                 cursorBrush = SolidColor(Tima.colors.navigation),
                 singleLine = true,
@@ -338,6 +339,7 @@ private fun RefOptions(
         BasicTextField(
             value = moreText,
             onValueChange = { onChange(author, lines, more, it.take(MORE_TEXT_MAX), tap) },
+            keyboardOptions = io.tima.core.ui.TextKeyboard,
             textStyle = TextStyle(fontSize = TimaType.sz5, color = colors.text),
             cursorBrush = SolidColor(colors.navigation),
             singleLine = true,

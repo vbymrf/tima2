@@ -37,6 +37,16 @@ import androidx.compose.ui.unit.dp
  * непустое перекрывает её содержимым. Отдельного состояния «показывать подсказку» нет —
  * оно расходилось бы с текстом.
  */
+/**
+ * Клавиатура для текста, который пишет человек: заглавная в начале, после «. ! ?» и с новой строки
+ * (заказчик 2026-10-29, 2а). Букву поднимает не приложение, а клавиатура телефона — как в Telegram и
+ * WhatsApp: её правило знает про паузы и отмену, и человек может выключить его в настройках клавиатуры.
+ * На ПК не действует — так и решено (2б: своей заглавной на ПК нет).
+ *
+ * Не для фразы, ника, поиска, кодов, адресов и ссылок — там заглавная мешает.
+ */
+val TextKeyboard = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
+
 @Composable
 fun Field(
     value: String,
@@ -77,6 +87,8 @@ fun Field(
      * фразы, но слова в словаре клавиатуры разбор уже не уберёт.
      */
     phrase: Boolean = false,
+    /** Текст, который пишет человек, — заглавная в начале предложения ([TextKeyboard]). */
+    sentences: Boolean = false,
 ) {
     val colors = Tima.colors
     val focus = remember { FocusRequester() }
@@ -113,7 +125,9 @@ fun Field(
                     autoCorrectEnabled = false,
                     keyboardType = KeyboardType.Password,
                 )
-                else -> KeyboardOptions(keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text)
+                numeric -> KeyboardOptions(keyboardType = KeyboardType.Number)
+                sentences -> TextKeyboard
+                else -> KeyboardOptions(keyboardType = KeyboardType.Text)
             },
             modifier = Modifier.fillMaxWidth().focusRequester(focus),
         )

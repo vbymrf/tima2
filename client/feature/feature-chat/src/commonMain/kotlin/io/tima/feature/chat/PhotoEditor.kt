@@ -358,6 +358,7 @@ fun PhotoEditor(
                 BasicTextField(
                     value = typed,
                     onValueChange = { typed = it },
+                    keyboardOptions = io.tima.core.ui.TextKeyboard,
                     textStyle = TextStyle(
                         color = PhotoLayers.INKS[textInk],
                         fontSize = TYPING_SIZE,

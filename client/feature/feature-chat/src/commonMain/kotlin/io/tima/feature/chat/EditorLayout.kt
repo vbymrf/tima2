@@ -429,6 +429,7 @@ private fun EditorCell(
         BasicTextField(
             value = value,
             onValueChange = { v -> model.changedCell(index, c, v) },
+            keyboardOptions = io.tima.core.ui.TextKeyboard,
             textStyle = TextStyle(
                 fontSize = sizeOf(look.size, TimaType.sz5),
                 color = io.tima.core.ui.paletteColor(look.color) ?: colors.text,

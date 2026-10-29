@@ -150,7 +150,7 @@ fun SuggestScreen(
     if (state.delivered) Secondary(words.writeAgainHow)
 
     Caption(words.whatToChange, fontSize = TimaType.sz4, weight = FontWeight.Bold)
-    Field(value = state.text, onChange = onText, hint = words.hint)
+    Field(value = state.text, onChange = onText, hint = words.hint, sentences = true)
 
     if (state.photos.isNotEmpty() || onAddPhoto != null) {
         Caption(problem.photos, fontSize = TimaType.sz5, weight = FontWeight.Bold)

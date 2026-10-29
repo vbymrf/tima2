@@ -164,6 +164,7 @@ internal fun InputLine(
                         textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
                         cursorBrush = SolidColor(colors.navigation),
                         visualTransformation = rememberMarkdownView(typed, source),
+                        keyboardOptions = io.tima.core.ui.TextKeyboard,
                         modifier = Modifier.fillMaxWidth().testTag(CHAT_INPUT_TAG)
                             .onFocusChanged { if (it.isFocused) area = null },
                     )

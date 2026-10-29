@@ -121,7 +121,7 @@ internal fun EditorList(
                         cursorBrush = SolidColor(colors.navigation),
                         visualTransformation = rememberTypedView(shown, marks, open = false, color = io.tima.core.ui.paletteColor(blockStyleOf(item.style).color)),
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardOptions = io.tima.core.ui.TextKeyboard.copy(imeAction = ImeAction.Next),
                         keyboardActions = KeyboardActions(onNext = { model.enterItem(index, i) }),
                         modifier = Modifier.weight(1f).heightIn(min = 28.dp).focusRequester(focus)
                             .onFocusChanged { if (it.isFocused) model.focusedItem(index, i, Spot.TITLE) }
@@ -145,6 +145,7 @@ internal fun EditorList(
                             BasicTextField(
                                 value = if (model.spot == content) model.field else TextFieldValue(shown.text),
                                 onValueChange = { v -> model.changedItem(index, i, Spot.TEXT, v) },
+                                keyboardOptions = io.tima.core.ui.TextKeyboard,
                                 textStyle = itemText,
                                 cursorBrush = SolidColor(colors.navigation),
                                 visualTransformation = rememberTypedView(shown, marks, open = false, color = io.tima.core.ui.paletteColor(blockStyleOf(item.style).color)),

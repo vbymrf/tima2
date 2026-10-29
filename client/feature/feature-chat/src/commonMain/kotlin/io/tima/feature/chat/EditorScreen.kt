@@ -946,6 +946,7 @@ private fun EditorItemView(
             BasicTextField(
                 value = value,
                 onValueChange = { v -> if (chosen) model.changed(index, v) else { model.focused(index); model.changed(index, v) } },
+                keyboardOptions = io.tima.core.ui.TextKeyboard,
                 textStyle = TextStyle(
                     fontSize = sizeOf(look.size, TimaType.sz4),
                     color = io.tima.core.ui.paletteColor(look.color) ?: colors.text,

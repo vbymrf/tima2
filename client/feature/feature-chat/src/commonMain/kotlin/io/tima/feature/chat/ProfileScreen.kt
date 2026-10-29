@@ -179,7 +179,7 @@ fun ProfileScreen(
                 }
 
                 Caption(words.nameHowShown, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                Field(value = state.name, onChange = onName, hint = words.nameExample)
+                Field(value = state.name, onChange = onName, hint = words.nameExample, sentences = true)
 
                 Caption(words.nicknameFound, fontSize = TimaType.sz5, weight = FontWeight.Bold)
                 if (state.nickEditable) {

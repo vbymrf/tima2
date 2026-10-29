@@ -140,6 +140,7 @@ fun CommentsScreen(
                     value = state.draft,
                     onChange = onDraft,
                     hint = words.comments.hint,
+                    sentences = true,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(glyph = "➤", onClick = onSend, live = true)

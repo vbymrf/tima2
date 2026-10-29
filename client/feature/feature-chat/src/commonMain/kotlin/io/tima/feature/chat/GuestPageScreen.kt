@@ -201,7 +201,7 @@ fun GuestPageScreen(
                             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
                         ) {
                             Tertiary(personFieldLabel(field), lineOne = true)
-                            Field(value = draft, onChange = { draft = it }, hint = bookWords.name)
+                            Field(value = draft, onChange = { draft = it }, hint = bookWords.name, sentences = true)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
                                 Button(label = bookWords.save, onClick = {
                                     onRename(draft.trim().ifEmpty { null })

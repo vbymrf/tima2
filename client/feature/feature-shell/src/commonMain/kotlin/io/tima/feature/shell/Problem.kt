@@ -462,6 +462,7 @@ fun ProblemScreen(
         value = state.text,
         onChange = onText,
         hint = words.describeHint,
+        sentences = true,
     )
     if (state.text.isBlank()) {
         Tertiary(words.onlyYouKnow)

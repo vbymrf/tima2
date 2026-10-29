@@ -264,10 +264,10 @@ fun NewContactScreen(
                 }
 
                 Caption(words.nameYouCall, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                Field(value = state.name, onChange = onName, hint = words.optional)
+                Field(value = state.name, onChange = onName, hint = words.optional, sentences = true)
 
                 Caption(words.section, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                Field(value = state.section, onChange = onSection, hint = words.commonSection)
+                Field(value = state.section, onChange = onSection, hint = words.commonSection, sentences = true)
 
                 // Два входа в раздел: выбрать из заведённых и завести набранный. Раньше
                 // было одно поле, и набранное в нём имя несуществующего раздела уводило
@@ -442,7 +442,7 @@ fun NewSectionScreen(
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
             ) {
                 Caption(words.title, fontSize = TimaType.sz5, weight = FontWeight.Bold)
-                Field(value = name, onChange = onName, hint = words.sectionExample)
+                Field(value = name, onChange = onName, hint = words.sectionExample, sentences = true)
                 // Людей в раздел кладут потом: заставлять выбирать их сейчас значит
                 // требовать решения там, где человек ещё только придумал имя папки.
                 Secondary(words.moveLater)

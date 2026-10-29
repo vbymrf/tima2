@@ -300,7 +300,7 @@ fun MediaWidgetAsk(
         if (list) {
             Tertiary(ew.listFound(links.size))
         } else {
-            Field(ew.askDescription, description, MediaAskTags.DESCRIPTION) { description = it; trouble = null }
+            Field(ew.askDescription, description, MediaAskTags.DESCRIPTION, sentences = true) { description = it; trouble = null }
             // Вид, своя картинка и метки — только у видео: кнопке-ссылке они ни к чему.
             if (kind == "video" && !notVideo) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -421,7 +421,7 @@ fun MarksAsk(
                         }
                     }
                     Box(Modifier.weight(1f)) {
-                        Field(null, row.text, MediaAskTags.markText(i)) { v -> change(i, row.copy(text = v.take(200))) }
+                        Field(null, row.text, MediaAskTags.markText(i), sentences = true) { v -> change(i, row.copy(text = v.take(200))) }
                     }
                     // Убрать строку — круглым пузырём, как «+Метка»: знак без круга на белом был не виден.
                     Box(
@@ -504,6 +504,8 @@ private fun Field(
     hint: String? = null,
     /** Только цифры — цифровая клавиатура. */
     digits: Boolean = false,
+    /** Текст человека — заглавная в начале предложения (TextKeyboard). */
+    sentences: Boolean = false,
     onChange: (String) -> Unit,
 ) {
     val colors = Tima.colors
@@ -517,7 +519,11 @@ private fun Field(
             maxLines = if (single) 1 else 4,
             textStyle = TextStyle(fontSize = TimaType.sz4, color = if (alarm && value.isNotBlank()) colors.alarm else colors.text),
             cursorBrush = SolidColor(colors.navigation),
-            keyboardOptions = if (digits) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
+            keyboardOptions = when {
+                digits -> KeyboardOptions(keyboardType = KeyboardType.Number)
+                sentences -> io.tima.core.ui.TextKeyboard
+                else -> KeyboardOptions.Default
+            },
             decorationBox = { inner ->
                 Box {
                     if (hint != null && value.isEmpty()) Caption(hint, fontSize = TimaType.sz4, color = colors.text3)
