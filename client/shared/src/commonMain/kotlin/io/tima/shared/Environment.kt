@@ -453,6 +453,10 @@ class Network(
     val accountStore: AccountStoreOverHttp =
         AccountStoreOverHttp(link.route, link.client, token = { token() })
 
+    /** Ячейка «ключ копии» — копия аккаунта, вид `keycopy` (план КК, КК8). */
+    val keyCopyStore: AccountStoreOverHttp =
+        AccountStoreOverHttp(link.route, link.client, token = { token() }, kind = "keycopy")
+
     /** Ячейка отметок «просмотрено до» — копия аккаунта, вид `reads` (ЖУ9). */
     val readsStore: AccountStoreOverHttp =
         AccountStoreOverHttp(link.route, link.client, token = { token() }, kind = "reads")

@@ -45,7 +45,24 @@ class KeyCopyService(
     private val localGroupKeys: () -> List<Triple<String, Int, ByteArray>> = { emptyList() },
     /** Отметка «дозалито под эпоху» — в настройках аккаунта; `null` — не отмечаем (тесты). */
     private val settings: io.tima.domain.chat.Settings? = null,
+    /** Ключи личных сообщений этого устройства (КК9): переписка → номер → ключ — для дозаливки. */
+    private val localMessageKeys: () -> Map<String, Map<Long, ByteArray>> = { emptyMap() },
 ) {
+    /**
+     * Книга аккаунта — запись «ключ копии» (КК8). Ставится, когда собрана копия аккаунта: её собирает экран,
+     * а эту службу — сборка устройства.
+     */
+    @kotlin.concurrent.Volatile
+    var book: CopyAnchorBook? = null
+
+    /** О том, что ключа копии от своих нет, сказано за этот запуск. */
+    @kotlin.concurrent.Volatile
+    private var saidNoAnchor = false
+
+    /** О подмене ключа личности сказано за этот запуск. */
+    @kotlin.concurrent.Volatile
+    private var saidIdentity = false
+
     private val lock = Mutex()
     private var cached: Pair<Int, ByteArray>? = null
 
@@ -60,7 +77,10 @@ class KeyCopyService(
 
     private companion object {
         /** Эпоха, под которую это устройство уже дозалило копию. */
-        const val BACKFILL_MARK = "key-copy.backfill.v1"
+        const val BACKFILL_MARK = "key-copy.backfill.v2"
+
+        /** Ключ копии из своего источника (КК8) — открытый, в настройках аккаунта. */
+        const val ANCHOR = "key-copy.anchor.v1"
 
         /** Пополнение на каждом сообщении: ответ «копии нет» живёт десять минут. */
         const val QUIET_ANSWER_MS = 10 * 60_000L
@@ -88,15 +108,90 @@ class KeyCopyService(
         answer = null
     }
 
+    /**
+     * Ключ копии — **только из своего источника** (план КК, КК8; Р4): фраза этого устройства, запись в книге
+     * аккаунта или, при переходе, секрет копии на телефоне. Ответ сервера — подсказка «пара сменилась».
+     * Своего источника нет — копию не пополняем.
+     */
     private suspend fun load(): Pair<Int, ByteArray>? {
-        val key = (current(QUIET_ANSWER_MS) as? KeyCopyApi.Current.Published)?.key ?: return null
-        val identityPub = (keys.devicesOf(userId) as? DeviceKeysResult.Devices)?.identityPub ?: return null
-        if (!KeyCopy.verify(identityPub, key.epoch, key.pub, key.sig)) {
-            Journal.trouble(LogCode.DEVICE_TRUST, "ключ копии не подписан ключом личности — копию не пополняем", "эпоха" to key.epoch)
+        var anchor = anchor() ?: fromBook() ?: fromStoredSecret()
+        if (anchor == null) {
+            if (!saidNoAnchor) {
+                saidNoAnchor = true
+                Journal.note(LogCode.DEVICE_TRUST, "ключа копии от своих нет — копию не пополняем")
+            }
             return null
         }
-        return key.epoch to key.pub
+        val published = (current(QUIET_ANSWER_MS) as? KeyCopyApi.Current.Published)?.key
+        // Сервер говорит о паре новее — заглянуть в книгу: сменившее устройство записало её туда.
+        if (published != null && published.epoch > anchor.epoch) {
+            fromBook()?.takeIf { it.epoch > anchor!!.epoch }?.let { anchor = it }
+        }
+        val a = anchor!!
+        // Ключ личности своего аккаунта от сервера сверяется с запомненным: расхождение — подмена.
+        val serverIdentity = (keys.devicesOf(userId) as? DeviceKeysResult.Devices)?.identityPub
+        if (serverIdentity != null && !serverIdentity.contentEquals(a.identityPub) && !saidIdentity) {
+            saidIdentity = true
+            Journal.trouble(LogCode.DEVICE_TRUST, "ключ личности своего аккаунта от сервера не тот — подмена?")
+        }
+        return a.epoch to a.pub
     }
+
+    /** Запомненный на устройстве ключ копии (КК8). */
+    private suspend fun anchor(): io.tima.core.encryption.CopyAnchor? =
+        settings?.let { s -> runCatching { s.all().first()[ANCHOR] }.getOrNull() }?.let { io.tima.core.encryption.CopyAnchor.decode(it) }
+
+    private suspend fun remember(anchor: io.tima.core.encryption.CopyAnchor) {
+        settings?.let { s -> runCatching { s.put(ANCHOR, anchor.encode()) } }
+    }
+
+    /**
+     * Ключ копии из книги аккаунта (КК8). Ключ личности в записи сверяется с запомненным: запись новее
+     * принимается, только если подписана тем же ключом личности.
+     */
+    private suspend fun fromBook(): io.tima.core.encryption.CopyAnchor? {
+        val got = runCatching { book?.read() }.getOrNull() ?: return null
+        val known = anchor()
+        if (known != null && !known.identityPub.contentEquals(got.identityPub)) {
+            Journal.trouble(LogCode.DEVICE_TRUST, "ключ копии в книге подписан другим ключом личности — не принят")
+            return null
+        }
+        if (known != null && got.epoch <= known.epoch) return known
+        remember(got)
+        Journal.note(LogCode.DEVICE_TRUST, "ключ копии взят из книги аккаунта", "эпоха" to got.epoch)
+        return got
+    }
+
+    /**
+     * Переход (КК8): телефон хранит секрет копии (Р46, до КК11). Открытая часть выводится из секрета;
+     * опубликованная сервером запись принимается, только если её открытая часть та же и подпись сходится.
+     * Запомнить и записать в книгу — тогда КК11 может стереть секрет.
+     */
+    private suspend fun fromStoredSecret(): io.tima.core.encryption.CopyAnchor? {
+        val (epoch, raw) = secrets?.get() ?: return null
+        val copy = runCatching { DeviceIdentity.fromRaw(raw) }.getOrNull() ?: return null
+        val published = (current(QUIET_ANSWER_MS) as? KeyCopyApi.Current.Published)?.key ?: return null
+        if (published.epoch != epoch || !published.pub.contentEquals(copy.encryptionPublic)) return null
+        val identityPub = (keys.devicesOf(userId) as? DeviceKeysResult.Devices)?.identityPub ?: return null
+        val anchor = io.tima.core.encryption.CopyAnchor(identityPub, epoch, copy.encryptionPublic, published.sig).takeIf { it.valid() } ?: return null
+        remember(anchor)
+        runCatching { book?.write(anchor) }
+        Journal.note(LogCode.DEVICE_TRUST, "ключ копии запомнен из секрета телефона и записан в книгу", "эпоха" to epoch)
+        return anchor
+    }
+
+    /** Ключ копии этого запуска стал известен (фраза, смена пары) — запомнить и записать в книгу. */
+    private suspend fun anchorFromWords(words: List<String>, epoch: Int, pub: ByteArray, sig: ByteArray) {
+        val identityPub = io.tima.core.encryption.AccountIdentitiesOverKodium.fromWords(words) ?: return
+        val anchor = io.tima.core.encryption.CopyAnchor(identityPub, epoch, pub, sig).takeIf { it.valid() } ?: return
+        remember(anchor)
+        val written = runCatching { book?.write(anchor) }.getOrNull()
+        Journal.note(LogCode.DEVICE_TRUST, "ключ копии запомнен по фразе", "эпоха" to epoch, "в книге" to (written == true))
+        lock.withLock { cached = null }
+    }
+
+    /** Есть ли у устройства ключ копии из своего источника (КК8): без него копию оно не пополняет. */
+    suspend fun anchored(): Boolean = anchor() != null
 
     /**
      * Фраза известна этому устройству (вход по фразе, новый аккаунт, «Подтвердить фразой»):
@@ -112,8 +207,10 @@ class KeyCopyService(
         val copy = KeyCopy.fromWords(words, epoch) ?: return
         fromPhrase = copy
         secrets?.put(epoch, copy.exportRaw())
-        if (epoch == 1 && pub() == null) {
-            val sig = KeyCopy.sign(words, 1, copy.encryptionPublic) ?: return
+        val sig = KeyCopy.sign(words, epoch, copy.encryptionPublic) ?: return
+        // Свой источник ключа копии (КК8): фраза этого запуска — запомнить и записать в книгу.
+        anchorFromWords(words, epoch, copy.encryptionPublic, sig)
+        if (epoch == 1 && api.current() == KeyCopyApi.Current.Missing) {
             val ok = api.publish(KeyCopyApi.Key(1, copy.encryptionPublic, sig))
             Journal.note(LogCode.DEVICE_TRUST, "ключ копии опубликован", "принят" to ok)
             forgetAnswer()
@@ -149,18 +246,14 @@ class KeyCopyService(
         for (part in groupItems.chunked(KeyCopyApi.PAGE)) {
             if (api.saveGroupKeys(epoch, part) != KeyCopyApi.Saved.OK) ok = false
         }
-        val chats = history.personalChats() ?: return false
+        // Личные — из своих ключей сообщений (КК9), а не из обёрток на сервере: обёртка живёт до доставки, а
+        // ключ на устройстве — пока лежит сообщение. Так поздно заведённая копия получает всё прочитанное.
         var messages = 0
-        for (chat in chats) {
-            var before = 0L
-            while (true) {
-                val page = history.page(chat.chatId, before) ?: return false
-                if (page.isEmpty()) break
-                val items = page.mapNotNull { item ->
-                    KeyCopy.wrapMessage(item.envelope, item.wrapEphemeral, deviceId, identity, copyPub)?.let { item.messageId to it }
-                }
-                when (api.saveMessages(chat.chatId, epoch, items)) {
-                    KeyCopyApi.Saved.OK -> messages += items.size
+        for ((chatId, perMessage) in localMessageKeys()) {
+            val items = perMessage.mapNotNull { (messageId, key) -> KeyCopy.wrapGroupKey(copyPub, key)?.let { messageId to it } }
+            for (part in items.chunked(KeyCopyApi.PAGE)) {
+                when (api.saveMessages(chatId, epoch, part)) {
+                    KeyCopyApi.Saved.OK -> messages += part.size
                     KeyCopyApi.Saved.STALE -> {
                         forgetAnswer()
                         lock.withLock { cached = null }
@@ -168,8 +261,6 @@ class KeyCopyService(
                     }
                     KeyCopyApi.Saved.FAILED -> ok = false
                 }
-                if (page.size < io.tima.core.network.HistoryApi.PAGE) break
-                before = page.last().messageId
             }
         }
         Journal.note(LogCode.DEVICE_TRUST, "копия ключей дозалита", "эпоха" to epoch, "сообщений" to messages, "ключей групп" to groupItems.size, "полностью" to ok)
@@ -252,9 +343,11 @@ class KeyCopyService(
         val sig = KeyCopy.sign(words, epoch, next.encryptionPublic) ?: return Rotation.WRONG_PHRASE
         if (!api.publish(KeyCopyApi.Key(epoch, next.encryptionPublic, sig))) return Rotation.OFFLINE
         forgetAnswer()
-        lock.withLock { cached = epoch to next.encryptionPublic }
         fromPhrase = next
         secrets?.put(epoch, next.exportRaw())
+        // Новая пара — в книгу (КК8): остальные свои устройства перейдут на неё оттуда, а не по слову сервера.
+        anchorFromWords(words, epoch, next.encryptionPublic, sig)
+        lock.withLock { cached = epoch to next.encryptionPublic }
         for (part in groupItems.chunked(KeyCopyApi.PAGE)) api.saveGroupKeys(epoch, part)
         var moved = 0
         for ((chatId, items) in perChat) {
@@ -347,6 +440,15 @@ class KeyCopyService(
             }
         }
     }
+}
+
+/** Запись «ключ копии» в книге аккаунта (план КК, КК8). Реализует копия аккаунта — у неё ключ служебной группы. */
+interface CopyAnchorBook {
+    /** `null` — записи нет, ключа служебной группы нет или сеть не ответила. */
+    suspend fun read(): io.tima.core.encryption.CopyAnchor?
+
+    /** @return записано. */
+    suspend fun write(anchor: io.tima.core.encryption.CopyAnchor): Boolean
 }
 
 /**

@@ -353,6 +353,10 @@ fun buildAssembled(
                 book.groupsWithKeys().flatMap { g -> book.versions(g).mapNotNull { v -> book.key(g, v)?.let { Triple(g, v, it) } } }
             },
             settings = environment.settings,
+            localMessageKeys = {
+                val keys = io.tima.core.database.SqlMessageKeys(environment.db, environment.cipher)
+                keys.chats().associateWith { keys.of(it) }
+            },
         )
         environment.onGroupKeyStored = keyCopy::feedGroupKey
         // Новое в открытой группе или канале — строка «Новое сообщение в группе» / «Новое в канале»

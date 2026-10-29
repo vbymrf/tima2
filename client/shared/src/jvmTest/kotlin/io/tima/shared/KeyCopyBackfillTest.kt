@@ -46,6 +46,15 @@ class KeyCopyBackfillTest {
     private fun b64(bytes: ByteArray) = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     private val json = headersOf("Content-Type", "application/json")
 
+    /** Ключ копии из своего источника (КК8): без него устройство копию не пополняет. */
+    private fun anchored(): MemorySettings = MemorySettings().apply {
+        values.value = mapOf(
+            "key-copy.anchor.v1" to io.tima.core.encryption.CopyAnchor(
+                account.identityPub, 1, copy.encryptionPublic, KeyCopy.sign(account.words, 1, copy.encryptionPublic)!!,
+            ).encode(),
+        )
+    }
+
     private class MemorySettings : Settings {
         val values = MutableStateFlow<Map<String, String>>(emptyMap())
         override fun all(): Flow<Map<String, String>> = values
@@ -76,7 +85,7 @@ class KeyCopyBackfillTest {
         }
         val client = HttpClient(engine) { timaDefaults() }
         val route = ServerRoute.from(RouteConfig(host = "example.com"))
-        val settings = MemorySettings()
+        val settings = anchored()
         val groupKey = ByteArray(32) { 5 }
         val service = KeyCopyService(
             api = KeyCopyApi(route, client) { "t" },
@@ -122,6 +131,105 @@ class KeyCopyBackfillTest {
         )
         assertFalse(service.backfillOnce())
         assertTrue(settings.values.value.isEmpty(), "отметки нет — повтор при следующем запуске")
+    }
+
+    /**
+     * План КК, КК8: сервер отдаёт свою пару «ключ личности + ключ копии» с сошедшейся подписью — устройство без
+     * своего источника под неё ничего не заворачивает.
+     */
+    @Test
+    fun пара_от_сервера_без_своего_источника_не_принимается() = runTest {
+        val forged = AccountIdentitiesOverKodium.fresh()
+        val forgedCopy = KeyCopy.fromWords(forged.words, 1)!!
+        val posted = mutableListOf<String>()
+        val engine = MockEngine { request ->
+            val path = request.url.encodedPath
+            when {
+                path == "/api/v1/users/me/key-copy" -> respond(
+                    """{"epoch":1,"pub":"${b64(forgedCopy.encryptionPublic)}","sig":"${b64(KeyCopy.sign(forged.words, 1, forgedCopy.encryptionPublic)!!)}"}""",
+                    HttpStatusCode.OK, json,
+                )
+                path == "/api/v1/keys/devices" ->
+                    respond("""{"devices":[],"identity_pub":"${b64(forged.identityPub)}"}""", HttpStatusCode.OK, json)
+                request.method == HttpMethod.Post -> {
+                    posted += path
+                    respond("", HttpStatusCode.Created)
+                }
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        val client = HttpClient(engine) { timaDefaults() }
+        val route = ServerRoute.from(RouteConfig(host = "example.com"))
+        val service = KeyCopyService(
+            api = KeyCopyApi(route, client) { "t" },
+            keys = KeysApi(route, client) { "t" },
+            history = HistoryApi(route, client) { "t" },
+            userId = "u-1",
+            deviceId = "d-1",
+            identity = DeviceIdentity.generate(),
+            scope = CoroutineScope(coroutineContext),
+            secrets = null,
+            localGroupKeys = { listOf(Triple("g-1", 1, ByteArray(32) { 5 })) },
+            settings = MemorySettings(),
+        )
+        assertFalse(service.backfillOnce())
+        service.feedGroupKey("g-1", 2, ByteArray(32) { 6 })
+        testScheduler.advanceUntilIdle()
+        assertTrue(posted.isEmpty(), "под пару от сервера завёрнуто: $posted")
+    }
+
+    /**
+     * План КК, КК8 и КК9: ключ копии пришёл книгой аккаунта — устройство дозаливает из своих ключей сообщений,
+     * а не из обёрток на сервере.
+     */
+    @Test
+    fun ключ_копии_из_книги_и_дозаливка_из_своих_ключей() = runTest {
+        val posted = mutableListOf<String>()
+        val messageKey = ByteArray(32) { 9 }
+        val engine = MockEngine { request ->
+            val path = request.url.encodedPath
+            when {
+                path == "/api/v1/users/me/key-copy" -> respond(
+                    """{"epoch":1,"pub":"${b64(copy.encryptionPublic)}","sig":"${b64(KeyCopy.sign(account.words, 1, copy.encryptionPublic)!!)}"}""",
+                    HttpStatusCode.OK, json,
+                )
+                path == "/api/v1/keys/devices" ->
+                    respond("""{"devices":[],"identity_pub":"${b64(account.identityPub)}"}""", HttpStatusCode.OK, json)
+                request.method == HttpMethod.Post && path.endsWith("/backup") -> {
+                    posted += (request.body as TextContent).text
+                    respond("", HttpStatusCode.Created)
+                }
+                request.method == HttpMethod.Post -> respond("", HttpStatusCode.Created)
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        val client = HttpClient(engine) { timaDefaults() }
+        val route = ServerRoute.from(RouteConfig(host = "example.com"))
+        val settings = MemorySettings()
+        val service = KeyCopyService(
+            api = KeyCopyApi(route, client) { "t" },
+            keys = KeysApi(route, client) { "t" },
+            history = HistoryApi(route, client) { "t" },
+            userId = "u-1",
+            deviceId = "d-1",
+            identity = DeviceIdentity.generate(),
+            scope = CoroutineScope(coroutineContext),
+            secrets = null,
+            settings = settings,
+            localMessageKeys = { mapOf("c-1" to mapOf(42L to messageKey)) },
+        )
+        assertFalse(service.anchored())
+        service.book = object : CopyAnchorBook {
+            override suspend fun read() = io.tima.core.encryption.CopyAnchor(
+                account.identityPub, 1, copy.encryptionPublic, KeyCopy.sign(account.words, 1, copy.encryptionPublic)!!,
+            )
+            override suspend fun write(anchor: io.tima.core.encryption.CopyAnchor) = true
+        }
+        assertTrue(service.backfillOnce())
+        assertTrue(service.anchored(), "ключ из книги запомнен")
+        val item = Json.parseToJsonElement(posted.single()).jsonObject["items"]!!.jsonArray.single().jsonObject
+        val wrapped = java.util.Base64.getUrlDecoder().decode(item["wrapped"]!!.jsonPrimitive.content)
+        assertContentEquals(messageKey, KeyCopy.openGroupKey(copy, wrapped), "ключ сообщения открывается парой копии")
     }
 
     /**
@@ -172,6 +280,7 @@ class KeyCopyBackfillTest {
             identity = DeviceIdentity.generate(),
             scope = CoroutineScope(coroutineContext),
             secrets = null,
+            settings = anchored(),
         )
 
         assertEquals(KeyCopyService.Adopt.WRONG_PHRASE, service.adoptPrior(account.words, "u-прежняя"), "фраза не прежней личности")

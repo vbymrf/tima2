@@ -73,7 +73,37 @@ class BookCopySync(
      * Нужна устройству, вошедшему по номеру и фразе: ключей ему никто не передал.
      */
     private val keyRequest: io.tima.domain.chat.GroupKeyRecovery? = null,
-) {
+    /** Ячейка «ключ копии» (план КК, КК8); `null` — записи нет (проверки). */
+    private val anchorStore: AccountStoreOverHttp? = null,
+) : CopyAnchorBook {
+
+    /** Запись «ключ копии» из книги: под ключом служебной группы, любой его версии (КК8). */
+    override suspend fun read(): io.tima.core.encryption.CopyAnchor? {
+        val s = anchorStore ?: return null
+        val blob = s.fetch() as? io.tima.domain.chat.AccountStoreStep.Blob ?: return null
+        val key = storeKey() ?: return null
+        return (listOf(key) + olderStoreKeys()).firstNotNullOfOrNull { io.tima.core.encryption.CopyAnchorCodec.open(it, blob.bytes) }
+    }
+
+    /** Записать «ключ копии» в книгу (КК8): следующей ревизией, при споре — ещё раз поверх свежей. */
+    override suspend fun write(anchor: io.tima.core.encryption.CopyAnchor): Boolean {
+        val s = anchorStore ?: return false
+        val key = storeKey() ?: return false
+        val sealed = io.tima.core.encryption.CopyAnchorCodec.seal(key, anchor) ?: return false
+        val next = when (val now = s.fetch()) {
+            is io.tima.domain.chat.AccountStoreStep.Blob -> now.revision + 1
+            io.tima.domain.chat.AccountStoreStep.Empty -> 1L
+            else -> return false
+        }
+        val stored = when (val r = s.put(next, sealed)) {
+            io.tima.domain.chat.AccountStoreStep.Stored -> true
+            is io.tima.domain.chat.AccountStoreStep.Conflict -> s.put(r.current.revision + 1, sealed) == io.tima.domain.chat.AccountStoreStep.Stored
+            else -> false
+        }
+        Journal.note(LogCode.DEVICE_TRUST, "ключ копии записан в книгу аккаунта", "эпоха" to anchor.epoch, "записан" to stored)
+        return stored
+    }
+
     private val memory = SettingsRevisionMemory(environment.settings, scope, BOOK_REVISION)
     private val readsMemory = SettingsRevisionMemory(environment.settings, scope, READS_REVISION)
 

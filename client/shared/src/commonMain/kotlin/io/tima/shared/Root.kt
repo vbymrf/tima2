@@ -2180,7 +2180,12 @@ private fun App(
             keyRequest = io.tima.core.network.GroupKeyRecoveryOverHttp(network.keyRecovery) { gid, words ->
                 io.tima.core.encryption.RecoverySignature.sign(words, gid, session.deviceId)
             },
-        ).also { it.start() }
+            // Ключ копии из своего источника — запись в книге аккаунта (план КК, КК8).
+            anchorStore = network.keyCopyStore,
+        ).also {
+            it.start()
+            assembled.keyCopy?.book = it
+        }
     }
 
     // Фоновые циклы — в своём файле: это политика времени, а не навигация.

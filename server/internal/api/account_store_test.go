@@ -122,6 +122,23 @@ func TestКопияПросмотренногоИСобытиеОстальны�
 	}
 }
 
+// План КК, КК8: «ключ копии» — своя ячейка книги аккаунта; сервер хранит её, не читая.
+func TestЯчейкаКлючаКопииПринимается(t *testing.T) {
+	ts, _ := setup(t)
+	me := registerDevice(t, ts, "+79990000245")
+	if code := postAuthed(t, ts, me.token, "PUT", "/api/v1/users/me/store/keycopy",
+		map[string]any{"revision": 1, "blob": blobOf(t, "ключ-копии")}, nil); code != 200 {
+		t.Fatalf("ключ копии в книгу: %d", code)
+	}
+	var got struct {
+		Revision int64  `json:"revision"`
+		Blob     string `json:"blob"`
+	}
+	if code := getAuthed(t, ts, me.token, "/api/v1/users/me/store/keycopy", &got); code != 200 || got.Blob != blobOf(t, "ключ-копии") {
+		t.Fatalf("ключ копии из книги: %d %+v", code, got)
+	}
+}
+
 func TestНеизвестныйВидКопииНеЗаводится(t *testing.T) {
 	ts, _ := setup(t)
 	me := registerDevice(t, ts, "+79990000242")
