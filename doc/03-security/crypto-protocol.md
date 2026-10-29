@@ -27,7 +27,7 @@
 
 > **Привязка к Kodium (сверено с исходниками `io.kodium`, 2026-07-12).** Пакет — `io.kodium`, координата Maven — `eu.livotov.labs:kodium`. Одна пара `KodiumPrivateKey` (генерируется `Kodium.generateKeyPair()`) даёт **и** encryption-ключ (X25519, для Box/wrapped), **и** signing-ключ (Ed25519) — оба выводятся из одного 32-байтного seed; публичная часть — `KodiumPublicKey(encryptionKey, signingKey)`. **Все операции возвращают `Result<T>`** — обязательна обработка (`getOrElse`/`fold`), «тихого» исключения нет.
 >
-> **Исключение — ML-KEM-768:** реализация Kodium 1.0.0 не интероперабельна с FIPS 203 (KAT-канарейка сработала, [ADR-0005 Поправка-1](../adr/0005-kodium-readiness-gate.md)); escrow использует провайдер `Mlkem768` из `messenger-crypto` с тем же API (`encapsulate` → `Pair(shared, ct)`). **Под ним KyberKotlin** (`asia.hombre:kyber`, обёртка над `asia.hombre.kyber.*`), а не BouncyCastle — сверено с исходниками 2026-08-26; прежняя пометка «BouncyCastle» здесь была неверна. Форки KyberKotlin и KeccakKotlin лежат в `third-party/` и ставятся в `mavenLocal`: апстрим не публикует таргеты Apple.
+> **Исключение — ML-KEM-768:** реализация Kodium 1.0.0 не интероперабельна с FIPS 203 (KAT-канарейка сработала, [ADR-0005 Поправка-1](../adr/0005-kodium-readiness-gate.md)); escrow использует провайдер `Mlkem768` из `messenger-crypto` с тем же API (`encapsulate` → `Pair(shared, ct)`). **С 2026-10-29 под ним снова Kodium — 1.1.0, нижний пакет `io.kodium.core.fips203`** ([ADR-0005 Поправка-3](../adr/0005-kodium-readiness-gate.md)): автор исправил дефект (#11). До того (2026-08-14 — 2026-10-29) — форк KyberKotlin в `mavenLocal`. Kodium 1.1.0 выбирает схему по открытому ключу и оставил сломанную схему 1.0.0 вариантом `LEGACY`, поэтому `Mlkem768.encapsulate` на ключ, опознанный как `LEGACY`, отказывает: такой блок escrow анклав (Go, только FIPS 203) не открыл бы.
 
 | Ключ | Тип | Где живёт | Назначение |
 |------|-----|-----------|-----------|
@@ -71,7 +71,7 @@ val plaintext  = zstd(protobuf(body))                                    // сж
 val payload = Kodium.encryptSymmetric(messageKey, plaintext).getOrThrow()  // слой 1 (nonce+box)
 
 // слой 2 — escrow. ВНИМАНИЕ порядок: encapsulate возвращает Pair(sharedSecret, ciphertext)
-val (kemShared, kemCt) = Mlkem768.encapsulate(escrowPublicKey)           // KyberKotlin (ADR-0005 Поправка-1)
+val (kemShared, kemCt) = Mlkem768.encapsulate(escrowPublicKey)           // Kodium 1.1.0 fips203, отказ на LEGACY (ADR-0005 Поправка-3)
 val escrowBlob = kemCt + Kodium.encryptSymmetric(hkdf(kemShared), messageKey).getOrThrow()  // ct=1088 B
 
 // слой 4 — обёртки: Kodium.encrypt(myPrivate, theirPublic, data); эфемерная пара отправителя

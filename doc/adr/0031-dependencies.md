@@ -33,7 +33,7 @@
    | готовые DLL звонков ПК | `client/core/core-call-desktop/build.gradle.kts` — адрес и sha256 |
    | сервер | `server/go.mod` |
    | образы стенда | `server/deploy/docker-compose*.yml` |
-   | форки и справочные исходники | [third-party/README.md](../../third-party/README.md) |
+   | справочные исходники (форков нет с 2026-10-29) | [third-party/README.md](../../third-party/README.md) |
 
 2. **Этот ADR — действующий список с назначением.** Добавили, заменили или убрали
    зависимость — строка здесь правится тем же коммитом. Номер версии, расходящийся со
@@ -92,9 +92,7 @@ libvpx, libaom — аппаратных кодеров в ней нет), при
 
 | Библиотека | Версия | Зачем |
 |---|---|---|
-| **Kodium** (`eu.livotov.labs:kodium`) | 1.0.0 | единственная криптобиблиотека протокола: SecretBox, Box, Ed25519, HKDF ([ADR-0005](0005-kodium-readiness-gate.md)) |
-| Kyber (`asia.hombre:kyber`) | 2.0.1 | ML-KEM-768; **наш форк** с целями Apple, ставится в `~/.m2` ([third-party/README](../../third-party/README.md)) |
-| KeccakKotlin | форк | нужен Kyber; тоже наш форк |
+| **Kodium** (`eu.livotov.labs:kodium`) | 1.1.0 | единственная криптобиблиотека протокола: SecretBox, Box, Ed25519, HKDF и ML-KEM-768 (нижний пакет `io.kodium.core.fips203`, [ADR-0005](0005-kodium-readiness-gate.md) Поправка-3). До 2026-10-29 ML-KEM брался из форков KyberKotlin и KeccakKotlin в `~/.m2` |
 | kotlincrypto sha2 | 0.8.0 | SHA-256 чистым Kotlin, на всех платформах |
 | zstd-kmp | 0.4.0 | сжатие тела сообщения до шифрования; все платформы, включая Apple |
 | Wire | 5.2.1 | код по схеме `schema/proto` ([ADR-0009](0009-schema-first-api.md)) |

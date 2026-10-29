@@ -12,7 +12,7 @@
 
 ## 1. Текущее состояние репозитория
 
-**Kodium** — это pure Kotlin Multiplatform **криптографическая библиотека** (`eu.livotov.labs:kodium:1.0.0`), а не готовый мессенджер. В репозитории нет backend-сервисов, мобильных клиентов, схем БД и транспортного слоя.
+**Kodium** — это pure Kotlin Multiplatform **криптографическая библиотека** (`eu.livotov.labs:kodium`, у нас 1.1.0 с 2026-10-29), а не готовый мессенджер. В репозитории нет backend-сервисов, мобильных клиентов, схем БД и транспортного слоя.
 
 ### Что уже реализовано в Kodium
 
@@ -22,7 +22,7 @@
 | X3DH (PreKeys, Signed PreKey) | `ratchet/X3DH.kt` | ✅ Готово |
 | Double Ratchet (1:1 E2EE) | `ratchet/DoubleRatchet.kt` | ✅ Готово |
 | PQ X3DH + PQ Double Ratchet | `ratchet/PQXDH.kt`, `PQDoubleRatchetSession.kt` | ✅ Готово |
-| ML-KEM-768 (FIPS 203) | `core/MLKEM.kt`, `core/fips203/*` | ❌ Сломан: SHAKE усечён до длины дайджеста, матрица `Â` заполнена энтропией на 3%. **Не используется** — escrow с 2026-08-14 на KyberKotlin, BouncyCastle остался оракулом в тестах ([ADR-0005 Поправка-1 и Поправка-2](./adr/0005-kodium-readiness-gate.md), [LivotovLabs/kodium#11](https://github.com/LivotovLabs/kodium/issues/11)) |
+| ML-KEM-768 (FIPS 203) | `core/MLKEM.kt`, `core/fips203/*` | ✅ С 1.1.0 исправлен ([LivotovLabs/kodium#11](https://github.com/LivotovLabs/kodium/issues/11)); escrow берёт его с 2026-10-29 через нижний `core/fips203/*` и отказывает на ключ, опознанный как `LEGACY` (сломанная схема 1.0.0). В 1.0.0 был сломан: SHAKE усечён до длины дайджеста, матрица `Â` заполнена энтропией на 3%; с 2026-08-14 по 2026-10-29 escrow шёл на KyberKotlin. BouncyCastle — оракул в тестах ([ADR-0005 Поправки 1–3](./adr/0005-kodium-readiness-gate.md)) |
 | HKDF, PBKDF2, Ed25519 | `ratchet/HKDF.kt`, `core/fips203/*` | ✅ Готово |
 | Экспорт/импорт сессий и ключей | `DoubleRatchetSession.exportToEncryptedString()` | ✅ Готово |
 | LRU для пропущенных ключей ratchet | `maxSkippedMessages = 2000` | ✅ Готово |
