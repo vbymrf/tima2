@@ -264,6 +264,8 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			Level:           level,
 			// Правка наследует пометку исходного у клиента; сервер её не выводит.
 			OnlyContinuation: req.OnlyContinuation,
+			// Время приёма — часы сервера (2026-10-29): порядок у всех по нему.
+			ReceivedAtUnixMs: time.Now().UnixMilli(),
 		}
 		// Открытое — первым узлом в поиск (Решения §12). Правка открытого строку поиска не меняет:
 		// её тело — изменённые узлы, а не сообщение целиком.
@@ -287,7 +289,7 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 		// «Описание», как страницу человека — «не зашёл, ничего не увидел» (заказчик 2026-10-18).
 		if level == levelPublicShowcase {
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(map[string]any{"message_id": messageID})
+			_ = json.NewEncoder(w).Encode(map[string]any{"message_id": messageID, "received_at_unix_ms": msg.ReceivedAtUnixMs})
 			return
 		}
 
@@ -356,7 +358,7 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(map[string]any{"message_id": messageID})
+		_ = json.NewEncoder(w).Encode(map[string]any{"message_id": messageID, "received_at_unix_ms": msg.ReceivedAtUnixMs})
 	}
 }
 
@@ -386,6 +388,10 @@ func groupMessageJSON(m store.GroupMessage) map[string]any {
 	}
 	if m.OnlyContinuation {
 		out["only_continuation"] = true
+	}
+	// Время приёма сервером (2026-10-29): клиент ставит сообщение на место по нему, а не по часам отправителя.
+	if m.ReceivedAtUnixMs > 0 {
+		out["received_at_unix_ms"] = m.ReceivedAtUnixMs
 	}
 	return out
 }

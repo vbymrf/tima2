@@ -416,6 +416,8 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "no_client_msg_id", "нужен заголовок X-Client-Msg-Id (UUID)")
 			return
 		}
+		// Время приёма — часы сервера (2026-10-29): порядок у всех по нему, а не по часам отправителя.
+		receivedAt := time.Now().UnixMilli()
 		err = deps.store.SaveMessage(r.Context(), store.Message{
 			ChatID:             meta.GetChatId(),
 			MessageID:          meta.GetMessageId(),
@@ -436,6 +438,7 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 			KeyCommitment:      env.GetKeyCommitment(),
 			EditOf:             meta.GetEditOf(),
 			WrappedKeys:        wrapped,
+			ReceivedAtUnixMs:   receivedAt,
 		})
 		if errors.Is(err, store.ErrDuplicate) {
 			w.Header().Set("Content-Type", "application/json")
@@ -469,6 +472,8 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 				"sender_id":          meta.GetSenderId(),
 				"envelope":           base64.RawURLEncoding.EncodeToString(raw),
 				"sender_profile_rev": senderRev,
+				// Время приёма сервером: по нему получатель ставит сообщение на место (2026-10-29).
+				"received_at_unix_ms": receivedAt,
 			}
 			// Правка едет тем же событием и в той же полосе — порядок с исходным важен, — но
 			// помечена: ни уведомления, ни счёта нового (ADR-0045 §5).
@@ -480,7 +485,7 @@ func postMessage(deps messagesDeps) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(map[string]any{"message_id": meta.GetMessageId()})
+		_ = json.NewEncoder(w).Encode(map[string]any{"message_id": meta.GetMessageId(), "received_at_unix_ms": receivedAt})
 	}
 }
 
@@ -568,6 +573,8 @@ type personalItem struct {
 	Envelope   string `json:"envelope"`                 // base64url(protobuf Envelope) с единственной обёрткой устройства
 	WrappedKey string `json:"wrapped_key"`              // base64url — дублирует обёртку из конверта для удобства
 	WrapEph    string `json:"wrap_ephemeral,omitempty"` // эфемерал обёртки восстановления (иначе — sender_ephemeral_pub конверта)
+	// ReceivedAt — когда сервер принял, по его часам (2026-10-29): клиент ставит сообщение на место по нему.
+	ReceivedAt int64 `json:"received_at_unix_ms,omitempty"`
 }
 
 func personalMessageItem(m store.StoredMessage, deviceID string) (personalItem, error) {
@@ -600,7 +607,7 @@ func personalMessageItem(m store.StoredMessage, deviceID string) (personalItem, 
 	if err != nil {
 		return personalItem{}, err
 	}
-	it := personalItem{MessageID: m.MessageID, Envelope: b64.EncodeToString(raw), WrappedKey: b64.EncodeToString(m.WrappedKeyForDevice)}
+	it := personalItem{MessageID: m.MessageID, Envelope: b64.EncodeToString(raw), WrappedKey: b64.EncodeToString(m.WrappedKeyForDevice), ReceivedAt: m.ReceivedAtUnixMs}
 	if len(m.WrapEphemeral) == 32 {
 		it.WrapEph = b64.EncodeToString(m.WrapEphemeral)
 	}

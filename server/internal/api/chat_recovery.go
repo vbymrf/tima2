@@ -122,6 +122,8 @@ func chatBackupList(deps chatsDeps) http.HandlerFunc {
 			MessageID uint64 `json:"message_id"`
 			Envelope  string `json:"envelope"`
 			WrapEph   string `json:"wrap_ephemeral"`
+			// Время приёма сервером (2026-10-29): новое устройство ставит сообщение на место по нему.
+			ReceivedAt int64 `json:"received_at_unix_ms,omitempty"`
 		}
 		out := make([]item, 0, len(items))
 		for _, it := range items {
@@ -136,7 +138,7 @@ func chatBackupList(deps chatsDeps) http.HandlerFunc {
 				writeErr(w, http.StatusInternalServerError, "internal", "ошибка сериализации")
 				return
 			}
-			out = append(out, item{MessageID: it.MessageID, Envelope: b64.EncodeToString(raw), WrapEph: b64.EncodeToString(blob[:32])})
+			out = append(out, item{MessageID: it.MessageID, Envelope: b64.EncodeToString(raw), WrapEph: b64.EncodeToString(blob[:32]), ReceivedAt: it.ReceivedAtUnixMs})
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": out})

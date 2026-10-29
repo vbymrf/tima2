@@ -34,7 +34,10 @@ type GroupMessage struct {
 	ThreadRoot      int64 // 0 = вне ветки (в базе NULL)
 	ReplyTo         int64
 	CreatedAtUnixMs int64
-	Signature       []byte
+	// ReceivedAtUnixMs — когда сервер принял (столбец created_at, его часы; 2026-10-29): порядок и время у
+	// клиентов — по нему. При записи 0 — now().
+	ReceivedAtUnixMs int64
+	Signature        []byte
 	// KeyCommitment — обязательство по ключу группы (подпись версии 2); nil — версия 1.
 	KeyCommitment []byte
 	// EditOf — номер исправляемого сообщения (подпись версии 3, ADR-0045); 0 — не правка.
@@ -65,14 +68,15 @@ func (s *Store) SaveGroupMessage(ctx context.Context, m GroupMessage) (int64, bo
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO group_messages (group_id, client_msg_id, sender_id, sender_device, kind,
 			gk_version, payload, thread_root, reply_to, created_at_unix_ms, signature, level, key_commitment, edit_of, search_text, search_key,
-			only_continuation)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+			only_continuation, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+			CASE WHEN $18::bigint > 0 THEN to_timestamp($18::bigint / 1000.0) ELSE now() END)
 		ON CONFLICT (group_id, client_msg_id) DO NOTHING
 		RETURNING message_id`,
 		m.GroupID, m.ClientMsgID, m.SenderID, m.SenderDevice, m.Kind,
 		nullIfZero(m.GKVersion), m.Payload, nullIfZero(m.ThreadRoot), nullIfZero(m.ReplyTo),
 		m.CreatedAtUnixMs, m.Signature, m.Level, m.KeyCommitment, m.EditOf, m.SearchText, SearchKey(m.SearchText),
-		m.OnlyContinuation).Scan(&id)
+		m.OnlyContinuation, m.ReceivedAtUnixMs).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) { // конфликт — сообщение уже принято
 		err = s.pool.QueryRow(ctx,
 			`SELECT message_id FROM group_messages WHERE group_id = $1 AND client_msg_id = $2`,
@@ -101,7 +105,7 @@ func (s *Store) ListGroupMessages(ctx context.Context, groupID string, threadRoo
 	rows, err := s.pool.Query(ctx, `
 		SELECT message_id, sender_id, sender_device, kind, COALESCE(gk_version, 0), payload,
 		       COALESCE(thread_root, 0), COALESCE(reply_to, 0), created_at_unix_ms, signature, level, key_commitment, edit_of,
-		       only_continuation
+		       only_continuation, (extract(epoch from created_at) * 1000)::bigint
 		FROM group_messages
 		WHERE group_id = $1 AND message_id < $2 AND NOT deleted
 		  AND ($3::bigint = 0 OR thread_root = $3)
@@ -118,7 +122,7 @@ func (s *Store) ListGroupMessages(ctx context.Context, groupID string, threadRoo
 		m := GroupMessage{GroupID: groupID}
 		if err := rows.Scan(&m.MessageID, &m.SenderID, &m.SenderDevice, &m.Kind, &m.GKVersion,
 			&m.Payload, &m.ThreadRoot, &m.ReplyTo, &m.CreatedAtUnixMs, &m.Signature, &m.Level, &m.KeyCommitment, &m.EditOf,
-			&m.OnlyContinuation); err != nil {
+			&m.OnlyContinuation, &m.ReceivedAtUnixMs); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

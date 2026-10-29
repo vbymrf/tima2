@@ -52,7 +52,7 @@ func (s *Store) ListMessageBackups(ctx context.Context, chatID, ownerID string, 
 		       m.created_at_unix_ms, m.reply_to, m.format_version, m.encrypted_payload,
 		       m.escrow_mlkem_ct, m.escrow_wrapped_key, m.escrow_key_version,
 		       m.sender_ephemeral_pub, COALESCE(m.ratchet_envelope, ''::bytea), m.signature, COALESCE(m.key_commitment, ''::bytea),
-		       m.edit_of, b.wrapped
+		       m.edit_of, b.wrapped, (extract(epoch from m.received_at) * 1000)::bigint
 		FROM personal_message_backup b
 		JOIN personal_messages m ON m.chat_id = b.chat_id AND m.message_id = b.message_id
 		WHERE b.chat_id = $1 AND b.owner_id = $2 AND b.epoch = $3 AND b.message_id < $4
@@ -71,7 +71,7 @@ func (s *Store) ListMessageBackups(ctx context.Context, chatID, ownerID string, 
 			&sm.CreatedAtUnixMs, &sm.ReplyTo, &sm.FormatVersion, &sm.EncryptedPayload,
 			&sm.EscrowMlkemCt, &sm.EscrowWrappedKey, &sm.EscrowKeyVersion,
 			&sm.SenderEphemeralPub, &sm.RatchetEnvelope, &sm.Signature, &sm.KeyCommitment,
-			&sm.EditOf, &sm.WrappedKeyForDevice,
+			&sm.EditOf, &sm.WrappedKeyForDevice, &sm.ReceivedAtUnixMs,
 		); err != nil {
 			return nil, err
 		}

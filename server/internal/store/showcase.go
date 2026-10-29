@@ -129,7 +129,7 @@ func (s *Store) GroupShowcase(ctx context.Context, groupID string) ([]GroupMessa
 	rows, err := s.pool.Query(ctx, `
 		SELECT message_id, sender_id, sender_device, kind, COALESCE(gk_version, 0), payload,
 		       COALESCE(thread_root, 0), COALESCE(reply_to, 0), created_at_unix_ms, signature, level, key_commitment, edit_of,
-		       only_continuation
+		       only_continuation, (extract(epoch from created_at) * 1000)::bigint
 		FROM group_messages
 		WHERE group_id = $1::uuid AND level = 0 AND NOT deleted
 		ORDER BY message_id ASC
@@ -146,7 +146,7 @@ func (s *Store) GroupShowcase(ctx context.Context, groupID string) ([]GroupMessa
 		m := GroupMessage{GroupID: groupID}
 		if err := rows.Scan(&m.MessageID, &m.SenderID, &m.SenderDevice, &m.Kind, &m.GKVersion,
 			&m.Payload, &m.ThreadRoot, &m.ReplyTo, &m.CreatedAtUnixMs, &m.Signature, &m.Level, &m.KeyCommitment, &m.EditOf,
-			&m.OnlyContinuation); err != nil {
+			&m.OnlyContinuation, &m.ReceivedAtUnixMs); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
