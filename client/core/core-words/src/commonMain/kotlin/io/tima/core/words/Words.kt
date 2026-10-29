@@ -440,6 +440,11 @@ interface UpdateWords {
     val dontCloseApp: String
     fun installVersion(version: String): String
     val installNow: String
+    /** Кнопка в окне предупреждений: она и качает, и ставит (заказчик 2026-10-29, 1#). */
+    val downloadAndInstall: String
+    /** Окно системы об установке закрыли — нажатием мимо или «Отмена» (2а#). */
+    val installCancelled: String
+    val installCancelledAbout: String
     val appWillClose: String
     val confirmSystemAsk: String
     val comeBackAfter: String
@@ -3196,6 +3201,9 @@ object RussianWords : Words {
         override val dontCloseApp = "Не закрывайте приложение, пока идёт скачивание"
         override fun installVersion(version: String) = "Установить $version"
         override val installNow = "Установить"
+        override val downloadAndInstall = "Скачать и установить"
+        override val installCancelled = "Установка отменена — окно системы закрылось"
+        override val installCancelledAbout = "Пакет уже скачан: нажмите «Установить», и окно системы откроется снова."
         override val appWillClose = "Приложение закроется, и запустится установщик. Это займёт минуту."
         override val confirmSystemAsk = "Если система спросит разрешение на установку — подтвердите."
         override val comeBackAfter =

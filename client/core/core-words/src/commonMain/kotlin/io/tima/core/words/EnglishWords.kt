@@ -682,6 +682,9 @@ object EnglishWords : Words {
         override val dontCloseApp = "Do not close the app while it is downloading"
         override fun installVersion(version: String) = "Install $version"
         override val installNow = "Install"
+        override val downloadAndInstall = "Download and install"
+        override val installCancelled = "Installation cancelled — the system window closed"
+        override val installCancelledAbout = "The package is already downloaded: tap «Install» and the system window opens again."
         override val appWillClose = "The app will close and the installer will start. It takes a minute."
         override val confirmSystemAsk = "If the system asks permission to install — allow it."
         override val comeBackAfter =

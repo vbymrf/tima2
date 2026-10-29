@@ -172,6 +172,13 @@ fun interface UpdateInstaller {
      *   установки (инвентарь поведения, пункт 12).
      */
     suspend fun install(offer: UpdateOffer, onProgress: (Int) -> Unit): InstallOutcome
+
+    /**
+     * Исходы, которые приходят от системы **после** [install] (заказчик 2026-10-29, 2а#): на Android окно
+     * подтверждения закрыли нажатием мимо или «Отмена» — [InstallOutcome.Cancelled]. Без этого экран так и
+     * говорил «Установщик запущен», а повтор качал пакет заново.
+     */
+    val systemOutcomes: kotlinx.coroutines.flow.Flow<InstallOutcome> get() = kotlinx.coroutines.flow.emptyFlow()
 }
 
 /** Чем кончилась установка. Каждый исход человеку означает разное — потому и разные. */
@@ -200,6 +207,12 @@ sealed interface InstallOutcome {
 
     /** Установщик отказался или человек его отменил. */
     data class Refused(val why: String) : InstallOutcome
+
+    /**
+     * Окно системы об установке закрыли (2а#). Пакет скачан и проверен — «Установить» заводит установку
+     * из него же, без скачивания (3#). Само окно заново не открывается: человек мог отказаться намеренно.
+     */
+    data object Cancelled : InstallOutcome
 }
 
 /** Что видно на вкладке «Обновление». */
@@ -314,6 +327,17 @@ class UpdateStore(
         // без сервера, и человек, у которого связи нет, всё равно узнает, поставилось ли.
         rememberedOutcome()?.let { _state.value = _state.value.copy(news = it) }
         check()
+        // Ответ системы после передачи пакета (2а#): только пока экран ждёт её, иначе — чужой след.
+        installer?.let { platform ->
+            scope.launch {
+                platform.systemOutcomes.collect { later ->
+                    if (_state.value.outcome !is InstallOutcome.Started) return@collect
+                    // Отменили — установки не было: при следующем запуске не говорить «обновление не встало».
+                    if (later is InstallOutcome.Cancelled) runCatching { memory.save("") }
+                    _state.value = _state.value.copy(outcome = later)
+                }
+            }
+        }
     }
 
     /**
@@ -473,9 +497,9 @@ fun UpdateSection(
 
         state.asking -> Asking(state, onConfirm, onDismiss)
 
-        state.outcome is InstallOutcome.Started -> Handed(onInstall)
+        state.outcome is InstallOutcome.Started -> Handed(onConfirm)
 
-        state.outcome != null -> Failed(state.outcome, onInstall)
+        state.outcome != null -> Failed(state.outcome, if (state.outcome == InstallOutcome.Cancelled) onConfirm else onInstall)
 
         state.expect -> Secondary(words.askingServer)
 
@@ -553,9 +577,9 @@ fun UpdateGate(
 
         state.asking -> Asking(state, onConfirm, onDismiss)
 
-        state.outcome is InstallOutcome.Started -> Handed(onInstall)
+        state.outcome is InstallOutcome.Started -> Handed(onConfirm)
 
-        state.outcome != null -> Failed(state.outcome, onInstall)
+        state.outcome != null -> Failed(state.outcome, if (state.outcome == InstallOutcome.Cancelled) onConfirm else onInstall)
 
         canInstall -> Button(label = words.install, onClick = onInstall, modifier = Modifier.testTag(UPDATE_INSTALL_TAG))
 
@@ -602,7 +626,9 @@ private fun Asking(state: UpdateState, onConfirm: () -> Unit, onDismiss: () -> U
     Alarm(words.confirmSystemAsk)
     Alarm(words.comeBackAfter)
     Secondary(words.dataStays)
-    Button(label = words.installNow, onClick = onConfirm)
+    // «Скачать и установить» (заказчик 2026-10-29, 1#): эта кнопка и качает, и ставит. «Установить» —
+    // у повтора, когда пакет уже скачан.
+    Button(label = words.downloadAndInstall, onClick = onConfirm, modifier = Modifier.testTag(UPDATE_CONFIRM_TAG))
     Button(label = words.notNow, onClick = onDismiss, kind = ButtonKind.Quiet)
 }
 
@@ -620,7 +646,7 @@ private fun Handed(onRetry: () -> Unit) {
     Caption(words.installerStarted, fontSize = TimaType.sz3, weight = FontWeight.Bold)
     Secondary(words.confirmInSystem)
     Secondary(words.pressAgain)
-    Button(label = words.installNow, onClick = onRetry)
+    Button(label = words.installNow, onClick = onRetry, modifier = Modifier.testTag(UPDATE_RETRY_TAG))
 }
 
 /** Не получилось. Причина названа своими словами: от неё зависит, что делать дальше. */
@@ -632,11 +658,16 @@ private fun Failed(outcome: InstallOutcome, onRetry: () -> Unit) {
         InstallOutcome.BadPackage -> words.badPackage to words.badPackageAbout
         InstallOutcome.NoHash -> words.noHash to words.noHashAbout
         is InstallOutcome.Refused -> words.installNotStarted to outcome.why
+        InstallOutcome.Cancelled -> words.installCancelled to words.installCancelledAbout
         InstallOutcome.Started -> "" to ""
     }
     Trouble(what)
     Secondary(whatNext)
-    Button(label = words.tryAgain, onClick = onRetry)
+    Button(
+        label = if (outcome == InstallOutcome.Cancelled) words.installNow else words.tryAgain,
+        onClick = onRetry,
+        modifier = Modifier.testTag(UPDATE_RETRY_TAG),
+    )
 }
 
 /** Мегабайты с одним знаком: точные байты человеку не говорят ничего. */
@@ -647,6 +678,12 @@ private fun megabytes(bytes: Long): String {
 
 /** «Обновить» — для сценариев на телефонах (ПЛАН-(МС)). */
 const val UPDATE_INSTALL_TAG: String = "update:install"
+
+/** «Скачать и установить» в окне предупреждений (заказчик 2026-10-29, 1#). */
+const val UPDATE_CONFIRM_TAG: String = "update:confirm"
+
+/** Повтор: «Установить» после отданного системе и после отмены окна, «Попробовать ещё раз» после сбоя. */
+const val UPDATE_RETRY_TAG: String = "update:retry"
 
 /** «Перейти к обновлению» в событии — для сценариев на телефонах (ПЛАН-(МС)). */
 const val EVENTS_UPDATE_TAG: String = "events:update"

@@ -41,6 +41,17 @@ import java.security.MessageDigest
  */
 class AndroidInstaller(private val context: Context) : UpdateInstaller {
 
+    /** Отмена окна системы и отказ установки — от [InstallResultReceiver] (заказчик 2026-10-29, 2а#). */
+    override val systemOutcomes: kotlinx.coroutines.flow.Flow<InstallOutcome> = InstallEvents.outcomes
+
+    init {
+        // Пакеты уже стоящей и прежних версий больше не нужны (3#): каждый весит ~46 МБ и лежал до удаления
+        // приложения.
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            runCatching { sweep { code -> code <= BuildConfig.VERSION_CODE } }
+        }
+    }
+
     override suspend fun install(offer: UpdateOffer, onProgress: (Int) -> Unit): InstallOutcome {
         // Экран не гаснет, пока качаем и проверяем (заказчик 2026-10-06): окно подтверждения
         // установки запускаем мы, а из погасшего экрана Android его не открывает — обновление
@@ -69,22 +80,34 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
                 )
             }
 
-            Journal.note(LogCode.UPD_START, "качаю пакет", "версия" to offer.versionCode, "имя" to offer.versionName)
-            val target = File(context.getExternalFilesDir(null) ?: context.filesDir, "TIMA-${offer.versionCode}.apk")
-            target.delete() // остаток прошлой попытки — не файл, а ловушка
+            val target = File(apkDir(), "TIMA-${offer.versionCode}.apk")
+            // Пакеты других версий — не нужны (3#).
+            runCatching { sweep { code -> code != offer.versionCode } }
 
-            val downloaded = try {
-                download(offer.url, target, onProgress)
-            } catch (e: Throwable) {
-                false
-            }
-            if (!downloaded) {
-                Journal.trouble(LogCode.UPD_NO_CONNECTION, "пакет не докачался", "версия" to offer.versionCode)
-                return@withContext InstallOutcome.NoConnection
-            }
-            Journal.note(LogCode.UPD_DOWNLOADED, "пакет скачан, проверяю подпись", "версия" to offer.versionCode)
+            // Пакет этой версии уже скачан (заказчик 2026-10-29, 3#): окно системы закрыли, нажали ещё раз — не
+            // качать 46 МБ заново. Годится он, только если проходит ту же проверку, что свежий: пакет, номер,
+            // наша подпись, хэш от сервера. Недокачанный или чужой её не пройдёт — тогда, как раньше, заново.
+            val ready = target.exists() && runCatching { verify(target, offer) == null }.getOrDefault(false)
+            if (ready) {
+                onProgress(100)
+                Journal.note(LogCode.UPD_DOWNLOADED, "пакет этой версии уже скачан и проверен — не качаю", "версия" to offer.versionCode)
+            } else {
+                Journal.note(LogCode.UPD_START, "качаю пакет", "версия" to offer.versionCode, "имя" to offer.versionName)
+                target.delete() // остаток прошлой попытки, не прошедший проверку, — не файл, а ловушка
 
-            when (val checked = verify(target, offer)) {
+                val downloaded = try {
+                    download(offer.url, target, onProgress)
+                } catch (e: Throwable) {
+                    false
+                }
+                if (!downloaded) {
+                    Journal.trouble(LogCode.UPD_NO_CONNECTION, "пакет не докачался", "версия" to offer.versionCode)
+                    return@withContext InstallOutcome.NoConnection
+                }
+                Journal.note(LogCode.UPD_DOWNLOADED, "пакет скачан, проверяю подпись", "версия" to offer.versionCode)
+            }
+
+            when (val checked = if (ready) null else verify(target, offer)) {
                 null -> Journal.note(LogCode.UPD_VERIFIED, "подпись сошлась, отдаю системе")
                 else -> {
                     // Отчёт должен объяснять, а не сообщать код: «подпись не та» и «файл
@@ -273,6 +296,19 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
         }
     }
 
+    private fun apkDir(): File = context.getExternalFilesDir(null) ?: context.filesDir
+
+    /** Стереть скачанные пакеты `TIMA-<номер>.apk`, номер которых подходит под [drop] (3#). */
+    private fun sweep(drop: (Int) -> Boolean) {
+        val files = apkDir().listFiles() ?: return
+        for (file in files) {
+            val code = APK_NAME.matchEntire(file.name)?.groupValues?.get(1)?.toIntOrNull() ?: continue
+            if (drop(code) && file.delete()) {
+                Journal.note(LogCode.UPD_START, "старый пакет обновления стёрт", "версия" to code)
+            }
+        }
+    }
+
     private fun openInstallSettings() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
@@ -347,6 +383,17 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
          */
         const val LIMIT_MS = 30 * 60 * 1000L
         const val HEX = "0123456789abcdef"
+        val APK_NAME = Regex("TIMA-(\\d+)\\.apk")
+    }
+}
+
+/** Что система сказала о нашей установке после передачи пакета (2а#) — для экрана обновления. */
+object InstallEvents {
+    private val _outcomes = kotlinx.coroutines.flow.MutableSharedFlow<InstallOutcome>(extraBufferCapacity = 4)
+    val outcomes: kotlinx.coroutines.flow.SharedFlow<InstallOutcome> = _outcomes
+
+    fun tell(outcome: InstallOutcome) {
+        _outcomes.tryEmit(outcome)
     }
 }
 
@@ -393,7 +440,23 @@ object InstallAwake {
 class InstallResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-        if (status != PackageInstaller.STATUS_PENDING_USER_ACTION) return
+        when (status) {
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> Unit
+            PackageInstaller.STATUS_SUCCESS -> return
+            // Окно системы закрыли — нажатием мимо или «Отмена» (заказчик 2026-10-29, 2а#). Само окно не
+            // открываем заново: человек мог отказаться намеренно; экран предложит «Установить» из скачанного.
+            PackageInstaller.STATUS_FAILURE_ABORTED -> {
+                Journal.note(LogCode.UPD_START, "окно установки закрыто — установка отменена")
+                InstallEvents.tell(InstallOutcome.Cancelled)
+                return
+            }
+            else -> {
+                val why = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty()
+                Journal.trouble(LogCode.UPD_BAD_PACKAGE, "Android не поставил пакет", "код" to status, "почему" to why)
+                InstallEvents.tell(InstallOutcome.Refused("Android не поставил пакет" + if (why.isNotBlank()) ": $why" else ""))
+                return
+            }
+        }
         @Suppress("DEPRECATION")
         val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
         confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

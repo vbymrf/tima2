@@ -28,6 +28,13 @@ import java.security.MessageDigest
  */
 class DesktopInstaller : UpdateInstaller {
 
+    init {
+        // Установщики уже стоящей и прежних версий больше не нужны (заказчик 2026-10-29: «на ПК тоже нужно
+        // удалять установщик»): MSI весит ~104 МБ и оставался во временной папке навсегда. Новая версия
+        // запускается уже после msiexec — её собственный MSI тоже можно стирать.
+        Thread { runCatching { sweep { code -> code <= BUILD_CODE } } }.apply { isDaemon = true }.start()
+    }
+
     override suspend fun install(offer: UpdateOffer, onProgress: (Int) -> Unit): InstallOutcome =
         withContext(Dispatchers.IO) {
             if (offer.sha256.isBlank()) return@withContext InstallOutcome.NoHash
@@ -35,16 +42,24 @@ class DesktopInstaller : UpdateInstaller {
             // Имя файла содержит номер сборки. Урок v1 (инвентарь поведения, пункт 11):
             // при общем имени однажды ставится вчерашний файл, оставшийся от прошлой
             // попытки, и понять это по экрану невозможно.
-            val target = File(System.getProperty("java.io.tmpdir"), "TIMA-${offer.versionCode}.msi")
+            val target = File(msiDir(), "TIMA-${offer.versionCode}.msi")
+            runCatching { sweep { code -> code != offer.versionCode } }
 
-            val downloaded = try {
-                download(offer.url, target, onProgress)
-            } catch (e: Throwable) {
-                return@withContext InstallOutcome.NoConnection
+            // Уже скачанный MSI этой версии с тем же хэшем — не качать заново (3#): прошлая попытка могла
+            // скачать и не поставить. Хэш не сошёлся — файл недокачан или чужой, качаем как раньше.
+            val ready = target.exists() && runCatching { hexDigest(target).equals(offer.sha256, ignoreCase = true) }.getOrDefault(false)
+            if (ready) {
+                onProgress(100)
+            } else {
+                val downloaded = try {
+                    download(offer.url, target, onProgress)
+                } catch (e: Throwable) {
+                    return@withContext InstallOutcome.NoConnection
+                }
+                if (!downloaded) return@withContext InstallOutcome.NoConnection
             }
-            if (!downloaded) return@withContext InstallOutcome.NoConnection
 
-            if (!hexDigest(target).equals(offer.sha256, ignoreCase = true)) {
+            if (!ready && !hexDigest(target).equals(offer.sha256, ignoreCase = true)) {
                 // Битый или подменённый файл не остаётся лежать: следующая попытка
                 // должна начинаться с чистого места, а не с сомнительного файла.
                 target.delete()
@@ -63,6 +78,17 @@ class DesktopInstaller : UpdateInstaller {
             }
             InstallOutcome.Started
         }
+
+    private fun msiDir(): File = File(System.getProperty("java.io.tmpdir"))
+
+    /** Стереть скачанные установщики `TIMA-<номер>.msi`, номер которых подходит под [drop]. */
+    private fun sweep(drop: (Int) -> Boolean) {
+        val files = msiDir().listFiles() ?: return
+        for (file in files) {
+            val code = MSI_NAME.matchEntire(file.name)?.groupValues?.get(1)?.toIntOrNull() ?: continue
+            if (drop(code)) file.delete()
+        }
+    }
 
     /** Качает в файл, отдавая проценты. `false` — сервер ответил не тем, чего мы ждём. */
     private fun download(url: String, target: File, onProgress: (Int) -> Unit): Boolean {
@@ -124,5 +150,6 @@ class DesktopInstaller : UpdateInstaller {
         // и лечилось это не терпением, а тем, что обрыв становится виден.
         const val READ_TIMEOUT = 90_000
         const val HEX = "0123456789abcdef"
+        val MSI_NAME = Regex("TIMA-(\\d+)\\.msi")
     }
 }
