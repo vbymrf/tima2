@@ -197,20 +197,23 @@ func (s *Store) ListDevices(ctx context.Context, userID string) ([]Device, error
 // записало до него, получатель проверяет этим ключом. Записать после отзыва устройство не может —
 // `requireActiveDevice` отказывает отозванному в каждом запросе.
 type RevokedDeviceKey struct {
-	DeviceID   string
-	SigningPub []byte
-	CertBy     string
-	CertAskID  string
-	CertSig    []byte
-	RevokedAt  time.Time
-	Reason     string
+	DeviceID string
+	// Ключ шифрования — только для проверки свидетельства (оно подписывает оба ключа); заворачивать
+	// под него нельзя.
+	EncryptionPub []byte
+	SigningPub    []byte
+	CertBy        string
+	CertAskID     string
+	CertSig       []byte
+	RevokedAt     time.Time
+	Reason        string
 }
 
 // RevokedDeviceKeys — отозванные устройства человека: ключи подписи и свидетельства. Строка устройства
 // при отзыве не стирается, ключ на месте.
 func (s *Store) RevokedDeviceKeys(ctx context.Context, userID string) ([]RevokedDeviceKey, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT device_id, signing_pub, cert_by, COALESCE(cert_ask_id::text, ''), cert_sig, revoked_at, revoked_reason
+		SELECT device_id, encryption_pub, signing_pub, cert_by, COALESCE(cert_ask_id::text, ''), cert_sig, revoked_at, revoked_reason
 		FROM devices WHERE user_id = $1 AND revoked_at IS NOT NULL ORDER BY revoked_at`, userID)
 	if err != nil {
 		return nil, err
@@ -219,7 +222,7 @@ func (s *Store) RevokedDeviceKeys(ctx context.Context, userID string) ([]Revoked
 	var out []RevokedDeviceKey
 	for rows.Next() {
 		var d RevokedDeviceKey
-		if err := rows.Scan(&d.DeviceID, &d.SigningPub, &d.CertBy, &d.CertAskID, &d.CertSig, &d.RevokedAt, &d.Reason); err != nil {
+		if err := rows.Scan(&d.DeviceID, &d.EncryptionPub, &d.SigningPub, &d.CertBy, &d.CertAskID, &d.CertSig, &d.RevokedAt, &d.Reason); err != nil {
 			return nil, err
 		}
 		out = append(out, d)

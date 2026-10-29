@@ -315,14 +315,17 @@ func TestPhoneIssuesSigningKeyAndCertifiesOwnDevice(t *testing.T) {
 	// План КК, КК13: по просьбе `revoked=1` — ключ подписи отозванного, его свидетельство, время и
 	// причина отзыва, и отозванный КПУ — цепочку проверяет получатель. `devices` не меняется.
 	var rv struct {
-		Devices        []struct{ DeviceID string `json:"device_id"` } `json:"devices"`
+		Devices []struct {
+			DeviceID string `json:"device_id"`
+		} `json:"devices"`
 		RevokedDevices []struct {
-			DeviceID   string `json:"device_id"`
-			SigningPub string `json:"signing_pub"`
-			CertBy     string `json:"cert_by"`
-			CertAskID  string `json:"cert_ask_id"`
-			RevokedAt  int64  `json:"revoked_at_unix_ms"`
-			Reason     string `json:"revoked_reason"`
+			DeviceID      string `json:"device_id"`
+			EncryptionPub string `json:"encryption_pub"`
+			SigningPub    string `json:"signing_pub"`
+			CertBy        string `json:"cert_by"`
+			CertAskID     string `json:"cert_ask_id"`
+			RevokedAt     int64  `json:"revoked_at_unix_ms"`
+			Reason        string `json:"revoked_reason"`
 		} `json:"revoked_devices"`
 		RevokedSigningKeys []struct {
 			AskID  string `json:"ask_id"`
@@ -336,7 +339,7 @@ func TestPhoneIssuesSigningKeyAndCertifiesOwnDevice(t *testing.T) {
 		t.Fatalf("ожидались одно действующее и одно отозванное: %+v", rv)
 	}
 	r := rv.RevokedDevices[0]
-	if r.DeviceID != phoneDev.id || r.SigningPub != b64.EncodeToString(sigOf(phoneDev)) || r.RevokedAt == 0 || r.CertBy != "ask" {
+	if r.DeviceID != phoneDev.id || r.SigningPub != b64.EncodeToString(sigOf(phoneDev)) || r.EncryptionPub != b64.EncodeToString(encOf(phoneDev)) || r.RevokedAt == 0 || r.CertBy != "ask" {
 		t.Fatalf("отозванный телефон отдан не так: %+v", r)
 	}
 	if len(rv.RevokedSigningKeys) != 1 || rv.RevokedSigningKeys[0].AskID != r.CertAskID || rv.RevokedSigningKeys[0].AskPub != b64.EncodeToString(acc.askPub()) {

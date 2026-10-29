@@ -744,17 +744,19 @@ func (s *Server) listDeviceKeys(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		type revokedItem struct {
-			DeviceID   string `json:"device_id"`
-			SigningPub string `json:"signing_pub"`
-			CertBy     string `json:"cert_by,omitempty"`
-			CertAskID  string `json:"cert_ask_id,omitempty"`
-			CertSig    string `json:"cert_sig,omitempty"`
-			RevokedAt  int64  `json:"revoked_at_unix_ms"`
-			Reason     string `json:"revoked_reason"`
+			DeviceID string `json:"device_id"`
+			// Только для проверки свидетельства: заворачивать под отозванное нельзя.
+			EncryptionPub string `json:"encryption_pub"`
+			SigningPub    string `json:"signing_pub"`
+			CertBy        string `json:"cert_by,omitempty"`
+			CertAskID     string `json:"cert_ask_id,omitempty"`
+			CertSig       string `json:"cert_sig,omitempty"`
+			RevokedAt     int64  `json:"revoked_at_unix_ms"`
+			Reason        string `json:"revoked_reason"`
 		}
 		ro := make([]revokedItem, 0, len(revoked))
 		for _, d := range revoked {
-			it := revokedItem{DeviceID: d.DeviceID, SigningPub: b64.EncodeToString(d.SigningPub), RevokedAt: d.RevokedAt.UnixMilli(), Reason: d.Reason}
+			it := revokedItem{DeviceID: d.DeviceID, EncryptionPub: b64.EncodeToString(d.EncryptionPub), SigningPub: b64.EncodeToString(d.SigningPub), RevokedAt: d.RevokedAt.UnixMilli(), Reason: d.Reason}
 			if d.CertBy != "" && len(d.CertSig) > 0 {
 				it.CertBy, it.CertAskID, it.CertSig = d.CertBy, d.CertAskID, b64.EncodeToString(d.CertSig)
 			}
