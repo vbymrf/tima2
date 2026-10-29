@@ -131,6 +131,13 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Окно установки системы ждёт ответа, а на экране TIMA — вернуть его поверх (заказчик 2026-10-29, 2#).
+        // onResume, а не onStart: окно установки полупрозрачное, и после него приходит только onResume.
+        InstallPending.returned(this)
+    }
+
     override fun onStart() {
         super.onStart()
         // Только после настоящего ухода в фон: первый `onStart` идёт сразу за запуском, и

@@ -68,6 +68,11 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
 
     private suspend fun installAwake(offer: UpdateOffer, onProgress: (Int) -> Unit): InstallOutcome =
         withContext(Dispatchers.IO) {
+            // Окно системы уже ждёт ответа (заказчик 2026-10-29, 3#): вторую установку не заводить — на слабом
+            // телефоне два окна подряд и вешали установщик. Открыть то же окно.
+            if (InstallPending.reopen(context, "«Установить» — окно установки уже ждёт, открыто то же")) {
+                return@withContext InstallOutcome.Started
+            }
             // Разрешение спрашивается здесь, а не при запуске: объяснить его можно только
             // тогда, когда человек уже нажал «Обновить».
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
@@ -293,6 +298,7 @@ class AndroidInstaller(private val context: Context) : UpdateInstaller {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
             val pending = PendingIntent.getBroadcast(context, sessionId, intent, flags)
             session.commit(pending.intentSender)
+            InstallPending.committed(sessionId)
         }
     }
 
@@ -442,15 +448,20 @@ class InstallResultReceiver : BroadcastReceiver() {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> Unit
-            PackageInstaller.STATUS_SUCCESS -> return
+            PackageInstaller.STATUS_SUCCESS -> {
+                InstallPending.done()
+                return
+            }
             // Окно системы закрыли — нажатием мимо или «Отмена» (заказчик 2026-10-29, 2а#). Само окно не
             // открываем заново: человек мог отказаться намеренно; экран предложит «Установить» из скачанного.
             PackageInstaller.STATUS_FAILURE_ABORTED -> {
-                Journal.note(LogCode.UPD_START, "окно установки закрыто — установка отменена")
+                InstallPending.done()
+                Journal.note(LogCode.UPD_CONFIRM, "окно установки закрыто — установка отменена")
                 InstallEvents.tell(InstallOutcome.Cancelled)
                 return
             }
             else -> {
+                InstallPending.done()
                 val why = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty()
                 Journal.trouble(LogCode.UPD_BAD_PACKAGE, "Android не поставил пакет", "код" to status, "почему" to why)
                 InstallEvents.tell(InstallOutcome.Refused("Android не поставил пакет" + if (why.isNotBlank()) ": $why" else ""))
@@ -459,7 +470,93 @@ class InstallResultReceiver : BroadcastReceiver() {
         }
         @Suppress("DEPRECATION")
         val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
-        confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { context.startActivity(confirm) }
+        val sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
+        InstallPending.asked(context, confirm, sessionId)
     }
+}
+
+/**
+ * Окно подтверждения установки, которое ждёт ответа человека (заказчик 2026-10-29, после Vivo: «системное
+ * сообщение выходит с долгим лагом, бывает — наше окно его закрывает»).
+ *
+ * 1. Каждый шаг — строка `UPD-CONFIRM` со временем от передачи пакета: тупит ли телефон, видно по отчёту.
+ * 2. Вернулись в TIMA, а окно ждёт (наш экран его перекрыл) — открыть его снова поверх.
+ * 3. «Установить», пока окно ждёт, — открыть то же окно, а не заводить вторую установку.
+ *
+ * Ждёт ли окно — спрашиваем систему (`getSessionInfo`): отменённый сеанс система стирает сразу, поэтому
+ * окно, закрытое человеком намеренно, заново не открывается.
+ */
+object InstallPending {
+    @Volatile private var confirm: Intent? = null
+    @Volatile private var session: Int = -1
+    @Volatile private var committedAt: Long = 0L
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
+
+    private fun now(): Long = android.os.SystemClock.elapsedRealtime()
+
+    /** Пакет отдан системе: окна ещё нет. */
+    fun committed(sessionId: Int) {
+        confirm = null
+        session = sessionId
+        committedAt = now()
+        Journal.note(LogCode.UPD_CONFIRM, "пакет отдан системе", "сеанс" to sessionId)
+    }
+
+    /** Система прислала окно подтверждения — открыть. */
+    fun asked(context: Context, intent: Intent, sessionId: Int) {
+        confirm = intent
+        if (sessionId >= 0) session = sessionId
+        Journal.note(LogCode.UPD_CONFIRM, "система прислала окно подтверждения", "через мс" to since())
+        open(context, "окно установки открыто")
+    }
+
+    /** Установка кончилась — успехом, отменой или отказом. */
+    fun done() {
+        confirm = null
+        session = -1
+    }
+
+    /** Окно ждёт ответа — открыть то же. `false` — не ждёт (нет окна или сеанс закрыт). */
+    fun reopen(context: Context, what: String): Boolean {
+        confirm ?: return false
+        if (!alive(context)) return false
+        open(context, what)
+        return true
+    }
+
+    /**
+     * Вернулись в TIMA (`onResume`). Пауза — потому что отмена окна приходит позже, чем окно гаснет: без неё
+     * окно, закрытое человеком, открылось бы снова раньше, чем система успела стереть сеанс.
+     */
+    fun returned(context: Context) {
+        if (session < 0) return
+        scope.launch {
+            delay(RETURN_PAUSE_MS)
+            if (session < 0) return@launch
+            if (confirm == null) {
+                Journal.note(LogCode.UPD_CONFIRM, "вернулись в TIMA, окно установки ещё не пришло", "мс от передачи" to since())
+                return@launch
+            }
+            reopen(context, "вернулись в TIMA, окно установки ждёт — открыто снова")
+        }
+    }
+
+    private fun alive(context: Context): Boolean {
+        val id = session
+        if (id < 0) return false
+        val info = runCatching { context.packageManager.packageInstaller.getSessionInfo(id) }.getOrNull()
+        if (info == null) done()
+        return info != null
+    }
+
+    private fun open(context: Context, what: String) {
+        val intent = confirm ?: return
+        runCatching { context.startActivity(Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            .onSuccess { Journal.note(LogCode.UPD_CONFIRM, what, "мс от передачи" to since()) }
+            .onFailure { Journal.trouble(LogCode.UPD_CONFIRM, "окно установки не открылось", "почему" to (it.message ?: it::class.simpleName.orEmpty())) }
+    }
+
+    private fun since(): Long = if (committedAt > 0) now() - committedAt else -1
+
+    private const val RETURN_PAUSE_MS = 1_500L
 }

@@ -695,6 +695,7 @@ object EnglishWords : Words {
                 "version starts."
         override val notNow = "Not now"
         override val installerStarted = "The installer has started"
+        override val waitSystemWindow = "Waiting for the system window — up to a minute on slow phones."
         override val confirmInSystem = "Confirm the installation in the system window."
         override val pressAgain = "If the window closed or you declined — tap again."
         override val notDownloaded = "The update did not download"

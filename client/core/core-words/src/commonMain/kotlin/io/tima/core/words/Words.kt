@@ -451,6 +451,8 @@ interface UpdateWords {
     val dataStays: String
     val notNow: String
     val installerStarted: String
+    /** Пока окно системы не пришло: на слабом телефоне оно идёт долго (заказчик 2026-10-29, 3#). */
+    val waitSystemWindow: String
     val confirmInSystem: String
     val pressAgain: String
     val notDownloaded: String
@@ -3213,6 +3215,7 @@ object RussianWords : Words {
                 "установщик их не трогает. Неотправленное дойдёт после запуска новой версии."
         override val notNow = "Не сейчас"
         override val installerStarted = "Установщик запущен"
+        override val waitSystemWindow = "Ждём окно системы — на медленных телефонах до минуты."
         override val confirmInSystem = "Подтвердите установку в окне системы."
         override val pressAgain = "Если окно закрылось или вы отказались — нажмите ещё раз."
         override val notDownloaded = "Обновление не скачалось"

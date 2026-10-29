@@ -693,6 +693,7 @@ object SpanishWords : Words {
                 "instalador no los toca. Lo que no se envió saldrá al arrancar la nueva versión."
         override val notNow = "Ahora no"
         override val installerStarted = "El instalador ha arrancado"
+        override val waitSystemWindow = "Esperando la ventana del sistema — hasta un minuto en teléfonos lentos."
         override val confirmInSystem = "Confirme la instalación en la ventana del sistema."
         override val pressAgain = "Si la ventana se cerró o la rechazó — pulse otra vez."
         override val notDownloaded = "La actualización no se descargó"

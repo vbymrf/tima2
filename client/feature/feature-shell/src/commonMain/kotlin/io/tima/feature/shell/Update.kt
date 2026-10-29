@@ -644,6 +644,7 @@ private fun Asking(state: UpdateState, onConfirm: () -> Unit, onDismiss: () -> U
 private fun Handed(onRetry: () -> Unit) {
     val words = Tima.words.update
     Caption(words.installerStarted, fontSize = TimaType.sz3, weight = FontWeight.Bold)
+    Secondary(words.waitSystemWindow)
     Secondary(words.confirmInSystem)
     Secondary(words.pressAgain)
     Button(label = words.installNow, onClick = onRetry, modifier = Modifier.testTag(UPDATE_RETRY_TAG))
