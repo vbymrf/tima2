@@ -9,10 +9,16 @@
 
 Три независимых механизма. Контент всегда шифруется конвертом; потеря ratchet-сессии не означает потерю сообщений.
 
+> **Храповик отменён (2026-10-06, [ADR-0036](../adr/0036-forward-secrecy-device-epochs.md), решение Р4 плана ПС).** Слой 3 не делается: поле
+> `ratchet_envelope` в конверте остаётся и всегда пустое, формат ради храповика не меняется. Прямая
+> секретность закрыта иначе — ключ шифрования устройства на месяц и срок обёрток 31–61 день (ADR-0036
+> §3–§4). Ниже упоминания ratchet (§1 «Слой 3», §2, §3.1–§3.4) описывают отменённый замысел и оставлены
+> ради истории решения.
+
 ```
 Слой 1  Конверт     SecretBox(zstd(protobuf(msg)), message_key)      — всегда
 Слой 2  Escrow      ML-KEM-768(Escrow_Public) → wrap(message_key)    — всегда
-Слой 3  Ratchet     DoubleRatchet(payload)                            — опционально (PFS, путь A)
+Слой 3  Ratchet     DoubleRatchet(payload)                            — ОТМЕНЁН (ADR-0036), поле всегда пустое
 Слой 4  Wrapped     Box(ephemeral, device_identity, message_key)      — всегда (план Б, путь B)
 ```
 
@@ -29,7 +35,7 @@
 | `GK` (Group Key) | 32 байта random | На клиентах участников; версии в `group_key_history` | Личные группы |
 | `media_key` | 32 байта random | Внутри encrypted_payload сообщения-указателя | Медиа-объект |
 | Escrow key pair | ML-KEM-768 | Public — у клиентов; private — только HSM/анклав | Юридический доступ |
-| Ratchet-состояние | X3DH + Double Ratchet | SQLDelight (шифрованный экспорт) | PFS активных сессий |
+| ~~Ratchet-состояние~~ | ~~X3DH + Double Ratchet~~ | — | **отменено** ([ADR-0036](../adr/0036-forward-secrecy-device-epochs.md)); вместо — ключ устройства на месяц |
 | `shelf_key` | 32 байта random | Wrapped на устройства владельца и грантополучателей; escrow per версия | Личная полка избранного ([feed-ranking.md](../04-data/feed-ranking.md) §2) |
 | `collection_key` / `story_key` | 32 байта random | Wrapped на устройства участников/аудитории; escrow через period/blob | Личные коллекции и истории |
 | Ключи ВП (identity + signing) | Curve25519 / Ed25519 | **Только wrapped** на устройства владельца и операторов (не в Keystore); ротация при смене команды/передаче | Виртуальные пользователи ([key-lifecycle.md](./key-lifecycle.md) §8) |
@@ -47,7 +53,7 @@ PersonalMessage {
     encrypted_payload:    SecretBox(zstd(protobuf(body)), message_key)   // nonce внутри вывода Kodium
     escrow_blob:          MLKEM_ct(1088) ‖ SecretBox(message_key, hkdf(mlkem_shared))
     sender_ephemeral_pub: KodiumPublicKey   // нужен получателю для разворачивания wrapped_key
-    ratchet_envelope:     RatchetMessage | null                  // путь A
+    ratchet_envelope:     RatchetMessage | null                  // путь A — отменён (ADR-0036), всегда пусто
     signature:            Ed25519(device_signing, canonical_bytes)
 }
 // Отдельно, в personal_message_keys (по одной на устройство получателя И отправителя):
@@ -72,7 +78,7 @@ val wrapped = (recipientDevices + myOtherDevices).associate { dev ->
     val eph = Kodium.generateKeyPair()
     dev.id to Kodium.encrypt(eph, dev.identityPublicKey, messageKey).getOrThrow()  // nonce+box
 }
-val ratchetEnv = ratchetSession?.encrypt(payload)?.getOrThrow()          // слой 3 (RatchetMessage), если сессия жива
+val ratchetEnv = ratchetSession?.encrypt(payload)?.getOrThrow()          // слой 3 — отменён (ADR-0036): не вызывается, поле пустое
 val signature  = Kodium.signDetached(myDeviceKey, canonicalBytes).getOrThrow()  // Ed25519 из device key pair
 ```
 
@@ -82,7 +88,7 @@ Wrapped keys создаются **и для собственных устрой�
 
 ```kotlin
 fun decrypt(msg: PersonalMessage): ByteArray {
-    msg.ratchetEnvelope?.let { env ->                 // Путь A: ratchet (PFS)
+    msg.ratchetEnvelope?.let { env ->                 // Путь A: ratchet — отменён (ADR-0036), не бывает
         ratchetSession?.decrypt(env)?.getOrNull()?.let { return it }
     }
     // Путь B: Kodium.decrypt(myPrivate, senderEphemeralPublic, cipher) → Result
@@ -95,7 +101,11 @@ fun decrypt(msg: PersonalMessage): ByteArray {
 
 Путь B делает `MAX_SKIP`-desync, офлайн любой длительности и переустановку нефатальными.
 
-### 3.4. Ratchet (фаза 5)
+### 3.4. Ratchet (фаза 5) — отменён
+
+> **Отменено 2026-10-06** решением заказчика (Р4 плана ПС, [ADR-0036](../adr/0036-forward-secrecy-device-epochs.md)): храповик не делается, `ratchet_envelope`
+> всегда пуст. Прямая секретность — по месяцам: ключ шифрования устройства на эпоху (ПС3) и срок обёрток
+> (ПС2). Пункты ниже — прежний замысел, для истории.
 
 - X3DH по PreKey bundle (`prekeys`), **с верификацией Signed PreKey** (обязательное условие gate).
 - `DoubleRatchetSession` Kodium; `maxSkippedMessages = 2000`; экспорт состояния — `exportToEncryptedString()` в локальную БД.
