@@ -29,7 +29,13 @@ class HistoryApi(
     class ChatRef(val chatId: String, val peerId: String, val lastMessageId: Long, val ownerId: String = "")
 
     /** Сообщение истории: конверт с обёрткой под это устройство и эфемерал обёртки. */
-    class Item(val messageId: Long, val envelope: ByteArray, val wrapEphemeral: ByteArray?)
+    class Item(
+        val messageId: Long,
+        val envelope: ByteArray,
+        val wrapEphemeral: ByteArray?,
+        /** Когда сервер принял (беда 2026-10-29); 0 — сервер старше. */
+        val receivedAtMs: Long = 0,
+    )
 
     /** Ключ одного сообщения под новое устройство. */
     class Key(val messageId: Long, val ephemeralPub: ByteArray, val wrapped: ByteArray)
@@ -83,6 +89,7 @@ class HistoryApi(
                 messageId = o.long("message_id") ?: return@mapNotNull null,
                 envelope = o.str("envelope")?.let { decodeBase64Url(it) } ?: return@mapNotNull null,
                 wrapEphemeral = o.str("wrap_ephemeral")?.let { decodeBase64Url(it) },
+                receivedAtMs = o.long("received_at_unix_ms") ?: 0,
             )
         }
     }

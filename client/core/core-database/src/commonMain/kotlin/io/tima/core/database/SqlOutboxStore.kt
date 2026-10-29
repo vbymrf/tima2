@@ -106,6 +106,7 @@ class SqlOutboxStore(
             fail_reason = entry.failReason,
             dedup_key = entry.dedupKey,
         )
+        if (entry.serverAtMs > 0) q.setOwnServerTs(entry.serverAtMs, entry.dedupKey)
     }
 
     override fun retryDead(dedupKey: String, nowMs: Long, level: Int): Boolean = db.transactionWithResult {

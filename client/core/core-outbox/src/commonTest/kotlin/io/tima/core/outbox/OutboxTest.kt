@@ -1,5 +1,6 @@
 package io.tima.core.outbox
 
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -464,5 +465,21 @@ class OutboxTest {
         outbox.onOutcome("dedup-1", SendOutcome.Permanent("banned"))
         assertEquals(true, outbox.deleteUnsent("dedup-1"))
         assertEquals(null, store.byDedupKey("dedup-1"))
+    }
+
+    @Test
+    fun пополнение_очереди_будит_отправку() {
+        // Беда 2026-10-29: отправку будил только список переписок, а новое сообщение, датированное раньше
+        // последнего в переписке, список не меняет — три сообщения две минуты лежали в очереди.
+        val heard = outbox.changes.replayCache.size
+        val seen = mutableListOf<Unit>()
+        val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch {
+            outbox.changes.collect { seen += it }
+        }
+        put("dedup-1")
+        assertFalse(put("dedup-1"), "повтор того же ключа — не пополнение")
+        job.cancel()
+        assertEquals(0, heard)
+        assertEquals(1, seen.size, "одно пополнение — один пинок")
     }
 }

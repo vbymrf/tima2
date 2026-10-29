@@ -612,7 +612,7 @@ class Receiver(
                     )
                 },
             ) { event ->
-                accept(event.chatId, event.messageId, event.envelope)
+                accept(event.chatId, event.messageId, event.envelope, event.receivedAtMs)
                 stamp(event)
             }
 
@@ -810,14 +810,14 @@ class Receiver(
      */
     private suspend fun acceptGroup(groupId: String, messageId: Long, frame: ByteArray) {
         val parsed = GroupFrame.parse(frame)
-        // Время написания — из кадра: по нему переписка на всех устройствах в одном порядке.
-        environment.incoming.receive(groupId, messageId, frame, sentAtMs = parsed?.createdAtUnixMs ?: 0)
+        // Время места — приёма сервером, без него — написания из кадра (беда 2026-10-29): одно на всех устройствах.
+        environment.incoming.receive(groupId, messageId, frame, sentAtMs = parsed?.placedAtMs ?: 0)
 
         // Сообщение группы — вкладка «Группы» журнала уведомлений (ЖУ1, ЖУ4). До 2026-09-30
         // группы не уведомляли вовсе. Своё и от заблокированного молчит — решает `Notices`.
         // Правка — без уведомления (ADR-0045 §5): она ложится на уже показанное сообщение.
         if ((parsed?.editOf ?: 0L) == 0L) {
-            notices?.arrived(groupId, parsed?.senderId, ref = "$groupId/$messageId", sentAtMs = parsed?.createdAtUnixMs ?: 0, group = true)
+            notices?.arrived(groupId, parsed?.senderId, ref = "$groupId/$messageId", sentAtMs = parsed?.placedAtMs ?: 0, group = true)
         }
 
         // Ключ подписи спрашивается до разбора: сам разбор синхронный, и ходить за ним
@@ -1165,7 +1165,7 @@ class Receiver(
         onStamp(SenderStamp(sender, event.senderProfileRev, if (group) event.chatId else null, event.senderHue))
     }
 
-    private suspend fun accept(chatId: String, messageId: Long, envelope: ByteArray) {
+    private suspend fun accept(chatId: String, messageId: Long, envelope: ByteArray, receivedAtMs: Long = 0) {
         // Групповое сообщение приходит тем же путём, но открывается иначе: у него нет
         // конверта, а подпись считается по метаданным вместе с payload.
         if (GroupFrame.isGroupFrame(envelope)) {
@@ -1187,7 +1187,10 @@ class Receiver(
             return
         }
 
-        environment.incoming.receive(chatId, messageId, envelope, sentAtMs = sender?.createdAtMs ?: 0)
+        // Место — по времени приёма сервером, без него — по времени написания из конверта (беда 2026-10-29: часы
+        // отправителя спешили, и его сообщения вставали «в будущее»).
+        val placedAt = receivedAtMs.takeIf { it > 0 } ?: sender?.createdAtMs ?: 0
+        environment.incoming.receive(chatId, messageId, envelope, sentAtMs = placedAt)
 
         // ── ПЕРВАЯ СТАДИЯ СТРОКИ: БЕЗ ИМЕНИ (У6) ────────────────────────────
         //
@@ -1199,7 +1202,7 @@ class Receiver(
         // `Notices`: правило живёт в одном месте, а не расходится по вызовам.
         // Правка — без уведомления (ADR-0045 §5): она ложится на уже показанное сообщение.
         if ((sender?.editOf ?: 0L) == 0L) {
-            notices?.arrived(chatId, sender?.userId, ref = "$chatId/$messageId", sentAtMs = sender?.createdAtMs ?: 0)
+            notices?.arrived(chatId, sender?.userId, ref = "$chatId/$messageId", sentAtMs = placedAt)
         }
 
         // ── ОТ ЗАБЛОКИРОВАННОГО: ЗАПИСАТЬ, НО НЕ ОТКРЫВАТЬ (Л9) ─────────────
@@ -1329,7 +1332,8 @@ class Receiver(
                 if (ownCopy(sender.deviceId)) continue
                 if (peer == null && sender.userId != session.userId) peer = sender.userId
                 captionKey(sender.userId, sender.deviceId)
-                if (environment.incoming.receive(chatId, item.messageId, stored, sentAtMs = sender.createdAtMs)) added++
+                val placedAt = item.receivedAtMs.takeIf { it > 0 } ?: sender.createdAtMs
+                if (environment.incoming.receive(chatId, item.messageId, stored, sentAtMs = placedAt)) added++
             }
             if (page.size < HistoryApi.PAGE) break
             before = page.last().messageId
@@ -1456,7 +1460,8 @@ class Receiver(
                     val sender = envelopeSender(stored) ?: continue
                     if (peer == null && sender.userId !in me) peer = sender.userId
                     captionKey(sender.userId, sender.deviceId)
-                    if (environment.incoming.receive(chat.chatId, item.messageId, stored, sentAtMs = sender.createdAtMs)) added++
+                    val placedAt = item.receivedAtMs.takeIf { it > 0 } ?: sender.createdAtMs
+                    if (environment.incoming.receive(chat.chatId, item.messageId, stored, sentAtMs = placedAt)) added++
                 }
                 if (page.size < io.tima.core.network.KeyCopyApi.PAGE) break
                 before = page.last().messageId

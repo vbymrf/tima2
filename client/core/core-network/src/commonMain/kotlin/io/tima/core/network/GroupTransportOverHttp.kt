@@ -43,7 +43,7 @@ class GroupTransportOverHttp(
             onlyContinuation = continuation(clientMsgId),
         )
         return when (answer) {
-            is SendGroupResult.Sent -> GroupSendStep.Sent(answer.messageId)
+            is SendGroupResult.Sent -> GroupSendStep.Sent(answer.messageId, answer.receivedAtMs)
             is SendGroupResult.Duplicate -> GroupSendStep.Duplicate(answer.messageId)
             SendGroupResult.UnknownKeyVersion -> GroupSendStep.UnknownKeyVersion
             SendGroupResult.Banned -> GroupSendStep.Banned

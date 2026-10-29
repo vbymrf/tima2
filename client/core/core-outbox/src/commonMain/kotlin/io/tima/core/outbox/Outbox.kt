@@ -106,6 +106,11 @@ data class OutboxEntry(
     val attempts: Int = 0,
     val nextAttemptAtMs: Long = 0,
     val createdAtMs: Long = 0,
+    /**
+     * Когда сервер принял, по его часам (`received_at_unix_ms`, 2026-10-29); 0 — ещё не принят или сервер
+     * старше. Ложится в `server_ts`: по нему своё стоит на месте и на этом устройстве.
+     */
+    val serverAtMs: Long = 0,
     /** Код отказа сервера, когда состояние DEAD; иначе `null`. Для подокна повтора и журнала. */
     val failReason: String? = null,
     val serverMessageId: Long? = null,
@@ -152,7 +157,7 @@ data class ReadyToSend(
 /** Чем закончилась попытка отправки. */
 sealed interface SendOutcome {
     /** Сервер принял конверт. */
-    data class Accepted(val serverMessageId: Long) : SendOutcome
+    data class Accepted(val serverMessageId: Long, val receivedAtMs: Long = 0) : SendOutcome
 
     /**
      * Сервер уже видел этот `dedup_key` — то есть предыдущая попытка **дошла**, а
@@ -161,7 +166,7 @@ sealed interface SendOutcome {
      * Это подтверждение, а не ошибка. Без отдельного случая дедупликация на сервере
      * превратилась бы в вечный цикл повторов на клиенте.
      */
-    data class Duplicate(val serverMessageId: Long) : SendOutcome
+    data class Duplicate(val serverMessageId: Long, val receivedAtMs: Long = 0) : SendOutcome
 
     /**
      * Временный отказ: сеть, 5xx, таймаут. Вернётся в очередь.
@@ -269,6 +274,12 @@ class Outbox(
     private val store: OutboxStore,
     private val nowMs: () -> Long,
     /**
+     * Время написания своего сообщения — по часам сервера (беда 2026-10-29, «сообщения в прошлом»): оно уходит
+     * в конверт и ставит неотправленное на место, а часы устройства бывают неверны. Сроки повторов — по
+     * [nowMs]: с ними сравнивает цикл отправки.
+     */
+    private val stampMs: () -> Long = nowMs,
+    /**
      * Задержки повторов по числу сделанных попыток. Значения — из живых испытаний v1
      * (`LinkState.retryDelayMs`): секунда, пять, две минуты. Последняя повторяется.
      */
@@ -320,9 +331,9 @@ class Outbox(
                 editOf = editOf,
                 state = OutboxState.QUEUED,
                 nextAttemptAtMs = now,
-                createdAtMs = now,
+                createdAtMs = stampMs(),
             ),
-        )
+        ).also { if (it) poke() }
     }
 
     /** Тот же вызов с умолчанием: круг по умолчанию — шифр. */
@@ -350,9 +361,9 @@ class Outbox(
                 kind = kind,
                 state = OutboxState.QUEUED,
                 nextAttemptAtMs = now,
-                createdAtMs = now,
+                createdAtMs = stampMs(),
             ),
-        )
+        ).also { if (it) poke() }
     }
 
     /**
@@ -462,7 +473,22 @@ class Outbox(
      * Повторить отказанное (решение заказчика 2026-09-19): та же запись, снова в очередь, с
      * текущим кругом — причиной отказа чаще всего и был круг. Конверта у DEAD нет.
      */
-    fun retryDead(dedupKey: String, level: Int): Boolean = store.retryDead(dedupKey, nowMs(), level)
+    fun retryDead(dedupKey: String, level: Int): Boolean =
+        store.retryDead(dedupKey, stampMs(), level).also { if (it) poke() }
+
+    /**
+     * Очередь пополнилась (беда 2026-10-29): отправка запускается от этого, а не только от изменения списка
+     * переписок — новое сообщение, датированное раньше последнего в переписке, список не меняет.
+     */
+    val changes: kotlinx.coroutines.flow.SharedFlow<Unit> get() = _changes
+    private val _changes = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+    )
+
+    private fun poke() {
+        _changes.tryEmit(Unit)
+    }
 
     /** Запись как есть — для журнала и подокна; `null` — нет такой. */
     fun entry(dedupKey: String): OutboxEntry? = store.byDedupKey(dedupKey)
@@ -498,12 +524,12 @@ class Outbox(
         val updated = when (outcome) {
             is SendOutcome.Accepted -> {
                 sealedEnvelopes.remove(dedupKey)
-                entry.copy(state = OutboxState.SENT, serverMessageId = outcome.serverMessageId)
+                entry.copy(state = OutboxState.SENT, serverMessageId = outcome.serverMessageId, serverAtMs = outcome.receivedAtMs)
             }
             // Повтор дошедшего — успех. Отличается только тем, откуда узнали.
             is SendOutcome.Duplicate -> {
                 sealedEnvelopes.remove(dedupKey)
-                entry.copy(state = OutboxState.SENT, serverMessageId = outcome.serverMessageId)
+                entry.copy(state = OutboxState.SENT, serverMessageId = outcome.serverMessageId, serverAtMs = outcome.receivedAtMs)
             }
             is SendOutcome.Retry -> entry.copy(
                 // Причина ожидания ложится рядом с сообщением — её показывает подокно

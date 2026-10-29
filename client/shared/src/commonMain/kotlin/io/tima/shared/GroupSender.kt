@@ -161,7 +161,7 @@ class GroupSender(
                 // Счётчик отправок под версией растёт только у шифрованного: открытое
                 // ключом не пользовалось и ротацию не приближает.
                 if (secret) environment.groupKeyBook.markSend(entry.chatId, version)
-                environment.queue.onOutcome(entry.dedupKey, SendOutcome.Accepted(outcome.messageId))
+                environment.queue.onOutcome(entry.dedupKey, SendOutcome.Accepted(outcome.messageId, outcome.receivedAtMs))
                 true
             }
 

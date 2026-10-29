@@ -79,6 +79,8 @@ class HttpMessageTransport(
         val body = runCatching { Json.parseToJsonElement(response.bodyAsText()).jsonObject }
             .getOrNull()
         val messageId = body?.longField("message_id")
+        // Время приёма сервером (2026-10-29); старый сервер его не шлёт — 0.
+        val receivedAt = body?.longField("received_at_unix_ms") ?: 0
         val code = body?.stringField("code")
         // Правка не принята (ADR-0045): причину — в журнал, крестик у правки сам её не скажет.
         if (code?.startsWith("edit_") == true) {
@@ -87,14 +89,14 @@ class HttpMessageTransport(
 
         return when (response.status) {
             HttpStatusCode.Created -> messageId
-                ?.let { SendOutcome.Accepted(it) }
+                ?.let { SendOutcome.Accepted(it, receivedAt) }
                 // 201 без идентификатора — либо не наш сервер, либо сломанный ответ.
                 // Повторять бессмысленно: конверт-то приняли.
                 ?: SendOutcome.Permanent("201 без message_id")
 
             HttpStatusCode.OK -> when {
                 body?.boolField("duplicate") == true && messageId != null ->
-                    SendOutcome.Duplicate(messageId)
+                    SendOutcome.Duplicate(messageId, receivedAt)
                 // 200 у этой ручки бывает только на повторе. Всё остальное —
                 // неизвестный ответ, и молча считать его успехом нельзя.
                 else -> SendOutcome.Permanent("200 без признака duplicate")

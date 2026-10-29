@@ -55,7 +55,17 @@ class GroupFrame(
     val editOf: Long = 0,
     /** «Только продолжение» (Решения §11.3): открытое поле сервера, в подпись не входит. */
     val onlyContinuation: Boolean = false,
+    /**
+     * Когда сервер принял, по его часам (`received_at_unix_ms`, беда 2026-10-29); в подпись не входит. 0 —
+     * сервер старше.
+     */
+    val receivedAtUnixMs: Long = 0,
 ) {
+    /**
+     * Время места сообщения в переписке: приёма сервером, а без него — написания по часам отправителя. Часы
+     * отправителя бывают неверны (ПК спешил на 4 мин 40 с), часы сервера — одни на всех.
+     */
+    val placedAtMs: Long get() = if (receivedAtUnixMs > 0) receivedAtUnixMs else createdAtUnixMs
 
     companion object {
         /** Признак группового кадра. В protobuf невозможен: поля с номером ноль нет. */
@@ -110,6 +120,7 @@ class GroupFrame(
                 keyCommitment = json.str("key_commitment")?.let { decodeBase64Url(it) },
                 editOf = json.long("edit_of") ?: 0,
                 onlyContinuation = json.bool("only_continuation") ?: false,
+                receivedAtUnixMs = json.long("received_at_unix_ms") ?: 0,
             )
         }
     }

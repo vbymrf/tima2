@@ -414,6 +414,11 @@ class EventStreamProtocol {
          */
         val senderProfileRev: Int? = null,
         val senderHue: Int? = null,
+        /**
+         * Когда сервер принял, по его часам (`received_at_unix_ms`, беда 2026-10-29): по нему сообщение встаёт на
+         * место. В равенство не входит. 0 — сервер старше: место — по времени написания из конверта.
+         */
+        val receivedAtMs: Long = 0,
     ) {
         override fun equals(other: Any?): Boolean = other is IncomingEvent &&
             eventId == other.eventId && chatId == other.chatId &&
@@ -586,6 +591,7 @@ class EventStreamProtocol {
                         IncomingEvent(
                             eventId, chatId, messageId, envelope,
                             senderProfileRev = json["sender_profile_rev"]?.jsonPrimitive?.intOrNull,
+                            receivedAtMs = json["received_at_unix_ms"]?.jsonPrimitive?.longOrNull ?: 0,
                         ),
                     )
                 }

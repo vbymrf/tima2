@@ -717,7 +717,9 @@ class Environment private constructor(
 ) {
 
     /** Очередь исходящих: одна на приложение, потому что одна на базу. */
-    val queue: Outbox = Outbox(SqlOutboxStore(db, cipher), nowMs = { msNow() })
+    // Время написания — по часам сервера (беда 2026-10-29: часы ПК спешили, и его сообщения вставали «в будущее»);
+    // сроки повторов — по часам устройства, с ними сравнивает цикл отправки.
+    val queue: Outbox = Outbox(SqlOutboxStore(db, cipher), nowMs = { msNow() }, stampMs = { io.tima.core.network.ServerClock.now() })
 
     /**
      * Машина входящих. Одна на приложение по той же причине: одна база.

@@ -118,7 +118,13 @@ class KeyCopyApi(
     }
 
     /** Сообщение страницы копии: конверт с обёрткой для `key-copy` и её эфемерал. */
-    class PageItem(val messageId: Long, val envelope: ByteArray, val wrapEphemeral: ByteArray)
+    class PageItem(
+        val messageId: Long,
+        val envelope: ByteArray,
+        val wrapEphemeral: ByteArray,
+        /** Когда сервер принял (беда 2026-10-29); 0 — сервер старше. */
+        val receivedAtMs: Long = 0,
+    )
 
     /** `GET /chats/{id}/backup` — страница копии, от новых к старым; `null` — не получена. */
     suspend fun page(chatId: String, before: Long, limit: Int = PAGE, owner: String = ""): List<PageItem>? {
@@ -136,6 +142,7 @@ class KeyCopyApi(
                 messageId = o.long("message_id") ?: return@mapNotNull null,
                 envelope = o.str("envelope")?.let { decodeBase64Url(it) } ?: return@mapNotNull null,
                 wrapEphemeral = o.str("wrap_ephemeral")?.let { decodeBase64Url(it) } ?: return@mapNotNull null,
+                receivedAtMs = o.long("received_at_unix_ms") ?: 0,
             )
         }
     }

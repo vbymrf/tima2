@@ -78,7 +78,7 @@ class GroupMessagesApi(
         val body = response.jsonBody()
         return when {
             response.status == HttpStatusCode.Created ->
-                SendGroupResult.Sent(messageId = body?.long("message_id") ?: 0)
+                SendGroupResult.Sent(messageId = body?.long("message_id") ?: 0, receivedAtMs = body?.long("received_at_unix_ms") ?: 0)
 
             // Повтор той же отправки. Для очереди это успех, а не отказ: сообщение у
             // сервера есть, и слать его в третий раз незачем.
@@ -123,11 +123,11 @@ class GroupMessagesApi(
         return list.mapNotNull { el ->
             val o = el.jsonObjectOrNull() ?: return@mapNotNull null
             val frame = GroupFrame.fromJson(o) ?: return@mapNotNull null
-            Page(messageId = frame.messageId, stored = GroupFrame.toStored(o.toString()), sentAtMs = frame.createdAtUnixMs)
+            Page(messageId = frame.messageId, stored = GroupFrame.toStored(o.toString()), sentAtMs = frame.placedAtMs)
         }
     }
 
-    /** Сообщение истории: номер, кадр для очереди входящих, время написания. */
+    /** Сообщение истории: номер, кадр для очереди входящих, время места — приёма сервером или написания. */
     class Page(val messageId: Long, val stored: ByteArray, val sentAtMs: Long)
 
     companion object {
@@ -137,7 +137,7 @@ class GroupMessagesApi(
 }
 
 sealed interface SendGroupResult {
-    data class Sent(val messageId: Long) : SendGroupResult
+    data class Sent(val messageId: Long, val receivedAtMs: Long = 0) : SendGroupResult
 
     /** Сервер уже принимал это сообщение по тому же `client_msg_id`. */
     data class Duplicate(val messageId: Long) : SendGroupResult

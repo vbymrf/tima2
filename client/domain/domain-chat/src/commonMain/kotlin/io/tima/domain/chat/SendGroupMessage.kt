@@ -163,7 +163,7 @@ interface GroupTransport {
 class SealedGroupBytes(val payload: ByteArray, val signature: ByteArray, val keyCommitment: ByteArray? = null)
 
 sealed interface GroupSendStep {
-    data class Sent(val messageId: Long) : GroupSendStep
+    data class Sent(val messageId: Long, val receivedAtMs: Long = 0) : GroupSendStep
     data class Duplicate(val messageId: Long) : GroupSendStep
     data object UnknownKeyVersion : GroupSendStep
     data object Banned : GroupSendStep
