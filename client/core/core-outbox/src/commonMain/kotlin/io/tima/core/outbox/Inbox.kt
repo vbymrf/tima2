@@ -74,6 +74,11 @@ data class IncomingEntry(
     val kind: Int = KIND_TEXT,
     /** Почему не расшифровалось — для диагностики и для показа человеку. */
     val undecryptableReason: String? = null,
+    /**
+     * Первая причина, по которой не открылось (беда 2026-10-24, вариант 5). [undecryptableReason]
+     * повтор перезаписывает, а начало истории нужно разбору. Сбрасывается, когда открылось.
+     */
+    val firstReason: String? = null,
 ) {
     val key: String get() = "$chatId/$messageId"
 
@@ -81,7 +86,7 @@ data class IncomingEntry(
         chatId == other.chatId && messageId == other.messageId &&
         envelope.contentEquals(other.envelope) && state == other.state &&
         attempts == other.attempts && receivedAtMs == other.receivedAtMs &&
-        undecryptableReason == other.undecryptableReason
+        undecryptableReason == other.undecryptableReason && firstReason == other.firstReason
 
     override fun hashCode(): Int {
         var h = chatId.hashCode()
@@ -91,6 +96,7 @@ data class IncomingEntry(
         h = 31 * h + attempts
         h = 31 * h + receivedAtMs.hashCode()
         h = 31 * h + (undecryptableReason?.hashCode() ?: 0)
+        h = 31 * h + (firstReason?.hashCode() ?: 0)
         return h
     }
 }
@@ -277,12 +283,13 @@ class Inbox(
                     outcome.editOf,
                     outcome.onlyContinuation,
                 )
-                entry.copy(state = IncomingState.STORED, kind = outcome.kind, undecryptableReason = null)
+                entry.copy(state = IncomingState.STORED, kind = outcome.kind, undecryptableReason = null, firstReason = null)
             }
             is OpenOutcome.NoKey -> entry.copy(
                 state = IncomingState.UNDECRYPTABLE,
                 attempts = entry.attempts + 1,
                 undecryptableReason = outcome.reason,
+                firstReason = entry.firstReason ?: outcome.reason,
             )
             // Отвергнутый конверт остаётся нечитаемым, а не исчезает: человек должен
             // видеть, что сообщение было, и что оно не прошло проверку. Молчаливое
@@ -291,6 +298,7 @@ class Inbox(
                 state = IncomingState.UNDECRYPTABLE,
                 attempts = entry.attempts + 1,
                 undecryptableReason = outcome.reason,
+                firstReason = entry.firstReason ?: outcome.reason,
             )
         }
         store.update(updated)
@@ -326,6 +334,9 @@ class Inbox(
 
     /** Всё нечитаемое — чтобы перед повтором подтянуть то, чего не хватало (ключи подписи). */
     fun undecryptable(): List<IncomingEntry> = store.undecryptable()
+
+    /** Запись по номеру — повтор разбора спрашивает, чем кончилось у каждой. */
+    fun entry(chatId: String, messageId: Long): IncomingEntry? = store.byKey(chatId, messageId)
 
     /**
      * Переписка открыта: всё разобранное в ней прочитано.

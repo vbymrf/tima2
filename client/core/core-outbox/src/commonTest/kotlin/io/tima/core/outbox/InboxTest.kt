@@ -136,6 +136,22 @@ class InboxTest {
         assertTrue(body.contentEquals(store.body("chat-1", 5)!!))
     }
 
+    /** Беда 2026-10-24, вариант 5: повтор перезаписывает причину, первая остаётся рядом. */
+    @Test
+    fun первая_причина_остаётся_рядом_с_последней_и_снимается_при_открытии() {
+        accept()
+        inbox.openNext(open = { OpenOutcome.NoKey("нет ключа версии 2") })
+        inbox.retryUndecryptable()
+        inbox.openNext(open = { OpenOutcome.NoKey("ключ подписи отправителя не получен") })
+        val stuck = store.byKey("chat-1", 5)!!
+        assertEquals("ключ подписи отправителя не получен", stuck.undecryptableReason)
+        assertEquals("нет ключа версии 2", stuck.firstReason)
+
+        inbox.retryUndecryptable()
+        inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
+        assertEquals(null, store.byKey("chat-1", 5)?.firstReason, "открытое не носит причин")
+    }
+
     @Test
     fun отвергнутый_конверт_остаётся_видимым_а_не_исчезает() {
         // Молчаливое исчезновение — худший вариант: подмена становится незаметной.

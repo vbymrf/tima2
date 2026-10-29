@@ -106,4 +106,16 @@ class ReceiverTest {
         assertTrue(lines[0].details.contains("причина" to "ключ подписи отправителя не получен"))
         kotlin.test.assertEquals(io.tima.core.diag.Level.Trouble, lines[1].level, "непрошедшая проверка — беда")
     }
+
+    /** Беда 2026-10-24, вариант 5: в журнале видно, с чего началось, а не только последнее. */
+    @Test
+    fun в_журнале_первая_причина_рядом_с_последней() {
+        val diary = io.tima.core.diag.Diary(now = { 0L })
+        io.tima.core.diag.Journal.replace(diary)
+        val r = receiver("d-я")
+        val entry = io.tima.core.outbox.IncomingEntry("c-1", 9, ByteArray(1), firstReason = "нет ключа версии 2")
+        r.noted(entry, io.tima.core.outbox.OpenOutcome.NoKey("ключ подписи отправителя не получен"))
+        val line = diary.tail().single { it.code == io.tima.core.diag.LogCode.MSG_UNREADABLE }
+        assertTrue(line.details.contains("первая причина" to "нет ключа версии 2"))
+    }
 }

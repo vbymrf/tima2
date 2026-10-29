@@ -40,6 +40,18 @@ class RequestGroupKeysTest {
         assertIs<RequestKeysStep.NothingMissing>(step)
     }
 
+    /** План КК, КК2: «недостающих нет» — повтор разбора идёт за ключом подписи автора. */
+    @Test
+    fun недостающих_нет_и_недоступное_разбирается_заново() = runTest {
+        var reopened = 0
+        RequestGroupKeys(reopen = { reopened++ }) { _, _ -> RecoveryStep.Requested(versions = 0, helpers = 5) }
+            .request(group)
+        assertEquals(1, reopened)
+        RequestGroupKeys(reopen = { reopened++ }) { _, _ -> RecoveryStep.Requested(versions = 2, helpers = 1) }
+            .request(group)
+        assertEquals(1, reopened, "просьба ушла — ждём ключи, повтор их событием")
+    }
+
     @Test
     fun нужна_секретная_фраза_а_не_ошибка() = runTest {
         // Заслон против угона номера: укравший SIM имеет доступ устройства, но без фразы

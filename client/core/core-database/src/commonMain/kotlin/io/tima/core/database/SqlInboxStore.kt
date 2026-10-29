@@ -69,6 +69,7 @@ class SqlInboxStore(
             state = entry.state.ordinal.toLong(),
             attempts = entry.attempts.toLong(),
             undecryptable_reason = entry.undecryptableReason,
+            first_reason = entry.firstReason,
             dedup_key = keyOf(entry.chatId, entry.messageId),
         )
     }
@@ -157,6 +158,7 @@ class SqlInboxStore(
         sentAtMs = server_ts ?: 0,
         kind = kind.toInt(),
         undecryptableReason = undecryptable_reason,
+        firstReason = first_reason,
     )
 
     private companion object {

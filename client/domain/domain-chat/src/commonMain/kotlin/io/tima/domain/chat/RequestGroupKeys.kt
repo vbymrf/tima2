@@ -14,7 +14,14 @@ package io.tima.domain.chat
  * значит решать за него, что он хочет читать чужую переписку до себя, и одновременно
  * будить чужие устройства без его ведома.
  */
-class RequestGroupKeys(private val recovery: GroupKeyRecovery) {
+class RequestGroupKeys(
+    /**
+     * Недостающих версий нет — разобрать недоступное заново (план КК, КК2): дело не в ключе группы,
+     * а чаще всего в ключе подписи автора, за которым повтор и сходит.
+     */
+    private val reopen: (suspend () -> Unit)? = null,
+    private val recovery: GroupKeyRecovery,
+) {
 
     /**
      * @return что сказать человеку. Ноль помощников — не ошибка: значит, нужных версий нет
@@ -29,7 +36,7 @@ class RequestGroupKeys(private val recovery: GroupKeyRecovery) {
     suspend fun request(groupId: String, phrase: List<String>? = null): RequestKeysStep =
         when (val answer = recovery.request(groupId, phrase)) {
             is RecoveryStep.Requested -> when {
-                answer.versions == 0 -> RequestKeysStep.NothingMissing
+                answer.versions == 0 -> RequestKeysStep.NothingMissing.also { runCatching { reopen?.invoke() } }
                 answer.helpers == 0 -> RequestKeysStep.NoHelpers
                 else -> RequestKeysStep.Asked(answer.helpers)
             }

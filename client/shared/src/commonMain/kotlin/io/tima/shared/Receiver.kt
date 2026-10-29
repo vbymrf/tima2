@@ -924,9 +924,16 @@ class Receiver(
         )
     }
 
-    /** Кадр про групповые ключи: исход остаётся в диагностике, канал не роняется. */
+    /**
+     * Кадр про групповые ключи: исход остаётся в диагностике, канал не роняется.
+     *
+     * Приехали ключи группы — недоступное разбирается заново (план КК, КК2): прежде повтора не
+     * было, и сообщение, разобранное до прихода ключа, оставалось «недоступным» навсегда (беда
+     * 2026-10-24).
+     */
     private suspend fun aboutKeys(decision: EventStreamProtocol.Decision) {
         keyOrchestrator.handle(decision)?.let { lastOutcome = it }
+        if (decision is EventStreamProtocol.Decision.KeysArrived) runCatching { reopenUnreadable() }
     }
 
     /** Закреплённое (ПЛАН-(ЗО) ЗО3): снимок на устройстве — открытым перепискам и событиям. */
@@ -1522,6 +1529,9 @@ class Receiver(
             "сообщение" to entry.messageId,
             "попытка" to entry.attempts + 1,
             "причина" to reason,
+            // Первая причина рядом с последней (беда 2026-10-24, вариант 5): по ней видно, с
+            // чего началось, когда повтор упёрся уже в другое.
+            "первая причина" to (entry.firstReason ?: reason),
         )
         if (forged) {
             Journal.trouble(LogCode.MSG_UNREADABLE, "сообщение не открылось — проверка не прошла", *fields)
@@ -1541,20 +1551,40 @@ class Receiver(
      *
      * @return сколько записей открылось.
      */
-    suspend fun reopenUnreadable(): Int {
+    suspend fun reopenUnreadable(): Int = reopenLock.withLock {
         val stuck = environment.incoming.undecryptable()
-        if (stuck.isEmpty()) return 0
+        if (stuck.isEmpty()) return@withLock 0
+        // Ключ подписи — и у кадра группы (план КК, КК2; беда 2026-10-24, вариант 1): до этого
+        // группа пропускалась, и её недоступное с причиной «ключ подписи не получен» не
+        // открывалось ни повтором, ни «Запросить ключ».
         for (entry in stuck) {
-            if (GroupFrame.isGroupFrame(entry.envelope)) continue
+            if (GroupFrame.isGroupFrame(entry.envelope)) {
+                GroupFrame.parse(entry.envelope)?.let { captionKey(it.senderId, it.senderDevice) }
+                continue
+            }
             val s = envelopeSender(entry.envelope) ?: continue
             captionKey(s.userId, s.deviceId)
         }
         environment.incoming.retryUndecryptable()
         drainIncoming()
-        val left = environment.incoming.undecryptable().size
-        Journal.note(LogCode.DEVICE_TRUST, "недоступное разобрано заново", "было" to stuck.size, "осталось" to left)
-        return stuck.size - left
+        // Чем кончился каждый кадр (вариант 5): одна строка на сообщение, а не только итог.
+        var opened = 0
+        for (entry in stuck) {
+            val now = environment.incoming.entry(entry.chatId, entry.messageId) ?: continue
+            if (now.state != io.tima.core.outbox.IncomingState.UNDECRYPTABLE) opened++
+            Journal.note(
+                LogCode.MSG_UNREADABLE, "повтор разбора",
+                "переписка" to entry.chatId.take(8), "сообщение" to entry.messageId,
+                "исход" to if (now.state == io.tima.core.outbox.IncomingState.UNDECRYPTABLE) "не открылось" else "открылось",
+                "причина" to (now.undecryptableReason ?: "-"), "первая причина" to (now.firstReason ?: entry.undecryptableReason ?: "-"),
+            )
+        }
+        Journal.note(LogCode.DEVICE_TRUST, "недоступное разобрано заново", "было" to stuck.size, "осталось" to stuck.size - opened)
+        opened
     }
+
+    /** Повтор идёт из канала (ключи группы), из «Запросить ключ» и с экрана — не вперемешку. */
+    private val reopenLock = kotlinx.coroutines.sync.Mutex()
 
     private suspend fun captionKey(userId: String, deviceId: String): ByteArray? {
         senderKeys[deviceId]?.let { return it }

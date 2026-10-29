@@ -4871,9 +4871,13 @@ private fun Chat(
             requestKeys = if (group) {
                 // Просьба подписывается фразой (Р42): без подписывающего она уходила неподписанной и
                 // получала 403 даже с введённой фразой (живая проверка 2026-10-06, п. 1.7).
-                RequestGroupKeys(GroupKeyRecoveryOverHttp(network.keyRecovery) { gid, words ->
-                    io.tima.core.encryption.RecoverySignature.sign(words, gid, myDeviceId)
-                })
+                RequestGroupKeys(
+                    // «Недостающих нет» — дело в ключе подписи автора: повтор сходит за ним (КК2).
+                    reopen = { reopenUnreadable?.invoke() },
+                    recovery = GroupKeyRecoveryOverHttp(network.keyRecovery) { gid, words ->
+                        io.tima.core.encryption.RecoverySignature.sign(words, gid, myDeviceId)
+                    },
+                )
             } else {
                 null
             },
