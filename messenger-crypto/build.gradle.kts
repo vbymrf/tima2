@@ -37,20 +37,14 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // NaCl: SecretBox, Box, Ed25519, HKDF. api, а не implementation:
-            // типы Kodium видны в подписях (KodiumPrivateKey).
-            api("eu.livotov.labs:kodium:1.0.0")
-
-            // ML-KEM-768 (FIPS 203) для escrow. Реализация ML-KEM внутри Kodium
-            // не интероперабельна со стандартом (ADR-0005 Поправка-1), поэтому
-            // берётся апстрим того же кода — KyberKotlin.
+            // NaCl: SecretBox, Box, Ed25519, HKDF — и ML-KEM-768 (FIPS 203) для escrow.
+            // api, а не implementation: типы Kodium видны в подписях (KodiumPrivateKey).
             //
-            // ВАЖНО: артефакты Apple апстрим не публикует, поэтому здесь
-            // разрешается наш форк из ../third-party с теми же координатами.
-            // Он обязан лежать в mavenLocal, и mavenLocal идёт ПЕРЕД
-            // mavenCentral в settings.gradle.kts — иначе подтянется апстрим без
-            // таргетов Apple, и iOS не соберётся.
-            implementation("asia.hombre:kyber:2.0.1")
+            // ML-KEM — из 1.1.0, нижний пакет io.kodium.core.fips203 (ADR-0005 Поправка-3,
+            // ПЛАН-(КМ)): в 1.0.0 он был сломан (Поправка-1), и с 2026-08-14 по 2026-10-29
+            // здесь стоял форк KyberKotlin из mavenLocal. Обновлять версию — только через
+            // ревью изменений и зелёные векторы: от fromRaw и HKDF зависят ключи всех устройств.
+            api("eu.livotov.labs:kodium:1.1.0")
 
             // Сжатие body ДО шифрования. Заменило zstd-jni (только JVM):
             // zstd-kmp даёт все таргеты, включая Apple, без cinterop.
@@ -65,7 +59,7 @@ kotlin {
             // примитивы» дороже, чем одна зависимость.
             //
             // Отдельной библиотеки CSPRNG здесь НЕТ намеренно: единственное
-            // место, где нужна случайность помимо самих Kodium и Kyber, — это
+            // место, где нужна случайность помимо самого Kodium, — это
             // мнемоника, и она берёт её у Kodium. Второй источник случайности в
             // криптомодуле — это второй способ получить её плохо.
             implementation("org.kotlincrypto.hash:sha2:0.8.0")

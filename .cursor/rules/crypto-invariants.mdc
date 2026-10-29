@@ -15,9 +15,17 @@ provide. Decisions and reasoning: `doc/adr/0005-kodium-readiness-gate.md`,
 
 - **NaCl layer** — SecretBox, Box, Ed25519, HKDF — **only Kodium**. Do not add a
   second library for these and do not write the primitives yourself.
-- **ML-KEM-768** — `asia.hombre:kyber` (KyberKotlin), behind the single wrapper
-  `messenger-crypto/.../Mlkem768.kt`. Kodium's own ML-KEM is broken and must not
-  be called: it truncates SHAKE output, filling the matrix `Â` with 3% entropy.
+- **ML-KEM-768** — Kodium 1.1.0, lower package `io.kodium.core.fips203`
+  (ADR-0005 Поправка-3), behind the single wrapper `messenger-crypto/.../Mlkem768.kt`.
+  Kodium 1.0.0's ML-KEM was broken (truncated SHAKE, matrix `Â` filled with 3%
+  entropy); 1.1.0 fixed it but kept the broken scheme as variant `LEGACY` and picks
+  the scheme **by the recipient's public key**. `Mlkem768.encapsulate` therefore
+  refuses a key detected as `LEGACY`: the enclave (Go, FIPS 203 only) could not open
+  such an escrow block, and the send would succeed silently. Do not call
+  `io.kodium.core.MLKEM` or `Kodium.pqc` directly.
+- **Upgrading Kodium** is a protocol-level change: `fromRaw`, HKDF and the NaCl layer
+  are baked into every device key and local database. Only with all vectors green and
+  a review of the upstream diff.
 - **BouncyCastle** — `testImplementation` only. It is the independent oracle, not
   a product dependency. Removing it from the test scope removes the only thing
   that would catch a repeat of the Kodium defect.

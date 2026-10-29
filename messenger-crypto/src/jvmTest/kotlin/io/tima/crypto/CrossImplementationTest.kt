@@ -1,5 +1,7 @@
 package io.tima.crypto
 
+import io.kodium.MlKemVariant
+import io.kodium.core.MLKEM
 import io.kodium.core.nacl
 import io.kodium.ratchet.HKDF
 import org.bouncycastle.crypto.digests.SHA256Digest
@@ -23,6 +25,7 @@ import java.security.SecureRandom
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -200,12 +203,14 @@ class CrossImplementationTest {
     // ── ML-KEM-768 ───────────────────────────────────────────────────────────
 
     /**
-     * Провайдер ML-KEM у нас KyberKotlin (ADR-0005 Поправка-2), и его обязан
-     * понимать будущий HSM. Сверяем в обе стороны: escrow работает только если
-     * анклав декапсулирует наш шифртекст и наоборот.
+     * Провайдер ML-KEM у нас Kodium 1.1.0, нижний пакет `fips203` (ADR-0005 Поправка-3),
+     * и его обязан понимать анклав (Go) и будущий HSM. Сверяем в обе стороны: escrow
+     * работает только если анклав декапсулирует наш шифртекст и наоборот. Заодно —
+     * стандартный ключ Kodium опознаёт как FIPS 203, иначе [Mlkem768.encapsulate]
+     * отказал бы честному ключу (ПЛАН-(КМ) Р2).
      */
     @Test
-    fun `mlkem768 - KyberKotlin и BouncyCastle совместимы в обе стороны`() {
+    fun `mlkem768 - Kodium и BouncyCastle совместимы в обе стороны`() {
         val parameters = MLKEMParameters.ml_kem_768
         repeat(KEM_ITERATIONS) {
             val (ourPublic, ourSecret) = Mlkem768.keyPair()
@@ -216,7 +221,7 @@ class CrossImplementationTest {
             assertContentEquals(
                 encapsulated.secret,
                 Mlkem768.decapsulate(encapsulated.encapsulation, ourSecret),
-                "BouncyCastle -> KyberKotlin разошлись; seed=$seed",
+                "BouncyCastle -> Kodium разошлись; seed=$seed",
             )
 
             // Наша инкапсуляция — их декапсуляция.
@@ -226,13 +231,35 @@ class CrossImplementationTest {
             val theirPair = generator.generateKeyPair()
             val theirPublic = (theirPair.public as MLKEMPublicKeyParameters).encoded
             val theirSecret = (theirPair.private as MLKEMPrivateKeyParameters).encoded
+            assertEquals(
+                MlKemVariant.FIPS_203,
+                MLKEM.variantOf(theirPublic),
+                "ключ BouncyCastle опознан как LEGACY; seed=$seed",
+            )
 
             val (ourShared, ourCiphertext) = Mlkem768.encapsulate(theirPublic)
             assertContentEquals(
                 ourShared,
                 MLKEMExtractor(MLKEMPrivateKeyParameters(parameters, theirSecret)).extractSecret(ourCiphertext),
-                "KyberKotlin -> BouncyCastle разошлись; seed=$seed",
+                "Kodium -> BouncyCastle разошлись; seed=$seed",
             )
+        }
+    }
+
+    /**
+     * Порядок половин сида `d ‖ z` (ПЛАН-(КМ) КМ1). Вектор `mlkem768_escrow` его не ловит:
+     * в нём все 64 байта одинаковы. Здесь `d ≠ z`, и ключ из того же сида у BouncyCastle
+     * обязан совпасть байт в байт — и открытый, и закрытый.
+     */
+    @Test
+    fun `mlkem768 - ключ из сида с разными d и z совпадает с BouncyCastle`() {
+        val parameters = MLKEMParameters.ml_kem_768
+        repeat(KEM_ITERATIONS) {
+            val seedBytes = bytes(64)
+            val (ourPublic, ourSecret) = Mlkem768.keyPairFromSeed(seedBytes)
+            val theirs = MLKEMPrivateKeyParameters(parameters, seedBytes)
+            assertContentEquals(theirs.publicKey, ourPublic, "открытый ключ из сида разошёлся; seed=$seed")
+            assertContentEquals(theirs.encoded, ourSecret, "закрытый ключ из сида разошёлся; seed=$seed")
         }
     }
 

@@ -1,28 +1,36 @@
 package io.tima.crypto
 
-import asia.hombre.kyber.KyberCipherText
-import asia.hombre.kyber.KyberDecapsulationKey
-import asia.hombre.kyber.KyberEncapsulationKey
-import asia.hombre.kyber.api.MLKEM_768
-import asia.hombre.kyber.interfaces.RandomProvider
+import io.kodium.MlKemVariant
+import io.kodium.core.MLKEM
+import io.kodium.core.fips203.KyberCipherText
+import io.kodium.core.fips203.KyberDecapsulationKey
+import io.kodium.core.fips203.KyberEncapsulationKey
+import io.kodium.core.fips203.KyberKEMKeyPair
+import io.kodium.core.fips203.MLKEM_768
+import io.kodium.core.fips203.RandomProvider
 
 /**
- * ML-KEM-768 (FIPS 203) для escrow-слоя — провайдер KyberKotlin
- * (`asia.hombre:kyber`, ADR-0005 Поправка-2).
+ * ML-KEM-768 (FIPS 203) для escrow-слоя — провайдер Kodium 1.1.0, нижний пакет
+ * `io.kodium.core.fips203` (ADR-0005 Поправка-3, ПЛАН-(КМ) Р1, Р3).
  *
- * НЕ Kodium: его реализация ML-KEM не интероперабельна с FIPS 203 — `KyberMath`
- * берёт SHAKE через `Digest`-грань kotlincrypto вместо XOF, из-за чего матрица `Â`
- * заполняется энтропией на 3%, а шум `s`/`e` — наполовину (ADR-0005 Поправка-1,
- * стенд воспроизведения — `doc_add/kodium-mlkem/`).
+ * История. В Kodium 1.0.0 ML-KEM был не интероперабелен с FIPS 203: SHAKE брался через
+ * `Digest`-грань вместо XOF, матрица `Â` заполнялась энтропией на 3% (ADR-0005 Поправка-1,
+ * issue LivotovLabs/kodium#11). С 2026-08-14 до 2026-10-29 здесь стоял KyberKotlin
+ * (Поправка-2) — его форки ради сборок под iOS. Kodium 1.1.0 исправил #11 (`xof`/`prf`
+ * читают SHAKE потоком нужной длины) и публикует iOS — форки ушли.
  *
- * KyberKotlin — апстрим того самого кода, что вендорен в Kodium, и **в нём дефекта
- * нет**: там `xof` возвращает поток, а `prf` получает длину конструктором. Выбран
- * вместо BouncyCastle по двум причинам: 163 КБ против 8,68 МБ и поддержка Kotlin
- * Multiplatform (BouncyCastle только JVM и закрывал бы дорогу на iOS).
+ * Нижний пакет, а не `io.kodium.core.MLKEM`: только в нём генерация ключа принимает
+ * подставленную случайность, без которой вектор `mlkem768_escrow` не воспроизвести (Р3).
+ *
+ * **Схему закрытия выбирает Kodium, по байтам открытого ключа** — сломанная схема 1.0.0
+ * осталась вариантом `LEGACY`, настройки «только FIPS 203» нет. Поэтому [encapsulate]
+ * сначала проверяет вариант и на `LEGACY` отказывает (Р2): закрытый по ней блок escrow
+ * анклав (Go, только FIPS 203) не открыл бы, а отправка прошла бы молча. Честный ключ так не
+ * опознаётся; подложный не пройдёт подпись анклава — проверка страхует от ошибки.
  *
  * BouncyCastle остался в `testImplementation` как независимый оракул: сверка двух
  * реализаций идёт на каждой сборке — см. `CrossImplementationTest`. Отсутствие
- * именно такой сверки и позволило дефекту Kodium дожить до релиза.
+ * именно такой сверки и позволило дефекту Kodium 1.0.0 дожить до релиза.
  *
  * API повторяет `io.kodium.core.MLKEM` (порядок Pair: shared ПЕРВЫЙ) — провайдер
  * меняется в одном месте.
@@ -36,9 +44,14 @@ object Mlkem768 {
     /** Генерация пары (CSPRNG). @return Pair(public 1184 B, secret 2400 B) */
     fun keyPair(): Pair<ByteArray, ByteArray> = toPair(MLKEM_768().generate())
 
-    /** Инкапсуляция на публичный ключ. @return Pair(sharedSecret 32 B, ciphertext 1088 B) */
+    /**
+     * Инкапсуляция на публичный ключ. @return Pair(sharedSecret 32 B, ciphertext 1088 B)
+     *
+     * @throws IllegalArgumentException ключ не того размера или опознан как `LEGACY` (Р2).
+     */
     fun encapsulate(publicKey: ByteArray): Pair<ByteArray, ByteArray> {
         require(publicKey.size == PublicKeySize) { "ML-KEM-768 public key: ожидалось $PublicKeySize байт" }
+        require(MLKEM.variantOf(publicKey) == MlKemVariant.FIPS_203) { "ключ ML-KEM не FIPS 203 (LEGACY)" }
         val result = KyberEncapsulationKey.fromBytes(publicKey).encapsulate()
         return Pair(result.sharedSecretKey, result.cipherText.fullBytes)
     }
@@ -56,9 +69,10 @@ object Mlkem768 {
     /**
      * Тест-хук KAT: детерминированный keygen из `d ‖ z` (64 байта, layout noble/FIPS 203).
      *
-     * ВНИМАНИЕ на порядок половин. `KyberKeyGenerator` запрашивает у источника
-     * случайности СНАЧАЛА `z` (уходит в ключ декапсуляции для implicit rejection),
-     * ПОТОМ `d` (из него растёт K-PKE) — то есть обратный нашему layout. Поэтому
+     * ВНИМАНИЕ на порядок половин. `KyberKeyGenerator` (у Kodium 1.1.0 тот же, что был
+     * у KyberKotlin) запрашивает у источника случайности СНАЧАЛА `z` (уходит в ключ
+     * декапсуляции для implicit rejection), ПОТОМ `d` (из него растёт K-PKE) — то есть
+     * обратный нашему layout. Поэтому
      * здесь половины меняются местами.
      *
      * Проверено сверкой с BouncyCastle на seed с `d != z`; вектор `mlkem768_escrow`
@@ -70,7 +84,7 @@ object Mlkem768 {
         return toPair(MLKEM_768(FixedRandom(zd)).generate())
     }
 
-    private fun toPair(kp: asia.hombre.kyber.KyberKEMKeyPair): Pair<ByteArray, ByteArray> =
+    private fun toPair(kp: KyberKEMKeyPair): Pair<ByteArray, ByteArray> =
         Pair(kp.encapsulationKey.fullBytes, kp.decapsulationKey.fullBytes)
 
     /** Отдаёт байты из фиксированного буфера последовательно — независимо от разбивки запросов. */
