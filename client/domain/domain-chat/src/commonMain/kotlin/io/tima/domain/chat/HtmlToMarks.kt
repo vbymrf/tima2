@@ -12,7 +12,9 @@ package io.tima.domain.chat
  */
 object HtmlToMarks {
 
-    private val TAG = Regex("""<(/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(/?)>|<!--.*?-->|<!\[CDATA\[.*?]]>|<![^>]*>|<\?[^>]*>""", RegexOption.DOT_MATCHES_ALL)
+    // `[\s\S]`, а не `.` с DOT_MATCHES_ALL: этой опции нет в общем коде (только JVM), и сборка общего кода в CI
+    // на ней падала с 2026-10-18. Комментарий и CDATA бывают многострочными; `[^>]` перевод строки и так берёт.
+    private val TAG = Regex("""<(/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(/?)>|<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?]]>|<![^>]*>|<\?[^>]*>""")
     private val INLINE = mapOf(
         "b" to "**", "strong" to "**",
         "i" to "*", "em" to "*",

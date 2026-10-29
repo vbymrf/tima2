@@ -203,7 +203,8 @@ class LinkCardsOverHttp(
     }
 
     private fun tag(html: String, name: String): String? =
-        Regex("<$name[^>]*>(.*?)</$name>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(html)
+        // `[\s\S]` вместо DOT_MATCHES_ALL — опции нет в общем коде (только JVM); заголовок бывает многострочным.
+        Regex("<$name[^>]*>([\\s\\S]*?)</$name>", RegexOption.IGNORE_CASE).find(html)
             ?.groupValues?.get(1)?.let { HtmlToMarks.decode(it).replace(Regex("\\s+"), " ").trim() }?.takeIf { it.isNotEmpty() }
 
     companion object {
