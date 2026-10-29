@@ -45,19 +45,42 @@ func (s *Store) MaxDeviceEventID(ctx context.Context, deviceID string) (int64, e
 	return v, err
 }
 
-// GCPersonalWrappedKeys удаляет обёртки конвертов по эпохе (ПЛАН-(ПС) ПС2, Р3, Р5): обёртка
-// живёт до конца календарного месяца сообщения (UTC; эпоха депозитария «чат × месяц») плюс
-// graceSec. Сообщение исчезает из выдачи истории (JOIN по обёртке) — дальше история только из
-// копии ключей; конверт с escrow остаётся до escrow-архива. Короче обёртка — меньше прошлого
-// откроет ключ устройства, утёкший потом.
+// GCPersonalWrappedKeys удаляет обёртки личных сообщений по доставке (план КК, КК10; модель Р5 —
+// «ключи на устройствах, обёртки до доставки»; заменяет календарный срок ПЛАН-(ПС) ПС2):
+//   - забранная — через graceSec после того, как устройство её забрало (ключ уже лежит на нём, КК9);
+//   - не забранная — пока у сообщения есть содержимое: молчащее устройство откроет пропущенное само (Р7 —
+//     до отзыва устройство своё);
+//   - обёртка отключённого устройства — сразу: забрать её больше некому.
 func (s *Store) GCPersonalWrappedKeys(ctx context.Context, graceSec int64) (int64, error) {
 	ct, err := s.pool.Exec(ctx, `
 		DELETE FROM personal_message_keys k
 		USING personal_messages m
 		WHERE m.chat_id = k.chat_id AND m.message_id = k.message_id
-		  AND date_trunc('month', m.received_at AT TIME ZONE 'UTC') + interval '1 month'
-		      < (now() AT TIME ZONE 'UTC') - make_interval(secs => $1)`, graceSec)
+		  AND (
+		    (k.taken_at IS NOT NULL AND k.taken_at < now() - make_interval(secs => $1))
+		    OR octet_length(m.encrypted_payload) = 0
+		    OR m.deleted
+		    OR EXISTS (SELECT 1 FROM devices d WHERE d.device_id = k.recipient AND d.revoked_at IS NOT NULL)
+		  )`, graceSec)
 	return ct.RowsAffected(), err
+}
+
+// MarkWrapsTaken — устройство развернуло ключи этих сообщений (КК10): обёртки под него считаются забранными.
+// Отмечается только своя обёртка и только один раз — время первой доставки.
+func (s *Store) MarkWrapsTaken(ctx context.Context, chatID, deviceID string, ids []int64) (int64, error) {
+	ct, err := s.pool.Exec(ctx, `
+		UPDATE personal_message_keys SET taken_at = now()
+		WHERE chat_id = $1 AND recipient = $2 AND taken_at IS NULL AND message_id = ANY($3::bigint[])`,
+		chatID, deviceID, ids)
+	return ct.RowsAffected(), err
+}
+
+// UntakenWraps — сколько обёрток под устройство ещё не забрано (КК10): пока они есть, устройство не
+// уничтожает ключ прошлой эпохи — обёртки могли быть сделаны под него.
+func (s *Store) UntakenWraps(ctx context.Context, deviceID string) (int64, error) {
+	var n int64
+	err := s.pool.QueryRow(ctx, `SELECT count(*) FROM personal_message_keys WHERE recipient = $1 AND taken_at IS NULL`, deviceID).Scan(&n)
+	return n, err
 }
 
 // GCDeviceEpochKeys удаляет записи ключей эпох старше keepEpochs последних у устройства

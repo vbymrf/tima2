@@ -36,6 +36,10 @@ type ChatStore interface {
 	// Просьба о ключах: что уже есть, что вернёт помощник, что потеряно (2026-10-06).
 	ChatRecovery(ctx context.Context, chatID, requesterDevice, requesterUser string, named []int64, fitBytes int) (store.ChatRecovery, error)
 
+	// Обёртки до доставки (план КК, КК10)
+	MarkWrapsTaken(ctx context.Context, chatID, deviceID string, ids []int64) (int64, error)
+	UntakenWraps(ctx context.Context, deviceID string) (int64, error)
+
 	// История на новом устройстве (ИУ1)
 	PersonalChatsOf(ctx context.Context, userID string) ([]store.PersonalChatRef, error)
 	IdentitiesOfAccount(ctx context.Context, userID string) ([]string, error)
@@ -71,5 +75,7 @@ func RegisterChats(mux *http.ServeMux, st ChatStore, n *Notifier, requireDevice 
 	mux.HandleFunc("POST /api/v1/users/me/key-copy/groups", requireDevice(saveGroupKeyCopies(deps)))
 	mux.HandleFunc("GET /api/v1/users/me/key-copy/groups", requireDevice(listGroupKeyCopies(deps)))
 	mux.HandleFunc("POST /api/v1/chats/{chatID}/recover", requireDevice(chatRecover(deps)))
+	mux.HandleFunc("POST /api/v1/chats/{chatID}/keys/taken", requireDevice(wrapsTaken(deps)))
+	mux.HandleFunc("GET /api/v1/keys/untaken", requireDevice(untakenWraps(deps)))
 	mux.HandleFunc("POST /api/v1/chats/{chatID}/recover/provide", requireDevice(chatRecoverProvide(deps)))
 }
