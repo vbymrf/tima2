@@ -175,8 +175,10 @@ class KeyCopyService(
         val identityPub = (keys.devicesOf(userId) as? DeviceKeysResult.Devices)?.identityPub ?: return null
         val anchor = io.tima.core.encryption.CopyAnchor(identityPub, epoch, copy.encryptionPublic, published.sig).takeIf { it.valid() } ?: return null
         remember(anchor)
-        runCatching { book?.write(anchor) }
-        Journal.note(LogCode.DEVICE_TRUST, "ключ копии запомнен из секрета телефона и записан в книгу", "эпоха" to epoch)
+        // Без ключа служебной группы книга не пишется — тогда якорь только на этом устройстве, а другим
+        // устройствам аккаунта ключ копии даст фраза.
+        val written = runCatching { book?.write(anchor) }.getOrNull() == true
+        Journal.note(LogCode.DEVICE_TRUST, "ключ копии запомнен из секрета телефона", "эпоха" to epoch, "в книге" to written)
         return anchor
     }
 
