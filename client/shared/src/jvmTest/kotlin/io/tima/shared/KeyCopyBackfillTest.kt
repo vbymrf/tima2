@@ -220,6 +220,21 @@ class KeyCopyBackfillTest {
         assertTrue(service.dropStoredSecret(harvested = true))
         assertEquals(null, vault.held, "секрет не стёрт")
         assertTrue(service.anchored(), "ключ копии запомнен до стирания")
+        // Чужая фраза (КК7): копию не трогает и не открывает.
+        val strangerService = KeyCopyService(
+            api = KeyCopyApi(route, client) { "t" },
+            keys = KeysApi(route, client) { "t" },
+            history = HistoryApi(route, client) { "t" },
+            userId = "u-1",
+            deviceId = "d-2",
+            identity = DeviceIdentity.generate(),
+            scope = CoroutineScope(coroutineContext),
+            secrets = null,
+            settings = MemorySettings(),
+        )
+        strangerService.onPhrase(AccountIdentitiesOverKodium.fresh().words)
+        assertFalse(strangerService.anchored(), "чужая фраза запомнена как ключ копии")
+        assertEquals(null, strangerService.copyIdentity())
         service.onPhrase(account.words)
         assertEquals(null, vault.held, "фраза снова сохранила секрет")
         assertTrue(service.copyIdentity() != null, "фраза этого запуска открывает копию")

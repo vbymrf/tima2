@@ -1518,6 +1518,9 @@ object SpanishWords : Words {
         override val messageUnavailable = "mensaje no disponible"
 
         override val messageUnavailableAsk = "Mensaje no disponible, solicitar"
+        override val noCopyTitle = "No hay copia de claves"
+        override val noCopyText = "Introduzca la frase para que el historial no se pierda si pierde el teléfono"
+        override val noCopyEnter = "Introducir la frase"
         override val notDecrypted = "Sin descifrar"
         override val notDecryptedLost = "Sin descifrar: no queda ninguna clave"
         override val keyWaitTitle = "Esperando la clave de sus dispositivos y del interlocutor"

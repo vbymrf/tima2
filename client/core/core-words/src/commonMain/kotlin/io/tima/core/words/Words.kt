@@ -1371,6 +1371,10 @@ interface ChatWords {
     fun phraseOpened(count: Int): String
     val phraseWrong: String
     val copyMissing: String
+    /** Одна просьба фразы на телефоне, когда копии ключей нет (план КК, КК7 б). */
+    val noCopyTitle: String
+    val noCopyText: String
+    val noCopyEnter: String
     /** «Не подтверждено» (план КК, КК13): открыто без проверки подписи автора. */
     val unverifiedMark: String
     /** Пояснение по нажатию на пометку «Не подтверждено». */
@@ -4066,6 +4070,9 @@ object RussianWords : Words {
         }
         override val messageUnavailable = "сообщение недоступно"
         override val messageUnavailableAsk = "Сообщение недоступно, запросить"
+        override val noCopyTitle = "Копии ключей нет"
+        override val noCopyText = "Введите фразу, чтобы история не пропала при потере телефона"
+        override val noCopyEnter = "Ввести фразу"
         override val notDecrypted = "Не расшифровано"
         override val notDecryptedLost = "Не расшифровано: ключа не осталось"
         override val keyWaitTitle = "Ждём ключ от ваших устройств и собеседника"

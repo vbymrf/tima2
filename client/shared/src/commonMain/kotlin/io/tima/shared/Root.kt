@@ -676,7 +676,16 @@ private fun Inside(
     val pinUser = current.session.userId
     val temporary = entry.accountList().firstOrNull { it.userId == pinUser }?.virtual == true
     val pinHost = remember(pinUser) {
-        PinHost(entry.pin(pinUser), temporary) { text -> pinPhraseVerdict(assembled.network, pinUser, temporary, text) }
+        PinHost(entry.pin(pinUser), temporary) { text ->
+            pinPhraseVerdict(assembled.network, pinUser, temporary, text).also { verdict ->
+                // Любой ввод фразы заводит копию, если её нет (план КК, КК7 а): здесь — сброс пин-кода.
+                if (verdict == io.tima.domain.account.PinPhraseVerdict.Ok && !temporary) {
+                    io.tima.domain.account.PhraseWords.parse(text).takeIf { it.isNotEmpty() }?.let { words ->
+                        runCatching { assembled.keyCopy?.onPhrase(words) }
+                    }
+                }
+            }
+        }
     }
     val relock by PinGate.relock.collectAsState()
     var locked by remember(pinUser, relock) { mutableStateOf(pinHost.lock.isOn() && !PinGate.isOpen(pinUser)) }
@@ -2870,6 +2879,21 @@ private fun App(
     // другого повода нет — «не знаю».
     val brokenNews = news as? UpdateNews.Broken
     val importantOffer = updateState.offer?.takeIf { updateState.important }
+    // Копии ключей нет — спросить фразу один раз и только на телефоне (план КК, КК7 б).
+    var noCopyAsk by remember(assembled.session.userId) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(assembled.session.userId) {
+        val copy = assembled.keyCopy
+        if (copy == null || platform.server !in io.tima.domain.account.PHONES) {
+            noCopyAsk = false
+            return@LaunchedEffect
+        }
+        if (runCatching { environment.settings.all().first()[NO_COPY_ASKED] }.getOrNull() != null) {
+            noCopyAsk = false
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(60_000L)
+        noCopyAsk = runCatching { copy.missing() }.getOrNull() ?: false
+    }
     val eventPresence: Map<EventKind, Presence> = mapOf(
         EventKind.Update to when {
             brokenNews != null || importantOffer != null -> Presence.Yes
@@ -2898,6 +2922,12 @@ private fun App(
         },
         // ДУ9: перерегистрация — извещение стороне.
         EventKind.Rereg to if (reregEvent != null) Presence.Yes else Presence.No,
+        // Копии ключей нет — один раз на телефоне (план КК, КК7 б).
+        EventKind.NoCopy to when (noCopyAsk) {
+            true -> Presence.Yes
+            false -> Presence.No
+            null -> Presence.Unknown
+        },
     )
     var eventMemory by remember { mutableStateOf(EventMemory()) }
     // Перерегистрация (ДУ9) идёт шагами — запуск, спор, окно, исход, — и каждое следующее событие
@@ -2936,11 +2966,13 @@ private fun App(
         }
         val authWords = Tima.words.auth
         val socialWords = Tima.words.social
+        val chatWords = Tima.words.chat
         fun lineTitle(kind: EventKind): String = when (kind) {
             EventKind.IdentityReplaced -> authWords.replacedTitle
             EventKind.IdentityClaim -> socialWords.identityClaims
             EventKind.DeviceAdded -> authWords.deviceAddedTitle
             EventKind.Uncertified -> authWords.uncertifiedTitle
+            EventKind.NoCopy -> chatWords.noCopyTitle
             EventKind.Rereg -> authWords.reregTitle
             EventKind.Update -> upd.importantOut.takeIf { importantOffer != null } ?: upd.broken
             EventKind.Notices -> warn.eventsLineNotices
@@ -3024,6 +3056,24 @@ private fun App(
                         where = Where.Settings(SettingsItem.DEVICES)
                     },
                     NoticeAction(warn.warnLater, ButtonKind.Quiet) { close(EventKind.Uncertified, "Позже") },
+                ),
+            )
+            // Копии ключей нет (план КК, КК7 б): к «Секретной фразе и устройствам», там «Завести копию». Просьба
+            // одна: и «Ввести фразу», и «Позже» её больше не показывают — строка на том экране остаётся.
+            EventKind.NoCopy -> NoticeEntry(
+                notice = io.tima.feature.shell.Notice(title = Tima.words.chat.noCopyTitle, text = Tima.words.chat.noCopyText),
+                actions = listOf(
+                    NoticeAction(Tima.words.chat.noCopyEnter) {
+                        close(EventKind.NoCopy, "Ввести фразу")
+                        scope.launch { runCatching { environment.settings.put(NO_COPY_ASKED, "1") } }
+                        noCopyAsk = false
+                        where = Where.Settings(SettingsItem.DEVICES)
+                    },
+                    NoticeAction(warn.warnLater, ButtonKind.Quiet) {
+                        close(EventKind.NoCopy, "Позже")
+                        scope.launch { runCatching { environment.settings.put(NO_COPY_ASKED, "1") } }
+                        noCopyAsk = false
+                    },
                 ),
             )
             // Заявка новой личности в группу — к составу группы, там «Подтвердить».
@@ -8200,6 +8250,9 @@ private const val CHAT_KEYS_ASKED = "chat.keys.asked."
  * 2026-10-06): их не просят снова. Имя латиницей — то, что приложение кладёт на диск.
  */
 private const val CHAT_KEYS_LOST = "chat.keys.lost."
+
+/** Просьба фразы, когда копии ключей нет, уже была (план КК, КК7 б) — больше не показывается. */
+private const val NO_COPY_ASKED = "keycopy.asked.v1"
 
 /** Сами просим ключи переписки не чаще раза в сутки. */
 private const val CHAT_KEYS_AGAIN_MS = 24 * 60 * 60_000L

@@ -199,12 +199,25 @@ class KeyCopyService(
      * секрет (Р46).
      */
     suspend fun onPhrase(words: List<String>) {
-        val epoch = when (val now = api.current()) {
-            is KeyCopyApi.Current.Published -> now.key.epoch
+        val published = api.current()
+        val epoch = when (published) {
+            is KeyCopyApi.Current.Published -> published.key.epoch
             KeyCopyApi.Current.Missing -> 1
             KeyCopyApi.Current.Unknown -> return
         }
+        // Чужая фраза или опечатка не заводит копию и не запоминается (КК7, КК8): ключ личности из слов — тот
+        // же, что запомнен, а без запомненного — тот, что у сервера; опубликованная копия — та же пара.
+        val claimed = io.tima.core.encryption.AccountIdentitiesOverKodium.fromWords(words) ?: return
+        val known = anchor()?.identityPub ?: (keys.devicesOf(userId) as? DeviceKeysResult.Devices)?.identityPub
+        if (known != null && !known.contentEquals(claimed)) {
+            Journal.note(LogCode.DEVICE_TRUST, "фраза не этого аккаунта — копия не тронута")
+            return
+        }
         val copy = KeyCopy.fromWords(words, epoch) ?: return
+        if (published is KeyCopyApi.Current.Published && !published.key.pub.contentEquals(copy.encryptionPublic)) {
+            Journal.note(LogCode.DEVICE_TRUST, "фраза не выводит опубликованную пару копии — копия не тронута", "эпоха" to epoch)
+            return
+        }
         // Закрытый ключ копии — только в памяти этого запуска (план КК, КК11): на устройство он не пишется.
         fromPhrase = copy
         val sig = KeyCopy.sign(words, epoch, copy.encryptionPublic) ?: return

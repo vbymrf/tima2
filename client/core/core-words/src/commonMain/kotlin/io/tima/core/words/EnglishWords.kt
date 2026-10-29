@@ -1518,6 +1518,9 @@ object EnglishWords : Words {
         override val messageUnavailable = "message unavailable"
 
         override val messageUnavailableAsk = "Message unavailable, request"
+        override val noCopyTitle = "No key backup"
+        override val noCopyText = "Enter your phrase so the history is not lost if you lose the phone"
+        override val noCopyEnter = "Enter the phrase"
         override val notDecrypted = "Not decrypted"
         override val notDecryptedLost = "Not decrypted: no key left"
         override val keyWaitTitle = "Waiting for the key from your devices and the other person"
