@@ -1,0 +1,7 @@
+-- Схема 26 → 27: ключи личных сообщений на устройстве (план КК, КК9).
+CREATE TABLE message_keys (
+    chat_id   TEXT    NOT NULL,
+    server_id INTEGER NOT NULL,
+    key_enc   BLOB    NOT NULL,
+    PRIMARY KEY (chat_id, server_id)
+);

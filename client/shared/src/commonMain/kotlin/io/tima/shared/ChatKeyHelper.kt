@@ -44,6 +44,8 @@ class ChatKeyHelper(
     /** Собеседник личной переписки; `null` — не знаем, и отдавать некому. */
     private val peerOf: suspend (String) -> String?,
     private val now: () -> Long = { msNow() },
+    /** Ключ сообщения на этом устройстве (план КК, КК9); `null` — нет, перезаворачиваем из обёртки на сервере. */
+    private val localKey: (String, Long) -> ByteArray? = { _, _ -> null },
 ) {
     private val lock = Mutex()
     private val answered = HashMap<String, Long>()
@@ -94,11 +96,19 @@ class ChatKeyHelper(
         val pub = device.wrapPub()
 
         val wanted = missing.toHashSet()
-        val oldest = wanted.min()
         val out = mutableListOf<HistoryApi.Key>()
+        // Сначала — из своих ключей сообщений (план КК, КК9): обёртка на сервере могла быть уже стёрта.
+        var fromOwn = 0
+        for (id in missing) {
+            val known = runCatching { localKey(chatId, id) }.getOrNull() ?: continue
+            out += HistoryKeys.wrapKey(id, known, pub).let { HistoryApi.Key(it.messageId, it.ephemeralPub, it.wrapped) }
+            wanted -= id
+            fromOwn++
+        }
+        val oldest = wanted.minOrNull() ?: Long.MAX_VALUE
         var failed = 0
         var before = 0L
-        pages@ while (out.size + failed < wanted.size) {
+        pages@ while (wanted.isNotEmpty() && out.size - fromOwn + failed < wanted.size) {
             val page = history.page(chatId, before) ?: break
             if (page.isEmpty()) break
             for (item in page) {
@@ -115,7 +125,7 @@ class ChatKeyHelper(
         Journal.note(
             LogCode.DEVICE_TRUST, "ключи переписки отданы по просьбе",
             "переписка" to chatId.take(8), "устройство" to requesterDevice.take(8),
-            "своё" to own, "по фразе" to (signature != null), "названо" to wanted.size,
+            "своё" to own, "по фразе" to (signature != null), "названо" to missing.size, "из своих ключей" to fromOwn,
             "ключей" to saved, "не перезавёрнуто" to failed,
         )
         return saved

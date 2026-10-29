@@ -38,6 +38,16 @@ object HistoryKeys {
         targetEncryptionPub: ByteArray,
     ): Rewrapped? = runCatching {
         require(targetEncryptionPub.size == 32) { "открытый ключ устройства — 32 байта" }
+        val messageId = MessageSerializer.decodeEnvelope(envelope).getOrThrow().meta.messageId.toLong()
+        val messageKey = keyOf(envelope, wrapEphemeral, myDeviceId, me) ?: return null
+        wrapKey(messageId, messageKey, targetEncryptionPub)
+    }.getOrNull()
+
+    /**
+     * Ключ сообщения из своей обёртки, сверенный с обязательством в конверте (план КК, КК9: ключи сообщений
+     * хранятся на устройстве). `null` — обёртки для нас нет, ключ не развернулся или не сошёлся.
+     */
+    fun keyOf(envelope: ByteArray, wrapEphemeral: ByteArray?, myDeviceId: String, me: DeviceIdentity): ByteArray? = runCatching {
         val sealed = MessageSerializer.decodeEnvelope(envelope).getOrThrow()
         val wrapped = sealed.wrappedKeys[myDeviceId] ?: return null
         val eph = wrapEphemeral?.takeIf { it.size == 32 } ?: sealed.senderEphemeralPub
@@ -47,15 +57,30 @@ object HistoryKeys {
         if (sealed.formatVersion >= CanonicalBytes.FORMAT_VERSION &&
             !CanonicalBytes.commitmentMatches(messageKey, sealed.keyCommitment)
         ) return null
+        messageKey
+    }.getOrNull()
+
+    /** Ключ из конверта, как он лежит в очереди входящих: с меткой истории или без. */
+    fun keyOfStored(stored: ByteArray, myDeviceId: String, me: DeviceIdentity): ByteArray? {
+        val (eph, envelope) = HistoryFrame.split(stored)
+        return keyOf(envelope, eph, myDeviceId, me)
+    }
+
+    /**
+     * Завернуть **известный** ключ сообщения под устройство (КК9): помощник отвечает из своих ключей, а не из
+     * обёртки на сервере — она могла быть уже стёрта.
+     */
+    fun wrapKey(messageId: Long, messageKey: ByteArray, targetEncryptionPub: ByteArray): Rewrapped {
+        require(targetEncryptionPub.size == 32) { "открытый ключ устройства — 32 байта" }
         // Своя эфемерная пара на каждый ключ — как у долей ключа группы: компрометация одной
         // не раскрывает остальную историю.
         val ephemeral = Kodium.generateKeyPair()
-        Rewrapped(
-            messageId = sealed.meta.messageId.toLong(),
+        return Rewrapped(
+            messageId = messageId,
             ephemeralPub = ephemeral.getPublicKey().encryptionKey,
             wrapped = WrappedKeyService.wrap(ephemeral, targetEncryptionPub, messageKey).getOrThrow(),
         )
-    }.getOrNull()
+    }
 }
 
 /**

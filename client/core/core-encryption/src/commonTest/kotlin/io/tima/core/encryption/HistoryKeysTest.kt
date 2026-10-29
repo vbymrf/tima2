@@ -64,6 +64,19 @@ class HistoryKeysTest {
         assertEquals("до нового телефона", got.content.plainText())
     }
 
+    /** План КК, КК9: ключ сообщения хранится на устройстве и отдаётся своему без обёртки на сервере. */
+    @Test
+    fun ключ_со_своей_обёртки_отдаётся_новому_устройству_без_сервера() {
+        val key = HistoryKeys.keyOf(envelope, null, "dev-старое", old)!!
+        assertNull(HistoryKeys.keyOf(envelope, null, "dev-чужое", old))
+        val r = HistoryKeys.wrapKey(77L, key, fresh.encryptionPublic)
+        val got = PersonalMessages.open(HistoryFrame.toStored(r.ephemeralPub, asServerGives(r)), "dev-новое", fresh, peer.signingPublic).getOrThrow()
+        assertEquals("до нового телефона", got.content.plainText())
+        // Из очереди входящих — с меткой истории — ключ тот же.
+        val stored = HistoryFrame.toStored(r.ephemeralPub, asServerGives(r))
+        assertTrue(key.contentEquals(HistoryKeys.keyOfStored(stored, "dev-новое", fresh)!!))
+    }
+
     @Test
     fun без_своей_обёртки_перезаворачивать_нечего() {
         assertNull(HistoryKeys.rewrap(envelope, null, "dev-чужое", old, fresh.encryptionPublic))

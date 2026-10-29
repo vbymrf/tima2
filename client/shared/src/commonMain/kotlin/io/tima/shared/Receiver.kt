@@ -217,6 +217,9 @@ class Receiver(
      */
     private val senderKeys = HashMap<String, io.tima.core.database.SenderKey>()
 
+    /** Ключи личных сообщений на устройстве (КК9): источник для своих устройств и копии. */
+    private val messageKeys = io.tima.core.database.SqlMessageKeys(environment.db, environment.cipher)
+
     /** Ключи подписи на устройстве: переживают перезапуск и отзыв устройства автора. */
     private val storedKeys = io.tima.core.database.SqlSenderKeys(environment.db)
 
@@ -1534,6 +1537,8 @@ class Receiver(
                 // Пришедшее из истории или из самой копии в копии уже есть — второй раз не подаём,
                 // иначе восстановление давало бы по запросу на каждое сообщение.
                 if (!io.tima.core.encryption.HistoryFrame.isHistory(entry.envelope)) keyCopy?.feedMessage(entry.chatId, entry.envelope)
+                // Ключ сообщения — на устройство (КК9): отдать своему и положить в копию после срока обёрток.
+                keepKey(entry.chatId, entry.messageId, entry.envelope)
                 // Фото и файлы вне пузыря — забрать сразу, «приди и получи» (Решения §6).
                 postman.received(io.tima.core.encryption.TextBodyCodec.decodeLine(it.body)?.rich)
                 // Правка, заменившая фото (ADR-0052), — новое фото забирается так же сразу.
@@ -1672,6 +1677,42 @@ class Receiver(
         val listed = outcome.devices.any { it.deviceId == deviceId } || outcome.revoked.any { it.device.deviceId == deviceId }
         if (!listed) absentSenders += deviceId
         return senderKeys[deviceId]
+    }
+
+    /** Ключ сообщения из своей обёртки — на устройство (КК9). Не развернулся — ничего: текст уже открыт. */
+    private fun keepKey(chatId: String, messageId: Long, stored: ByteArray) {
+        val key = io.tima.core.encryption.HistoryKeys.keyOfStored(stored, session.deviceId, identity) ?: return
+        runCatching { messageKeys.put(chatId, messageId, key) }
+    }
+
+    /**
+     * Собрать ключи уже прочитанного из своих живых обёрток на сервере — один раз после обновления (план КК,
+     * КК9). До КК9 устройство ключей не хранило; без сбора стирание доставленных обёрток (КК10) унесло бы
+     * последний источник ключа старой переписки.
+     *
+     * @return сколько ключей собрано; `null` — список переписок не получен, повторить позже.
+     */
+    suspend fun harvestMessageKeys(): Int? {
+        val chats = network.history.personalChats(allIdentities = true) ?: return null
+        var kept = 0
+        var pages = 0
+        for (chat in chats) {
+            var before = 0L
+            while (true) {
+                val page = network.history.page(chat.chatId, before) ?: break
+                pages++
+                if (page.isEmpty()) break
+                for (item in page) {
+                    if (runCatching { messageKeys.get(chat.chatId, item.messageId) }.getOrNull() != null) continue
+                    val key = io.tima.core.encryption.HistoryKeys.keyOf(item.envelope, item.wrapEphemeral, session.deviceId, identity) ?: continue
+                    runCatching { messageKeys.put(chat.chatId, item.messageId, key) }.onSuccess { kept++ }
+                }
+                if (page.size < io.tima.core.network.HistoryApi.PAGE) break
+                before = page.last().messageId
+            }
+        }
+        Journal.note(LogCode.DEVICE_TRUST, "ключи прочитанного собраны на устройство", "переписок" to chats.size, "страниц" to pages, "ключей" to kept)
+        return kept
     }
 
     /**

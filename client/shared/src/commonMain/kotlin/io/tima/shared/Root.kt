@@ -1970,6 +1970,19 @@ private fun App(
         runCatching { environment.settings.put(key, "1") }
     }
 
+    // Ключи уже прочитанного — на устройство, один раз после обновления (план КК, КК9): до него ключи
+    // сообщений не хранились, и стирание доставленных обёрток (КК10) унесло бы последний их источник.
+    LaunchedEffect(assembled.session.userId) {
+        val key = "keys.harvested.v1"
+        if (runCatching { environment.settings.all().first()[key] }.getOrNull() != null) return@LaunchedEffect
+        kotlinx.coroutines.delay(30_000L)
+        while (true) {
+            if (runCatching { assembled.receiver.harvestMessageKeys() }.getOrNull() != null) break
+            kotlinx.coroutines.delay(15 * 60_000L)
+        }
+        runCatching { environment.settings.put(key, "1") }
+    }
+
     // Переписки «с собой», заведённые своим сообщением с другого устройства (отчёт X63M,
     // 2026-10-23), — собеседника по списку сервера. Без отметки: нечего чинить — сеть не трогается.
     LaunchedEffect(assembled.session.userId) {

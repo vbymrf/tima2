@@ -1,0 +1,23 @@
+-- Ключи личных сообщений на устройстве (план КК, КК9; модель Р5 «ключи на устройствах»).
+--
+-- Раньше устройство хранило только расшифрованный текст, а ключ сообщения брало из обёртки на сервере —
+-- и отдать его своему другому устройству или положить в копию после срока обёрток было нечем. Ключ лежит
+-- под шифром покоя рядом с текстом и новой открытости не добавляет: текст там уже лежит.
+CREATE TABLE message_keys (
+    chat_id   TEXT    NOT NULL,
+    server_id INTEGER NOT NULL,
+    key_enc   BLOB    NOT NULL,
+    PRIMARY KEY (chat_id, server_id)
+);
+
+putMessageKey:
+INSERT OR IGNORE INTO message_keys(chat_id, server_id, key_enc) VALUES (?, ?, ?);
+
+messageKey:
+SELECT key_enc FROM message_keys WHERE chat_id = ? AND server_id = ?;
+
+messageKeysOf:
+SELECT server_id, key_enc FROM message_keys WHERE chat_id = ? ORDER BY server_id;
+
+messageKeyChats:
+SELECT DISTINCT chat_id FROM message_keys;

@@ -43,6 +43,20 @@ class SqlSenderKeysTest {
         assertTrue(SenderKey("d-1", "u-1", pub, revokedAtMs = 5, revokedReason = "").confirms)
     }
 
+    /** План КК, КК9: ключи сообщений на устройстве — под шифром покоя, не перезаписываются. */
+    @Test
+    fun ключ_сообщения_хранится_под_шифром_и_не_перезаписывается() {
+        val keysOfMessages = SqlMessageKeys(db, testCipher())
+        val key = ByteArray(32) { 7 }
+        keysOfMessages.put("c-1", 3, key)
+        keysOfMessages.put("c-1", 3, ByteArray(32) { 8 })
+        assertTrue(key.contentEquals(keysOfMessages.get("c-1", 3)!!))
+        assertEquals(setOf(3L), keysOfMessages.of("c-1").keys)
+        assertEquals(listOf("c-1"), keysOfMessages.chats())
+        val raw = db.messageKeysQueries.messageKey("c-1", 3).executeAsOne()
+        assertFalse(raw.contentEquals(key), "ключ лежит открытым")
+    }
+
     @Test
     fun непроверенное_хранится_в_базе_и_подтверждается_или_скрывается() {
         val cipher = testCipher()

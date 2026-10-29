@@ -455,6 +455,7 @@ fun buildAssembled(
                     myDeviceId = device.session.deviceId,
                     identity = { identity },
                     peerOf = { chatId -> environment.chatFacts.peerOf(chatId) },
+                    localKey = io.tima.core.database.SqlMessageKeys(environment.db, environment.cipher)::get,
                 ),
                 onStamp = { senderStamps.tryEmit(it) },
                 onOutdated = { outdated.value = true },
