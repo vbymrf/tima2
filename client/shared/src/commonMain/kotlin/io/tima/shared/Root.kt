@@ -4348,6 +4348,13 @@ private fun App(
                         },
                         myUserId = session.userId,
                         reopenUnreadable = { assembled.receiver.reopenUnreadable() },
+                        // «Открыть через фразу» (план КК, КК4): ввод фразы заводит копию, если её нет (КК7 а), и
+                        // открывает недоступное этой переписки из копии.
+                        openByPhrase = { chat, words, isGroup ->
+                            runCatching { assembled.keyCopy?.onPhrase(words) }
+                            assembled.receiver.openFromCopy(chat, words, isGroup)
+                        },
+                        fromPhoneMay = platform.server !in io.tima.domain.account.PHONES,
                         // Вид группы — один на сообщества (2026-10-07); нажатие на аватар — страница.
                         avatarLook = communityView.avatarLook,
                         onAuthor = { id -> where = Where.Person(id) },
@@ -4748,6 +4755,10 @@ private fun Chat(
      * есть (2026-10-06). `null` — нечем: так собирают экран в проверках.
      */
     reopenUnreadable: (suspend () -> Int)? = null,
+    /** «Открыть через фразу» (план КК, КК4): переписка, слова, группа ли. `null` — нечем (проверки). */
+    openByPhrase: (suspend (String, List<String>, Boolean) -> io.tima.domain.chat.PhraseOpen)? = null,
+    /** ПК: «Передать с телефона» в окне недоступного (КК4). */
+    fromPhoneMay: Boolean = false,
     /** Где аватар автора в группе — «Вид» в «Социуме»; в личной переписке аватара нет. */
     avatarLook: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
     /** Нажатие на аватар автора — его страница. */
@@ -4975,6 +4986,8 @@ private fun Chat(
             } else {
                 null
             },
+            openByPhrase = openByPhrase?.let { open -> { words -> open(chatId, words, group) } },
+            fromPhoneMay = fromPhoneMay,
             // Сами — один раз на переписку в сутки, в личной и в группе: каждое открытие с
             // недоступным сообщением будило бы чужие устройства заново.
             autoAskAllowed = {
@@ -5337,7 +5350,12 @@ private fun Chat(
             onBack = onBack,
             onCloseMessage = store::noticeDismissed,
             onRequestKey = store::requestKey,
-            onAskChatKeys = store::askChatKeys,
+            // Нажатие на «Не расшифровано» — окно «Ждём ключ…» (план КК, КК4).
+            onAskChatKeys = store::unreadableTapped,
+            onKeyWaitClose = store::keyWaitClosed,
+            onPhraseOpen = store::phraseOpenStarted,
+            onOpenByPhrase = store::openByPhrasePressed,
+            onFromPhone = store::fromPhonePressed,
             avatarLook = avatarLook,
             onAuthor = onAuthor,
             onPhrase = store::changedPhrase,

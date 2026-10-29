@@ -118,6 +118,13 @@ class SqlInboxStore(
 
     private val keys = db.senderKeysQueries
 
+    override fun replaceUndecryptable(chatId: String, messageId: Long, envelope: ByteArray): Boolean {
+        val before = byKey(chatId, messageId)?.state
+        if (before != IncomingState.UNDECRYPTABLE) return false
+        q.replaceUndecryptable(cipher.seal(envelope), IncomingState.RECEIVED.ordinal.toLong(), keyOf(chatId, messageId), IncomingState.UNDECRYPTABLE.ordinal.toLong())
+        return true
+    }
+
     override fun stashUnverified(chatId: String, messageId: Long, envelope: ByteArray) {
         keys.stashUnverified(keyOf(chatId, messageId), chatId, messageId, cipher.seal(envelope))
     }

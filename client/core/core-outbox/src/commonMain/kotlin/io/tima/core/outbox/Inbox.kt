@@ -214,6 +214,14 @@ interface InboxStore {
         unverified: Boolean = false,
     )
 
+    /**
+     * Заменить конверт у **нечитаемого** входящего и вернуть его в разбор (КК4: ключ пришёл из копии по фразе —
+     * обёртка под это устройство в другом конверте). Разобранное не трогается.
+     *
+     * @return заменено.
+     */
+    fun replaceUndecryptable(chatId: String, messageId: Long, envelope: ByteArray): Boolean
+
     /** Конверт открытого без проверки подписи (КК13) — для повторной проверки, когда придёт ключ. */
     fun stashUnverified(chatId: String, messageId: Long, envelope: ByteArray)
 
@@ -360,6 +368,10 @@ class Inbox(
 
     /** Всё нечитаемое — чтобы перед повтором подтянуть то, чего не хватало (ключи подписи). */
     fun undecryptable(): List<IncomingEntry> = store.undecryptable()
+
+    /** Ключ пришёл другим конвертом (КК4) — нечитаемое на повторный разбор. */
+    fun replaceUndecryptable(chatId: String, messageId: Long, envelope: ByteArray): Boolean =
+        store.replaceUndecryptable(chatId, messageId, envelope)
 
     /** Конверты непроверенного (КК13). */
     fun unverifiedEnvelopes(): List<UnverifiedEnvelope> = store.unverifiedEnvelopes()

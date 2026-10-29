@@ -298,6 +298,10 @@ SELECT * FROM messages WHERE direction = 1 AND state IN (?, ?) ORDER BY local_id
 updateParsed:
 UPDATE messages SET body_enc = ?, sender_id = ?, level = ?, thread_root = ?, kind = ?, edit_of = ?, only_continuation = ?, unverified = ? WHERE dedup_key = ?;
 
+-- Нечитаемое получило конверт с обёрткой под это устройство (КК4, копия по фразе): на повторный разбор.
+replaceUndecryptable:
+UPDATE messages SET body_enc = ?, state = ? WHERE dedup_key = ? AND direction = 1 AND state = ?;
+
 -- Подпись непроверенного сошлась, когда пришёл ключ (КК13): пометка снимается.
 markVerified:
 UPDATE messages SET unverified = 0 WHERE dedup_key = ?;

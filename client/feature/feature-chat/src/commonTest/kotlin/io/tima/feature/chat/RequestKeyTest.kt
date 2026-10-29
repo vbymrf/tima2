@@ -146,6 +146,66 @@ class RequestKeyTest {
         assertEquals(2, assertIs<ChatNotice.KeysLost>(store.state.value.notice).messages)
     }
 
+    /** План КК, КК4: нажатие на «Не расшифровано» — окно и просьба; повторно за сутки не просит. */
+    @Test
+    fun нажатие_на_недоступное_открывает_окно_и_просит() = runTest {
+        val asked = mutableListOf<List<Long>>()
+        var allowed = true
+        stream.value = listOf(unreadable(5))
+        val store = ChatStore(
+            io = kotlinx.coroutines.Dispatchers.Unconfined,
+            chatId = "cccccccc-0000-0000-0000-000000000003",
+            observe = ObserveChat(ChatFeed { _, _ -> stream }),
+            send = send(),
+            scope = backgroundScope,
+            askChatKeys = { _, ids -> asked += ids; io.tima.domain.chat.RequestKeysStep.Asked(2) },
+            autoAskAllowed = { allowed.also { allowed = false } },
+            fromPhoneMay = true,
+        )
+        runCurrent()
+        store.unreadableTapped()
+        runCurrent()
+        val wait = store.state.value.keyWait!!
+        assertFalse(wait.lost)
+        assertTrue(wait.fromPhone, "на ПК есть «Передать с телефона»")
+        assertEquals(listOf(listOf(5L)), asked)
+        store.keyWaitClosed()
+        store.unreadableTapped()
+        runCurrent()
+        assertEquals(1, asked.size, "за сутки — второй раз не просим")
+        store.fromPhonePressed()
+        runCurrent()
+        assertEquals(2, asked.size, "«Передать с телефона» просит сразу")
+    }
+
+    /** План КК, КК4: ключа не осталось — окно сразу с фразой; «Открыть» открывает из копии. */
+    @Test
+    fun ключа_не_осталось_окно_с_фразой_и_открытие_из_копии() = runTest {
+        val opened = mutableListOf<List<String>>()
+        stream.value = listOf(unreadable(9))
+        val store = ChatStore(
+            io = kotlinx.coroutines.Dispatchers.Unconfined,
+            chatId = "cccccccc-0000-0000-0000-000000000004",
+            observe = ObserveChat(ChatFeed { _, _ -> stream }),
+            send = send(),
+            scope = backgroundScope,
+            askChatKeys = { _, _ -> error("потерянное не просят") },
+            lostKeys = { setOf(9L) },
+            openByPhrase = { words -> opened += words; io.tima.domain.chat.PhraseOpen.Opened(1) },
+        )
+        runCurrent()
+        store.unreadableTapped()
+        runCurrent()
+        assertTrue(store.state.value.keyWait!!.lost)
+        assertTrue(store.state.value.keyWait!!.phraseOpen)
+        store.changedPhrase("один два три")
+        store.openByPhrasePressed()
+        runCurrent()
+        assertEquals(listOf(listOf("один", "два", "три")), opened)
+        assertEquals("", store.state.value.phrase, "фраза осталась после открытия")
+        assertTrue(store.state.value.keyWait!!.said!!.isNotBlank())
+    }
+
     private fun unreadable(serverId: Long) = ChatLine(
         dedupKey = "k-$serverId",
         chatId = "cccccccc-0000-0000-0000-000000000002",

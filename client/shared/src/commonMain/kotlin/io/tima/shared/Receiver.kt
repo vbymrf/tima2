@@ -1679,6 +1679,53 @@ class Receiver(
         return senderKeys[deviceId]
     }
 
+    /**
+     * «Открыть через фразу» (план КК, КК1 и КК4): пара копии выводится из слов этого запуска, ключи берутся из
+     * копии, пара забывается. Личная — страница копии переписки → своя обёртка → очередь → обычный разбор с
+     * проверкой подписи и обязательства; группа — версии ключа из копии → повтор недоступного.
+     */
+    suspend fun openFromCopy(chatId: String, words: List<String>, group: Boolean): io.tima.domain.chat.PhraseOpen {
+        val published = when (val c = network.keyCopy.current()) {
+            is io.tima.core.network.KeyCopyApi.Current.Published -> c.key
+            io.tima.core.network.KeyCopyApi.Current.Missing -> return io.tima.domain.chat.PhraseOpen.NoCopy
+            io.tima.core.network.KeyCopyApi.Current.Unknown -> return io.tima.domain.chat.PhraseOpen.Offline
+        }
+        val copy = io.tima.core.encryption.KeyCopy.fromWords(words, published.epoch) ?: return io.tima.domain.chat.PhraseOpen.WrongPhrase
+        if (!copy.encryptionPublic.contentEquals(published.pub)) return io.tima.domain.chat.PhraseOpen.WrongPhrase
+        val before = environment.incoming.undecryptable().count { it.chatId == chatId }
+        if (group) {
+            val items = network.keyCopy.groupKeys() ?: return io.tima.domain.chat.PhraseOpen.Offline
+            for (item in items.filter { it.groupId == chatId }) {
+                val key = io.tima.core.encryption.KeyCopy.openGroupKey(copy, item.wrapped) ?: continue
+                environment.groupKeyBook.put(item.groupId, item.gkVersion, key)
+            }
+            reopenUnreadable()
+        } else {
+            val stuck = environment.incoming.undecryptable().filter { it.chatId == chatId }.map { it.messageId }.toHashSet()
+            var cursor = 0L
+            while (stuck.isNotEmpty()) {
+                val page = network.keyCopy.page(chatId, cursor) ?: return io.tima.domain.chat.PhraseOpen.Offline
+                if (page.isEmpty()) break
+                for (item in page) {
+                    if (item.messageId !in stuck) continue
+                    val stored = io.tima.core.encryption.KeyCopy.restoreFor(
+                        item.envelope, item.wrapEphemeral, copy, session.deviceId, identity.encryptionPublic,
+                    ) ?: continue
+                    sender(stored)?.let { captionKey(it.userId, it.deviceId) }
+                    if (environment.incoming.replaceUndecryptable(chatId, item.messageId, stored)) stuck -= item.messageId
+                }
+                if (page.size < io.tima.core.network.KeyCopyApi.PAGE) break
+                cursor = page.last().messageId
+            }
+            drainIncoming()
+        }
+        val opened = before - environment.incoming.undecryptable().count { it.chatId == chatId }
+        Journal.note(LogCode.DEVICE_TRUST, "недоступное из копии по фразе", "переписка" to chatId.take(8), "было" to before, "открылось" to opened)
+        return io.tima.domain.chat.PhraseOpen.Opened(opened)
+    }
+
+    private fun sender(stored: ByteArray) = envelopeSender(stored)
+
     /** Ключ сообщения из своей обёртки — на устройство (КК9). Не развернулся — ничего: текст уже открыт. */
     private fun keepKey(chatId: String, messageId: Long, stored: ByteArray) {
         val key = io.tima.core.encryption.HistoryKeys.keyOfStored(stored, session.deviceId, identity) ?: return

@@ -67,6 +67,12 @@ class InMemoryInboxStore : InboxStore {
     val unverifiedRows = mutableSetOf<String>()
     private val stash = LinkedHashMap<String, UnverifiedEnvelope>()
 
+    override fun replaceUndecryptable(chatId: String, messageId: Long, envelope: ByteArray): Boolean {
+        val entry = rows[key(chatId, messageId)]?.takeIf { it.state == IncomingState.UNDECRYPTABLE } ?: return false
+        rows[entry.key] = entry.copy(envelope = envelope, state = IncomingState.RECEIVED)
+        return true
+    }
+
     override fun stashUnverified(chatId: String, messageId: Long, envelope: ByteArray) {
         stash[key(chatId, messageId)] = UnverifiedEnvelope(chatId, messageId, envelope)
     }

@@ -63,6 +63,15 @@ sealed interface RecoveryStep {
     data class Refused(val reason: String) : RecoveryStep
 }
 
+/** Чем кончилось «Открыть через фразу» (план КК, КК4): копия открыта фразой этого запуска и забыта. */
+sealed interface PhraseOpen {
+    /** Сколько сообщений открылось из копии. */
+    data class Opened(val count: Int) : PhraseOpen
+    data object WrongPhrase : PhraseOpen
+    data object NoCopy : PhraseOpen
+    data object Offline : PhraseOpen
+}
+
 /** Что показать человеку после нажатия «запросить ключ». */
 sealed interface RequestKeysStep {
     /** Просьба ушла [устройствам] участникам. Ключи приедут, когда кто-то из них ответит. */

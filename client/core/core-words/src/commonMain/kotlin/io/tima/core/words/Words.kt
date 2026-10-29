@@ -1355,6 +1355,22 @@ interface ChatWords {
     val messageUnavailable: String
     /** Недоступное сообщение личной переписки — с просьбой ключей (2026-10-06). */
     val messageUnavailableAsk: String
+    /** У недоступного сообщения (план КК, КК4, Р9): сообщение есть, ключа нет. */
+    val notDecrypted: String
+    /** Ключа не осталось ни у кого — открыть можно только через фразу (КК4). */
+    val notDecryptedLost: String
+    /** Окно по нажатию на недоступное — личная переписка (КК4). */
+    val keyWaitTitle: String
+    /** То же в группе. */
+    val keyWaitTitleGroup: String
+    val openByPhrase: String
+    val openAction: String
+    /** Только ПК: попросить свой телефон — он ответит из своих ключей (КК4). */
+    val fromPhone: String
+    val fromPhoneHint: String
+    fun phraseOpened(count: Int): String
+    val phraseWrong: String
+    val copyMissing: String
     /** «Не подтверждено» (план КК, КК13): открыто без проверки подписи автора. */
     val unverifiedMark: String
     /** Пояснение по нажатию на пометку «Не подтверждено». */
@@ -4050,6 +4066,17 @@ object RussianWords : Words {
         }
         override val messageUnavailable = "сообщение недоступно"
         override val messageUnavailableAsk = "Сообщение недоступно, запросить"
+        override val notDecrypted = "Не расшифровано"
+        override val notDecryptedLost = "Не расшифровано: ключа не осталось"
+        override val keyWaitTitle = "Ждём ключ от ваших устройств и собеседника"
+        override val keyWaitTitleGroup = "Ждём ключ от ваших устройств и участников"
+        override val openByPhrase = "Открыть через фразу"
+        override val openAction = "Открыть"
+        override val fromPhone = "Передать с телефона"
+        override val fromPhoneHint = "Откройте приложение на телефоне — он передаст ключи"
+        override fun phraseOpened(count: Int) = "Открыто через фразу: $count"
+        override val phraseWrong = "Фраза не подошла"
+        override val copyMissing = "Копии ключей нет — открыть через фразу нечего"
         override val unverifiedMark = "Не подтверждено: подпись автора не проверена"
         override val unverifiedWhy = "Ключа подписи устройства автора нет ни у кого. Автора и время назвал сервер — проверить их подписью нельзя. Когда ключ найдётся, пометка снимется сама."
         override val messageKeyLost = "Сообщение недоступно: ключа не осталось"

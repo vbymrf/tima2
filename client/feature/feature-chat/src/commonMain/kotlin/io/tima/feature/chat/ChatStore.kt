@@ -5,6 +5,7 @@ import io.tima.domain.chat.DraftSteps
 import io.tima.domain.chat.FoundMessage
 import io.tima.domain.chat.GroupKind
 import io.tima.domain.chat.MessageFinder
+import io.tima.domain.chat.PhraseOpen
 import io.tima.domain.chat.references
 import io.tima.domain.chat.ChatPins
 import io.tima.domain.chat.PinStep
@@ -177,6 +178,13 @@ class ChatStore(
      * помнит вызывающий; и в личной, и в группе (заказчик 2026-10-06). `null` — сами не просим.
      */
     private val autoAskAllowed: (suspend () -> Boolean)? = null,
+    /**
+     * «Открыть через фразу» (план КК, КК4): копия открывается словами этого запуска и забывается. `null` —
+     * пункта нет (проверки).
+     */
+    private val openByPhrase: (suspend (List<String>) -> PhraseOpen)? = null,
+    /** ПК: в окне недоступного есть «Передать с телефона» — просьба своему телефону (КК4). */
+    private val fromPhoneMay: Boolean = false,
     /** Правка своего (ADR-0045). `null` — «Изменить» нечем: так собирают экран в проверках. */
     private val edit: EditMessage? = null,
     /** Удаление своего: у себя и у всех (Решения §8). `null` — нечем. */
@@ -1313,6 +1321,68 @@ class ChatStore(
         scope.launch { askKeysNow(null, quiet = false) }
     }
 
+    /**
+     * Нажатие на «Не расшифровано» (план КК, КК4, Р9) — окно «Ждём ключ…». Просьба своим устройствам и
+     * собеседнику (участникам) уходит, если её не было за сутки; у «ключа не осталось» просить незачем —
+     * окно сразу предлагает фразу.
+     */
+    fun unreadableTapped() {
+        val lostAll = askable().isEmpty()
+        _state.value = _state.value.copy(keyWait = KeyWait(lost = lostAll, phraseOpen = lostAll, fromPhone = fromPhoneMay))
+        if (lostAll || _state.value.expectKey || (requestKeys == null && askChatKeys == null)) return
+        scope.launch {
+            if (autoAskAllowed?.invoke() == false) return@launch
+            _state.value = _state.value.copy(expectKey = true)
+            askKeysNow(null, quiet = false)
+        }
+    }
+
+    fun keyWaitClosed() {
+        _state.value = _state.value.copy(keyWait = null, phrase = "")
+    }
+
+    /** «Открыть через фразу» — поле фразы в окне. */
+    fun phraseOpenStarted() {
+        _state.value.keyWait?.let { _state.value = _state.value.copy(keyWait = it.copy(phraseOpen = true)) }
+    }
+
+    /**
+     * «Открыть» с набранной фразой: ключи из копии (КК1, КК4) и, если устройство не заверено, та же фраза
+     * подписывает просьбу своим и собеседнику. Слова дальше нигде не хранятся.
+     */
+    fun openByPhrasePressed() {
+        val wait = _state.value.keyWait ?: return
+        val words = PhraseWords.parse(_state.value.phrase).takeIf { it.isNotEmpty() } ?: return
+        _state.value = _state.value.copy(keyWait = wait.copy(opening = true, said = null))
+        scope.launch {
+            if (_state.value.phraseWanted && !_state.value.expectKey) {
+                _state.value = _state.value.copy(expectKey = true)
+                askKeysNow(words, quiet = true)
+            }
+            val outcome = runCatching { openByPhrase?.invoke(words) }.getOrNull()
+            val said = when (outcome) {
+                is PhraseOpen.Opened -> words().chat.phraseOpened(outcome.count)
+                PhraseOpen.WrongPhrase -> words().chat.phraseWrong
+                PhraseOpen.NoCopy -> words().chat.copyMissing
+                PhraseOpen.Offline, null -> words().chat.offlineRetryIn(5)
+            }
+            val now = _state.value.keyWait ?: return@launch
+            _state.value = _state.value.copy(
+                keyWait = now.copy(opening = false, said = said),
+                phrase = if (outcome is PhraseOpen.Opened) "" else _state.value.phrase,
+            )
+        }
+    }
+
+    /** ПК, «Передать с телефона»: просьба своим устройствам сейчас, без суточного предела (КК4). */
+    fun fromPhonePressed() {
+        val wait = _state.value.keyWait ?: return
+        _state.value = _state.value.copy(keyWait = wait.copy(said = words().chat.fromPhoneHint))
+        if (_state.value.expectKey || (requestKeys == null && askChatKeys == null)) return
+        _state.value = _state.value.copy(expectKey = true)
+        scope.launch { askKeysNow(null, quiet = false) }
+    }
+
     /** Недоступные сообщения, которые стоит просить: с номером сервера и не потерянные, новые первыми. */
     private fun askable(): List<Long> {
         val lost = _state.value.lostKeys
@@ -1329,6 +1399,8 @@ class ChatStore(
         lostKeys?.let { _state.value = _state.value.copy(lostKeys = it()) }
         val needs = outcome == RequestKeysStep.NeedsSecretPhrase
         _state.value = _state.value.copy(
+            // Отказ по подписи — в открытом окне сразу поле фразы (КК4): «Открыть» подпишет просьбу ею же.
+            keyWait = _state.value.keyWait?.let { if (needs) it.copy(phraseOpen = true) else it },
             expectKey = false,
             // Фраза нужна — поле остаётся открытым, пока просьба не уйдёт.
             phraseWanted = needs || (_state.value.phraseWanted && outcome !is RequestKeysStep.Asked),
@@ -1394,6 +1466,8 @@ data class ChatState(
     val phraseWanted: Boolean = false,
     /** Номера сообщений, к которым ключа не осталось ни у кого: «запросить» у них нет. */
     val lostKeys: Set<Long> = emptySet(),
+    /** Окно «Ждём ключ…» по нажатию на «Не расшифровано» (план КК, КК4); `null` — закрыто. */
+    val keyWait: KeyWait? = null,
     /**
      * Групповая ли переписка. От этого зависит показ автора у каждой реплики: в личной
      * он лишний, в групповой без него сообщение теряет половину смысла.
@@ -1460,6 +1534,22 @@ private const val UNDO_DROP_MS = 5_000L
 
 /** Задуманный ответ: номер сообщения, его автор и строка из него для полосы. */
 data class ReplyDraft(val serverId: Long, val userId: String, val preview: String?)
+
+/**
+ * Окно недоступного (план КК, КК4, Р9).
+ *
+ * @param lost ключа не осталось ни у кого — сразу фраза.
+ * @param phraseOpen поле фразы раскрыто.
+ * @param fromPhone пункт «Передать с телефона» (только ПК).
+ * @param said исход последнего действия словами.
+ */
+data class KeyWait(
+    val lost: Boolean = false,
+    val phraseOpen: Boolean = false,
+    val fromPhone: Boolean = false,
+    val opening: Boolean = false,
+    val said: String? = null,
+)
 
 /** Сколько знаков сообщения показывать в полосе ответа. */
 private const val REPLY_PREVIEW = 120

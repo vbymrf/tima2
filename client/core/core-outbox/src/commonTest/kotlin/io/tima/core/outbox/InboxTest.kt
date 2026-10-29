@@ -152,6 +152,19 @@ class InboxTest {
         assertEquals(null, store.byKey("chat-1", 5)?.firstReason, "открытое не носит причин")
     }
 
+    /** План КК, КК4: ключ пришёл из копии по фразе другим конвертом — нечитаемое снова в разборе. */
+    @Test
+    fun нечитаемое_получает_новый_конверт_и_разбирается() {
+        accept()
+        inbox.openNext(open = { OpenOutcome.NoKey("нет обёртки") })
+        val fresh = byteArrayOf(4, 4)
+        assertTrue(inbox.replaceUndecryptable("chat-1", 5, fresh))
+        assertEquals(IncomingState.RECEIVED, store.byKey("chat-1", 5)?.state)
+        assertTrue(fresh.contentEquals(store.byKey("chat-1", 5)!!.envelope))
+        inbox.openNext(open = { OpenOutcome.Opened(body, "u-автор") })
+        assertTrue(!inbox.replaceUndecryptable("chat-1", 5, fresh), "разобранное не трогается")
+    }
+
     /** План КК, КК13: открытое без проверки подписи помечено, конверт сохранён; дальше — подтвердить или скрыть. */
     @Test
     fun непроверенное_помечено_и_конверт_ждёт_проверки() {

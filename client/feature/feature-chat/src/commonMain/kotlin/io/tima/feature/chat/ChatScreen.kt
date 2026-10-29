@@ -135,6 +135,11 @@ fun ChatScreen(
      * переписки с нечитаемыми сообщениями: у личной просить нечего и не у кого.
      */
     onRequestKey: () -> Unit = {},
+    /** Окно «Ждём ключ…» (план КК, КК4): закрыть, раскрыть фразу, открыть через фразу, «Передать с телефона». */
+    onKeyWaitClose: () -> Unit = {},
+    onPhraseOpen: () -> Unit = {},
+    onOpenByPhrase: () -> Unit = {},
+    onFromPhone: () -> Unit = {},
     /** Человек набирает секретную фразу для подписи запроса. */
     onPhrase: (String) -> Unit = {},
     /**
@@ -404,24 +409,20 @@ fun ChatScreen(
         )
         }
 
-        // Полоса недоступной истории — над вводом и ОДНА на экран, а не у каждой строки.
-        // Запрос уходит сразу за все недостающие версии; кнопка у каждого сообщения
-        // обещала бы точность, которой в механизме нет.
-        // В личной переписке полосы нет, пока не понадобилась фраза: просят нажатием на само
-        // сообщение.
-        val phraseWanted = state.phraseWanted || state.notice is ChatNotice.KeysNeedPhrase
-        if ((state.keyAskMay || (state.chatKeysMay && phraseWanted)) &&
-            state.lines.any { it.display == MessageDisplay.UNREADABLE }
-        ) {
-            StoryUnavailable(
+        // Окно недоступного (план КК, КК4, Р9; заказчик 2026-10-29): открывается нажатием на «Не
+        // расшифровано» — одинаково в личной и в группе. Полосы над вводом больше нет: просьба уходит
+        // нажатием на сообщение, фраза — пунктом окна.
+        state.keyWait?.let { wait ->
+            KeyWaitPanel(
+                wait = wait,
+                group = state.group,
                 expect = state.expectKey,
-                // Заверенному фраза не нужна (заказчик 2026-10-06): первое нажатие просит без
-                // неё, отказ по подписи открывает поле, и следующее нажатие подписывает фразой.
-                phraseInputNeeded = phraseWanted,
                 phrase = state.phrase,
                 onPhrase = onPhrase,
-                onAsk = onAskChatKeys ?: onRequestKey,
-                onRequest = onRequestKey,
+                onClose = onKeyWaitClose,
+                onPhraseOpen = onPhraseOpen,
+                onOpen = onOpenByPhrase,
+                onFromPhone = onFromPhone,
             )
         }
 
@@ -1108,13 +1109,13 @@ private fun BubbleOf(
         // собеседника (заказчик 2026-10-06: «сообщение недоступно, запросить»).
         // Ключа не осталось ни у кого — просить незачем, и кнопка была бы обещанием без
         // исполнения (2026-10-06).
-        line.display == MessageDisplay.UNREADABLE && keyLost -> Chip(Tima.words.chat.messageKeyLost, kind = ChipKind.Quiet)
+        // «Не расшифровано» (план КК, КК4, Р9): сообщение есть, ключа нет. Нажатие — окно «Ждём ключ…»;
+        // у «ключа не осталось» окно сразу предлагает фразу.
+        line.display == MessageDisplay.UNREADABLE && keyLost ->
+            Chip(Tima.words.chat.notDecryptedLost, kind = ChipKind.Quiet, modifier = Modifier.testTag("chat:undecrypted"), onClick = onAskChatKeys)
 
-        line.display == MessageDisplay.UNREADABLE -> if (onAskChatKeys != null) {
-            Chip(Tima.words.chat.messageUnavailableAsk, kind = ChipKind.Quiet, onClick = onAskChatKeys)
-        } else {
-            Chip(Tima.words.chat.messageUnavailable, kind = ChipKind.Quiet)
-        }
+        line.display == MessageDisplay.UNREADABLE ->
+            Chip(Tima.words.chat.notDecrypted, kind = ChipKind.Quiet, modifier = Modifier.testTag("chat:undecrypted"), onClick = onAskChatKeys)
 
         else -> Chip(Tima.words.chat.decrypting, kind = ChipKind.Quiet)
     }
@@ -1384,50 +1385,63 @@ private fun NoKeyYet(expect: Boolean, phrase: String, onPhrase: (String) -> Unit
 }
 
 /**
- * Полоса «часть истории недоступна» с кнопкой запроса.
- *
- * **Почему это не беда.** Сообщения до входа в группу не читаются законно: обёртки
- * прошлых версий ключа выдают только тем, кто был в группе на момент ротации. Показать
- * это ошибкой значило бы сказать человеку, что что-то сломалось, тогда как всё работает
- * как задумано — и одновременно спрятать единственное доступное ему действие.
+ * Окно «Ждём ключ…» (план КК, КК4, Р9; заказчик 2026-10-29): кого ждём, что с просьбой, «Открыть через
+ * фразу» и на ПК «Передать с телефона». Стоит над вводом, закрывается «✕».
  */
 @Composable
-private fun StoryUnavailable(
+private fun KeyWaitPanel(
+    wait: KeyWait,
+    group: Boolean,
     expect: Boolean,
-    phraseInputNeeded: Boolean,
     phrase: String,
     onPhrase: (String) -> Unit,
-    onAsk: () -> Unit,
-    onRequest: () -> Unit,
+    onClose: () -> Unit,
+    onPhraseOpen: () -> Unit,
+    onOpen: () -> Unit,
+    onFromPhone: () -> Unit,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
-    Column(modifier = Modifier.fillMaxWidth().background(colors.functional)) {
-        if (phraseInputNeeded) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.functional)
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+            .testTag("chat:keywait"),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Caption(
+                if (wait.lost) words.notDecryptedLost else if (group) words.keyWaitTitleGroup else words.keyWaitTitle,
+                fontSize = TimaType.sz5,
+                modifier = Modifier.weight(1f),
+            )
+            Chip("✕", kind = ChipKind.Quiet, modifier = Modifier.testTag("chat:keywait.close"), onClick = onClose)
+        }
+        if (expect) Caption(words.asking, fontSize = TimaType.sz5)
+        wait.said?.let { Caption(it, fontSize = TimaType.sz5) }
+        if (wait.phraseOpen) {
             Field(
                 value = phrase,
                 onChange = onPhrase,
                 hint = words.phraseWords, phrase = true,
-                modifier = Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+                modifier = Modifier.testTag("chat:keywait.phrase"),
             )
         }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(colors.functional)
-            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
-        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Caption(
-            words.storyUnavailable,
-            fontSize = TimaType.sz5,
-            modifier = Modifier.weight(1f),
-        )
-        Button(label = if (expect) words.asking else words.askKey, onClick = {
-            if (!phraseInputNeeded) onAsk() else if (phrase.isNotBlank()) onRequest()
-        })
-    }
+        Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+            if (!wait.phraseOpen) {
+                Chip(words.openByPhrase, kind = ChipKind.Selected, modifier = Modifier.testTag("chat:keywait.byphrase"), onClick = onPhraseOpen)
+            } else {
+                Button(
+                    label = if (wait.opening) words.asking else words.openAction,
+                    modifier = Modifier.testTag("chat:keywait.open"),
+                    onClick = { if (!wait.opening && phrase.isNotBlank()) onOpen() },
+                )
+            }
+            if (wait.fromPhone) {
+                Chip(words.fromPhone, kind = ChipKind.Quiet, modifier = Modifier.testTag("chat:keywait.phone"), onClick = onFromPhone)
+            }
+        }
     }
 }
 
