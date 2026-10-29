@@ -253,7 +253,7 @@ fun buildAssembled(
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             // Сеть при запуске поднимается не сразу — несколько попыток, дальше до следующего запуска.
             repeat(EPOCH_PUBLISH_TRIES) { attempt ->
-                if (epochRing.publish(network.keys, identity, device.session.deviceId)) return@launch
+                if (epochRing.publish(network.keys, identity, device.session.deviceId, untaken = { network.history.untaken() })) return@launch
                 kotlinx.coroutines.delay(EPOCH_PUBLISH_PAUSE_MS * (attempt + 1))
             }
         }

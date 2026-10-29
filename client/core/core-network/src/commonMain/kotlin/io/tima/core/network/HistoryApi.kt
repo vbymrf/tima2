@@ -118,6 +118,42 @@ class HistoryApi(
         return response.jsonBody()?.int("saved") ?: keys.size
     }
 
+    /**
+     * `POST /chats/{id}/keys/taken` (план КК, КК10): ключи этих сообщений развёрнуты и лежат на устройстве —
+     * обёртки под него можно стирать через запас.
+     *
+     * @return сколько отмечено; `null` — сеть или отказ.
+     */
+    suspend fun taken(chatId: String, ids: List<Long>): Int? {
+        if (ids.isEmpty()) return 0
+        val response = try {
+            client.post(route.api("/api/v1/chats/$chatId/keys/taken")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody("{\"message_ids\":[" + ids.joinToString(",") + "]}")
+            }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        return response.jsonBody()?.int("taken")
+    }
+
+    /**
+     * `GET /keys/untaken` (КК10): сколько обёрток под это устройство ещё не забрано.
+     *
+     * @return `null` — сеть или отказ: тогда считаем, что есть.
+     */
+    suspend fun untaken(): Int? {
+        val response = try {
+            client.get(route.api("/api/v1/keys/untaken")) { header("Authorization", "Bearer ${token()}") }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        return response.jsonBody()?.int("count")
+    }
+
     /** Чем кончилась просьба о ключах переписки. */
     sealed interface Recover {
         /**

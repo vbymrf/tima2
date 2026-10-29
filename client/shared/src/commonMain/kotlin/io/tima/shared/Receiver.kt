@@ -25,6 +25,7 @@ import io.tima.core.network.EventStream
 import io.tima.core.outbox.IncomingEntry
 import io.tima.core.outbox.OpenOutcome
 import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.update
 import io.tima.domain.account.Session
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
@@ -1729,8 +1730,33 @@ class Receiver(
     /** Ключ сообщения из своей обёртки — на устройство (КК9). Не развернулся — ничего: текст уже открыт. */
     private fun keepKey(chatId: String, messageId: Long, stored: ByteArray) {
         val key = io.tima.core.encryption.HistoryKeys.keyOfStored(stored, session.deviceId, identity) ?: return
-        runCatching { messageKeys.put(chatId, messageId, key) }
+        if (runCatching { messageKeys.put(chatId, messageId, key) }.isSuccess) takenLater(chatId, messageId)
     }
+
+    /** Ключи, лёгшие на устройство, — серверу «забрано» пачкой (КК10): обёртки под устройство уйдут через запас. */
+    private val takenQueue = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Set<Long>>>(emptyMap())
+    private val takenLock = kotlinx.coroutines.sync.Mutex()
+
+    private fun queueTaken(chatId: String, ids: Collection<Long>) {
+        takenQueue.update { it + (chatId to (it[chatId].orEmpty() + ids)) }
+    }
+
+    private fun takenLater(chatId: String, messageId: Long) {
+        queueTaken(chatId, listOf(messageId))
+        takenScope.launch { kotlinx.coroutines.delay(TAKEN_PAUSE_MS); flushTaken() }
+    }
+
+    /** Отдать накопленные отметки «забрано»; не дошедшие остаются до следующего раза. */
+    suspend fun flushTaken() = takenLock.withLock {
+        val batch = takenQueue.getAndUpdate { emptyMap() }
+        for ((chatId, ids) in batch) {
+            for (part in ids.toList().chunked(TAKEN_BATCH)) {
+                if (network.history.taken(chatId, part) == null) queueTaken(chatId, part)
+            }
+        }
+    }
+
+    private val takenScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
 
     /**
      * Собрать ключи уже прочитанного из своих живых обёрток на сервере — один раз после обновления (план КК,
@@ -1752,12 +1778,16 @@ class Receiver(
                 for (item in page) {
                     if (runCatching { messageKeys.get(chat.chatId, item.messageId) }.getOrNull() != null) continue
                     val key = io.tima.core.encryption.HistoryKeys.keyOf(item.envelope, item.wrapEphemeral, session.deviceId, identity) ?: continue
-                    runCatching { messageKeys.put(chat.chatId, item.messageId, key) }.onSuccess { kept++ }
+                    runCatching { messageKeys.put(chat.chatId, item.messageId, key) }.onSuccess {
+                        kept++
+                        queueTaken(chat.chatId, listOf(item.messageId))
+                    }
                 }
                 if (page.size < io.tima.core.network.HistoryApi.PAGE) break
                 before = page.last().messageId
             }
         }
+        flushTaken()
         Journal.note(LogCode.DEVICE_TRUST, "ключи прочитанного собраны на устройство", "переписок" to chats.size, "страниц" to pages, "ключей" to kept)
         return kept
     }
@@ -1803,6 +1833,12 @@ class Receiver(
     private class SentBy(val userId: String, val deviceId: String, val createdAtMs: Long, val editOf: Long = 0)
 
     internal companion object {
+        /** Пауза перед отдачей отметок «забрано» — копятся пачкой (КК10). */
+        const val TAKEN_PAUSE_MS = 5_000L
+
+        /** Номеров в одной отметке — сервер принимает до тысячи. */
+        const val TAKEN_BATCH = 500
+
         /**
          * Сколько ждать перед новой попыткой — У11.
          *

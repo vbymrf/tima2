@@ -4,6 +4,8 @@ import io.tima.core.encryption.DeviceEpochKeys
 import io.tima.core.encryption.DeviceIdentity
 import io.tima.core.network.DeviceKeyRecord
 import io.tima.core.network.EpochKeyRecord
+import io.ktor.client.engine.mock.respond
+import io.tima.core.network.timaDefaults
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -38,6 +40,27 @@ class EpochKeyRingTest {
         val second = ring.prepare()
         assertEquals(listOf("2026-10", "2026-11"), secrets.epochs().sorted())
         assertContentEquals(secrets.map.getValue("2026-11"), second.first(), "новый ключ — первым")
+    }
+
+    /** План КК, КК10: пока есть не забранные обёртки — ключи прошлых эпох не уничтожаются. */
+    @Test
+    fun прошлые_ключи_живут_пока_есть_не_забранные_обёртки() = kotlinx.coroutines.test.runTest {
+        val secrets = Memory()
+        var now = 1_785_000_000_000L // 2026-07
+        val ring = EpochKeyRing(secrets) { now }
+        ring.prepare()
+        now = oct2026
+        ring.prepare()
+        val engine = io.ktor.client.engine.mock.MockEngine { respond("", io.ktor.http.HttpStatusCode.NoContent) }
+        val client = io.ktor.client.HttpClient(engine) { timaDefaults() }
+        val keys = io.tima.core.network.KeysApi(io.tima.core.network.ServerRoute.from(io.tima.core.network.RouteConfig(host = "example.com")), client) { "t" }
+        val device = DeviceIdentity.generate()
+        kotlin.test.assertTrue(ring.publish(keys, device, "dev-1", untaken = { 3 }))
+        assertEquals(listOf("2026-07", "2026-10"), secrets.epochs().sorted(), "ключ июля уничтожен при не забранных обёртках")
+        kotlin.test.assertTrue(ring.publish(keys, device, "dev-1", untaken = { null }))
+        assertEquals(2, secrets.epochs().size, "не узнали — считаем, что есть")
+        kotlin.test.assertTrue(ring.publish(keys, device, "dev-1", untaken = { 0 }))
+        assertEquals(listOf("2026-10"), secrets.epochs().sorted())
     }
 
     @Test

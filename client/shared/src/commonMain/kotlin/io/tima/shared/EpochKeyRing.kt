@@ -68,7 +68,16 @@ class EpochKeyRing(
      *
      * @return опубликован ли ключ текущей эпохи.
      */
-    suspend fun publish(keys: KeysApi, identity: DeviceIdentity, deviceId: String): Boolean {
+    suspend fun publish(
+        keys: KeysApi,
+        identity: DeviceIdentity,
+        deviceId: String,
+        /**
+         * Сколько обёрток под устройство не забрано (план КК, КК10); `null` — не узнали. Пока не ноль — ключи
+         * прошлых эпох не уничтожаются: обёртки живут до доставки, и часть может быть под старый ключ.
+         */
+        untaken: suspend () -> Int? = { 0 },
+    ): Boolean {
         val epoch = currentEpoch()
         val secret = runCatching { secrets.get(epoch) }.getOrNull() ?: return false
         val pub = DeviceEpochKeys.publicOf(secret)
@@ -82,6 +91,11 @@ class EpochKeyRing(
             is TrustCallResult.Offline -> false
         }
         if (!published) return false
+        val waiting = runCatching { untaken() }.getOrNull()
+        if (waiting == null || waiting > 0) {
+            Journal.note(LogCode.DEVICE_TRUST, "ключ эпохи опубликован; прошлые не уничтожены — есть не забранные обёртки", "эпоха" to epoch, "не забрано" to (waiting ?: -1))
+            return true
+        }
         val keep = setOf(epoch, previous(epoch))
         val dropped = runCatching { secrets.epochs().filter { it !in keep }.onEach { secrets.remove(it) } }.getOrDefault(emptyList())
         Journal.note(LogCode.DEVICE_TRUST, "ключ эпохи опубликован", "эпоха" to epoch, "уничтожено" to dropped.size)
