@@ -205,8 +205,8 @@ class KeyCopyService(
             KeyCopyApi.Current.Unknown -> return
         }
         val copy = KeyCopy.fromWords(words, epoch) ?: return
+        // Закрытый ключ копии — только в памяти этого запуска (план КК, КК11): на устройство он не пишется.
         fromPhrase = copy
-        secrets?.put(epoch, copy.exportRaw())
         val sig = KeyCopy.sign(words, epoch, copy.encryptionPublic) ?: return
         // Свой источник ключа копии (КК8): фраза этого запуска — запомнить и записать в книгу.
         anchorFromWords(words, epoch, copy.encryptionPublic, sig)
@@ -268,9 +268,28 @@ class KeyCopyService(
         return ok
     }
 
-    /** Секрет копии, которым это устройство может её открыть; `null` — не может. */
-    fun copyIdentity(): DeviceIdentity? =
-        fromPhrase ?: secrets?.get()?.let { (_, raw) -> runCatching { DeviceIdentity.fromRaw(raw) }.getOrNull() }
+    /**
+     * Секрет копии, которым это устройство может её открыть, — **только фраза этого запуска** (план КК, КК11);
+     * `null` — не может. Сохранённого секрета больше нет: копия открывается только фразой.
+     */
+    fun copyIdentity(): DeviceIdentity? = fromPhrase
+
+    /**
+     * Стереть сохранённый секрет копии (план КК, КК11) — когда ключ копии запомнен из своего источника (КК8) и
+     * ключи прочитанного собраны на устройство (КК9): тогда QR-передаче есть из чего брать историю.
+     *
+     * @param harvested собраны ли ключи прочитанного.
+     * @return стёрт или его не было.
+     */
+    suspend fun dropStoredSecret(harvested: Boolean): Boolean {
+        val stored = secrets?.get() ?: return true
+        if (!harvested) return false
+        // Ключ копии запомнить, пока секрет ещё есть, — иначе пополнять копию будет не под что.
+        if (anchor() == null && fromStoredSecret() == null) return false
+        runCatching { secrets?.clear() }
+        Journal.note(LogCode.DEVICE_TRUST, "секрет копии стёрт с устройства — копия открывается только фразой", "эпоха" to stored.first)
+        return secrets?.get() == null
+    }
 
     /** Не заведена ли копия у личности (Р44); `null` — не узнали. */
     suspend fun missing(): Boolean? = when (current(SCREEN_ANSWER_MS)) {
@@ -344,7 +363,6 @@ class KeyCopyService(
         if (!api.publish(KeyCopyApi.Key(epoch, next.encryptionPublic, sig))) return Rotation.OFFLINE
         forgetAnswer()
         fromPhrase = next
-        secrets?.put(epoch, next.exportRaw())
         // Новая пара — в книгу (КК8): остальные свои устройства перейдут на неё оттуда, а не по слову сервера.
         anchorFromWords(words, epoch, next.encryptionPublic, sig)
         lock.withLock { cached = epoch to next.encryptionPublic }

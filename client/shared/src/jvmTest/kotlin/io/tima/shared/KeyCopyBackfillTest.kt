@@ -179,6 +179,53 @@ class KeyCopyBackfillTest {
     }
 
     /**
+     * План КК, КК11: фраза больше не оставляет секрет копии на устройстве; сохранённый раньше стирается, когда
+     * ключ копии запомнен и ключи прочитанного собраны.
+     */
+    @Test
+    fun секрет_копии_не_хранится_и_старый_стирается() = runTest {
+        val engine = MockEngine { request ->
+            when (request.url.encodedPath) {
+                "/api/v1/users/me/key-copy" -> respond(
+                    """{"epoch":1,"pub":"${b64(copy.encryptionPublic)}","sig":"${b64(KeyCopy.sign(account.words, 1, copy.encryptionPublic)!!)}"}""",
+                    HttpStatusCode.OK, json,
+                )
+                "/api/v1/keys/devices" -> respond("""{"devices":[],"identity_pub":"${b64(account.identityPub)}"}""", HttpStatusCode.OK, json)
+                else -> respond("", HttpStatusCode.NotFound)
+            }
+        }
+        val client = HttpClient(engine) { timaDefaults() }
+        val route = ServerRoute.from(RouteConfig(host = "example.com"))
+        val vault = object : KeyCopySecrets {
+            var held: Pair<Int, ByteArray>? = 1 to copy.exportRaw()
+            override fun get() = held
+            override fun put(epoch: Int, secret: ByteArray) { held = epoch to secret }
+            override fun clear() { held = null }
+        }
+        val settings = MemorySettings()
+        val service = KeyCopyService(
+            api = KeyCopyApi(route, client) { "t" },
+            keys = KeysApi(route, client) { "t" },
+            history = HistoryApi(route, client) { "t" },
+            userId = "u-1",
+            deviceId = "d-1",
+            identity = DeviceIdentity.generate(),
+            scope = CoroutineScope(coroutineContext),
+            secrets = vault,
+            settings = settings,
+        )
+        assertEquals(null, service.copyIdentity(), "сохранённый секрет больше не открывает копию")
+        assertFalse(service.dropStoredSecret(harvested = false), "ключи прочитанного не собраны — рано")
+        assertTrue(vault.held != null)
+        assertTrue(service.dropStoredSecret(harvested = true))
+        assertEquals(null, vault.held, "секрет не стёрт")
+        assertTrue(service.anchored(), "ключ копии запомнен до стирания")
+        service.onPhrase(account.words)
+        assertEquals(null, vault.held, "фраза снова сохранила секрет")
+        assertTrue(service.copyIdentity() != null, "фраза этого запуска открывает копию")
+    }
+
+    /**
      * План КК, КК8 и КК9: ключ копии пришёл книгой аккаунта — устройство дозаливает из своих ключей сообщений,
      * а не из обёрток на сервере.
      */

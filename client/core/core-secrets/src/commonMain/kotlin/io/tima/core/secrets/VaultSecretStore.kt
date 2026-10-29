@@ -43,6 +43,11 @@ class VaultSecretStore(private val vault: SecretVault) : DeviceSecretStore {
         vault.put(Secrets.KEY_COPY_SECRET, head + secret)
     }
 
+    /** Стереть секрет копии (план КК, КК11): закрытый ключ копии больше не хранит ни одно устройство. */
+    fun removeKeyCopySecret() {
+        vault.remove(Secrets.KEY_COPY_SECRET)
+    }
+
     /** `эпоха → закрытый ключ копии`; `null` — не сохранён. */
     fun keyCopySecret(): Pair<Int, ByteArray>? {
         val raw = vault.get(Secrets.KEY_COPY_SECRET) ?: return null

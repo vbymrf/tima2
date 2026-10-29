@@ -29,6 +29,11 @@ class HistoryHandover(
      */
     private val keyCopy: io.tima.core.network.KeyCopyApi? = null,
     private val copy: DeviceIdentity? = null,
+    /**
+     * Ключи сообщений на этом устройстве (план КК, КК9, КК11): переписка → номер → ключ. Первый источник —
+     * за весь срок, что сообщение лежит, а не за срок обёрток.
+     */
+    private val localKeys: (String) -> Map<Long, ByteArray> = { emptyMap() },
 ) {
 
     /** @return сколько ключей принял сервер. */
@@ -42,8 +47,16 @@ class HistoryHandover(
         var failed = 0
         for (chat in chats) {
             val keys = mutableListOf<HistoryApi.Key>()
+            // Сначала — свои ключи сообщений (КК9): секрета копии на устройстве больше нет (КК11).
+            val own = runCatching { localKeys(chat.chatId) }.getOrDefault(emptyMap())
+            for ((messageId, key) in own) {
+                val r = HistoryKeys.wrapKey(messageId, key, encryptionPub)
+                keys += HistoryApi.Key(r.messageId, r.ephemeralPub, r.wrapped)
+            }
             var before = 0L
-            val fromCopy = if (keyCopy != null && copy != null) {
+            val fromCopy = if (own.isNotEmpty()) {
+                true
+            } else if (keyCopy != null && copy != null) {
                 while (true) {
                     val page = keyCopy.page(chat.chatId, before) ?: break
                     if (page.isEmpty()) break

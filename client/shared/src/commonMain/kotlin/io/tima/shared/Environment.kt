@@ -338,6 +338,7 @@ class Entry private constructor(
     fun keyCopySecrets(userId: String): KeyCopySecrets = object : KeyCopySecrets {
         override fun get(): Pair<Int, ByteArray>? = accounts.store(userId).keyCopySecret()
         override fun put(epoch: Int, secret: ByteArray) = accounts.store(userId).saveKeyCopySecret(epoch, secret)
+        override fun clear() = accounts.store(userId).removeKeyCopySecret()
     }
 
     companion object {
@@ -878,6 +879,9 @@ class Environment private constructor(
 interface KeyCopySecrets {
     fun get(): Pair<Int, ByteArray>?
     fun put(epoch: Int, secret: ByteArray)
+
+    /** Стереть (план КК, КК11). */
+    fun clear() {}
 }
 
 /** Где лежат ключи шифрования устройства на эпоху (ПЛАН-(ПС) ПС3): эпоха «2026-10» → секрет. */

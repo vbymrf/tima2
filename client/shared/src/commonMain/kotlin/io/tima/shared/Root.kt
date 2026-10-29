@@ -1983,6 +1983,18 @@ private fun App(
         runCatching { environment.settings.put(key, "1") }
     }
 
+    // Секрет копии на телефоне стирается (план КК, КК11), когда ключ копии запомнен (КК8) и ключи прочитанного
+    // собраны (КК9): копия открывается только фразой, QR-передача — из своих ключей.
+    LaunchedEffect(assembled.session.userId) {
+        val copy = assembled.keyCopy ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(90_000L)
+        while (true) {
+            val harvested = runCatching { environment.settings.all().first()["keys.harvested.v1"] }.getOrNull() != null
+            if (runCatching { copy.dropStoredSecret(harvested) }.getOrDefault(false)) break
+            kotlinx.coroutines.delay(15 * 60_000L)
+        }
+    }
+
     // Переписки «с собой», заведённые своим сообщением с другого устройства (отчёт X63M,
     // 2026-10-23), — собеседника по списку сервера. Без отметки: нечего чинить — сеть не трогается.
     LaunchedEffect(assembled.session.userId) {
@@ -4159,7 +4171,7 @@ private fun App(
                                 onCertified = { id, pub ->
                                     scope.launch {
                                         runCatching { assembled.keyOrchestrator.handOver(id, pub) }
-                                        HistoryHandover(network.history, assembled.session.deviceId, assembled.identity ?: deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
+                                        HistoryHandover(network.history, assembled.session.deviceId, assembled.identity ?: deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity(), localKeys = io.tima.core.database.SqlMessageKeys(environment.db, environment.cipher)::of).handOver(id, pub)
                                     }
                                 },
                             )
@@ -4253,7 +4265,7 @@ private fun App(
                                 onCertified = { id, pub ->
                                     scope.launch {
                                         runCatching { assembled.keyOrchestrator.handOver(id, pub) }
-                                        HistoryHandover(network.history, assembled.session.deviceId, assembled.identity ?: deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
+                                        HistoryHandover(network.history, assembled.session.deviceId, assembled.identity ?: deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity(), localKeys = io.tima.core.database.SqlMessageKeys(environment.db, environment.cipher)::of).handOver(id, pub)
                                     }
                                 },
                             ),
@@ -4283,7 +4295,7 @@ private fun App(
                         onTrusted = { id, pub ->
                             assembled.keyOrchestrator.handOver(id, pub)
                             scope.launch {
-                                HistoryHandover(network.history, assembled.session.deviceId, assembled.identity ?: deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity()).handOver(id, pub)
+                                HistoryHandover(network.history, assembled.session.deviceId, assembled.identity ?: deviceIdentityFrom(deviceSecret), network.keyCopy, assembled.keyCopy?.copyIdentity(), localKeys = io.tima.core.database.SqlMessageKeys(environment.db, environment.cipher)::of).handOver(id, pub)
                             }
                         },
                     )
