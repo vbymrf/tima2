@@ -490,6 +490,7 @@ object InstallPending {
     @Volatile private var confirm: Intent? = null
     @Volatile private var session: Int = -1
     @Volatile private var committedAt: Long = 0L
+    @Volatile private var openedAt: Long = 0L
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
 
     private fun now(): Long = android.os.SystemClock.elapsedRealtime()
@@ -499,14 +500,14 @@ object InstallPending {
         confirm = null
         session = sessionId
         committedAt = now()
-        Journal.note(LogCode.UPD_CONFIRM, "пакет отдан системе", "сеанс" to sessionId)
+        note("пакет отдан системе", "сеанс" to sessionId)
     }
 
     /** Система прислала окно подтверждения — открыть. */
     fun asked(context: Context, intent: Intent, sessionId: Int) {
         confirm = intent
         if (sessionId >= 0) session = sessionId
-        Journal.note(LogCode.UPD_CONFIRM, "система прислала окно подтверждения", "через мс" to since())
+        note("система прислала окно подтверждения", "через мс" to since())
         open(context, "окно установки открыто")
     }
 
@@ -533,8 +534,11 @@ object InstallPending {
         scope.launch {
             delay(RETURN_PAUSE_MS)
             if (session < 0) return@launch
+            // Окно только что открыли («Установить» или сама система) — второй раз подряд не нужно: на realme
+            // 2026-10-29 так окно открылось дважды за 0,6 с.
+            if (now() - openedAt < RETURN_PAUSE_MS) return@launch
             if (confirm == null) {
-                Journal.note(LogCode.UPD_CONFIRM, "вернулись в TIMA, окно установки ещё не пришло", "мс от передачи" to since())
+                note("вернулись в TIMA, окно установки ещё не пришло", "мс от передачи" to since())
                 return@launch
             }
             reopen(context, "вернулись в TIMA, окно установки ждёт — открыто снова")
@@ -552,11 +556,23 @@ object InstallPending {
     private fun open(context: Context, what: String) {
         val intent = confirm ?: return
         runCatching { context.startActivity(Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            .onSuccess { Journal.note(LogCode.UPD_CONFIRM, what, "мс от передачи" to since()) }
+            .onSuccess {
+                openedAt = now()
+                note(what, "мс от передачи" to since())
+            }
             .onFailure { Journal.trouble(LogCode.UPD_CONFIRM, "окно установки не открылось", "почему" to (it.message ?: it::class.simpleName.orEmpty())) }
     }
 
     private fun since(): Long = if (committedAt > 0) now() - committedAt else -1
+
+    /**
+     * Строка `UPD-CONFIRM` — и сразу на диск: удачная установка заменяет процесс, и строки после передачи пакета,
+     * оставшиеся в памяти, пропадали (realme 2026-10-29) — а по ним и меряется, тупит ли телефон.
+     */
+    private fun note(what: String, vararg tail: Pair<String, Any?>) {
+        Journal.note(LogCode.UPD_CONFIRM, what, *tail)
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { runCatching { Journal.diary.flush() } }
+    }
 
     private const val RETURN_PAUSE_MS = 1_500L
 }
