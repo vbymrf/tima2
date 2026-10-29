@@ -192,6 +192,41 @@ func (s *Store) ListDevices(ctx context.Context, userID string) ([]Device, error
 }
 
 // ── Устройства ──
+// RevokedDeviceKey — ключ подписи отозванного устройства со свидетельством, временем и причиной отзыва
+// (план КК, КК13; беда 2026-10-24, вариант 2). Отзыв — «с этой минуты»: сообщения, которые устройство
+// записало до него, получатель проверяет этим ключом. Записать после отзыва устройство не может —
+// `requireActiveDevice` отказывает отозванному в каждом запросе.
+type RevokedDeviceKey struct {
+	DeviceID   string
+	SigningPub []byte
+	CertBy     string
+	CertAskID  string
+	CertSig    []byte
+	RevokedAt  time.Time
+	Reason     string
+}
+
+// RevokedDeviceKeys — отозванные устройства человека: ключи подписи и свидетельства. Строка устройства
+// при отзыве не стирается, ключ на месте.
+func (s *Store) RevokedDeviceKeys(ctx context.Context, userID string) ([]RevokedDeviceKey, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT device_id, signing_pub, cert_by, COALESCE(cert_ask_id::text, ''), cert_sig, revoked_at, revoked_reason
+		FROM devices WHERE user_id = $1 AND revoked_at IS NOT NULL ORDER BY revoked_at`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RevokedDeviceKey
+	for rows.Next() {
+		var d RevokedDeviceKey
+		if err := rows.Scan(&d.DeviceID, &d.SigningPub, &d.CertBy, &d.CertAskID, &d.CertSig, &d.RevokedAt, &d.Reason); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 type Device struct {
 	DeviceID      string
 	UserID        string

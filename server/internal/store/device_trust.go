@@ -64,6 +64,27 @@ func (s *Store) ActiveSigningKeys(ctx context.Context, userID string) ([]Signing
 	return out, rows.Err()
 }
 
+// RevokedSigningKeys — отозванные КПУ человека (план КК, КК13): ими заверены его отозванные устройства,
+// и без них цепочку доверия ключа подписи отозванного устройства не проверить.
+func (s *Store) RevokedSigningKeys(ctx context.Context, userID string) ([]SigningKey, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT ask_id, user_id, COALESCE(device_id::text, ''), ask_pub, ask_sig
+		FROM account_signing_keys WHERE user_id = $1 AND revoked_at IS NOT NULL ORDER BY created_at`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SigningKey
+	for rows.Next() {
+		var k SigningKey
+		if err := rows.Scan(&k.AskID, &k.UserID, &k.DeviceID, &k.Pub, &k.Sig); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
 // DeviceSigningKey — действующий КПУ, который держит этот телефон.
 func (s *Store) DeviceSigningKey(ctx context.Context, userID, deviceID string) (SigningKey, error) {
 	var k SigningKey

@@ -308,6 +308,46 @@ func TestPhoneIssuesSigningKeyAndCertifiesOwnDevice(t *testing.T) {
 	if len(v.SigningKeys) != 0 {
 		t.Fatalf("КПУ отозванного телефона остался действующим: %+v", v.SigningKeys)
 	}
+	if len(v.Devices) != 1 || v.Devices[0].DeviceID != pcDev.id {
+		t.Fatalf("в devices остался отозванный: %+v", v.Devices)
+	}
+
+	// План КК, КК13: по просьбе `revoked=1` — ключ подписи отозванного, его свидетельство, время и
+	// причина отзыва, и отозванный КПУ — цепочку проверяет получатель. `devices` не меняется.
+	var rv struct {
+		Devices        []struct{ DeviceID string `json:"device_id"` } `json:"devices"`
+		RevokedDevices []struct {
+			DeviceID   string `json:"device_id"`
+			SigningPub string `json:"signing_pub"`
+			CertBy     string `json:"cert_by"`
+			CertAskID  string `json:"cert_ask_id"`
+			RevokedAt  int64  `json:"revoked_at_unix_ms"`
+			Reason     string `json:"revoked_reason"`
+		} `json:"revoked_devices"`
+		RevokedSigningKeys []struct {
+			AskID  string `json:"ask_id"`
+			AskPub string `json:"ask_pub"`
+		} `json:"revoked_signing_keys"`
+	}
+	if code := getAuthed(t, ts, pcDev.token, "/api/v1/keys/devices?revoked=1&user_id="+pcDev.userID, &rv); code != 200 {
+		t.Fatalf("/keys/devices?revoked=1: %d", code)
+	}
+	if len(rv.Devices) != 1 || len(rv.RevokedDevices) != 1 {
+		t.Fatalf("ожидались одно действующее и одно отозванное: %+v", rv)
+	}
+	r := rv.RevokedDevices[0]
+	if r.DeviceID != phoneDev.id || r.SigningPub != b64.EncodeToString(sigOf(phoneDev)) || r.RevokedAt == 0 || r.CertBy != "ask" {
+		t.Fatalf("отозванный телефон отдан не так: %+v", r)
+	}
+	if len(rv.RevokedSigningKeys) != 1 || rv.RevokedSigningKeys[0].AskID != r.CertAskID || rv.RevokedSigningKeys[0].AskPub != b64.EncodeToString(acc.askPub()) {
+		t.Fatalf("отозванный КПУ не отдан: %+v", rv.RevokedSigningKeys)
+	}
+	// Без просьбы полей нет — прежние клиенты видят то же, что раньше.
+	var plain map[string]any
+	getAuthed(t, ts, pcDev.token, "/api/v1/keys/devices?user_id="+pcDev.userID, &plain)
+	if _, ok := plain["revoked_devices"]; ok {
+		t.Fatalf("revoked_devices отдан без просьбы")
+	}
 }
 
 // Привязка по QR: в строгом режиме телефон без КПУ новое устройство не приводит; телефон с КПУ

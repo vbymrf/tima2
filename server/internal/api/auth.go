@@ -727,6 +727,46 @@ func (s *Server) listDeviceKeys(w http.ResponseWriter, r *http.Request) {
 	if len(identityPub) == 32 {
 		resp["identity_pub"] = b64.EncodeToString(identityPub)
 	}
+	// Отозванные — только по просьбе (`revoked=1`) и отдельными полями (план КК, КК13): по `devices`
+	// заворачивают ключи, отозванному заворачивать нельзя. Получатель проверяет ими подписи сообщений,
+	// записанных до отзыва; причина — чтобы по краже ставить «Не подтверждено» (Р11).
+	if r.URL.Query().Get("revoked") == "1" {
+		revoked, err := s.Store.RevokedDeviceKeys(r.Context(), userID)
+		if err != nil {
+			log.Printf("listDeviceKeys: revoked: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		revokedAsks, err := s.Store.RevokedSigningKeys(r.Context(), userID)
+		if err != nil {
+			log.Printf("listDeviceKeys: revoked asks: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		type revokedItem struct {
+			DeviceID   string `json:"device_id"`
+			SigningPub string `json:"signing_pub"`
+			CertBy     string `json:"cert_by,omitempty"`
+			CertAskID  string `json:"cert_ask_id,omitempty"`
+			CertSig    string `json:"cert_sig,omitempty"`
+			RevokedAt  int64  `json:"revoked_at_unix_ms"`
+			Reason     string `json:"revoked_reason"`
+		}
+		ro := make([]revokedItem, 0, len(revoked))
+		for _, d := range revoked {
+			it := revokedItem{DeviceID: d.DeviceID, SigningPub: b64.EncodeToString(d.SigningPub), RevokedAt: d.RevokedAt.UnixMilli(), Reason: d.Reason}
+			if d.CertBy != "" && len(d.CertSig) > 0 {
+				it.CertBy, it.CertAskID, it.CertSig = d.CertBy, d.CertAskID, b64.EncodeToString(d.CertSig)
+			}
+			ro = append(ro, it)
+		}
+		ra := make([]askItem, 0, len(revokedAsks))
+		for _, k := range revokedAsks {
+			ra = append(ra, askItem{k.AskID, b64.EncodeToString(k.Pub), b64.EncodeToString(k.Sig)})
+		}
+		resp["revoked_devices"] = ro
+		resp["revoked_signing_keys"] = ra
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }
