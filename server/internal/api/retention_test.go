@@ -6,6 +6,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -248,5 +249,57 @@ func TestPurgeContentBySetting(t *testing.T) {
 	}
 	if body, _ := payload(); body != 0 {
 		t.Fatal("сообщение старше срока не стёрлось")
+	}
+}
+
+// План КК, КК5 (Р2): содержимое зашифрованного сообщения группы уходит, когда уничтожен ключ escrow его версии
+// ключа группы, — как у личных. Открытое сообщение (версии нет) не трогается, метаданные остаются.
+func TestPurgeGroupContentByVersionEscrow(t *testing.T) {
+	ts, srv := setup(t)
+	db := testDB(t)
+	ctx := context.Background()
+	owner := registerDevice(t, ts, "+79990050021")
+	group := createGroupAPI(t, ts, owner.token)
+	if _, code := doRotate(t, ts, owner.token, group, 1, "periodic", []*device{owner}); code != http.StatusCreated {
+		t.Fatalf("ротация: %d", code)
+	}
+	const escrowID = 777001
+	if _, err := db.Exec(ctx, `UPDATE group_key_history SET escrow_key_version = $2 WHERE group_id = $1`, group, escrowID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO escrow_keys (id, region, epoch, chat_id, public_key, valid_from, valid_to, destroy_at, signature)
+		VALUES ($1, 'ru', '2026-01', $2, $3, now() - interval '9 months', now() - interval '8 months', now() + interval '1 day', $4)
+		ON CONFLICT (id) DO UPDATE SET destroy_at = EXCLUDED.destroy_at`, escrowID, group, make([]byte, 1184), make([]byte, 64)); err != nil {
+		t.Fatal(err)
+	}
+	insert := func(version any, client string) {
+		if _, err := db.Exec(ctx, `INSERT INTO group_messages (group_id, client_msg_id, sender_id, sender_device, kind, gk_version, payload, created_at_unix_ms, signature)
+			VALUES ($1, $2, $3, $4, 1, $5, 'содержимое', 1, $6)`, group, client, owner.userID, owner.id, version, make([]byte, 64)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert(1, "dddddddd-0000-0000-0000-000000000021")
+	insert(nil, "dddddddd-0000-0000-0000-000000000022")
+	payloadOf := func(client string) int {
+		var n int
+		if err := db.QueryRow(ctx, `SELECT octet_length(payload) FROM group_messages WHERE client_msg_id = $1`, client).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if _, err := srv.Store.PurgeMessageContent(ctx, time.Now(), 100, store.ContentWithEscrow); err != nil {
+		t.Fatal(err)
+	}
+	if payloadOf("dddddddd-0000-0000-0000-000000000021") == 0 {
+		t.Fatal("ключ escrow версии жив, а содержимое стёрто")
+	}
+	if _, err := srv.Store.PurgeMessageContent(ctx, time.Now().Add(48*time.Hour), 100, store.ContentWithEscrow); err != nil {
+		t.Fatal(err)
+	}
+	if payloadOf("dddddddd-0000-0000-0000-000000000021") != 0 {
+		t.Fatal("ключ escrow версии уничтожен, а содержимое осталось")
+	}
+	if payloadOf("dddddddd-0000-0000-0000-000000000022") == 0 {
+		t.Fatal("открытое сообщение группы стёрто — escrow у него нет")
 	}
 }

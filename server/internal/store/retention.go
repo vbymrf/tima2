@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // AccountState — состояние аккаунта.
@@ -216,7 +217,54 @@ func (s *Store) PurgeMessageContent(ctx context.Context, now time.Time, limit in
 		}
 		content = tag.RowsAffected()
 	}
-	return escrow.RowsAffected() + content, nil
+	groups, err := purgeGroupContent(ctx, s.pool, now, limit, contentDays)
+	if err != nil {
+		return 0, err
+	}
+	return escrow.RowsAffected() + content + groups, nil
+}
+
+// purgeGroupContent — содержимое зашифрованных сообщений групп (план КК, КК5, Р2: как у личных). Escrow у
+// группы один на версию ключа (`group_key_history.escrow_key_version`): ключ эпохи анклава уничтожен — открыть
+// сообщения этой версии по ордеру больше нечем, и содержимое уходит тем же правилом `TIMA_MESSAGE_RETENTION`.
+// Метаданные строки остаются. Открытые сообщения (уровни 0…3, версии нет) не трогаются: escrow у них нет.
+// Поля escrow версии не стираются: у `escrow_mlkem_ct` проверка длины, и версия нужна ротации.
+func purgeGroupContent(ctx context.Context, pool *pgxpool.Pool, now time.Time, limit int, contentDays int) (int64, error) {
+	switch {
+	case contentDays == ContentWithEscrow:
+		tag, err := pool.Exec(ctx, `
+			UPDATE group_messages g
+			SET payload = ''::bytea
+			WHERE g.message_id IN (
+			    SELECT g2.message_id
+			    FROM group_messages g2
+			    JOIN group_key_history h ON h.group_id = g2.group_id AND h.gk_version = g2.gk_version
+			    JOIN escrow_keys k ON k.id = h.escrow_key_version
+			    WHERE g2.gk_version IS NOT NULL AND g2.gk_version > 0
+			      AND k.destroy_at <= $1 AND octet_length(g2.payload) > 0
+			    LIMIT $2
+			)`, now, limit)
+		if err != nil {
+			return 0, err
+		}
+		return tag.RowsAffected(), nil
+	case contentDays > 0:
+		cutoff := now.Add(-time.Duration(contentDays) * 24 * time.Hour).UnixMilli()
+		tag, err := pool.Exec(ctx, `
+			UPDATE group_messages g
+			SET payload = ''::bytea
+			WHERE g.message_id IN (
+			    SELECT g2.message_id FROM group_messages g2
+			    WHERE g2.gk_version IS NOT NULL AND g2.gk_version > 0
+			      AND g2.created_at_unix_ms < $1 AND octet_length(g2.payload) > 0
+			    LIMIT $2
+			)`, cutoff, limit)
+		if err != nil {
+			return 0, err
+		}
+		return tag.RowsAffected(), nil
+	}
+	return 0, nil
 }
 
 // IdentityHistoryStart — момент самого раннего сообщения, отправленного под этой
