@@ -37,22 +37,11 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
-        // ── mavenLocal ПЕРВЫМ, и это не «на всякий случай» ────────────────────
-        //
-        // Здесь лежат форки KyberKotlin и KeccakKotlin с включёнными таргетами
-        // Apple (../third-party). Координаты у них те же, что у апстрима, а апстрим
-        // артефактов Apple не публикует.
-        //
-        // Почему это нужно КЛИЕНТУ, хотя зависимость объявлена в messenger-crypto:
-        // composite build подставляет проект вместо зависимости, но транзитивные
-        // зависимости этого проекта резолвятся **репозиториями потребителя**. То
-        // есть без mavenLocal здесь клиент честно найдёт kyber в mavenCentral — без
-        // вариантов под iOS, — и падение будет выглядеть как «No matching variant
-        // of asia.hombre:kyber», указывая на что угодно, кроме порядка репозиториев.
-        //
-        // Собрать форки: ./gradlew publishToMavenLocal в third-party/KeccakKotlin,
-        // затем в third-party/KyberKotlin (kyber зависит от keccak).
-        mavenLocal()
+        // mavenLocal здесь стоял первым до 2026-10-29 — ради форков KyberKotlin и
+        // KeccakKotlin с таргетами Apple. ML-KEM теперь из Kodium 1.1.0 (ПЛАН-(КМ)),
+        // форков нет. Транзитивные зависимости messenger-crypto (composite build)
+        // по-прежнему резолвятся репозиториями ЭТОГО файла — новый репозиторий для
+        // криптомодуля добавлять сюда же.
         google()
         mavenCentral()
         // ── JitPack: без него не собирается livekit-android ───────────────────
@@ -75,9 +64,8 @@ dependencyResolutionManagement {
 
 // ── messenger-crypto как composite build ──────────────────────────────────────
 //
-// Криптомодуль живёт своей сборкой и своим циклом: у него отдельные репозитории
-// (mavenLocal перед mavenCentral — там лежат форки Kyber и Keccak с таргетами
-// Apple) и отдельный прогон векторов. includeBuild подставляет его вместо
+// Криптомодуль живёт своей сборкой и своим циклом: у него свои репозитории
+// (только mavenCentral с 2026-10-29) и отдельный прогон векторов. includeBuild подставляет его вместо
 // зависимости io.tima:messenger-crypto, то есть правка крипто видна клиенту сразу,
 // без публикации.
 //
