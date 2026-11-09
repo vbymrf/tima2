@@ -9,11 +9,16 @@ import kotlin.test.assertTrue
 class CameraCropTest {
 
     @Test
-    fun ступени_до_трёх_и_обратно() {
+    fun ступени_через_десятую_до_трёх_и_обратно() {
+        // Заказчик 2026-11-10: шаг мельче — от 1× до 3× двадцать нажатий.
         val steps = generateSequence(CameraCrop.FULL) { it.closer().takeIf { next -> next != it } }.map { it.zoom }.toList()
-        assertEquals(listOf(1f, 1.5f, 2f, 3f), steps, "ответ заказчика 2: до 3×")
+        assertEquals(21, steps.size, steps.toString())
+        assertEquals(1.1f, steps[1], 0.0001f)
+        assertEquals(3f, steps.last(), 0.0001f, "ответ заказчика 2: до 3×")
         assertFalse(CameraCrop(3f).canCloser)
-        assertEquals(CameraCrop.FULL, CameraCrop(1.5f, 0.1f, 0f).farther(), "с 1,5× «−» возвращает весь кадр без сдвига")
+        assertEquals(CameraCrop.FULL, CameraCrop(1.1f, 0.01f, 0f).farther(), "с 1,1× «−» возвращает весь кадр без сдвига")
+        assertEquals("1.3", CameraCrop.label(steps[3]))
+        assertEquals("2", CameraCrop.label(steps[10]))
     }
 
     @Test
@@ -25,17 +30,19 @@ class CameraCropTest {
 
     @Test
     fun сдвиг_во_все_стороны_не_дальше_края() {
-        // 2× — видна половина, середина ходит на четверть кадра в каждую сторону.
-        var c = CameraCrop(2f)
-        repeat(10) { c = c.moved(1, 0) }
+        // 2× — видна половина, середина ходит на четверть кадра в каждую сторону; шаг — 1/20 видимой части,
+        // до края — десять нажатий (было два).
+        var c = CameraCrop(2f).moved(1, 0)
+        assertEquals(0.025f, c.x, 0.0001f)
+        repeat(30) { c = c.moved(1, 0) }
         assertEquals(0.25f, c.x, 0.0001f)
         assertFalse(c.canMove(1, 0), "у правого края стрелка вправо горит")
         assertTrue(c.canMove(-1, 0))
-        repeat(10) { c = c.moved(0, -1) }
+        repeat(30) { c = c.moved(0, -1) }
         assertEquals(-0.25f, c.y, 0.0001f)
         // «−» сужает предел — сдвиг возвращается внутрь.
         val back = c.farther()
-        assertTrue(back.x <= (1f - 1f / 1.5f) / 2f + 0.0001f, "после «−» видимая часть вышла за край")
+        assertTrue(back.x <= (1f - 1f / back.zoom) / 2f + 0.0001f, "после «−» видимая часть вышла за край")
     }
 
     @Test

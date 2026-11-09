@@ -381,7 +381,7 @@ class CallHostTest {
         val engine = FakeEngine()
         val host = videoCall(engine)
 
-        host.cropCamera(CameraCrop.FULL.closer().closer())
+        host.cropCamera(CameraCrop(2f))
         assertEquals(2f, host.crop.zoom)
         assertEquals(2f, engine.crops.last().zoom, "движку не сказали обрезать кадр")
 

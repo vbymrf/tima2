@@ -24,10 +24,10 @@ data class CameraCrop(val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f
     /** «−»: прежняя ступень; на 1× — весь кадр. */
     fun farther(): CameraCrop = copy(zoom = STEPS.lastOrNull { it < zoom - EPS } ?: 1f).clamped()
 
-    /** Стрелки: шаг — четверть видимой части; [dx], [dy] — −1, 0 или 1. */
+    /** Стрелки: шаг — 1/20 видимой части (заказчик 2026-11-10: в 5 раз мельче четверти); [dx], [dy] — −1, 0 или 1. */
     fun moved(dx: Int, dy: Int): CameraCrop = copy(x = x + dx * step, y = y + dy * step).clamped()
 
-    private val step: Float get() = 1f / zoom / 4f
+    private val step: Float get() = 1f / zoom / PAN_PARTS
 
     val canCloser: Boolean get() = STEPS.any { it > zoom + EPS }
     val canFarther: Boolean get() = !full
@@ -63,12 +63,21 @@ data class CameraCrop(val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f
     companion object {
         val FULL = CameraCrop()
 
-        /** Ступени приближения (ответ заказчика 2: до 3×). */
-        val STEPS = listOf(1f, 1.5f, 2f, 3f)
+        /**
+         * Ступени приближения (ответ заказчика 2: до 3×) — через 0,1× (заказчик 2026-11-10: было 1 · 1,5 · 2 · 3,
+         * «увеличь количество в 5 раз»): от 1× до 3× — 20 нажатий.
+         */
+        val STEPS = (10..30).map { it / 10f }
+
+        /** На сколько частей делится видимая часть при сдвиге: было 4. */
+        private const val PAN_PARTS = 20f
 
         private const val EPS = 0.001f
 
-        fun label(zoom: Float): String = if (zoom == zoom.toInt().toFloat()) zoom.toInt().toString() else zoom.toString()
+        fun label(zoom: Float): String {
+            val tenths = (zoom * 10).let { kotlin.math.round(it).toInt() }
+            return if (tenths % 10 == 0) (tenths / 10).toString() else "${tenths / 10}.${tenths % 10}"
+        }
 
         private fun round2(v: Float): String = ((v * 100).toInt() / 100f).toString()
     }
