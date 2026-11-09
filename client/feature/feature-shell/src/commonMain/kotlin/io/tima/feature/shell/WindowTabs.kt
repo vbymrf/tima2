@@ -31,6 +31,11 @@ class WindowTabs {
         chosen[window] = tab
     }
 
+    /** Начальное положение окна (ПЛАН-(МП) М3): вкладка снова первая. */
+    fun reset(window: Window) {
+        chosen.remove(window)
+    }
+
     /**
      * Вкладка окна, у которого ряд вкладок свой (`PhoneWindow`):
      * `var tab by remember(tabs) { tabs.state(…) }`. Без `remember` каждая перерисовка давала

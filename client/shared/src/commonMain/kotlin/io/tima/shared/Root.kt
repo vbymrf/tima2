@@ -981,7 +981,9 @@ private fun App(
     // Окно начинается с «Телефона» и хранится у процесса ([CallKeep]), а не в окне: Android пересоздаёт окно сам
     // (Redmi 2026-09-30), и открытое окно 0 или 6 не должно пропадать вместе с ним.
     val windowState = remember(session.deviceId) { CallKeep.window(session.deviceId) }
-    val navigator = remember(windowState) { Navigator(windowState) }
+    val navigator = remember(windowState) {
+        Navigator(windowState) { what, details -> Journal.note(LogCode.NAV, what, *details.toTypedArray()) }
+    }
     var where by navigator::where
     var window by navigator::window
     // Буферы переходов (ПЛАН-(БП)): на устройстве, в настройках; читаются один раз — дальше живут здесь.
@@ -1022,8 +1024,8 @@ private fun App(
      * Поэтому вход в окно 0 теперь один на всех: и набор, и входящий, и плашка.
      */
     fun showCall() {
-        window = Window.Call
-        where = Where.Nothing
+        // Откуда ушли в звонок — запоминается: конец звонка вернёт туда (ПЛАН-(МП) М10).
+        navigator.toCall()
     }
     // Смена окна — тоже «что человек делал»: половина жалоб про конкретное окно.
     // В журнал — ключ, а не надпись: журнал читает чинящий, и запись не должна менять
@@ -1483,7 +1485,7 @@ private fun App(
     // не задерживаемся: ни свайпом, ни переключателем оттуда не уйти в понятное место.
     LaunchedEffect(window) { if (window in Window.OFF) window = Window.Phone }
     LaunchedEffect(callHost.active) {
-        if (!callHost.active && window == Window.Call) window = Window.Phone
+        if (!callHost.active && window == Window.Call) navigator.leaveCall()
         // Разговор кончился — за строкой о нём идём сейчас, а не при следующем заходе
         // во вкладку. На журнал смотрят СРАЗУ после звонка, и строка, появляющаяся
         // через минуту, читается как потеря.
@@ -2134,14 +2136,22 @@ private fun App(
     // (Redmi 2026-10-09: два лишних кадра по 140 мс на переход). Читает его только слой часов.
     val windowAwaited = remember { mutableStateOf<Window?>(null) }
     val switchClock = remember { WindowSwitchClock() }
-    val goToWindow: (Window) -> Unit = { target ->
+    // Вход в окно — способом (ПЛАН-(МП) М3): свайп — в точку окна, переключатель — в начальное положение, то есть
+    // цепочка окна пустеет и вкладка — первая. Способ ждущего перехода — рядом с ним, не состоянием: часы его не читают.
+    val awaitedBy = remember { arrayOf(Via.Switcher) }
+    val arriveAt: (Window, Via) -> Unit = { target, by ->
+        if (navigator.enter(target, by) == Arrive.Start && (by == Via.Switcher || by == Via.Panel)) windowTabs.reset(target)
+    }
+    val goToWindow: (Window, Via) -> Unit = { target, by ->
         when {
-            target == window -> where = Where.Nothing
-            switchClock.needed -> windowAwaited.value = target
+            target == window -> arriveAt(target, by)
+            switchClock.needed -> {
+                awaitedBy[0] = by
+                windowAwaited.value = target
+            }
             else -> {
                 switchClock.started()
-                window = target
-                where = Where.Nothing
+                arriveAt(target, by)
             }
         }
     }
@@ -2150,8 +2160,7 @@ private fun App(
             if (target == null) return@collect
             withFrameNanos { } // кадр с часами нарисован
             switchClock.started()
-            window = target
-            where = Where.Nothing
+            arriveAt(target, awaitedBy[0])
         }
     }
     LaunchedEffect(window) {
@@ -2170,7 +2179,7 @@ private fun App(
             // отрицателен, и свайп с первого окна ушёл бы в -1, то есть никуда.
             val step = if (where_ == InSide.Next) 1 else -1
             Journal.note(LogCode.SCREEN_OPEN, "swipe", "из" to window.name, "куда" to where_.name)
-            goToWindow(order[(at + step + order.size) % order.size])
+            goToWindow(order[(at + step + order.size) % order.size], Via.Swipe)
         }
     }
 
@@ -2422,7 +2431,7 @@ private fun App(
         }
         Journal.note(LogCode.JUMP, "из указателей", "буфер" to p.level.substringBefore(':'))
         pointerViewSheet = false
-        where = Where.Chat(p.chatId, null, jumpTo = p.serverId)
+        navigator.open(Where.Chat(p.chatId, null, jumpTo = p.serverId), Via.Pointer)
     }
 
     if (pointerViewSheet) {
@@ -3060,8 +3069,7 @@ private fun App(
             // входящий, пришедший при открытой панели, было нечем принять.
             onCall = if (callHost.active) {
                 {
-                    window = Window.Call
-                    where = Where.Nothing
+                    navigator.toCall()
                     windowSwitcher = false
                 }
             } else {
@@ -3079,7 +3087,7 @@ private fun App(
             avatar = remember(profileState.avatarBytes) { profileState.avatarBytes?.let(::decodeImage) },
             counters = windowCounters(noticeCounts),
             onSelect = { selected ->
-                goToWindow(selected)
+                goToWindow(selected, Via.Switcher)
                 windowSwitcher = false
             },
             onSettings = {
@@ -3290,11 +3298,8 @@ private fun App(
             Rail(
                 layout = layout,
                 current = window,
-                onSelect = { selected ->
-                    window = selected
-                    // Смена окна закрывает подокно: оно принадлежало прежнему окну.
-                    where = Where.Nothing
-                },
+                // Рейка ПК — в точку окна: с его цепочкой подокон (ПЛАН-(МП) М3).
+                onSelect = { selected -> navigator.enter(selected, Via.Rail) },
                 counters = windowCounters(noticeCounts),
                 onSettings = toSettings,
                 inCall = callHost.active,
@@ -3429,7 +3434,7 @@ private fun App(
                     onRedialKind = callHost::redialAs,
                     onClose = {
                         callHost.close()
-                        window = Window.Phone
+                        navigator.leaveCall()
                     },
                 )
 
@@ -4275,12 +4280,12 @@ private fun App(
                                 chatId = current.chatId,
                                 key = io.tima.domain.chat.JumpBuffer.keyOf(current.chatId, isGroup, home),
                                 sameBuffer = { other -> home != null && socialState.mine.any { it.groupId == other && it.communityId == home } },
-                                elsewhere = { other, number -> where = Where.Chat(other, null, jumpTo = number) },
+                                // Ссылка в другую переписку — новое звено цепочки: «назад» вернёт сюда (ПЛАН-(МП) М7).
+                                elsewhere = { other, number -> navigator.open(Where.Chat(other, null, jumpTo = number), Via.Link) },
                                 pointers = {
                                     pointerOpened = io.tima.domain.chat.JumpBuffer.keyOf(current.chatId, isGroup, home)
                                     windowTabs.choose(Window.Activity, WindowTab.Pointers)
-                                    window = Window.Activity
-                                    where = Where.Nothing
+                                    navigator.enter(Window.Activity, Via.Pointer)
                                 },
                                 jumpTo = current.jumpTo,
                             )
