@@ -991,6 +991,8 @@ private fun App(
     }
     var where by navigator::where
     var window by navigator::window
+    // Вид главного окна (ПЛАН-(ВО)): панель перехода — показана, пока настройка не сказала «0» (Р2).
+    val layoutNav by remember { environment.settings.all().map { it[MainLayoutKeys.NAV] != "0" }.distinctUntilChanged() }.collectAsState(true)
     // Буферы переходов (ПЛАН-(БП)): на устройстве, в настройках; читаются один раз — дальше живут здесь.
     val jumpStored by androidx.compose.runtime.produceState<Map<String, String>?>(null) {
         value = runCatching { environment.settings.all().first() }.getOrDefault(emptyMap())
@@ -3169,6 +3171,17 @@ private fun App(
     CompositionLocalProvider(
         LocalLooking provides looking,
         LocalActiveCall provides activeCall.takeIf { callHost.active && window != Window.Call },
+        // Панель перехода (ПЛАН-(ВО) ВО2): показана по умолчанию (Р2); скрыта настройкой — пузыри в шапке (ВО3).
+        io.tima.feature.shell.LocalWindowNav provides if (layoutNav) {
+            io.tima.feature.shell.WindowNav(
+                current = window,
+                windows = io.tima.feature.shell.navWindows(),
+                counters = windowCounters(noticeCounts),
+                onSelect = { goToWindow(it, Via.Panel) },
+            )
+        } else {
+            null
+        },
         io.tima.feature.shell.LocalWindowTabs provides windowTabs,
         LocalInnerPopups provides innerPopups,
     ) {

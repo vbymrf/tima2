@@ -1,5 +1,7 @@
 package io.tima.feature.shell
 
+import androidx.compose.foundation.layout.ime
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -148,8 +150,17 @@ fun WindowFrame(
             // новая вкладка получает размер сама; переписка, кнопки окон и подокна задают своё внутри.
             ProvidePlace(TextPlace.LISTS) { content() }
         }
+
+        // Панель перехода (ПЛАН-(ВО) ВО2) — внизу, только на телефоне; клавиатура открыта — прячется (Р9).
+        val nav = LocalWindowNav.current
+        if (nav != null && LayoutLocal.current.phone && !imeOpen()) WindowNavBar(nav)
     }
 }
+
+/** Открыта ли клавиатура — по отступу снизу, который она занимает. */
+@Composable
+private fun imeOpen(): Boolean =
+    androidx.compose.foundation.layout.WindowInsets.Companion.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
 
 /**
  * Куда ведёт свайп.
