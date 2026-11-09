@@ -97,7 +97,7 @@
      большие зелёные круги, переключатель столбиком, красная «Завершить». Большие — Звук, Камера, Завершить; маленькие —
      Свернуть, переключатель звука, Настройки. */
   .ряд6 { display: grid; grid-template-columns: 40px 58px 38px 58px 40px 62px; justify-content: space-between; align-items: center; padding: 0 6px; }
-  .ряд6.подписи { margin-top: 6px; font-size: 9.5px; font-weight: 800; text-align: center; letter-spacing: -0.02em; }
+  .ряд6.подписи { margin-top: 6px; font-size: 11px; font-weight: 800; text-align: center; letter-spacing: -0.02em; }
   .ряд6.подписи span { white-space: nowrap; justify-self: center; }
   .мал { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--чёрный-6); color: var(--текст); justify-self: center; }
   .мал svg { width: 22px; height: 22px; }
@@ -175,7 +175,7 @@
             <div class="бол красн"><svg><use href="#трубка"/></svg></div>
           </div>
           <div class="ряд6 подписи">
-            <span>Свернуть</span><span>Звук</span><span>Ухо</span><span>Камера</span><span>Настройки</span><span>Завершить</span>
+            <span></span><span>Звук</span><span></span><span>Камера</span><span></span><span>Завершить</span>
           </div>
         </div>
         
@@ -201,7 +201,7 @@
             <div class="бол красн"><svg><use href="#трубка"/></svg></div>
           </div>
           <div class="ряд6 подписи">
-            <span>Свернуть</span><span>Звук</span><span>Динамик</span><span>Камера</span><span>Настройки</span><span>Завершить</span>
+            <span></span><span>Звук</span><span></span><span>Камера</span><span></span><span>Завершить</span>
           </div>
         </div>
         
@@ -232,7 +232,7 @@
             <div class="бол красн"><svg><use href="#трубка"/></svg></div>
           </div>
           <div class="ряд6 подписи">
-            <span>Свернуть</span><span>Звук</span><span>Динамик</span><span>Камера</span><span>Настройки</span><span>Завершить</span>
+            <span></span><span>Звук</span><span></span><span>Камера</span><span></span><span>Завершить</span>
           </div>
         </div>
         <div class="лист-зв">
@@ -244,8 +244,8 @@
         <div class="дом"></div>
       </div>
       <div class="подп"><b>2а. Настройки (≡).</b> Лист снизу поверх звонка. «Показать экран устройства» — вместо камеры
-      уходит экран телефона. «Экономить трафик» (глаз) — видео не принимается и не отправляется, звонок голосовой, пока
-      выключатель стоит.</div>
+      уходит экран телефона. «Экономить трафик» (глаз) — как нынешний глаз: видео собеседника не принимается, своя
+      камера гаснет; выключили — камера возвращается как была.</div>
     </div>
     <div>
       <div class="тлф">
@@ -268,11 +268,10 @@
   </div>
 </section>
 
-<h2>Вопросы к выбору</h2>
+<h2>Решено (заказчик 2026-11-10)</h2>
 <ol class="опис">
-  <li><b>«Звук»</b> — это свой микрофон (вас не слышат) или звук собеседника (вы не слышите)? В макете — микрофон.</li>
-  <li><b>Подписи под кнопками</b> оставить или только значки?</li>
-  <li><b>«Экономить трафик»</b> выключает видео в обе стороны — а «Камера» в ряду остаётся включать своё видео? Или при
-  экономии «Камера» гаснет?</li>
+  <li><b>Подписи</b> — только у больших кнопок: Звук, Камера, Завершить.</li>
+  <li><b>«Экономить трафик»</b> — то же, что нынешний глаз: видео собеседника не принимается, своя камера гаснет.</li>
+  <li>План — <code>doc_mig/ПЛАН-(ЗН)-ЗВОНКА-НОВОГО-ВИДА.md</code>.</li>
 </ol>
 </div>
