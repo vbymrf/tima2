@@ -3272,14 +3272,14 @@ private fun App(
         io.tima.feature.shell.LocalHeaderNotices provides if (layoutNav) {
             emptyList()
         } else {
-            val counts = windowCounters(noticeCounts)
             io.tima.feature.shell.HEADER_NOTICE_WINDOWS.mapNotNull { w ->
-                val n = counts[w] ?: 0
+                val tabs = headerTabsOf(w)
+                val n = tabs.sumOf { noticeCounts.tab(it) }
                 if (n == 0) {
                     null
                 } else {
                     io.tima.feature.shell.HeaderNotice(w, n) {
-                        val tab = noticeCounts.latest(noticeTabsOf(w))?.let(::windowTabOf)
+                        val tab = noticeCounts.latest(tabs)?.let { headerTabOf(w, it) }
                         navigator.enter(w, Via.HeaderNotice)
                         tab?.let { windowTabs.choose(w, it) }
                     }

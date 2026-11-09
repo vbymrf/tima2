@@ -763,3 +763,17 @@ internal fun noticeWindowOf(tab: io.tima.domain.chat.NoticeTab): Window = when (
     io.tima.domain.chat.NoticeTab.Channels -> Window.Social
     io.tima.domain.chat.NoticeTab.Groups -> Window.Page
 }
+
+/**
+ * Вкладки журнала, из которых складывается пузырь окна в шапке (ВО3, заказчик 2026-11-10): «Телефон» — чаты и звонки;
+ * «Социум» — каналы и группы: группы с новым человек видит в каталоге «Социума», там у каждой своё число.
+ */
+internal fun headerTabsOf(window: Window): List<io.tima.domain.chat.NoticeTab> = when (window) {
+    Window.Social -> listOf(io.tima.domain.chat.NoticeTab.Channels, io.tima.domain.chat.NoticeTab.Groups)
+    else -> noticeTabsOf(window)
+}
+
+/** Вкладка окна, куда ведёт пузырь: у «Социума» — каталог, где и каналы, и группы. */
+internal fun headerTabOf(window: Window, tab: io.tima.domain.chat.NoticeTab): WindowTab =
+    if (window == Window.Social) WindowTab.Catalogue else windowTabOf(tab)
+

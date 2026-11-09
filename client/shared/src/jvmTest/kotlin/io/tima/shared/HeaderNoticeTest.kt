@@ -41,3 +41,15 @@ class NoticeTapTest {
         assertEquals(Window.Page, noticeWindowOf(NoticeTab.Groups))
     }
 }
+
+/** Пузыри в шапке (заказчик 2026-11-10): у «Социума» — каналы и группы, ведёт в каталог. */
+class HeaderTabsTest {
+
+    @Test
+    fun социум_каналы_и_группы_в_каталог() {
+        assertEquals(listOf(NoticeTab.Channels, NoticeTab.Groups), headerTabsOf(Window.Social))
+        assertEquals(WindowTab.Catalogue, headerTabOf(Window.Social, NoticeTab.Groups))
+        assertEquals(listOf(NoticeTab.Chats, NoticeTab.Calls), headerTabsOf(Window.Phone))
+        assertEquals(WindowTab.Calls, headerTabOf(Window.Phone, NoticeTab.Calls))
+    }
+}

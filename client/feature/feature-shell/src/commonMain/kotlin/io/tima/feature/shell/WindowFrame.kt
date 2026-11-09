@@ -141,9 +141,10 @@ fun WindowFrame(
                 onSwitchWindows = onSwitchWindows,
                 right = {
                     ControlRow {
-                        // Пузыри соседних окон — перед «Поиском» (ВО3); своего окна пузыря нет.
+                        // Пузыри «Телефона» и «Социума» — перед «Поиском» (ВО3), на любом окне, и своего тоже
+                        // (заказчик 2026-11-10: «и на Телефон окне, и на других два уведомления»).
                         if (LayoutLocal.current.phone) {
-                            for (n in LocalHeaderNotices.current) if (n.window != window) HeaderNoticeBubble(n)
+                            for (n in LocalHeaderNotices.current) HeaderNoticeBubble(n)
                         }
                         if (onSearch != null) IconButton(glyph = "🔍", onClick = onSearch, modifier = Modifier.testTag(WINDOW_SEARCH_TAG))
                         IconButton(glyph = "⚙", onClick = onSettings, modifier = Modifier.testTag(WINDOW_SETTINGS_TAG))
