@@ -75,7 +75,8 @@ internal fun CallStrip(model: CallStripModel) {
     val moving = rememberInfiniteTransition()
     // Как в пробе 1в (заказчик 2026-11-10): узор лучами из центра крутится по кругу — на длинной полосе штрихи у
     // краёв длинные и бегут быстро, у середины короткие и медленнее. Оборот — 6 с (заказчик 2026-11-10: было 2 с,
-    // потом 4 с; в пробе — 3 с). Цвет — шапки (`navigation`), а не «подтверждено».
+    // потом 4 с; в пробе — 3 с). Цвет — шапки (`navigation`), а не «подтверждено». Лучей 24 по 9°: при 12 по 18°
+    // у левого и правого края штрих тянулся сплошным (заказчик 2026-11-10: «покороче в два раза»).
     val turn by moving.animateFloat(0f, 1f, infiniteRepeatable(tween(STRIP_TURN_MS, easing = LinearEasing)))
     val blink by moving.animateFloat(1f, 0.25f, infiniteRepeatable(tween(600), RepeatMode.Reverse))
     val title = call.group?.title ?: call.peer
@@ -96,12 +97,14 @@ internal fun CallStrip(model: CallStripModel) {
                         )
                     }
                     .clickable(onClick = model.onOpen)
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    // Поле одно со всех сторон (заказчик 2026-11-10): снизу у «Завершить» — как справа.
+                    .padding(STRIP_PAD)
                     .testTag(CALL_STRIP_TAG),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(10.dp).alpha(blink).background(colors.confirmed, CircleShape))
+                // Точка — цветом шапки, как и рамка (заказчик 2026-11-10).
+                Box(Modifier.size(10.dp).alpha(blink).background(colors.navigation, CircleShape))
                 Column(Modifier.weight(1f)) {
                     Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, lineOne = true)
                     Caption(status, fontSize = TimaType.sz6, color = colors.text2, lineOne = true)
@@ -123,9 +126,9 @@ internal fun CallStrip(model: CallStripModel) {
                     Modifier.size(END_SIZE).background(colors.alarm, CircleShape).clickable(onClick = model.onEnd).testTag(CALL_STRIP_END_TAG),
                     contentAlignment = Alignment.Center,
                 ) {
-                    // Знак — 80 % кнопки (заказчик 2026-11-10).
-                    val glyph = with(LocalDensity.current) { (END_SIZE * 0.8f).toSp() }
-                    BasicText("✆", style = TextStyle(fontSize = glyph, lineHeight = glyph, color = colors.onAccent))
+                    // Трубка рисованная, а не «✆»: у знака шрифта свои поля, и он садился ниже середины (заказчик
+                    // 2026-11-10). Ширина — 80 % кнопки, по середине.
+                    HangUpIcon(colors.onAccent, Modifier.size(END_SIZE * 0.8f))
                 }
             }
         }
@@ -156,7 +159,37 @@ internal fun stripStatus(
     }
 }
 
-/** Узор рамки: 12 лучей по 18° с пропусками по 12°, повёрнутый на [turn] оборота; жёсткие края — парами точек. */
+/**
+ * Положенная трубка: дуга с двумя «ушами» вниз, по середине своего места — и по ширине, и по высоте (её рамка
+ * считается и сдвигается к середине).
+ */
+@Composable
+internal fun HangUpIcon(color: Color, modifier: Modifier) = androidx.compose.foundation.Canvas(modifier) {
+    val s = size.minDimension
+    // Пологая дуга (100°) и короткие толстые «уши» наружу — трубка, а не наушники.
+    val r = s * 0.46f
+    val arc = s * 0.17f
+    val ear = s * 0.26f
+    val drop = s * 0.1f
+    val out = s * 0.07f
+    val endY = -r * 0.643f // sin 220° — концы дуги выше центра
+    val endX = r * 0.766f // |cos 220°|
+    // Высота фигуры: от верха дуги до низа ушей; центр дуги сдвигается так, чтобы фигура стояла по середине.
+    val top = -r - arc / 2
+    val bottom = endY + drop + ear / 2
+    val c = Offset(size.width / 2, size.height / 2 - (top + bottom) / 2)
+    drawArc(
+        color, startAngle = 220f, sweepAngle = 100f, useCenter = false,
+        topLeft = Offset(c.x - r, c.y - r), size = Size(r * 2, r * 2),
+        style = Stroke(width = arc, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+    )
+    for (side in listOf(-1f, 1f)) {
+        val from = Offset(c.x + side * endX, c.y + endY)
+        drawLine(color, from, Offset(from.x + side * out, from.y + drop), strokeWidth = ear, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+    }
+}
+
+/** Узор рамки: 24 луча по 9° с пропусками по 6°, повёрнутый на [turn] оборота; жёсткие края — парами точек. */
 internal fun rays(turn: Float, color: Color): Array<Pair<Float, Color>> {
     val clear = color.copy(alpha = 0f)
     val parts = mutableListOf<Pair<Float, Float>>() // начало и конец луча в долях оборота
@@ -182,11 +215,14 @@ internal fun rays(turn: Float, color: Color): Array<Pair<Float, Color>> {
     return stops.toTypedArray()
 }
 
-private const val RAYS = 12
-private const val RAY_STEP = 30f
-private const val RAY_ON = 18f
+private const val RAYS = 24
+private const val RAY_STEP = 15f
+private const val RAY_ON = 9f
 private const val STRIP_TURN_MS = 6_000
 private val END_SIZE = 36.dp
+
+/** Поле вокруг содержимого панели — одно со всех сторон. */
+private val STRIP_PAD = 12.dp
 
 const val CALL_STRIP_TAG = "strip:call"
 const val CALL_STRIP_MIC_TAG = "strip:call.mic"
