@@ -20,7 +20,9 @@ import io.tima.domain.chat.LinkSafety
  * исполняется. Пределы: HTML до 512 КБ, картинка до 5 МБ, 10 с на запрос, переходы — не больше
  * трёх и каждый проверяется заново: переход во внутреннюю сеть так же запрещён, как и ссылка.
  *
- * Свой клиент, без наших заголовков и токена: сайту незачем знать, что за ним пришёл TIMA.
+ * Свой клиент, без наших заголовков и токена: сайту незачем знать, что за ним пришёл TIMA. Называемся
+ * браузером ([BROWSER]): сайт отдаёт браузеру одно, а программе другое, и смотреть надо то, что получит
+ * браузер после «Перейти».
  */
 class LinkCardsOverHttp(
     private val client: HttpClient = HttpClient(httpEngine()) {
@@ -74,7 +76,7 @@ class LinkCardsOverHttp(
             if (inside(LinkSafety.hostOf(at) ?: return null)) return null
             val here = at
             var next: String? = null
-            val done = stream.prepareGet(at).execute { resp ->
+            val done = stream.prepareGet(at) { header(HttpHeaders.UserAgent, BROWSER) }.execute { resp ->
                 val location = resp.headers[HttpHeaders.Location]
                 when {
                     resp.status.value in 300..399 && location != null -> {
@@ -136,6 +138,9 @@ class LinkCardsOverHttp(
             if (inside(LinkSafety.hostOf(url) ?: return null)) return null
             val here = url
             val result = client.prepareGet(url) {
+                // Без этого страница подписки (заказчик 2026-11-09) вместо страницы отдавала `okhttp` файл JSON — и
+                // окно перехода показывало «файл», а карточки не было; браузер по той же ссылке видел страницу.
+                header(HttpHeaders.UserAgent, BROWSER)
                 header(HttpHeaders.Accept, "text/html,image/*;q=0.9,*/*;q=0.5")
                 if (range) header(HttpHeaders.Range, "bytes=0-${limit - 1}")
             }.execute { resp ->
@@ -215,6 +220,9 @@ class LinkCardsOverHttp(
 
         /** Начало файла для окна облачного файла: подписи форматов и имена внутри архива — в первых 4 КБ. */
         const val PEEK = 4 * 1024
+
+        /** Как называемся сайту — браузером, тем же, что у видео (`MEDIA_USER_AGENT`). */
+        const val BROWSER = io.tima.core.media.MEDIA_USER_AGENT
         private const val MAX_TITLE = 200
         private const val MAX_DESCRIPTION = 400
 

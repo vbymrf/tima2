@@ -6,9 +6,11 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.tima.domain.chat.FileKinds
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -94,6 +96,26 @@ class LinkCardsOverHttpTest {
         assertEquals("https://a.example/x.png", LinkCardsOverHttp.resolve("https://a.example/p/q", "/x.png"))
         assertEquals("https://a.example/p/x.png", LinkCardsOverHttp.resolve("https://a.example/p/q", "x.png"))
         assertEquals("https://cdn.example/x.png", LinkCardsOverHttp.resolve("https://a.example/p", "//cdn.example/x.png"))
+    }
+
+    @Test
+    fun сайт_видит_браузер_и_отдаёт_страницу_а_не_файл() = runTest {
+        // Страница подписки (заказчик 2026-11-09): браузеру — страница, программе — JSON.
+        val url = "https://sub.example/abc"
+        val c = LinkCardsOverHttp(
+            HttpClient(
+                MockEngine { req ->
+                    val browser = req.headers[HttpHeaders.UserAgent].orEmpty().startsWith("Mozilla/")
+                    if (browser) respond("<title>Подписка</title>", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "text/html; charset=utf-8"))
+                    else respond("{}", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                },
+            ) { followRedirects = false },
+            inside = { false },
+        )
+        val peek = c.peek(url)!!
+        assertEquals("text/html", peek.type)
+        assertFalse(FileKinds.isFile(url, peek), "страница, а не файл")
+        assertEquals("Подписка", c.card(url)!!.title)
     }
 
     @Test
