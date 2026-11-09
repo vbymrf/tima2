@@ -495,169 +495,13 @@ internal fun Chat(
     // Store живёт столько, сколько открыта переписка: ключ по chatId, чтобы при переходе в
     // другую он пересоздался, а не показал реплики предыдущей.
     val store = remember(chatId) {
-        ChatStore(
-            chatId = chatId,
-            observe = environment.chat,
-            send = environment.send,
-            scope = scope,
-            // Где остановились — у каждой переписки своё (ПЛАН-(МП) М2).
-            places = ChatPlacesInSettings(environment.settings),
-            markRead = environment.reading,
-            seenAtStart = false,
-            // Запрос недостающего ключа и имена авторов — только у группы: у личной
-            // переписки просить не у кого, а собеседник назван в шапке.
-            requestKeys = if (group) {
-                // Просьба подписывается фразой (Р42): без подписывающего она уходила неподписанной и
-                // получала 403 даже с введённой фразой (живая проверка 2026-10-06, п. 1.7).
-                RequestGroupKeys(
-                    // «Недостающих нет» — дело в ключе подписи автора: повтор сходит за ним (КК2).
-                    reopen = { reopenUnreadable?.invoke() },
-                    recovery = GroupKeyRecoveryOverHttp(network.keyRecovery) { gid, words ->
-                        io.tima.core.encryption.RecoverySignature.sign(words, gid, myDeviceId)
-                    },
-                )
-            } else {
-                null
-            },
-            // Лечение группы без ключа при открытии: обёртки, а если ключа не было ни у
-            // кого — первый выпуск. Стенд 2026-09-16…18: группы рождались без ключа.
-            heal = if (group) heal else null,
-            names = if (group) people else null,
-            // Аватар автора: медиа из справочника, байты из медиа-хранилища. Только в
-            // группе — в личной переписке подписи у реплик нет вовсе.
-            faces = if (group) people else null,
-            // Повтор и удаление отказанного — поверх очереди, с журналом «отказ → повтор».
-            dead = deadMessages(environment),
-            // Сужение — только в группе: у личного сообщения круга нет, оно зашифровано и
-            // адресовано одному человеку.
-            narrow = if (group) NarrowMessageLevel(network.messageLevels) else null,
-            // Ключей нет вовсе — значит группа молчит целиком, и сказать об этом надо
-            // прямо. Спрашивается у книги ключей, а не у сети: ответ нужен и офлайн.
-            anyKey = if (group) {
-                { environment.groupKeyBook.latestVersion(chatId) != null }
-            } else {
-                null
-            },
-            // Личная переписка: недоступное сообщение — просьба ключей у своих устройств и
-            // собеседника (заказчик 2026-10-06). Ответ приходит событием `recovery.msg_ready`,
-            // и история догоняется сама. Незаверенное устройство подписывает просьбу фразой.
-            askChatKeys = if (!group) {
-                { words, named ->
-                    val signature = words?.let { io.tima.core.encryption.RecoverySignature.sign(it, chatId, myDeviceId) }
-                    when (val r = network.history.recover(chatId, signature, named)) {
-                        is io.tima.core.network.HistoryApi.Recover.Asked -> {
-                            Journal.note(
-                                LogCode.DEVICE_TRUST, "ключи переписки запрошены", "переписка" to chatId.take(8),
-                                "названо" to named.size, "вернут" to r.missing, "уже есть" to r.ready,
-                                "потеряно" to r.lost.size, "помощников" to r.helpers, "по фразе" to (signature != null),
-                            )
-                            // Потерянное запоминается: ключа к нему нет ни у кого, и просить его
-                            // снова — будить чужие устройства зря.
-                            if (r.lost.isNotEmpty()) {
-                                val key = CHAT_KEYS_LOST + chatId
-                                runCatching {
-                                    val before = environment.settings.all().first()[key].orEmpty()
-                                        .split(',').mapNotNull { it.toLongOrNull() }.toSet()
-                                    environment.settings.put(key, (before + r.lost).sortedDescending().joinToString(","))
-                                }
-                            }
-                            // Ключ сообщения у устройства уже есть — дело не в нём: разобрать заново,
-                            // подтянув ключи подписи отправителей.
-                            if (r.ready > 0) runCatching { reopenUnreadable?.invoke() }
-                            when {
-                                r.missing > 0 && r.helpers > 0 -> io.tima.domain.chat.RequestKeysStep.Asked(r.helpers)
-                                r.missing > 0 -> io.tima.domain.chat.RequestKeysStep.NoHelpers
-                                r.lost.isNotEmpty() && r.ready == 0 -> io.tima.domain.chat.RequestKeysStep.Lost(r.lost.size)
-                                else -> io.tima.domain.chat.RequestKeysStep.NothingMissing
-                            }
-                        }
-                        // Устройство не заверено — просьбу подписывает фраза; опечатка в фразе
-                        // приходит тем же отказом.
-                        is io.tima.core.network.HistoryApi.Recover.Refused ->
-                            if (r.code == "bad_identity_sig" || r.code == "phrase_required") {
-                                Journal.note(LogCode.DEVICE_TRUST, "ключи переписки — нужна фраза", "переписка" to chatId.take(8), "с фразой" to (words != null))
-                                io.tima.domain.chat.RequestKeysStep.NeedsSecretPhrase
-                            } else {
-                                Journal.trouble(LogCode.DEVICE_TRUST, "просьба о ключах переписки отклонена", "код" to r.code)
-                                io.tima.domain.chat.RequestKeysStep.Refused(r.code)
-                            }
-                        io.tima.core.network.HistoryApi.Recover.Offline -> io.tima.domain.chat.RequestKeysStep.Offline(0)
-                    }
-                }
-            } else {
-                null
-            },
-            lostKeys = if (!group) {
-                {
-                    runCatching { environment.settings.all().first()[CHAT_KEYS_LOST + chatId] }.getOrNull().orEmpty()
-                        .split(',').mapNotNull { it.toLongOrNull() }.toSet()
-                }
-            } else {
-                null
-            },
-            openByPhrase = openByPhrase?.let { open -> { words -> open(chatId, words, group) } },
-            fromPhoneMay = fromPhoneMay,
-            // Сами — один раз на переписку в сутки, в личной и в группе: каждое открытие с
-            // недоступным сообщением будило бы чужие устройства заново.
-            autoAskAllowed = {
-                val key = CHAT_KEYS_ASKED + chatId
-                val last = runCatching { environment.settings.all().first()[key]?.toLongOrNull() }.getOrNull() ?: 0L
-                val now = msNow()
-                (now - last >= CHAT_KEYS_AGAIN_MS).also { if (it) runCatching { environment.settings.put(key, now.toString()) } }
-            },
-            // Меню сообщения (Решения §11.1): правка, удаление у себя и у всех, подборка.
-            edit = environment.edit,
-            deleter = io.tima.domain.chat.DeleteMessage(environment.removal, network.removal),
-            picks = environment.picks,
-            pickLevel = io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community),
-            drafts = LoggedDrafts(environment.drafts),
-            // Вложения (Решения §2, §3, §6): файл закрыт своим ключом до выхода с устройства.
-            attach = io.tima.domain.chat.SendAttachments(
-                queue = environment.queue,
-                uploads = SealedUploads({ network.media }) { id, sealed, mime ->
-                    postman?.keepSent(id, sealed, photo = mime.startsWith("image/"), voice = mime == io.tima.domain.chat.SendAttachments.VOICE_MIME)
-                },
-                bodies = io.tima.core.encryption.AttachmentBodiesOverKodium,
-                keys = io.tima.core.outbox.UuidDedupKeys,
-                // Правила приёма — от сервера, не чаще раза в сутки (ПЛАН-(ИФ) ИФ2).
-                source = io.tima.domain.chat.CachedMediaRules(environment.settings, { network.media.rules() }, ::msNow),
-            ),
-            peerId = if (group) null else (peerUser ?: myUserId.takeIf { it.isNotEmpty() }),
-            selfChat = !group && (peerUser == null || peerUser == myUserId),
-            // Редактор (Решения §10): документ собирается тем же конвейером, что и набранное.
-            composer = io.tima.domain.chat.SendComposed(
-                queue = environment.queue,
-                bodies = io.tima.core.encryption.ComposedBodiesOverKodium,
-                keys = io.tima.core.outbox.UuidDedupKeys,
-                // Продолжение своего уровня — в группе: в личной один уровень (Решения §11.3).
-                continuations = if (group) environment.continuations else null,
-            ),
-            pins = pins,
-            pinMay = pinMay,
-            setSuper = setSuper,
-            finder = finder,
-        ).also { s ->
-            // Недоступное по ссылке (ПЛАН-(ЖС)): причина и уровень, без номеров чужих переписок.
-            s.attachLog = { reason -> Journal.note(LogCode.FILE_SEND, "отказ", "причина" to reason) }
-            s.refLog = { kind, number, reason, level ->
-                Journal.note(
-                    LogCode.REF_UNAVAILABLE, "недоступно по ссылке", "вид" to kind, "номер" to number,
-                    "причина" to reason, "уровень" to (level ?: -1),
-                )
-            }
-            s.pinLog = { on, step ->
-                val outcome = when (step) {
-                    io.tima.domain.chat.PinStep.Done -> "сделано"
-                    is io.tima.domain.chat.PinStep.Refused -> step.code
-                    io.tima.domain.chat.PinStep.Offline -> "нет сети"
-                }
-                if (step == io.tima.domain.chat.PinStep.Done) {
-                    Journal.note(LogCode.PIN_MSG, if (on) "закреплено" else "снято", "группа" to group)
-                } else {
-                    Journal.trouble(LogCode.PIN_MSG, if (on) "не закреплено" else "не снято", "группа" to group, "итог" to outcome)
-                }
-            }
-        }
+        ChatAssembly.store(
+            chatId = chatId, group = group, environment = environment, network = network, scope = scope,
+            myDeviceId = myDeviceId, myUserId = myUserId, peerUser = peerUser, community = community,
+            reopenUnreadable = reopenUnreadable, heal = heal, people = people, postman = postman,
+            openByPhrase = openByPhrase, fromPhoneMay = fromPhoneMay,
+            pins = pins, pinMay = pinMay, setSuper = setSuper, finder = finder,
+        )
     }
     // Вид группы — первым: от него зависит, нужен ли ей ключ (заказчик 2026-10-21).
     LaunchedEffect(store, groupKind) { store.groupKind(groupKind) }
@@ -2233,4 +2077,196 @@ internal fun filesOf(line: ChatLine): List<io.tima.domain.chat.RichMedia> =
 internal fun savedName(m: io.tima.domain.chat.RichMedia, n: Int): String = m.name.ifBlank {
     val ext = if (m.mime.startsWith("image/")) "jpg" else "bin"
     if (n > 0) "photo-$n.$ext" else "photo.$ext"
+}
+
+
+/**
+ * Сборка store переписки со всеми его портами (ПЛАН-(РФ) РФ3): что откуда берётся — в одном месте, а не посреди
+ * экрана. Значения приходят параметрами — те же, что `Chat()` получает сама; поведение прежнее.
+ */
+internal object ChatAssembly {
+    fun store(
+        chatId: String,
+        group: Boolean,
+        environment: Environment,
+        network: ChatPorts,
+        scope: kotlinx.coroutines.CoroutineScope,
+        myDeviceId: String,
+        myUserId: String,
+        peerUser: String?,
+        community: String?,
+        reopenUnreadable: (suspend () -> Int)?,
+        heal: HealGroupKey?,
+        people: People?,
+        postman: PostmanFiles?,
+        openByPhrase: (suspend (String, List<String>, Boolean) -> io.tima.domain.chat.PhraseOpen)?,
+        fromPhoneMay: Boolean,
+        pins: io.tima.domain.chat.ChatPins?,
+        pinMay: Boolean,
+        setSuper: (suspend (Long) -> Boolean)?,
+        finder: io.tima.domain.chat.MessageFinder?,
+    ): ChatStore =
+        ChatStore(
+            chatId = chatId,
+            observe = environment.chat,
+            send = environment.send,
+            scope = scope,
+            // Где остановились — у каждой переписки своё (ПЛАН-(МП) М2).
+            places = ChatPlacesInSettings(environment.settings),
+            markRead = environment.reading,
+            seenAtStart = false,
+            // Запрос недостающего ключа и имена авторов — только у группы: у личной
+            // переписки просить не у кого, а собеседник назван в шапке.
+            requestKeys = if (group) {
+                // Просьба подписывается фразой (Р42): без подписывающего она уходила неподписанной и
+                // получала 403 даже с введённой фразой (живая проверка 2026-10-06, п. 1.7).
+                RequestGroupKeys(
+                    // «Недостающих нет» — дело в ключе подписи автора: повтор сходит за ним (КК2).
+                    reopen = { reopenUnreadable?.invoke() },
+                    recovery = GroupKeyRecoveryOverHttp(network.keyRecovery) { gid, words ->
+                        io.tima.core.encryption.RecoverySignature.sign(words, gid, myDeviceId)
+                    },
+                )
+            } else {
+                null
+            },
+            // Лечение группы без ключа при открытии: обёртки, а если ключа не было ни у
+            // кого — первый выпуск. Стенд 2026-09-16…18: группы рождались без ключа.
+            heal = if (group) heal else null,
+            names = if (group) people else null,
+            // Аватар автора: медиа из справочника, байты из медиа-хранилища. Только в
+            // группе — в личной переписке подписи у реплик нет вовсе.
+            faces = if (group) people else null,
+            // Повтор и удаление отказанного — поверх очереди, с журналом «отказ → повтор».
+            dead = deadMessages(environment),
+            // Сужение — только в группе: у личного сообщения круга нет, оно зашифровано и
+            // адресовано одному человеку.
+            narrow = if (group) NarrowMessageLevel(network.messageLevels) else null,
+            // Ключей нет вовсе — значит группа молчит целиком, и сказать об этом надо
+            // прямо. Спрашивается у книги ключей, а не у сети: ответ нужен и офлайн.
+            anyKey = if (group) {
+                { environment.groupKeyBook.latestVersion(chatId) != null }
+            } else {
+                null
+            },
+            // Личная переписка: недоступное сообщение — просьба ключей у своих устройств и
+            // собеседника (заказчик 2026-10-06). Ответ приходит событием `recovery.msg_ready`,
+            // и история догоняется сама. Незаверенное устройство подписывает просьбу фразой.
+            askChatKeys = if (!group) {
+                { words, named ->
+                    val signature = words?.let { io.tima.core.encryption.RecoverySignature.sign(it, chatId, myDeviceId) }
+                    when (val r = network.history.recover(chatId, signature, named)) {
+                        is io.tima.core.network.HistoryApi.Recover.Asked -> {
+                            Journal.note(
+                                LogCode.DEVICE_TRUST, "ключи переписки запрошены", "переписка" to chatId.take(8),
+                                "названо" to named.size, "вернут" to r.missing, "уже есть" to r.ready,
+                                "потеряно" to r.lost.size, "помощников" to r.helpers, "по фразе" to (signature != null),
+                            )
+                            // Потерянное запоминается: ключа к нему нет ни у кого, и просить его
+                            // снова — будить чужие устройства зря.
+                            if (r.lost.isNotEmpty()) {
+                                val key = CHAT_KEYS_LOST + chatId
+                                runCatching {
+                                    val before = environment.settings.all().first()[key].orEmpty()
+                                        .split(',').mapNotNull { it.toLongOrNull() }.toSet()
+                                    environment.settings.put(key, (before + r.lost).sortedDescending().joinToString(","))
+                                }
+                            }
+                            // Ключ сообщения у устройства уже есть — дело не в нём: разобрать заново,
+                            // подтянув ключи подписи отправителей.
+                            if (r.ready > 0) runCatching { reopenUnreadable?.invoke() }
+                            when {
+                                r.missing > 0 && r.helpers > 0 -> io.tima.domain.chat.RequestKeysStep.Asked(r.helpers)
+                                r.missing > 0 -> io.tima.domain.chat.RequestKeysStep.NoHelpers
+                                r.lost.isNotEmpty() && r.ready == 0 -> io.tima.domain.chat.RequestKeysStep.Lost(r.lost.size)
+                                else -> io.tima.domain.chat.RequestKeysStep.NothingMissing
+                            }
+                        }
+                        // Устройство не заверено — просьбу подписывает фраза; опечатка в фразе
+                        // приходит тем же отказом.
+                        is io.tima.core.network.HistoryApi.Recover.Refused ->
+                            if (r.code == "bad_identity_sig" || r.code == "phrase_required") {
+                                Journal.note(LogCode.DEVICE_TRUST, "ключи переписки — нужна фраза", "переписка" to chatId.take(8), "с фразой" to (words != null))
+                                io.tima.domain.chat.RequestKeysStep.NeedsSecretPhrase
+                            } else {
+                                Journal.trouble(LogCode.DEVICE_TRUST, "просьба о ключах переписки отклонена", "код" to r.code)
+                                io.tima.domain.chat.RequestKeysStep.Refused(r.code)
+                            }
+                        io.tima.core.network.HistoryApi.Recover.Offline -> io.tima.domain.chat.RequestKeysStep.Offline(0)
+                    }
+                }
+            } else {
+                null
+            },
+            lostKeys = if (!group) {
+                {
+                    runCatching { environment.settings.all().first()[CHAT_KEYS_LOST + chatId] }.getOrNull().orEmpty()
+                        .split(',').mapNotNull { it.toLongOrNull() }.toSet()
+                }
+            } else {
+                null
+            },
+            openByPhrase = openByPhrase?.let { open -> { words -> open(chatId, words, group) } },
+            fromPhoneMay = fromPhoneMay,
+            // Сами — один раз на переписку в сутки, в личной и в группе: каждое открытие с
+            // недоступным сообщением будило бы чужие устройства заново.
+            autoAskAllowed = {
+                val key = CHAT_KEYS_ASKED + chatId
+                val last = runCatching { environment.settings.all().first()[key]?.toLongOrNull() }.getOrNull() ?: 0L
+                val now = msNow()
+                (now - last >= CHAT_KEYS_AGAIN_MS).also { if (it) runCatching { environment.settings.put(key, now.toString()) } }
+            },
+            // Меню сообщения (Решения §11.1): правка, удаление у себя и у всех, подборка.
+            edit = environment.edit,
+            deleter = io.tima.domain.chat.DeleteMessage(environment.removal, network.removal),
+            picks = environment.picks,
+            pickLevel = io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community),
+            drafts = LoggedDrafts(environment.drafts),
+            // Вложения (Решения §2, §3, §6): файл закрыт своим ключом до выхода с устройства.
+            attach = io.tima.domain.chat.SendAttachments(
+                queue = environment.queue,
+                uploads = SealedUploads({ network.media }) { id, sealed, mime ->
+                    postman?.keepSent(id, sealed, photo = mime.startsWith("image/"), voice = mime == io.tima.domain.chat.SendAttachments.VOICE_MIME)
+                },
+                bodies = io.tima.core.encryption.AttachmentBodiesOverKodium,
+                keys = io.tima.core.outbox.UuidDedupKeys,
+                // Правила приёма — от сервера, не чаще раза в сутки (ПЛАН-(ИФ) ИФ2).
+                source = io.tima.domain.chat.CachedMediaRules(environment.settings, { network.media.rules() }, ::msNow),
+            ),
+            peerId = if (group) null else (peerUser ?: myUserId.takeIf { it.isNotEmpty() }),
+            selfChat = !group && (peerUser == null || peerUser == myUserId),
+            // Редактор (Решения §10): документ собирается тем же конвейером, что и набранное.
+            composer = io.tima.domain.chat.SendComposed(
+                queue = environment.queue,
+                bodies = io.tima.core.encryption.ComposedBodiesOverKodium,
+                keys = io.tima.core.outbox.UuidDedupKeys,
+                // Продолжение своего уровня — в группе: в личной один уровень (Решения §11.3).
+                continuations = if (group) environment.continuations else null,
+            ),
+            pins = pins,
+            pinMay = pinMay,
+            setSuper = setSuper,
+            finder = finder,
+        ).also { s ->
+            // Недоступное по ссылке (ПЛАН-(ЖС)): причина и уровень, без номеров чужих переписок.
+            s.attachLog = { reason -> Journal.note(LogCode.FILE_SEND, "отказ", "причина" to reason) }
+            s.refLog = { kind, number, reason, level ->
+                Journal.note(
+                    LogCode.REF_UNAVAILABLE, "недоступно по ссылке", "вид" to kind, "номер" to number,
+                    "причина" to reason, "уровень" to (level ?: -1),
+                )
+            }
+            s.pinLog = { on, step ->
+                val outcome = when (step) {
+                    io.tima.domain.chat.PinStep.Done -> "сделано"
+                    is io.tima.domain.chat.PinStep.Refused -> step.code
+                    io.tima.domain.chat.PinStep.Offline -> "нет сети"
+                }
+                if (step == io.tima.domain.chat.PinStep.Done) {
+                    Journal.note(LogCode.PIN_MSG, if (on) "закреплено" else "снято", "группа" to group)
+                } else {
+                    Journal.trouble(LogCode.PIN_MSG, if (on) "не закреплено" else "не снято", "группа" to group, "итог" to outcome)
+                }
+            }
+        }
 }
