@@ -99,6 +99,9 @@ enum class SettingsItem(val group: SettingsGroup, val glyph: String) {
      * экран, по которому надо прокручивать, чтобы найти известное.
      */
     TEXT(SettingsGroup.APPLICATION, "🔠"),
+
+    /** Вид главного окна и переходы (ПЛАН-(ВО) ВО5, ПЛАН-(МП) М5): раскладка, панель перехода, куда ведут входы. */
+    MAIN_WINDOW(SettingsGroup.APPLICATION, "📐"),
     LANGUAGE(SettingsGroup.APPLICATION, "🌐"),
     PRIVACY(SettingsGroup.APPLICATION, "🔒"),
     STORAGE(SettingsGroup.APPLICATION, "💾"),

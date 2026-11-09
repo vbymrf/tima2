@@ -602,6 +602,23 @@ internal fun Settings(
             // Шрифты и размеры — второй пункт вида (ПЛАН-(Ш)-ШРИФТОВ Ш4).
             SettingsItem.TEXT -> TextLookScreen(appearance, onAppearance)
 
+            // Вид главного окна и переходы (ПЛАН-(ВО) ВО5, ПЛАН-(МП) М5): пишется в настройки устройства аккаунта,
+            // корень читает их оттуда же и меняет окно сразу.
+            SettingsItem.MAIN_WINDOW -> {
+                val stored by remember { deviceSettings.all() }.collectAsState(emptyMap())
+                val put: (String, String) -> Unit = { k, v -> scope.launch { runCatching { deviceSettings.put(k, v) } } }
+                val by = arriveFrom(stored)
+                io.tima.feature.shell.MainWindowScreen(
+                    order = io.tima.feature.shell.layoutOf(stored[MainLayoutKeys.ORDER]),
+                    nav = stored[MainLayoutKeys.NAV] != "0",
+                    arrive = { code -> Via.entries.firstOrNull { it.code == code }?.let { by(it) == Arrive.Point } ?: false },
+                    phone = io.tima.core.ui.LayoutLocal.current.phone,
+                    onOrder = { put(MainLayoutKeys.ORDER, io.tima.feature.shell.layoutCode(it)) },
+                    onNav = { put(MainLayoutKeys.NAV, if (it) "1" else "0") },
+                    onArrive = { code, point -> put(MainLayoutKeys.ARRIVE + code, if (point) Arrive.Point.code else Arrive.Start.code) },
+                )
+            }
+
             // Выбор языка приложения (ПЛАН-(Я)-ЯЗЫКА Я1). Сообщения не переводятся, и экран
             // говорит это строкой: перевода сообщений нет вовсе.
             SettingsItem.LANGUAGE -> {

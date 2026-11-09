@@ -3245,7 +3245,7 @@ private fun App(
                 onSettings = {
                     Journal.note(LogCode.NAV, "подсказка", "итог" to "settings")
                     scope.launch { runCatching { environment.settings.put(MainLayoutKeys.NAV_TIP, "1") } }
-                    where = Where.Settings()
+                    where = Where.Settings(SettingsItem.MAIN_WINDOW)
                 },
             )
         } else {

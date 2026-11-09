@@ -224,6 +224,25 @@ interface WindowWords {
     val navTipOk: String
     val navTipSettings: String
 
+    /** Пункт настроек «Главное окно» (ПЛАН-(ВО) ВО5). */
+    val mainSample: String
+    val mainLayout: String
+    val mainHeaderFixed: String
+    val areaTabs: String
+    val areaSections: String
+    val areaContent: String
+    val areaNav: String
+    val navShown: String
+    val navHidden: String
+    val transitionsTitle: String
+    val arrivePanel: String
+    val arriveSwitcher: String
+    val arriveSwipe: String
+    val arriveRail: String
+    val arrivePoint: String
+    val arriveStart: String
+    val transitionsAbout: String
+
     /** Пометка у окна, в котором человек сейчас: цвет здесь занят навигацией. */
     fun youAreHere(about: String): String
     fun cameFrom(window: String): String
@@ -388,6 +407,7 @@ interface SettingsListWords {
     val itemAppearance: String
     /** «Шрифты и размеры» — второй пункт вида (ПЛАН-(Ш)-ШРИФТОВ Ш4, 2026-09-16). */
     val itemText: String
+    val itemMainWindow: String
     val itemLanguage: String
     val itemPrivacy: String
     val itemStorage: String
@@ -3044,6 +3064,23 @@ object RussianWords : Words {
         override val navTipHow = "Убрать панель или переставить её можно в настройках."
         override val navTipOk = "Понятно"
         override val navTipSettings = "Настройки"
+        override val mainSample = "Образец"
+        override val mainLayout = "Расположение"
+        override val mainHeaderFixed = "Шапка — всегда вверху"
+        override val areaTabs = "Вкладки"
+        override val areaSections = "Разделы"
+        override val areaContent = "— список —"
+        override val areaNav = "Панель перехода"
+        override val navShown = "показана — уведомлений в шапке нет"
+        override val navHidden = "скрыта — уведомления «Телефона» и «Социума» в шапке"
+        override val transitionsTitle = "Переходы — куда ведёт вход в окно"
+        override val arrivePanel = "Панель перехода"
+        override val arriveSwitcher = "Переключение окон (шапка)"
+        override val arriveSwipe = "Свайп"
+        override val arriveRail = "Рейка окон"
+        override val arrivePoint = "В точку окна"
+        override val arriveStart = "С начала"
+        override val transitionsAbout = "В точку окна — туда, где были в этом окне: вкладка и открытая переписка. С начала — первая вкладка, без открытого."
         override fun cameFrom(window: String) = "Вы пришли из окна «$window»"
         override fun cameFromTab(window: String, tab: String) =
             "Вы пришли из окна «$window», вкладка «$tab»"
@@ -3178,6 +3215,7 @@ object RussianWords : Words {
         override val itemVirtuals = "Аккаунты"
         override val itemAppearance = "Цвета"
         override val itemText = "Шрифты и размеры"
+        override val itemMainWindow = "Главное окно"
         override val itemLanguage = "Язык"
         override val itemPrivacy = "Приватность и блокировки"
         override val itemStorage = "Память и трафик"
