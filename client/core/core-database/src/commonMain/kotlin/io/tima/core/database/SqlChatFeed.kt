@@ -12,9 +12,14 @@ import io.tima.domain.chat.MessageBodies
 import io.tima.domain.chat.MessageBodyCodec
 import io.tima.domain.chat.MessageDisplay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 /**
  * Переписка из базы — переходник к порту `domain-chat`.
@@ -53,27 +58,43 @@ class SqlChatFeed(
 ) : ChatFeed, MessageBodies, io.tima.domain.chat.LocalMessages {
 
     override fun page(chatId: String, limit: Int): Flow<List<ChatLine>> =
+        rows(chatId, limit, DecodedCache())
+            // Расшифровка ленты — не на главном потоке (см. SqlChatsFeed.list).
+            .flowOn(Dispatchers.Default)
+
+    /**
+     * Лента, которая растёт (заказчик 2026-11-09: старые сообщения не видны): кеш разбора — один на
+     * все размеры, иначе каждая подгрузка заново расшифровывала бы всё уже показанное.
+     * `flatMapLatest` дожидается конца прежнего потока, прежде чем начать новый, — кеш не делится
+     * между двумя сразу.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun pages(chatId: String, limits: Flow<Int>): Flow<List<ChatLine>> = flow {
+        val cache = DecodedCache()
+        emitAll(limits.flatMapLatest { limit -> rows(chatId, limit, cache) })
+    }.flowOn(Dispatchers.Default)
+
+    override suspend fun depth(chatId: String, serverId: Long): Int = withContext(Dispatchers.Default) {
+        db.messagesQueries.chatDepth(serverId, chatId).executeAsOne().toInt()
+    }
+
+    private fun rows(chatId: String, limit: Int, cache: DecodedCache): Flow<List<ChatLine>> =
         db.messagesQueries.chatPage(chatId, limit.toLong())
             // asFlow + mapToList: обновление приходит от самой базы, когда меняется
             // таблица. Опрос по таймеру давал бы в v1 и задержку, и лишние пробуждения.
             .asFlow()
             .mapToList(Dispatchers.Default)
-            .map(object : suspend (List<Messages>) -> List<ChatLine> {
-                // Кеш разбора (ADR-0011 §10, Решения §14) — на поток этой страницы: лента
-                // пересобирается на каждое изменение таблицы, и без кеша пришедшее одно сообщение
-                // заставляло бы заново расшифровывать и разбирать все строки на экране. Поток
-                // собирается последовательно — делить кеш не с кем.
-                private val cache = DecodedCache()
-
-                override suspend fun invoke(lines: List<Messages>): List<ChatLine> {
-                    // Правки — тем же проходом: строка правки в ленте не идёт, она ложится на
-                    // исходное (ADR-0045). Таблица одна, и новая правка будит этот же поток.
-                    val edits = editsOf(chatId)
-                    return lines.map { it.toLine(edits, cache) }
-                }
-            })
-            // Расшифровка ленты — не на главном потоке (см. SqlChatsFeed.list).
-            .flowOn(Dispatchers.Default)
+            .map { lines ->
+                // Кеш разбора (ADR-0011 §10, Решения §14): лента пересобирается на каждое изменение
+                // таблицы, и без кеша пришедшее одно сообщение заставляло бы заново расшифровывать и
+                // разбирать все строки на экране. Кеш не меньше страницы: меньший при обходе
+                // по порядку не попадает ни разу.
+                cache.limit = maxOf(cache.limit, limit + CACHE_SPARE)
+                // Правки — тем же проходом: строка правки в ленте не идёт, она ложится на
+                // исходное (ADR-0045). Таблица одна, и новая правка будит этот же поток.
+                val edits = editsOf(chatId)
+                lines.map { it.toLine(edits, cache) }
+            }
 
     override fun original(chatId: String, serverId: Long): EditOriginal? {
         val row = db.messagesQueries.byServerId(chatId, serverId).executeAsOneOrNull() ?: return null
@@ -190,7 +211,10 @@ class SqlChatFeed(
  * Разобранные строки ленты по ключу «строка, тело, правки»; старое вытесняется. Ключ меняется
  * вместе с тем, от чего зависит разбор, — устаревшего результата не бывает.
  */
-internal class DecodedCache(private val limit: Int = 400) {
+/** Запас кеша разбора сверх страницы: правки и только что ушедшие с края строки. */
+private const val CACHE_SPARE = 100
+
+internal class DecodedCache(var limit: Int = 400) {
     private val map = LinkedHashMap<String, io.tima.domain.chat.DecodedLine?>()
 
     fun get(key: String, make: () -> io.tima.domain.chat.DecodedLine?): io.tima.domain.chat.DecodedLine? {

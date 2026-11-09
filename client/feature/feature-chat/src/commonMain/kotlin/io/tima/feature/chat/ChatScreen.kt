@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
@@ -284,6 +285,10 @@ fun ChatScreen(
     onPeekClose: () -> Unit = {},
     /** Из показанного одним — открыть его переписку (другая переписка). `null` — кнопки нет. */
     onOpenChat: ((String) -> Unit)? = null,
+    /** Дошли до верха ленты — ещё порция старых (заказчик 2026-11-09). `null` — лента не растёт. */
+    onOlder: (() -> Unit)? = null,
+    /** Дорастить ленту до сообщения этой переписки: `true` — оно здесь и придёт в ленту. */
+    onReach: (suspend (Long) -> Boolean)? = null,
 ) {
     val cancelledMark = Tima.words.auth.identityCancelledMark
     val colors = Tima.colors
@@ -330,9 +335,15 @@ fun ChatScreen(
         // Переходы по ответу, вставленному и «Продолжить чтение» — буфер переходов (§11.4, ПЛАН-(БП)).
         val jumps = remember(jumpPlace?.chatId, jumpPlace?.key) { FeedJumps(jumpPlace) }
         jumps.onJump = onJump
+        jumps.reach = onReach
+        val reachScope = androidx.compose.runtime.rememberCoroutineScope()
         val openMessage: (String, String, Long) -> Unit = { kind, chat, number ->
             when {
                 state.lines.any { it.serverId == number && it.chatId == chat } -> jumps.go(number)
+                // Этой переписки, но старше ленты — лента дорастает, переход ждёт его (2026-11-09).
+                onReach != null && jumpPlace != null && chat == jumpPlace.chatId -> reachScope.launch {
+                    if (onReach(number)) jumps.go(number) else onPeek?.invoke(kind, chat, number)
+                }
                 // Группа того же сообщества — туда и к сообщению, а не окно одного сообщения (БП4).
                 jumpPlace != null && chat != jumpPlace.chatId && jumpPlace.sameBuffer(chat) -> jumps.elsewhere(chat, number)
                 else -> onPeek?.invoke(kind, chat, number)
@@ -342,12 +353,19 @@ fun ChatScreen(
         // его в ленте и после загрузки — окно одного сообщения.
         val arrive = jumpPlace?.jumpTo
         var arriving by remember(jumpPlace?.chatId, arrive) { mutableStateOf(arrive) }
+        var reaching by remember(jumpPlace?.chatId, arrive) { mutableStateOf<Boolean?>(null) }
         LaunchedEffect(arriving, state.lines.size) {
             val target = arriving ?: return@LaunchedEffect
             if (state.lines.any { it.serverId == target }) {
                 jumps.go(target, record = false)
                 arriving = null
             } else if (state.lines.isNotEmpty()) {
+                // Старше ленты — дорастить до него и подождать, пока придёт (заказчик 2026-11-09); пришла
+                // дорощенная лента — эффект начнётся заново. Не пришло (в ветке, только продолжение) — одно.
+                if (reaching == null && onReach != null) {
+                    reaching = onReach(target)
+                    if (reaching == true) kotlinx.coroutines.delay(ARRIVE_WAIT_MS)
+                }
                 kotlinx.coroutines.delay(ARRIVE_WAIT_MS)
                 arriving = null
                 onPeek?.invoke(if (state.group) "group" else "personal", jumpPlace?.chatId.orEmpty(), target)
@@ -359,7 +377,8 @@ fun ChatScreen(
             val found = state.lines.firstOrNull { it.serverId == state.pinned }
             PinnedBar(
                 text = found?.takeUnless { it.deleted }?.text,
-                onOpen = { if (found != null) jumps.go(state.pinned) },
+                // Закреплённое старше ленты — лента дорастает до него (2026-11-09).
+                onOpen = { if (found != null || onReach != null) jumps.go(state.pinned) },
                 onUnpin = onUnpin?.takeIf { state.pinMay },
             )
         }
@@ -371,6 +390,7 @@ fun ChatScreen(
         ) {
         Feed(
             jumps = jumps,
+            onOlder = onOlder,
             // Сообщение только из фото, которых уже не будет, — не показывается (ADR-0052).
             lines = state.lines.filterNot { attachments.photosGone(it.rich) },
             // **В личной переписке подписи нет вовсе.** Так в макете: у чужой реплики
@@ -512,6 +532,10 @@ private fun Feed(
     onInvite: (ChatLine) -> Unit = {},
     /** По содержимому, а не во всю высоту — сообщение подокном (журнал указателей). */
     wrap: Boolean = false,
+    /** Дошли до верха — ещё старых; `null` — лента не растёт. */
+    onOlder: (() -> Unit)? = null,
+    /** Разделитель дней между сообщениями (заказчик 2026-11-09); в подокне одного сообщения — нет. */
+    days: Boolean = jumps != null,
 ) =
     // Сообщения — своя группа размера (ПЛАН-(Ш)-ШРИФТОВ Ш3): её укрупняют чаще всего, и
     // от списка чатов она не зависит.
@@ -541,7 +565,17 @@ private fun Feed(
         LaunchedEffect(jumps.request) {
             val target = jumps.request ?: return@LaunchedEffect
             jumps.taken()
-            jumpScope.launch { jumps.perform(target, feed, listState, record = jumps.record) }
+            jumpScope.launch { jumps.performReaching(target, { feed }, listState, record = jumps.record) }
+        }
+    }
+    // Дошли до верха ленты — ещё порция старых (заказчик 2026-11-09). Лента перевёрнута: верх — конец списка.
+    if (onOlder != null) {
+        val older by androidx.compose.runtime.rememberUpdatedState(onOlder)
+        LaunchedEffect(listState) {
+            androidx.compose.runtime.snapshotFlow {
+                val info = listState.layoutInfo
+                info.totalItemsCount > 0 && (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - OLDER_AHEAD
+            }.collect { near -> if (near) older() }
         }
     }
     if (jumps != null) WatchLeaving(jumps, lines, listState)
@@ -579,10 +613,12 @@ private fun Feed(
             emptyMap()
         }
         val taken = hues.values.toSet()
-        items(lines, key = { it.dedupKey }) { line ->
-            val index = lines.indexOf(line)
+        itemsIndexed(lines, key = { _, it -> it.dedupKey }) { index, line ->
+            Column(Modifier.fillMaxWidth()) {
             // Предыдущее по времени лежит НИЖЕ в списке: список идёт новым сверху.
             val previous = lines.getOrNull(index + 1)
+            // Первое сообщение дня — над ним день (заказчик 2026-11-09): «Сегодня», «Вчера», «29 октября».
+            if (days && (previous == null || !sameDay(previous.atMs, line.atMs))) DayDivider(line.atMs)
             // Приглашение в групповой звонок — карточкой словами читающего (решение 3а).
             val called = invite(line)
             if (called != null) {
@@ -590,7 +626,7 @@ private fun Feed(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = if (line.outgoing) Arrangement.End else Arrangement.Start,
                 ) { CallInviteCard(called, onJoin = { onInvite(line) }) }
-                return@items
+                return@itemsIndexed
             }
             // Переход сюда — коротко подсвечено (В34).
             Box(if (jumps != null && line.serverId > 0 && jumps.highlight == line.serverId) Modifier.background(flashColor, androidx.compose.foundation.shape.RoundedCornerShape(10.dp)) else Modifier) {
@@ -625,6 +661,7 @@ private fun Feed(
                 onMenu = onMenu,
                 onSelect = onSelect,
             )
+            }
             }
             }
         }
@@ -666,6 +703,31 @@ internal fun PointerFeed(
             onMenu = onToggle,
             onSelect = onToggle,
             wrap = wrap,
+        )
+    }
+}
+
+/** За сколько строк до верха ленты просить ещё старых. */
+private const val OLDER_AHEAD = 10
+
+/** Метка разделителя дней — для сценариев. */
+const val DAY_DIVIDER_TAG = "chat:day"
+
+/** День над первым сообщением дня — посередине, тихо, как служебная строка. */
+@Composable
+private fun DayDivider(atMs: Long) {
+    val words = Tima.words.chat
+    Box(Modifier.fillMaxWidth().padding(vertical = TimaSpacing.about3 / 2), contentAlignment = Alignment.Center) {
+        Caption(
+            feedDay(atMs, words),
+            fontSize = TimaType.sz6,
+            weight = FontWeight.Bold,
+            color = Tima.colors.text3,
+            lineOne = true,
+            modifier = Modifier
+                .background(Tima.colors.border.copy(alpha = 0.35f), androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 3.dp)
+                .testTag(DAY_DIVIDER_TAG),
         )
     }
 }

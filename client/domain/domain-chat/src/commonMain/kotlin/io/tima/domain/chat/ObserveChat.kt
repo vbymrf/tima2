@@ -1,6 +1,10 @@
 package io.tima.domain.chat
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 
 /**
  * Чтение переписки — вторая половина К4.1.
@@ -42,14 +46,28 @@ class ObserveChat(private val feed: ChatFeed) {
         return feed.page(chatId, limit)
     }
 
+    /**
+     * Лента, которая растёт: сколько строк — из [limits] (подгрузка старых по прокрутке и переход к
+     * старому, заказчик 2026-11-09). До того лента держала последние 50 навсегда: старше было не
+     * увидеть и не перейти — указатели на них молчали.
+     */
+    fun pages(chatId: String, limits: Flow<Int>): Flow<List<ChatLine>> {
+        require(chatId.isNotBlank()) { "chatId пустой" }
+        return feed.pages(chatId, limits.map { it.coerceIn(1, MAX_PAGE) }.distinctUntilChanged())
+    }
+
+    /** Место сообщения от нового (1 — последнее); нет его в переписке — 0. */
+    suspend fun depth(chatId: String, serverId: Long): Int = feed.depth(chatId, serverId)
+
     companion object {
         const val DEFAULT_PAGE: Int = 50
 
         /**
          * Предел страницы. Не «круглое число»: страница целиком лежит в памяти и целиком
-         * расшифрована, а бюджет памяти §3.7 — вещь измеримая.
+         * расшифрована, а бюджет памяти §3.7 — вещь измеримая. Строка ленты — текст и разметка, без
+         * картинок (они грузятся отдельно по видимым): 5000 строк — единицы мегабайт.
          */
-        const val MAX_PAGE: Int = 500
+        const val MAX_PAGE: Int = 5000
     }
 }
 
@@ -200,6 +218,13 @@ enum class MessageDisplay {
  */
 fun interface ChatFeed {
     fun page(chatId: String, limit: Int): Flow<List<ChatLine>>
+
+    /** Лента переменного размера; база держит один кеш разбора на все размеры. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun pages(chatId: String, limits: Flow<Int>): Flow<List<ChatLine>> = limits.flatMapLatest { page(chatId, it) }
+
+    /** Место сообщения от нового (1 — последнее); нет — 0. Не умеет — 0. */
+    suspend fun depth(chatId: String, serverId: Long): Int = 0
 }
 
 /**

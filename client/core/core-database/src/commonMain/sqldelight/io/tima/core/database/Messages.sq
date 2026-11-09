@@ -199,6 +199,16 @@ WHERE chat_id = ? AND edit_of = 0
 ORDER BY COALESCE(server_ts, client_ts) DESC, local_id DESC
 LIMIT ?;
 
+-- Место сообщения в ленте, считая от нового (1 — последнее), в том же порядке, что `chatPage`:
+-- сколько строк ленты нужно, чтобы оно в неё вошло (переход к старому, заказчик 2026-11-09).
+-- Нет такого в переписке — 0.
+chatDepth:
+SELECT COUNT(*) FROM messages AS m
+JOIN messages AS t ON t.chat_id = m.chat_id AND t.server_id = :serverId AND t.edit_of = 0
+WHERE m.chat_id = :chatId AND m.edit_of = 0
+  AND (COALESCE(m.server_ts, m.client_ts) > COALESCE(t.server_ts, t.client_ts)
+    OR (COALESCE(m.server_ts, m.client_ts) = COALESCE(t.server_ts, t.client_ts) AND m.local_id >= t.local_id));
+
 -- Правки переписки по порядку написания (ADR-0045): поздняя правка узла перекрывает раннюю.
 -- Отказанная своя (`:dead`) не в счёт — у собеседника её нет. Неразобранная входящая
 -- отсеивается при разборе тела: у неё в столбце ещё конверт.

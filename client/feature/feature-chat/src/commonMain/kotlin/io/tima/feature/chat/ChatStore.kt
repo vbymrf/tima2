@@ -285,6 +285,38 @@ class ChatStore(
      */
     private var known: List<ChatLine> = emptyList()
 
+    // ── ЛЕНТА РАСТЁТ (заказчик 2026-11-09) ───────────────────────────────────
+    //
+    // До того лента держала последние [pageSize] строк навсегда: старше было не увидеть
+    // прокруткой и не достать переходом — указатель на старое сообщение молчал.
+
+    private val step = pageSize
+
+    /** Место сообщения в ленте от нового — из базы (параметр конструктора, а не свойство). */
+    private val depthOf: suspend (Long) -> Int = { observe.depth(chatId, it) }
+
+    /** Сколько последних строк держит лента. */
+    private val limit = kotlinx.coroutines.flow.MutableStateFlow(pageSize)
+
+    /** Пришло столько, сколько просили: в базе, может быть, есть старше. */
+    private var more = false
+
+    /** Дошли до верха ленты — ещё порция старых. Старше нет — ничего. */
+    fun older() {
+        if (more && limit.value < ObserveChat.MAX_PAGE) limit.value = minOf(limit.value + step, ObserveChat.MAX_PAGE)
+    }
+
+    /**
+     * Переход к сообщению, которого в ленте нет: дорастить ленту до него с запасом. `true` — оно в
+     * переписке и войдёт в ленту; `false` — его здесь нет (или дальше предела) — показывать одно.
+     */
+    suspend fun reach(serverId: Long): Boolean {
+        val depth = withContext(io) { runCatching { depthOf(serverId) }.getOrDefault(0) }
+        if (depth <= 0 || depth > ObserveChat.MAX_PAGE) return false
+        if (depth + step > limit.value) limit.value = minOf(depth + step, ObserveChat.MAX_PAGE)
+        return true
+    }
+
     init {
         // Закреплённое — с сервера при открытии и событием потом; полоса читает общий снимок.
         pins?.let { board ->
@@ -327,8 +359,10 @@ class ChatStore(
         }?.launchIn(scope)
         // Список приходит потоком: обновление от самой базы, а не по нажатию. Значит
         // пришедшее сообщение и смена состояния отправки появляются на экране сами.
-        observe.page(chatId, pageSize)
+        observe.pages(chatId, limit)
             .onEach { lines ->
+                // Строк пришло столько, сколько просили, — в базе, может быть, есть старше.
+                more = lines.size >= limit.value
                 // Признак пересчитывается на каждом обновлении: ключ может приехать в
                 // любой момент — ротацией, догоном или ответом на просьбу, — и полоса
                 // обязана исчезнуть сама, без повторного открытия переписки.

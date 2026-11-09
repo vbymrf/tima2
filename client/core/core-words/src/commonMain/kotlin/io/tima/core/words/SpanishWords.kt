@@ -1276,6 +1276,10 @@ object SpanishWords : Words {
         override val editInEditor = "Este mensaje se edita en el editor"
         override val editImpossible = "Este mensaje no se puede editar"
         override val linkGo = "Ir"
+        override val feedToday = "Hoy"
+        override val feedYesterday = "Ayer"
+        override fun feedDay(day: Int, month: Int, year: Int?) =
+            "$day de ${ES_MONTHS[month - 1]}" + (year?.let { " de $it" } ?: "")
         override val linkWatch = "Ver"
         override val linkListen = "Escuchar"
         override fun linkPlayHint(listen: Boolean) = if (listen) "«Escuchar» — en la ventana de TIMA, «Ir» — en el navegador" else "«Ver» — en la ventana de TIMA, «Ir» — en el navegador"
@@ -2194,3 +2198,8 @@ object SpanishWords : Words {
         override fun inside(howMany: Int, role: String) = "$howMany dentro · $role"
     }
 }
+
+private val ES_MONTHS = listOf(
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+)

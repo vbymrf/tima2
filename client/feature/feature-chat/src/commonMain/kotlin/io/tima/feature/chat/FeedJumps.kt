@@ -32,6 +32,7 @@ import io.tima.domain.chat.JumpPoint
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.layout.onSizeChanged
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -103,6 +104,12 @@ class FeedJumps(private val place: JumpPlace? = null) {
     /** Сообщение коротко подсвечено после перехода (В34). */
     var highlight by mutableStateOf<Long?>(null)
         private set
+
+    /**
+     * Дорастить ленту до сообщения, которого в ней нет (заказчик 2026-11-09): `true` — оно в переписке и
+     * скоро придёт в ленту; `false` или `null` — его здесь нет.
+     */
+    var reach: (suspend (Long) -> Boolean)? = null
 
     /** Кому сказать о переходе — `(to — к сообщению, step — назад или вперёд; длина цепочки)`; журнал ведёт общий слой. */
     var onJump: ((String, Int) -> Unit)? = null
@@ -195,6 +202,25 @@ private fun anchorOf(lines: List<ChatLine>, state: LazyListState): Long? =
         .firstNotNullOfOrNull { lines.getOrNull(it.index)?.serverId?.takeIf { id -> id > 0 } }
 
 /**
+ * Перейти к сообщению, которого может не быть в ленте: старое — лента дорастает до него ([FeedJumps.reach]),
+ * и переход ждёт, пока оно придёт. Не дождались — ничего (заказчик 2026-11-09: указатели на старое молчали).
+ */
+internal suspend fun FeedJumps.performReaching(target: Long, lines: () -> List<ChatLine>, state: LazyListState, record: Boolean = true) {
+    if (lines().none { it.serverId == target }) {
+        if (reach?.invoke(target) != true) return
+        kotlinx.coroutines.withTimeoutOrNull(REACH_WAIT_MS) {
+            androidx.compose.runtime.snapshotFlow { lines() }.first { feed -> feed.any { it.serverId == target } }
+        } ?: return
+        // Пришедшее — сначала разложить на экране, потом крутить к нему.
+        state.scrollToItem(state.firstVisibleItemIndex)
+    }
+    perform(target, lines(), state, record)
+}
+
+/** Сколько ждать, пока дорощенная лента принесёт сообщение. */
+private const val REACH_WAIT_MS = 5_000L
+
+/**
  * Перейти к сообщению: записать «откуда» и «куда», прокрутить, подсветить. Нет в ленте — ничего.
  *
  * Одно место для всех переходов — по ссылке, ответу, закреплённому, «назад» и «вперёд»: сообщение
@@ -249,7 +275,8 @@ fun Modifier.coversFeedTop(jumps: FeedJumps): Modifier = this.then(
 internal fun JumpButtons(jumps: FeedJumps, lines: List<ChatLine>, state: LazyListState, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val awayFromBottom = state.firstVisibleItemIndex > 2
-    val scroll: (Long) -> Unit = { to -> scope.launch { jumps.perform(to, lines, state, record = false) } }
+    val feed by androidx.compose.runtime.rememberUpdatedState(lines)
+    val scroll: (Long) -> Unit = { to -> scope.launch { jumps.performReaching(to, { feed }, state, record = false) } }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
         if (jumps.canBack) {
             JumpButton("↩", JUMP_BACK_TAG, onLong = jumps::clear) { jumps.step(jumps.buffer.back(), scroll) }

@@ -5389,6 +5389,8 @@ private fun Chat(
     ) {
         ChatScreen(
             onPeek = if (finder != null) store::peek else null,
+            onOlder = store::older,
+            onReach = store::reach,
             onPeekClose = store::peekClosed,
             onUnpin = if (pins != null) store::unpin else null,
             onShowcase = onShowcase,

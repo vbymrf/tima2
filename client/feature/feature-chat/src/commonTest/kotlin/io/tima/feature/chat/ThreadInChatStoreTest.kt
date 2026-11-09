@@ -84,7 +84,7 @@ class ThreadInChatStoreTest {
         val store = store(
             listOf(line(1, "исходное"), line(2, "ответ", threadRoot = 1), line(3, "ещё ответ", threadRoot = 1)),
             sent,
-            this,
+            backgroundScope,
         )
         runCurrent()
 
@@ -96,7 +96,7 @@ class ThreadInChatStoreTest {
     @Test
     fun открытая_ветка_показывает_корень_и_ответы() = runTest {
         val sent = mutableListOf<Enqueued>()
-        val store = store(listOf(line(1, "исходное"), line(2, "ответ", threadRoot = 1)), sent, this)
+        val store = store(listOf(line(1, "исходное"), line(2, "ответ", threadRoot = 1)), sent, backgroundScope)
         runCurrent()
 
         store.threadOpened(1)
@@ -111,7 +111,7 @@ class ThreadInChatStoreTest {
     @Test
     fun ответ_в_ветке_уходит_тем_же_путём_и_с_кругом_корня() = runTest {
         val sent = mutableListOf<Enqueued>()
-        val store = store(listOf(line(1, "исходное", level = 2), line(2, "ответ", threadRoot = 1)), sent, this)
+        val store = store(listOf(line(1, "исходное", level = 2), line(2, "ответ", threadRoot = 1)), sent, backgroundScope)
         runCurrent()
 
         store.threadOpened(1)
@@ -131,7 +131,7 @@ class ThreadInChatStoreTest {
     @Test
     fun закрытая_ветка_не_держит_черновик() = runTest {
         val sent = mutableListOf<Enqueued>()
-        val store = store(listOf(line(1, "исходное"), line(2, "ответ", threadRoot = 1)), sent, this)
+        val store = store(listOf(line(1, "исходное"), line(2, "ответ", threadRoot = 1)), sent, backgroundScope)
         runCurrent()
 
         store.threadOpened(1)

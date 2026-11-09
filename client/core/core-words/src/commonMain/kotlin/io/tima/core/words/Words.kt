@@ -1499,6 +1499,12 @@ interface ChatWords {
     /** Ссылки (заказчик 2026-10-19): «Перейти» под абзацем и окно с доменом перед переходом. */
     val linkGo: String
 
+    /** Разделитель дней в ленте (заказчик 2026-11-09): «Сегодня», «Вчера», «29 октября», «29 октября 2025». */
+    val feedToday: String
+    val feedYesterday: String
+    /** День и месяц (1–12) словами; [year] — только когда год не нынешний. */
+    fun feedDay(day: Int, month: Int, year: Int?): String
+
     /**
      * Ссылка на видео или звук, которые играют в окне TIMA (заказчик 2026-10-24): «Посмотреть» или
      * «Прослушать» — у нас, «Перейти» — в браузере; подсказка под тем, что по ссылке.
@@ -3824,6 +3830,10 @@ object RussianWords : Words {
         override val editInEditor = "Такое сообщение правится в редакторе"
         override val editImpossible = "Это сообщение изменить нельзя"
         override val linkGo = "Перейти"
+        override val feedToday = "Сегодня"
+        override val feedYesterday = "Вчера"
+        override fun feedDay(day: Int, month: Int, year: Int?) =
+            "$day ${RU_MONTHS[month - 1]}" + (year?.let { " $it" } ?: "")
         override val linkWatch = "Посмотреть"
         override val linkListen = "Прослушать"
         override fun linkPlayHint(listen: Boolean) =
@@ -4807,3 +4817,9 @@ object CurrentWords {
     @Volatile
     var value: Words = RussianWords
 }
+
+/** Месяцы в родительном падеже — «29 октября». */
+private val RU_MONTHS = listOf(
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)

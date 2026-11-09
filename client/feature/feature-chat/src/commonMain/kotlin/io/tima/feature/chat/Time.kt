@@ -51,6 +51,24 @@ internal fun day(atMs: Long, today: String, yesterday: String, nowMs: Long = kot
     }
 }
 
+/** Один ли местный день у двух моментов — разделитель дней в ленте. */
+internal fun sameDay(a: Long, b: Long): Boolean {
+    val zone = TimeZone.currentSystemDefault()
+    return Instant.fromEpochMilliseconds(a).toLocalDateTime(zone).date == Instant.fromEpochMilliseconds(b).toLocalDateTime(zone).date
+}
+
+/** День в ленте (заказчик 2026-11-09): «Сегодня», «Вчера», «29 октября»; другого года — с годом. */
+internal fun feedDay(atMs: Long, words: io.tima.core.words.ChatWords, nowMs: Long = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()): String {
+    val zone = TimeZone.currentSystemDefault()
+    val at = Instant.fromEpochMilliseconds(atMs).toLocalDateTime(zone).date
+    val now = Instant.fromEpochMilliseconds(nowMs).toLocalDateTime(zone).date
+    return when (at) {
+        now -> words.feedToday
+        now.minus(1, kotlinx.datetime.DateTimeUnit.DAY) -> words.feedYesterday
+        else -> words.feedDay(at.dayOfMonth, at.monthNumber, at.year.takeIf { it != now.year })
+    }
+}
+
 /** Дата и время целиком — «22.10.2026 08:44», местное: шапка просмотра фото (заказчик 2026-10-22). */
 internal fun dateTime(atMs: Long): String {
     val local = Instant.fromEpochMilliseconds(atMs).toLocalDateTime(TimeZone.currentSystemDefault())
