@@ -112,7 +112,7 @@ internal fun TalkPanel(
                             )
                         }
                     }
-                    // «Звук» серый, когда микрофон выключен, — как «Камера» под закрытым глазом.
+                    // «Микрофон» серый, когда микрофон выключен, — как «Камера» под закрытым глазом.
                     Labeled(words.panelSound, dim = !state.microphoneOn) {
                         BigButton(
                             glyph = if (state.microphoneOn) "🎤" else "🔇",
@@ -180,7 +180,7 @@ internal fun TalkPanel(
 
 /** Крупная кнопка с подписью под ней. */
 @Composable
-private fun Labeled(text: String, dim: Boolean = false, button: @Composable () -> Unit) = Column(
+internal fun Labeled(text: String, dim: Boolean = false, button: @Composable () -> Unit) = Column(
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
 ) {
@@ -190,7 +190,7 @@ private fun Labeled(text: String, dim: Boolean = false, button: @Composable () -
 
 /** Место высотой с крупную кнопку: переключатель и глаз стоят по её середине. */
 @Composable
-private fun AtButton(width: androidx.compose.ui.unit.Dp, content: @Composable () -> Unit) = Box(
+internal fun AtButton(width: androidx.compose.ui.unit.Dp, content: @Composable () -> Unit) = Box(
     Modifier.width(width).height(BIG).wrapContentHeight(unbounded = true),
     contentAlignment = Alignment.Center,
 ) { content() }
@@ -208,7 +208,7 @@ private fun Label(text: String, modifier: Modifier, dim: Boolean = false) = Capt
 
 /** Крупная круглая кнопка панели: салатовая — включено, серая — выключено, красная — конец. */
 @Composable
-private fun BigButton(
+internal fun BigButton(
     glyph: String,
     on: Boolean,
     onClick: () -> Unit,
@@ -238,7 +238,7 @@ private fun BigButton(
 
 /** Переключатель на два места столбиком: горит выбранное; нажатие на другое — переключить. */
 @Composable
-private fun TwoWay(
+internal fun TwoWay(
     top: @Composable (Boolean) -> Unit,
     bottom: @Composable (Boolean) -> Unit,
     topOn: Boolean,
@@ -297,7 +297,7 @@ internal fun Modifier.flipBy(vertical: Boolean, onFirst: () -> Unit, onSecond: (
 }
 
 @Composable
-private fun Glyph(text: String) = Caption(text, fontSize = TimaType.sz5)
+internal fun Glyph(text: String) = Caption(text, fontSize = TimaType.sz5)
 
 /**
  * Значок переключателя камеры, рисованный: рамка картины и в ней человечек (передняя — меня
@@ -305,7 +305,7 @@ private fun Glyph(text: String) = Caption(text, fontSize = TimaType.sz5)
  * картину с человечком». Готового знака для этого нет, а рисованный выглядит одинаково везде.
  */
 @Composable
-private fun PictureIcon(person: Boolean, lit: Boolean) {
+internal fun PictureIcon(person: Boolean, lit: Boolean) {
     val ink = if (lit) Tima.colors.onAccent else Tima.colors.text2
     Canvas(Modifier.size(ICON)) {
         val w = size.width
@@ -360,6 +360,8 @@ internal fun Pip(
     onMove: (Offset) -> Unit,
     modifier: Modifier = Modifier,
     instead: @Composable () -> Unit = {},
+    /** Поверх окошка, над слоем жестов: смена камеры нового вида (ПЛАН-(ЗН) ЗН4). */
+    corner: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
 ) {
     // Обработчики — свежие: жесты живут, пока живёт окошко, и замкнутые при первом показе
     // обработчики помнили бы, что меняться было не с чем (2026-10-08).
@@ -399,6 +401,7 @@ internal fun Pip(
                     )
                 },
         )
+        corner?.invoke(this)
     }
 }
 
@@ -439,13 +442,13 @@ internal fun Dialing(side: androidx.compose.ui.unit.Dp = WAVES, content: @Compos
 }
 
 /** Крупная кнопка панели. */
-private val BIG = 54.dp
+internal val BIG = 54.dp
 
 /** Место маленького глаза между микрофоном и камерой. */
 private val EYE_WIDTH = 36.dp
 
 /** Место переключателя на два места: ячейка и поля вокруг. */
-private val SWITCH_WIDTH = 34.dp
+internal val SWITCH_WIDTH = 34.dp
 
 /** Один промежуток между соседями группы «Звук · глаз · Камера». */
 private val GAP = 10.dp
@@ -460,10 +463,10 @@ private val SWITCH_PAD = 3.dp
 private val FLIP_SWIPE = 16.dp
 
 /** Прозрачность недоступного значка. */
-private const val DIM = 0.35f
+internal const val DIM = 0.35f
 
 /** Значок внутри места переключателя. */
-private val ICON = 20.dp
+internal val ICON = 20.dp
 
 /**
  * Размер своего изображения в углу.

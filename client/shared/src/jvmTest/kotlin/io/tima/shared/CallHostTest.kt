@@ -4,6 +4,7 @@ import io.tima.core.call.CallDoor
 import io.tima.core.call.CallEngine
 import io.tima.core.call.CallStage
 import io.tima.core.call.CallState
+import io.tima.core.call.CameraCrop
 import io.tima.core.call.CallStep
 import io.tima.core.call.Calls
 import io.tima.core.call.PublishPreset
@@ -344,6 +345,51 @@ class CallHostTest {
         assertEquals(listOf(true), engine.camera)
     }
 
+    // ── НОВЫЙ ВИД ОКНА ЗВОНКА (ПЛАН-(ЗН), заказчик 2026-11-10) ──────────────
+
+    @Test
+    fun экономить_трафик_гасит_камеру_и_возвращает_как_была() = runTest {
+        // Ответ заказчика 7: «Экономить трафик» делает то же, что нынешний глаз.
+        val engine = FakeEngine()
+        val host = videoCall(engine)
+
+        host.saveTraffic(true)
+        assertEquals(listOf(false), engine.remote, "видео собеседника продолжает приниматься")
+        assertEquals(listOf(false), engine.camera, "своя камера не погасла")
+
+        engine.say(CallState(stage = CallStage.Connected, cameraOn = false, remoteVideoTaken = false))
+        host.saveTraffic(false)
+        assertEquals(listOf(false, true), engine.remote)
+        assertEquals(listOf(false, true), engine.camera, "камера не вернулась, хотя была включена")
+    }
+
+    @Test
+    fun экономия_при_выключенной_камере_камеру_не_включает() = runTest {
+        val engine = FakeEngine()
+        val host = videoCall(engine)
+        engine.say(CallState(stage = CallStage.Connected, cameraOn = false))
+
+        host.saveTraffic(true)
+        host.saveTraffic(false)
+
+        assertEquals(emptyList(), engine.camera, "камера включилась, хотя до экономии была выключена")
+    }
+
+    @Test
+    fun приближение_живёт_звонок_к_следующему_весь_кадр() = runTest {
+        // Ответ заказчика 3: масштаб помнится в звонке, к следующему — 1×.
+        val engine = FakeEngine()
+        val host = videoCall(engine)
+
+        host.cropCamera(CameraCrop.FULL.closer().closer())
+        assertEquals(2f, host.crop.zoom)
+        assertEquals(2f, engine.crops.last().zoom, "движку не сказали обрезать кадр")
+
+        host.hangUp()
+        host.close()
+        assertEquals(CameraCrop.FULL, host.crop, "следующий звонок начнётся приближенным")
+    }
+
     // ── СВЕРНУЛИ ПОСРЕДИ ВИДЕОЗВОНКА (заказчик 2026-10-01, 1б и 1в) ──────────
 
     /** Видеозвонок идёт, своя камера включена. */
@@ -573,6 +619,18 @@ class CallHostTest {
 
         override suspend fun restartCamera() {
             restarts++
+        }
+
+        /** Как принимали и переставали принимать видео собеседника. */
+        val remote = mutableListOf<Boolean>()
+        override suspend fun setRemoteVideo(on: Boolean) {
+            remote += on
+        }
+
+        /** Какие обрезки кадра просили (ЗН5). */
+        val crops = mutableListOf<CameraCrop>()
+        override suspend fun setCameraCrop(crop: CameraCrop) {
+            crops += crop
         }
 
         /** Сказать за движок: «комната ответила вот этим». */

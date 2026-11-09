@@ -159,10 +159,18 @@ fun CallScreen(
     swipeArea: Modifier = Modifier,
     /** Цвет имени собеседника: заблокирован — красный, незнакомый «цветом» — оранжевый; `null` — обычный. */
     peerTint: Color? = null,
+    /**
+     * Новый вид окна разговора (ПЛАН-(ЗН), «Настройки → Звонок · Вид»); `null` — прежний.
+     * Групповой звонок остаётся прежним и с ним (ответ заказчика 4).
+     */
+    fresh: FreshCall? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
     var askHangUp by remember { mutableStateOf(false) }
+    // Лист «Настройки звонка» нового вида (ЗН3): открыт ли.
+    var sheetOpen by remember { mutableStateOf(false) }
+    val freshTalk = fresh != null && group == null && state.stage == CallStage.Connected
     var benchJournal by remember { mutableStateOf(false) }
     // Своё окошко: поменяно ли местами с собеседником, куда его перенесли, несут ли сейчас.
     var swapped by remember { mutableStateOf(false) }
@@ -243,7 +251,8 @@ fun CallScreen(
             // Своя картинка — только пока камера включена. Выключенная камера в движке глушит
             // дорожку, а не убирает её, и окошко с замершим кадром висело (заказчик
             // 2026-10-08: «отключил камеру свою — окно не исчезает»).
-            val mine = localVideo?.takeIf { state.cameraOn }
+            // Показ экрана (ЗН6) — своё окошко показывает экран: камера при нём выключена.
+            val mine = localVideo?.takeIf { state.cameraOn || state.screenSharing }
             // Камеру выключили — обмен забыт: включённая снова, она появляется окошком, а не
             // сразу во весь кадр (живая проверка realme 2026-10-08).
             LaunchedEffect(mine == null) { if (mine == null) swapped = false }
@@ -349,6 +358,8 @@ fun CallScreen(
             // смотрит на себя. Нажатие меняет его местами с собеседником; зажали —
             // толстая зелёная рамка, и окошко переносится пальцем (заказчик 2026-10-08).
             val small = if (swap) remoteShown else mine
+            // Смена камеры нового вида — кругом на своём изображении (ЗН4), где бы оно ни было.
+            val flip = onSwitchCamera?.takeIf { freshTalk && mine != null && state.cameraSwitchable && !state.screenSharing }
             // Поменялись, а у собеседника видео нет — в окошке его аватар.
             if (small != null || swap) {
                 Pip(
@@ -361,6 +372,26 @@ fun CallScreen(
                     onDrag = { moving -> pipDragging = moving },
                     onMove = { delta -> pipOffset = clampPip(pipOffset + delta, area.belowBy(pipBelowPx), pipSizePx) },
                     modifier = Modifier.align(Alignment.TopEnd),
+                    corner = flip?.takeIf { !swap }?.let { switch ->
+                        { CameraFlip(switch, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about1)) }
+                    },
+                )
+            }
+            if (flip != null && swap) {
+                CameraFlip(flip, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3))
+            }
+            // Режим адаптации (ЗН5) — выше ряда кнопок, пока своя камера в кадре.
+            val crop = fresh?.crop
+            if (fresh != null && freshTalk && crop != null && state.cameraOn && !state.screenSharing && !sheetOpen) {
+                AdaptBar(crop, fresh.onCrop, Modifier.align(Alignment.BottomCenter).padding(bottom = TimaSpacing.about2))
+            }
+            if (fresh != null && freshTalk && sheetOpen) {
+                CallSheet(
+                    saving = !state.remoteVideoTaken,
+                    onSaveTraffic = fresh.onSaveTraffic,
+                    sharing = state.screenSharing,
+                    onScreenShare = fresh.onScreenShare,
+                    modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
         }
@@ -379,6 +410,19 @@ fun CallScreen(
         // (проба «а», заказчик 2026-10-08). Кнопки стоят на своих местах при любом
         // состоянии — прежнее правило ряда значков осталось в силе.
         val talking = state.stage == CallStage.Connected && !(askHangUp && group != null)
+        if (talking && fresh != null && freshTalk) {
+            FreshTalkPanel(
+                state = state,
+                onMicrophone = onMicrophone,
+                onCamera = onCamera,
+                onSpeaker = onSpeaker,
+                sheetOpen = sheetOpen,
+                onSheet = { sheetOpen = !sheetOpen },
+                onMinimize = fresh.onMinimize,
+                onHangUp = onHangUp,
+            )
+            return@Column
+        }
         if (talking) {
             TalkPanel(
                 state = state,

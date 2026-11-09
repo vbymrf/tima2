@@ -159,6 +159,8 @@ class MainActivity : ComponentActivity() {
     private var wasBackground = false
 
     override fun onDestroy() {
+        screenAnswer?.invoke(null)
+        screenAnswer = null
         alive--
         // Пересоздаёт система (заказчик 2026-09-30): поворот, тема, смена ресурсов у всех
         // приложений разом (Redmi, `Config changes=80000000`). Отдельной строкой и с маской
@@ -207,6 +209,15 @@ class MainActivity : ComponentActivity() {
         // (Redmi 2026-09-27, отчёт 5KXE).
         number = ++made
         alive++
+        io.tima.core.call.ScreenAsk.ask = { onResult ->
+            screenAnswer?.invoke(null)
+            screenAnswer = onResult
+            val projection = getSystemService(android.media.projection.MediaProjectionManager::class.java)
+            runCatching { screenAsk.launch(projection.createScreenCaptureIntent()) }.onFailure {
+                screenAnswer = null
+                onResult(null)
+            }
+        }
         // Пересозданное системой окно получает прежнее намерение — «значок» здесь врал бы.
         val rebuilt = recreating || savedInstanceState != null
         recreating = false
@@ -429,6 +440,16 @@ class MainActivity : ComponentActivity() {
      */
     private val scan = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
         result.data?.getStringExtra(QrScanActivity.CODE)?.let { code.value = it }
+    }
+
+    /** Ждёт ответа на вопрос «записывать экран?» (ПЛАН-(ЗН) ЗН6). */
+    private var screenAnswer: ((Intent?) -> Unit)? = null
+
+    /** Системный вопрос о записи экрана: движок звонка просит его через [io.tima.core.call.ScreenAsk]. */
+    private val screenAsk = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        val answer = screenAnswer
+        screenAnswer = null
+        answer?.invoke(result.data.takeIf { result.resultCode == RESULT_OK })
     }
 
     /** «Закрыть приложение»: журнал — на диск, служба канала — стоп, задача и процесс — закрыть. */

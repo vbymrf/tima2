@@ -551,6 +551,23 @@ internal fun Settings(
                 )
             }
 
+            // Вид окна звонка и режим адаптации (ПЛАН-(ЗН) ЗН1): настройки устройства, читаются при начале звонка.
+            SettingsItem.CALL_LOOK -> {
+                val saved by deviceSettings.all().collectAsState(emptyMap())
+                io.tima.feature.call.CallLookScreen(
+                    fresh = io.tima.core.call.CallLookKeys.fresh(saved),
+                    onFresh = { on ->
+                        Journal.note(LogCode.CALL, "вид окна звонка выбран", "вид" to if (on) "новый" else "прежний")
+                        scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.LOOK, if (on) "new" else "old") }
+                    },
+                    adapt = io.tima.core.call.CallLookKeys.adapt(saved),
+                    onAdapt = { on ->
+                        Journal.note(LogCode.CALL, "режим адаптации изображения выбран", "включён" to on)
+                        scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.ADAPT, if (on) "1" else "0") }
+                    },
+                )
+            }
+
             SettingsItem.PERMISSIONS -> {
                 // Состояние читается при каждом заходе, а не запоминается: человек мог
                 // сменить разрешение в системных настройках, пока нас не было.

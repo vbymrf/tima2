@@ -567,6 +567,80 @@ class LiveKitCallEngine(
         return grabFrame(track)
     }
 
+    /** Обрезка кадра (ЗН5) — одна на движок; на дорожку ставится при первом приближении. */
+    private val cropper = CameraCropper()
+
+    /** Дорожка, у источника которой стоит [cropper]: перевыпуск камеры даёт новую — ставим снова. */
+    private var croppedTrack: LocalVideoTrack? = null
+
+    override suspend fun setCameraCrop(crop: CameraCrop) {
+        val was = cropper.crop
+        cropper.crop = crop.clamped()
+        attachCropper()
+        Journal.note(
+            LogCode.CALL, "адаптация изображения",
+            "стало" to cropper.crop.describe(), "было" to was.describe(), "обрезка стоит" to (croppedTrack != null),
+            *cropper.measure(),
+        )
+    }
+
+    private fun attachCropper() {
+        if (cropper.crop.full && croppedTrack == null) return
+        val track = room?.localParticipant?.videoTrackPublications
+            ?.firstOrNull { it.first.source != Track.Source.SCREEN_SHARE }?.second as? LocalVideoTrack ?: return
+        if (track === croppedTrack) return
+        val source = CameraCropper.sourceOf(track)
+        if (source == null) {
+            Journal.trouble(LogCode.CALL, "адаптация изображения: нет доступа к источнику видео — кадр уходит целым")
+            return
+        }
+        runCatching { source.setVideoProcessor(cropper) }
+            .onSuccess { croppedTrack = track }
+            .onFailure { Journal.trouble(LogCode.CALL, "адаптация изображения: обработчик не встал", "причина" to (it.message ?: it::class.simpleName)) }
+    }
+
+    override val screenShareable: Boolean get() = true
+
+    /** Была ли включена камера до показа экрана (ЗН6): кончили показ — она возвращается как была. */
+    private var screenBeforeCamera: Boolean? = null
+
+    override suspend fun setScreenShare(on: Boolean): Boolean {
+        val live = room ?: return false
+        if (!on) {
+            val done = attempt { live.localParticipant.setScreenShareEnabled(false) }
+            _state.value = _state.value.copy(screenSharing = false)
+            val camera = screenBeforeCamera == true
+            screenBeforeCamera = null
+            if (camera) setCamera(true)
+            Journal.note(LogCode.CALL, "показ экрана остановлен", "удалось" to done, "камера вернулась" to camera)
+            return done
+        }
+        val permission = ScreenAsk.permission()
+        if (permission == null) {
+            Journal.note(LogCode.CALL, "показ экрана: разрешение на запись экрана не дали")
+            return false
+        }
+        val cameraWas = _state.value.cameraOn
+        if (cameraWas) setCamera(false)
+        val done = attempt {
+            live.localParticipant.setScreenShareEnabled(
+                true,
+                io.livekit.android.room.track.screencapture.ScreenCaptureParams(permission, null, null) {
+                    // Остановили системой (шторка «Остановить показ») — камера возвращается так же.
+                    scope.launch { if (_state.value.screenSharing) setScreenShare(false) }
+                },
+            )
+        }
+        if (done) {
+            screenBeforeCamera = cameraWas
+            _state.value = _state.value.copy(screenSharing = true)
+        } else if (cameraWas) {
+            setCamera(true)
+        }
+        Journal.note(LogCode.CALL, "показ экрана", "начат" to done, "камера была" to cameraWas)
+        return done
+    }
+
     override suspend fun switchCamera() {
         cameraFront = !cameraFront
         val position = if (cameraFront) CameraPosition.FRONT else CameraPosition.BACK
@@ -870,6 +944,10 @@ class LiveKitCallEngine(
 
     override suspend fun disconnect() {
         stopWatching()
+        // Приближение — на звонок (ответ заказчика 3): следующий начинается с 1×.
+        cropper.crop = CameraCrop.FULL
+        croppedTrack = null
+        screenBeforeCamera = null
         room?.disconnect()
         room = null
         // Дорожки гасим сами: после disconnect их некому отдать, а оставленные они
@@ -2097,10 +2175,14 @@ class LiveKitCallEngine(
     private fun watchLocalVideo(room: Room) {
         watchers += scope.launch {
             room.localParticipant::videoTrackPublications.flow.collect { published ->
-                val track = published.firstOrNull()?.second as? VideoTrack
-                show(_localVideo, room, track)
-                _state.value = _state.value.copy(cameraOn = track != null)
-                autoSound(cameraOn = track != null)
+                // Идёт показ экрана (ЗН6) — своё окошко показывает экран: уходит он, а не камера.
+                val screen = published.firstOrNull { it.first.source == Track.Source.SCREEN_SHARE }
+                val camera = published.firstOrNull { it.first.source != Track.Source.SCREEN_SHARE }
+                show(_localVideo, room, (screen ?: camera)?.second as? VideoTrack)
+                val cameraOn = camera?.second != null && !camera.first.muted
+                _state.value = _state.value.copy(cameraOn = cameraOn, screenSharing = screen != null)
+                autoSound(cameraOn = cameraOn)
+                attachCropper()
             }
         }
     }
@@ -2155,9 +2237,11 @@ class LiveKitCallEngine(
             _state.value = _state.value.copy(remoteVideoShown = false)
             return
         }
+        // Показ экрана собеседника (ЗН6) — первым: он идёт вместо камеры.
         val track = room.remoteParticipants.values
             .flatMap { it.videoTrackPublications }
             .filterNot { it.first.muted }
+            .sortedBy { if (it.first.source == Track.Source.SCREEN_SHARE) 0 else 1 }
             .firstNotNullOfOrNull { it.second as? VideoTrack }
         show(_remoteVideo, room, track)
         _state.value = _state.value.copy(remoteVideoShown = track != null)

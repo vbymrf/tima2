@@ -408,6 +408,8 @@ interface SettingsListWords {
     /** «Шрифты и размеры» — второй пункт вида (ПЛАН-(Ш)-ШРИФТОВ Ш4, 2026-09-16). */
     val itemText: String
     val itemMainWindow: String
+    /** «Звонок · Вид» — вид окна звонка и режим адаптации (ПЛАН-(ЗН) ЗН1). */
+    val itemCallLook: String
     val itemLanguage: String
     val itemPrivacy: String
     val itemStorage: String
@@ -1303,9 +1305,27 @@ interface CallWords {
      */
     val stranger: String
 
-    /** Подписи столбцов панели разговора: «Звук», «Камера» (третья — [hangUp]), 2026-10-08. */
+    /**
+     * Подписи столбцов панели разговора: «Микрофон», «Камера» (третья — [hangUp]), 2026-10-08.
+     * «Звук» стал «Микрофоном» 2026-11-10 (ПЛАН-(ЗН) ЗН0) — и в прежнем окне, и в новом.
+     */
     val panelSound: String
     val panelCamera: String
+
+    /** Лист «Настройки звонка» нового окна (ПЛАН-(ЗН) ЗН3, ЗН6). */
+    val sheetTitle: String
+    val shareScreen: String
+    val shareScreenAbout: String
+    val saveTraffic: String
+    val saveTrafficAbout: String
+
+    /** Пункт настроек «Звонок · Вид» (ПЛАН-(ЗН) ЗН1). */
+    val lookTitle: String
+    val lookNew: String
+    val lookOld: String
+    val lookAbout: String
+    val adaptTitle: String
+    val adaptAbout: String
 
     /** Набор публикации сменили посреди разговора: связь прервалась не сама. */
     fun presetApplied(name: String): String
@@ -3216,6 +3236,7 @@ object RussianWords : Words {
         override val itemAppearance = "Цвета"
         override val itemText = "Шрифты и размеры"
         override val itemMainWindow = "Главное окно"
+        override val itemCallLook = "Звонок · Вид"
         override val itemLanguage = "Язык"
         override val itemPrivacy = "Приватность и блокировки"
         override val itemStorage = "Память и трафик"
@@ -3774,8 +3795,19 @@ object RussianWords : Words {
             "Набор не применён: сервер не дал войти заново. Разговор продолжается прежним набором"
         override val peerOffline = "Телефон собеседника не на связи — звонок придёт, когда он появится"
         override val stranger = "Незнакомый"
-        override val panelSound = "Звук"
+        override val panelSound = "Микрофон"
         override val panelCamera = "Камера"
+        override val sheetTitle = "Настройки звонка"
+        override val shareScreen = "Показать экран устройства"
+        override val shareScreenAbout = "Собеседник видит ваш экран вместо камеры"
+        override val saveTraffic = "Экономить трафик"
+        override val saveTrafficAbout = "Видео собеседника не принимается, ваша камера гаснет; выключили — камера возвращается как была"
+        override val lookTitle = "Вид окна звонка"
+        override val lookNew = "Новый"
+        override val lookOld = "Прежний"
+        override val lookAbout = "Новый — кнопки одним рядом: свернуть, микрофон, ухо или динамик, камера, настройки звонка, завершить. Действует со следующего звонка. Групповой звонок — всегда в прежнем виде."
+        override val adaptTitle = "Режим адаптации изображения"
+        override val adaptAbout = "Поверх изображения — кнопки: приблизить своё изображение до 3× и сдвинуть его в любую сторону. Собеседник видит то же, что ваше окошко. Только в новом виде и в звонке на двоих; к следующему звонку — снова весь кадр."
         override val noAnswer = "Не дозвонились: никто не ответил"
         override val peerBusy = "Собеседник занят другим звонком"
         override val ringing = "Звонит…"

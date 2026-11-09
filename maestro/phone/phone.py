@@ -352,8 +352,9 @@ def to_home(dev, debug_dir=None, steps=6):
 # **запасным путём** (заказчик): `find` берёт узел с меткой ИЛИ с надписью — что есть.
 # Учёт, какой сценарий на что опирается, — doc_mig/ФУНКЦИОНАЛ/АВТОТЕСТЫ/СЦЕНАРИИ-ПО-ОКНАМ.md.
 
-# Окно звонка в любой стадии: набор, входящий, разговор, конец.
-CALL_WINDOW = ('call:panel', 'call:dialing', 'call:cancel', 'call:accept', 'call:close')
+# Окно звонка в любой стадии: набор, входящий, разговор (прежний вид — `call:panel`, новый —
+# `call:fresh`, ПЛАН-(ЗН) с 2026-11-10), конец.
+CALL_WINDOW = ('call:panel', 'call:fresh', 'call:dialing', 'call:cancel', 'call:accept', 'call:close')
 
 
 def call_screen(ns):

@@ -205,6 +205,9 @@ internal enum class Via(val code: String, val arrive: Arrive, val remembers: Boo
     Link("link", Arrive.Point, true),
     Pointer("pointer", Arrive.Start, false),
     Call("call", Arrive.Point, true),
+
+    /** «Свернуть» окна звонка нового вида (ПЛАН-(ЗН) ЗН2): «Телефон» с начала — на «Чатах». */
+    Minimize("minimize", Arrive.Start, false),
 }
 
 /** Та же сущность — переписка той же, страница того же человека, любые настройки; остальное — по равенству. */

@@ -115,6 +115,17 @@ class NavigatorChainTest {
     }
 
     @Test
+    fun свернуть_звонок_ведёт_на_телефон_с_начала() {
+        // ПЛАН-(ЗН) ЗН2: «Свернуть» — в «Телефон» на «Чаты», звонок остаётся панелью над шапкой.
+        nav.where = аня
+        nav.toCall()
+        nav.enter(Window.Phone, Via.Minimize)
+        assertEquals(Window.Phone, nav.window)
+        assertEquals(Where.Nothing, nav.where, "свёрнутый звонок открыл переписку, а не «Чаты»")
+        assertTrue(log.any { "как=minimize" in it }, log.toString())
+    }
+
+    @Test
     fun предел_двадцать_звеньев() {
         repeat(30) { nav.where = Where.Chat("c-$it", null) }
         assertEquals(Navigator.LIMIT, nav.chain().size)

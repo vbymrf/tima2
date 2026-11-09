@@ -997,6 +997,12 @@ private fun App(
     // Раскладка главного окна (ПЛАН-(ВО) ВО4): где вкладки, разделы и панель перехода относительно списка.
     val layoutOrder by remember { environment.settings.all().map { io.tima.feature.shell.layoutOf(it[MainLayoutKeys.ORDER]) }.distinctUntilChanged() }
         .collectAsState(io.tima.feature.shell.DEFAULT_LAYOUT)
+    // «Звонок · Вид» (ПЛАН-(ЗН) ЗН1): новый вид окна звонка и режим адаптации. Снимок берётся при
+    // начале звонка — идущий звонок вид не меняет; к следующему — новый снимок.
+    val callLookNow by remember {
+        environment.settings.all().map { io.tima.core.call.CallLookKeys.fresh(it) to io.tima.core.call.CallLookKeys.adapt(it) }.distinctUntilChanged()
+    }.collectAsState(true to false)
+    var callLook by remember { mutableStateOf<Pair<Boolean, Boolean>?>(null) }
     // Настройка «Переходы» (ПЛАН-(МП) М5): куда ведёт вход в окно каждым способом.
     val arriveStored by remember {
         environment.settings.all().map { all -> all.filterKeys { it.startsWith(MainLayoutKeys.ARRIVE) } }.distinctUntilChanged()
@@ -3244,6 +3250,15 @@ private fun App(
     }
     // Звонок начался — звук в сообщениях на паузу; после звонка он на паузе и остаётся (ПЛАН-(ВО) Р12).
     LaunchedEffect(callHost.active) { if (callHost.active) audioHubHere?.stop() }
+    LaunchedEffect(callHost.active) {
+        callLook = if (callHost.active) {
+            callLookNow.also { (fresh, adapt) ->
+                Journal.note(LogCode.CALL, "вид окна звонка", "вид" to if (fresh) "новый" else "прежний", "адаптация" to adapt)
+            }
+        } else {
+            null
+        }
+    }
     // Смотрит ли человек на приложение (заказчик 2026-10-20): окно на экране, замка нет, окно звонка
     // не открыто. Отсюда «прочитано» и снятие уведомлений — [rememberSeen].
     val windowUp by assembled.notices.shown.collectAsState()
@@ -3576,6 +3591,20 @@ private fun App(
                     onClose = {
                         callHost.close()
                         navigator.leaveCall()
+                    },
+                    // Новый вид окна разговора (ПЛАН-(ЗН)): по снимку настройки на этот звонок.
+                    fresh = callLook?.takeIf { it.first }?.let { (_, adapt) ->
+                        io.tima.feature.call.FreshCall(
+                            onMinimize = {
+                                Journal.note(LogCode.CALL, "окно звонка свёрнуто")
+                                navigator.enter(Window.Phone, Via.Minimize)
+                                windowTabs.choose(Window.Phone, WindowTab.Chats)
+                            },
+                            onSaveTraffic = callHost::saveTraffic,
+                            onScreenShare = if (callHost.screenShareable) callHost::screenShare else null,
+                            crop = if (adapt) callHost.crop else null,
+                            onCrop = callHost::cropCamera,
+                        )
                     },
                 )
 

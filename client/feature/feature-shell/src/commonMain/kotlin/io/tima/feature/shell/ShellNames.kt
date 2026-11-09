@@ -133,6 +133,7 @@ fun SettingsListWords.item(item: SettingsItem): String = when (item) {
     SettingsItem.PRIVACY -> itemPrivacy
     SettingsItem.STORAGE -> itemStorage
     SettingsItem.CALLS -> itemCalls
+    SettingsItem.CALL_LOOK -> itemCallLook
     SettingsItem.CALLBENCH -> itemCallBench
     SettingsItem.BLOGGER -> itemBlogger
     SettingsItem.QUESTIONS -> itemQuestions

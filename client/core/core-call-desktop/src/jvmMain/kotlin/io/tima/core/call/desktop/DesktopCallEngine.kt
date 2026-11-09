@@ -18,6 +18,7 @@ import io.tima.core.call.SendLimit
 import io.tima.core.call.cappedTo
 import io.tima.core.call.userOfIdentity
 import io.tima.core.call.CenterCrop
+import io.tima.core.call.CameraCrop
 import io.tima.core.call.CallEngine
 import io.tima.core.call.CallQuality
 import io.tima.core.call.CallStage
@@ -335,7 +336,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     /** Чужие публикации по sid: нужны, чтобы отписаться от видео (ЗВ11). */
     private val publications = HashMap<String, Publication>()
 
-    private class Publication(val handle: Long, val kind: TrackKind, val identity: String)
+    private class Publication(val handle: Long, val kind: TrackKind, val identity: String, val screen: Boolean = false)
 
     /** Камеры, которые собеседник выключил, — по `track_muted`; для [watchLoss]. */
     private val mutedSids = HashSet<String>()
@@ -1144,7 +1145,20 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         }
         event.track_unsubscribed?.let { gone ->
             Journal.note(LogCode.CALL_TRACK, "отписались от дорожки собеседника", "кто" to userOfIdentity(gone.participant_identity).take(8), "дорожка" to gone.track_sid.takeLast(6))
-            if (remote?.sid == gone.track_sid) stopRemote()
+            if (remote?.sid == gone.track_sid) {
+                val wasScreen = publications[gone.track_sid]?.screen == true
+                stopRemote()
+                // Собеседник кончил показ экрана (ЗН6) — его камера подписана, но потока у нас нет:
+                // переподписка даёт её заново.
+                if (wasScreen && takeRemote && group == null) {
+                    for ((sid, p) in publications) {
+                        if (sid != gone.track_sid && p.kind == TrackKind.KIND_VIDEO && p.identity != myIdentity) {
+                            subscribe(p.handle, false)
+                            subscribe(p.handle, true)
+                        }
+                    }
+                }
+            }
             groupRemotes.entries.removeAll { (_, r) -> (r.sid == gone.track_sid).also { if (it) dropRemote(r) } }
         }
         event.track_subscription_failed?.let {
@@ -1297,7 +1311,10 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     }
 
     private fun remember(identity: String, publication: OwnedTrackPublication) {
-        publications.put(publication.info.sid, Publication(publication.handle.id, publication.info.kind, identity))
+        publications.put(
+            publication.info.sid,
+            Publication(publication.handle.id, publication.info.kind, identity, screen = publication.info.source == TrackSource.SOURCE_SCREENSHARE),
+        )
             ?.let { Ffi.drop(it.handle) }
         if (publication.info.muted) mutedSids += publication.info.sid else mutedSids -= publication.info.sid
     }
@@ -1311,6 +1328,12 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             owned += track.handle.id
             remoteAudio += track.handle.id
             if (remoteSilent) enableRemote(track.handle.id, false)
+            return
+        }
+        // Идёт показ экрана собеседника (ЗН6) — его приглушённая камера картинку не перебивает.
+        val shown = remote
+        if (shown != null && publications[shown.sid]?.screen == true && publications[track.info.sid]?.screen != true) {
+            owned += track.handle.id
             return
         }
         if (remote != null) stopRemote()
@@ -1464,6 +1487,17 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         cameraSid = ""
         cameraCodec = null
         mutedSids.clear()
+        // Показ экрана и приближение — на звонок (ЗН5, ЗН6): комната кончилась — кончились и они.
+        screenJob?.cancel()
+        screenJob = null
+        if (screenTrack != 0L) {
+            Ffi.drop(screenTrack)
+            Ffi.drop(screenSource)
+        }
+        screenTrack = 0L
+        screenSource = 0L
+        screenSid = ""
+        crop = CameraCrop.FULL
         while (events.tryReceive().isSuccess) Unit
         stopRemote()
         groupJob?.cancel()
@@ -1668,6 +1702,16 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                 delay(wait)
                 continue
             }
+            // Режим адаптации (ЗН5): часть кратной середины, тоже кратная 16, — смещением, без копии.
+            val c = crop
+            val part = if (c.full) null else c.region(w, h).let { r ->
+                val pw = (r.width / 16 * 16).coerceAtLeast(16)
+                val ph = (r.height / 16 * 16).coerceAtLeast(16)
+                CameraCrop.Region(x + r.left + (r.width - pw) / 2, y + r.top + (r.height - ph) / 2, pw, ph)
+            }
+            val sentW = part?.width ?: w
+            val sentH = part?.height ?: h
+            val sentOffset = part?.let { (it.top.toLong() * opened.width + it.left) * 3 } ?: offset
             runCatching {
                 Ffi.request(
                     FfiRequest(
@@ -1675,9 +1719,9 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                             source_handle = source,
                             buffer = VideoBufferInfo(
                                 type = VideoBufferType.RGB24,
-                                width = w,
-                                height = h,
-                                data_ptr = Pointer.nativeValue(opened.frame) + offset,
+                                width = sentW,
+                                height = sentH,
+                                data_ptr = Pointer.nativeValue(opened.frame) + sentOffset,
                                 stride = opened.width * 3,
                             ),
                             timestamp_us = System.nanoTime() / 1000,
@@ -1686,8 +1730,12 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                     ),
                 )
             }
-            // Себе — через кадр: это проверка «я в кадре», а не второй видеопоток.
-            if (shown++ % 2 == 0) preview.pictures.value = rgbToPicture(opened)
+            cropFrames++
+            // Себе — через кадр: это проверка «я в кадре», а не второй видеопоток. Приближено —
+            // себе то же, что уходит.
+            if (shown++ % 2 == 0) {
+                preview.pictures.value = if (part == null) rgbToPicture(opened) else rgbToPicture(opened, part)
+            }
         }
     }
 
@@ -1902,6 +1950,177 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         SoundTest.play(name)
     }
 
+    // ── Режим адаптации изображения (ПЛАН-(ЗН) ЗН5) ─────────────────────────
+    /** Читается насосом камеры на каждом кадре — отсюда `@Volatile`. */
+    @Volatile
+    private var crop: CameraCrop = CameraCrop.FULL
+    private var cropFrames = 0L
+    private var cropSince = System.nanoTime()
+
+    override suspend fun setCameraCrop(crop: CameraCrop) {
+        val was = this.crop
+        this.crop = crop.clamped()
+        val now = System.nanoTime()
+        val fps = ((cropFrames / ((now - cropSince) / 1e9)) * 10).toLong() / 10.0
+        cropFrames = 0
+        cropSince = now
+        Journal.note(LogCode.CALL, "адаптация изображения", "стало" to this.crop.describe(), "было" to was.describe(), "к/с" to fps, "кодер" to "ПК")
+    }
+
+    // ── Показ экрана (ПЛАН-(ЗН) ЗН6) ─────────────────────────────────────────
+    private var screenSource = 0L
+    private var screenTrack = 0L
+    private var screenSid = ""
+    private var screenJob: Job? = null
+
+    /** Была ли камера включена до показа экрана: кончили — возвращается как была. */
+    private var screenCamera = false
+
+    override val screenShareable: Boolean get() = !java.awt.GraphicsEnvironment.isHeadless()
+
+    override suspend fun setScreenShare(on: Boolean): Boolean = withContext(worker) {
+        if (!on) {
+            val was = screenTrack != 0L
+            stopScreen()
+            _state.value = _state.value.copy(screenSharing = false)
+            if (was && screenCamera) setCamera(true)
+            Journal.note(LogCode.CALL, "показ экрана остановлен", "камера вернулась" to (was && screenCamera), "кодер" to "ПК")
+            return@withContext true
+        }
+        if (room == 0L || screenTrack != 0L) return@withContext false
+        val bounds = runCatching {
+            java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice.defaultConfiguration.bounds
+        }.getOrNull() ?: return@withContext false
+        // Не шире 1280: экран уходит текстом и окнами, а не лицом, — частота важнее размера.
+        val scale = minOf(1.0, SCREEN_WIDTH.toDouble() / bounds.width)
+        val sw = (bounds.width * scale).toInt() / 16 * 16
+        val sh = (bounds.height * scale).toInt() / 16 * 16
+        screenSource = Ffi.request(
+            FfiRequest(
+                new_video_source = NewVideoSourceRequest(
+                    type = VideoSourceType.VIDEO_SOURCE_NATIVE,
+                    resolution = VideoSourceResolution(width = sw, height = sh),
+                ),
+            ),
+        ).new_video_source?.source?.handle?.id ?: 0L
+        screenTrack = Ffi.request(
+            FfiRequest(create_video_track = CreateVideoTrackRequest(name = "screen", source_handle = screenSource)),
+        ).create_video_track?.track?.handle?.id ?: 0L
+        val answer = Ffi.call(PUBLISH_TIMEOUT_MS) { id ->
+            FfiRequest(
+                publish_track = PublishTrackRequest(
+                    local_participant_handle = localParticipant,
+                    track_handle = screenTrack,
+                    options = TrackPublishOptions(
+                        source = TrackSource.SOURCE_SCREENSHARE,
+                        video_codec = VideoCodec.VP8.toFfi(),
+                        video_encoding = VideoEncoding(max_bitrate = SCREEN_BITRATE, max_framerate = SCREEN_FPS.toDouble()),
+                        simulcast = false,
+                    ),
+                    request_async_id = id,
+                ),
+            )
+        }?.publish_track
+        val publication = answer?.publication
+        if (publication == null) {
+            Journal.trouble(LogCode.CALL, "показ экрана не опубликован", "причина" to (answer?.error ?: "нет ответа"))
+            Ffi.drop(screenTrack)
+            Ffi.drop(screenSource)
+            screenTrack = 0L
+            screenSource = 0L
+            return@withContext false
+        }
+        owned += publication.handle.id
+        screenSid = publication.info.sid
+        screenCamera = camera != null
+        if (screenCamera) {
+            stopCamera()
+            if (cameraTrack != 0L) mute(cameraTrack, true)
+            _state.value = _state.value.copy(cameraOn = false)
+        }
+        val preview = Frames()
+        _localVideo.value = preview
+        val source = screenSource
+        screenJob = scope.launch(Dispatchers.IO) { pumpScreen(bounds, sw, sh, source, preview) }
+        _state.value = _state.value.copy(screenSharing = true)
+        Journal.note(LogCode.CALL, "показ экрана", "начат" to true, "кадр" to "${sw}×${sh}", "камера была" to screenCamera, "кодер" to "ПК")
+        true
+    }
+
+    /** Снимок экрана — в движок; себе — через кадр. Снимает `Robot`: медленно, но без нативных библиотек. */
+    private suspend fun pumpScreen(bounds: java.awt.Rectangle, sw: Int, sh: Int, source: Long, preview: Frames) {
+        val robot = runCatching { java.awt.Robot() }.getOrNull() ?: return
+        val scaled = java.awt.image.BufferedImage(sw, sh, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        val rgb = ByteArray(sw * sh * 3)
+        val memory = com.sun.jna.Memory(rgb.size.toLong())
+        val pixels = IntArray(sw * sh)
+        var shown = 0
+        while (currentCoroutineContext().isActive) {
+            val started = System.currentTimeMillis()
+            val shot = runCatching { robot.createScreenCapture(bounds) }.getOrNull()
+            if (shot != null) {
+                val g = scaled.createGraphics()
+                g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+                g.drawImage(shot, 0, 0, sw, sh, null)
+                g.dispose()
+                scaled.getRGB(0, 0, sw, sh, pixels, 0, sw)
+                var o = 0
+                for (px in pixels) {
+                    rgb[o] = (px shr 16).toByte()
+                    rgb[o + 1] = (px shr 8).toByte()
+                    rgb[o + 2] = px.toByte()
+                    o += 3
+                }
+                memory.write(0, rgb, 0, rgb.size)
+                runCatching {
+                    Ffi.request(
+                        FfiRequest(
+                            capture_video_frame = CaptureVideoFrameRequest(
+                                source_handle = source,
+                                buffer = VideoBufferInfo(
+                                    type = VideoBufferType.RGB24,
+                                    width = sw,
+                                    height = sh,
+                                    data_ptr = Pointer.nativeValue(memory),
+                                    stride = sw * 3,
+                                ),
+                                timestamp_us = System.nanoTime() / 1000,
+                                rotation = VideoRotation.VIDEO_ROTATION_0,
+                            ),
+                        ),
+                    )
+                }
+                if (shown++ % 2 == 0) preview.pictures.value = rgbToPicture(sw, sh, rgb)
+            }
+            delay((1000L / SCREEN_FPS - (System.currentTimeMillis() - started)).coerceAtLeast(10L))
+        }
+    }
+
+    private suspend fun stopScreen() {
+        screenJob?.cancel()
+        screenJob = null
+        if (screenTrack == 0L) return
+        val sid = screenSid
+        if (sid.isNotEmpty() && room != 0L) {
+            Ffi.call(PUBLISH_TIMEOUT_MS) { id ->
+                FfiRequest(
+                    unpublish_track = UnpublishTrackRequest(
+                        local_participant_handle = localParticipant,
+                        track_sid = sid,
+                        stop_on_unpublish = true,
+                        request_async_id = id,
+                    ),
+                )
+            }
+        }
+        Ffi.drop(screenTrack)
+        Ffi.drop(screenSource)
+        screenTrack = 0L
+        screenSource = 0L
+        screenSid = ""
+        if (camera == null) _localVideo.value = null
+    }
+
     private fun stopCamera() {
         cameraJob?.cancel()
         cameraJob = null
@@ -1979,6 +2198,16 @@ private fun VideoCodec.toFfi(): LkVideoCodec = when (this) {
 internal fun rgbToPicture(camera: Camera): VideoPicture =
     rgbToPicture(camera.width, camera.height, camera.frame.getByteArray(0, camera.width * camera.height * 3))
 
+/** Часть кадра камеры — своё окошко при приближении (ЗН5): то же, что уходит собеседнику. */
+internal fun rgbToPicture(camera: Camera, part: CameraCrop.Region): VideoPicture {
+    val row = part.width * 3
+    val rgb = ByteArray(row * part.height)
+    for (line in 0 until part.height) {
+        camera.frame.read(((part.top + line).toLong() * camera.width + part.left) * 3, rgb, line * row, row)
+    }
+    return rgbToPicture(part.width, part.height, rgb)
+}
+
 internal fun rgbToPicture(width: Int, height: Int, rgb: ByteArray): VideoPicture {
     val out = ByteArray(width * height * 4)
     var i = 0
@@ -2004,6 +2233,11 @@ private fun CallSetup.audioOptions() = AudioSourceOptions(
 /** Сколько ждать, пока поток проверки отпустит обработку, прежде чем её закрыть. */
 private const val APM_GRACE_MS = 200L
 private const val CONNECT_TIMEOUT_MS = 20_000L
+
+/** Показ экрана ПК (ЗН6): ширина, частота и потолок полосы. */
+private const val SCREEN_WIDTH = 1280
+private const val SCREEN_FPS = 5
+private const val SCREEN_BITRATE = 1_500_000L
 private const val DISCONNECT_TIMEOUT_MS = 5_000L
 
 /** Опрос «видео собеседника нет»: два пустых подряд — шесть секунд, как на телефоне. */

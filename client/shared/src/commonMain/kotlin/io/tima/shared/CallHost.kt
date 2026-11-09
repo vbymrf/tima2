@@ -30,6 +30,7 @@ import io.tima.core.call.CallNoticeActions
 import io.tima.core.call.SoundRoute
 import io.tima.core.call.openCallSettings
 import io.tima.core.diag.Journal
+import io.tima.core.call.CameraCrop
 import io.tima.core.words.CurrentWords
 import io.tima.core.words.Words
 import io.tima.core.diag.LogCode
@@ -822,6 +823,8 @@ class CallHost(
         videoForbidden = false
         beforePause = null
         pendingInvites = null
+        crop = CameraCrop.FULL
+        cameraBeforeSaving = false
         state = CallState()
     }
 
@@ -842,6 +845,41 @@ class CallHost(
     /** Кнопка «Переключение камеры» — передняя ↔ задняя (ПЛАН-(В)-ВИДЕО.md В9). */
     fun switchCamera() {
         scope.launch { engine?.switchCamera() }
+    }
+
+    /** Приближение своего изображения (ПЛАН-(ЗН) ЗН5): на звонок, к следующему — 1× (ответ заказчика 3). */
+    var crop by mutableStateOf(CameraCrop.FULL)
+        private set
+
+    fun cropCamera(next: CameraCrop) {
+        crop = next.clamped()
+        val now = crop
+        scope.launch { engine?.setCameraCrop(now) }
+    }
+
+    /** Умеет ли движок показывать экран устройства (ЗН6): нет — нет и пункта в листе. */
+    val screenShareable: Boolean get() = engine?.screenShareable == true
+
+    fun screenShare(on: Boolean) {
+        Journal.note(LogCode.CALL, "показать экран нажато", "включить" to on)
+        scope.launch { engine?.setScreenShare(on) }
+    }
+
+    /** Была ли камера включена до «Экономить трафик»: выключили экономию — возвращается как была. */
+    private var cameraBeforeSaving = false
+
+    /** «Экономить трафик» нового вида (ЗН3) — поведением нынешнего глаза (ответ заказчика 7). */
+    fun saveTraffic(on: Boolean) {
+        Journal.note(LogCode.CALL, "экономить трафик", "включено" to on, "камера была" to state.cameraOn)
+        if (on) {
+            cameraBeforeSaving = state.cameraOn
+            remoteVideo(false)
+            if (state.cameraOn) camera(false)
+        } else {
+            remoteVideo(true)
+            if (cameraBeforeSaving) camera(true)
+            cameraBeforeSaving = false
+        }
     }
 
     /** Взята ли блокировка «гасить экран у уха». */
