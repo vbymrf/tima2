@@ -136,3 +136,40 @@ fun WindowNavTipBubble(tip: WindowNavTip) {
 const val NAV_TIP_TAG = "tip:nav"
 const val NAV_TIP_SETTINGS_TAG = "tip:nav.settings"
 const val NAV_TIP_CLOSE_TAG = "tip:nav.close"
+
+/**
+ * Уведомление соседнего окна в шапке (ПЛАН-(ВО) ВО3, проба 3в) — когда панель перехода скрыта: число в оранжевом
+ * пузыре, значок окна в правом углу пузыря. Смотрим только «Телефон» и «Социум»: на «Телефоне» — пузырь «Социума», на
+ * «Социуме» — «Телефона», на остальных — оба. Нажатие — в окно и на вкладку последнего пришедшего (Р4). Только телефон.
+ */
+class HeaderNotice(val window: Window, val count: Int, val onOpen: () -> Unit)
+
+/** Пузыри шапки; пусто — их нет (панель показана, широкий формат, нового нет). */
+val LocalHeaderNotices = compositionLocalOf<List<HeaderNotice>> { emptyList() }
+
+/** Окна, о которых пузыри в шапке, и чьи — на каком окне (Р3). */
+val HEADER_NOTICE_WINDOWS = listOf(Window.Phone, Window.Social)
+
+@Composable
+fun HeaderNoticeBubble(notice: HeaderNotice) {
+    val colors = Tima.colors
+    Box(Modifier.padding(top = 6.dp, end = 8.dp)) {
+        Box(
+            Modifier.widthIn(min = 30.dp).background(colors.activity, RoundedCornerShape(14.dp))
+                .clickable(onClick = notice.onOpen).padding(horizontal = 9.dp, vertical = 4.dp)
+                .testTag(headerNoticeTag(notice.window)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Caption(if (notice.count > 99) "99+" else notice.count.toString(), fontSize = TimaType.sz5, weight = FontWeight.ExtraBold, color = colors.text)
+        }
+        Box(
+            Modifier.align(Alignment.TopEnd).offset(x = 9.dp, y = (-8).dp).size(20.dp)
+                .background(colors.surface, androidx.compose.foundation.shape.CircleShape)
+                .border(1.5.dp, colors.navigation, androidx.compose.foundation.shape.CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { Caption(notice.window.glyph, fontSize = TimaType.sz6) }
+    }
+}
+
+/** Метка пузыря: `header:notice.phone`, `header:notice.social`. */
+fun headerNoticeTag(window: Window): String = "header:notice." + window.name.lowercase()

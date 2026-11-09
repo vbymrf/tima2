@@ -66,6 +66,6 @@ class SqlNoticeJournal(
     private fun active(row: Active): ActiveNotice? {
         val tab = NoticeTab.of(row.tab) ?: return null
         val what = NoticeWhat.of(row.what) ?: return null
-        return ActiveNotice(tab, row.entity, what)
+        return ActiveNotice(tab, row.entity, what).at(row.at_ms ?: 0L)
     }
 }

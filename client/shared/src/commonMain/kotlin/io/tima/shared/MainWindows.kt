@@ -740,3 +740,20 @@ internal fun SearchRow(
 internal fun HourglassLayer(awaited: androidx.compose.runtime.State<Window?>) {
     if (awaited.value != null) WindowHourglass()
 }
+
+/** Вкладки журнала уведомлений окна — те, из которых складывается его число ([windowCounters]). */
+internal fun noticeTabsOf(window: Window): List<io.tima.domain.chat.NoticeTab> = when (window) {
+    Window.Phone -> listOf(io.tima.domain.chat.NoticeTab.Chats, io.tima.domain.chat.NoticeTab.Calls)
+    Window.Social -> listOf(io.tima.domain.chat.NoticeTab.Channels)
+    Window.Page -> listOf(io.tima.domain.chat.NoticeTab.Groups)
+    else -> emptyList()
+}
+
+/** Вкладка окна, где живёт вкладка журнала уведомлений: «Каналы» — каталог «Социума», «Группы» — на «Странице». */
+internal fun windowTabOf(tab: io.tima.domain.chat.NoticeTab): WindowTab = when (tab) {
+    io.tima.domain.chat.NoticeTab.Chats -> WindowTab.Chats
+    io.tima.domain.chat.NoticeTab.Calls -> WindowTab.Calls
+    io.tima.domain.chat.NoticeTab.Channels -> WindowTab.Catalogue
+    io.tima.domain.chat.NoticeTab.Groups -> WindowTab.Groups
+}
+

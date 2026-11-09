@@ -3196,6 +3196,24 @@ private fun App(
         } else {
             null
         },
+        // Панель скрыта — пузыри «Телефона» и «Социума» в шапке (ВО3); нажатие — окно и вкладка последнего пришедшего.
+        io.tima.feature.shell.LocalHeaderNotices provides if (layoutNav) {
+            emptyList()
+        } else {
+            val counts = windowCounters(noticeCounts)
+            io.tima.feature.shell.HEADER_NOTICE_WINDOWS.mapNotNull { w ->
+                val n = counts[w] ?: 0
+                if (n == 0) {
+                    null
+                } else {
+                    io.tima.feature.shell.HeaderNotice(w, n) {
+                        val tab = noticeCounts.latest(noticeTabsOf(w))?.let(::windowTabOf)
+                        navigator.enter(w, Via.HeaderNotice)
+                        tab?.let { windowTabs.choose(w, it) }
+                    }
+                }
+            }
+        },
         io.tima.feature.shell.LocalWindowNav provides if (layoutNav) {
             io.tima.feature.shell.WindowNav(
                 current = window,

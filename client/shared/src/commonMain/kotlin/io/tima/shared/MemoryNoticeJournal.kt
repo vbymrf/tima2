@@ -58,7 +58,9 @@ class MemoryNoticeJournal : NoticeJournal {
     override fun active(): Flow<List<ActiveNotice>> = flow
 
     override fun activeNow(): List<ActiveNotice> =
-        rows.filter { it.clearedAt == 0L }.map { ActiveNotice(it.record.tab, it.record.entity, it.record.what) }.distinct()
+        rows.filter { it.clearedAt == 0L }
+            .groupBy { Triple(it.record.tab, it.record.entity, it.record.what) }
+            .map { (k, rs) -> ActiveNotice(k.first, k.second, k.third).at(rs.maxOf { it.record.atMs }) }
 
     override fun purge(beforeMs: Long): Int {
         val old = rows.filter { it.clearedAt in 1 until beforeMs }

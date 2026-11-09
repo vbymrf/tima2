@@ -50,8 +50,9 @@ UPDATE notice_log SET cleared_at = ?, cleared_by = ? WHERE cleared_at = 0 AND ta
 clearRef:
 UPDATE notice_log SET cleared_at = ?, cleared_by = ? WHERE cleared_at = 0 AND what = ? AND ref = ?;
 
+-- Последнее время — для перехода к последнему пришедшему (ПЛАН-(ВО) ВО3).
 active:
-SELECT DISTINCT tab, entity, what FROM notice_log WHERE cleared_at = 0;
+SELECT tab, entity, what, MAX(at_ms) AS at_ms FROM notice_log WHERE cleared_at = 0 GROUP BY tab, entity, what;
 
 purge:
 DELETE FROM notice_log WHERE cleared_at > 0 AND cleared_at < ?;

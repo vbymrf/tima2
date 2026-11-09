@@ -113,7 +113,15 @@ data class NoticeRecord(
 )
 
 /** Неснятое уведомление: сущность на вкладке, этого вида. */
-data class ActiveNotice(val tab: NoticeTab, val entity: String, val what: NoticeWhat)
+data class ActiveNotice(val tab: NoticeTab, val entity: String, val what: NoticeWhat) {
+    /**
+     * Когда пришло последнее такое уведомление, мс (ПЛАН-(ВО) ВО3: пузырь в шапке ведёт на вкладку последнего
+     * пришедшего). В равенство не входит: одна сущность с новым — одна строка, сколько бы раз она ни пришла.
+     */
+    var atMs: Long = 0L
+
+    fun at(ms: Long): ActiveNotice = also { atMs = ms }
+}
 
 /**
  * Числа из журнала — ЖУ2, ЖУ4 (решения заказчика 2026-09-30).
@@ -124,7 +132,7 @@ data class ActiveNotice(val tab: NoticeTab, val entity: String, val what: Notice
  * - **Значок приложения** — сумма чисел вкладок: 2 + 1 = 3. Одна сущность на двух вкладках
  *   считается на каждой — числа не складываются в одно, а суммируются по вкладкам.
  */
-class NoticeCounts(active: List<ActiveNotice>) {
+class NoticeCounts(private val active: List<ActiveNotice>) {
     private val byTab: Map<NoticeTab, Set<String>> =
         active.groupBy { it.tab }.mapValues { (_, rows) -> rows.map { it.entity }.toSet() }
 
@@ -141,6 +149,9 @@ class NoticeCounts(active: List<ActiveNotice>) {
     fun chat(chatId: String, peerId: String?): Int =
         (if (chatId in entities(NoticeTab.Chats) || chatId in entities(NoticeTab.Groups)) 1 else 0) +
             (if (peerId != null && peerId in entities(NoticeTab.Calls)) 1 else 0)
+
+    /** Вкладка последнего пришедшего уведомления среди [tabs] (ПЛАН-(ВО) ВО3); нового нет — `null`. */
+    fun latest(tabs: Collection<NoticeTab>): NoticeTab? = active.filter { it.tab in tabs }.maxByOrNull { it.atMs }?.tab
 
     /** Значок приложения — сумма чисел вкладок. */
     val total: Int get() = NoticeTab.entries.sumOf { tab(it) }
