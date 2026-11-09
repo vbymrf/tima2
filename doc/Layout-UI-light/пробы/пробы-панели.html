@@ -122,6 +122,30 @@
   /* Соседи в шапке: место под пузырь — за счёт полей плашки, а не переносом */
   .зона-1.с-соседом { padding-left: 16px; padding-right: 16px; gap: 7px; flex-wrap: nowrap; }
   .зона-1.с-соседом .икона { width: 32px; height: 32px; flex-basis: 32px; }
+
+  /* ── 5. ОКНО «ГЛАВНОЕ ОКНО» (ВО6) ─────────────────────────────────────────── */
+  .обр { margin: 10px 14px; border: 1.5px solid var(--чёрный-12); border-radius: 14px; overflow: hidden; background: var(--поверхность); }
+  .обр .м-шапка { margin: 6px; height: 26px; border-radius: 6px; background: var(--навигация); display: flex; align-items: center; padding: 0 8px; gap: 6px; color: #fff; font-size: 11px; font-weight: 800; }
+  .обр .м-ряд { height: 20px; margin: 4px 8px; border-radius: 999px; background: var(--чёрный-6); display: flex; align-items: center; padding: 0 8px; font-size: 10px; font-weight: 700; color: var(--чёрный-70); }
+  .обр .м-ряд.р { background: transparent; border-bottom: 1px solid var(--чёрный-12); border-radius: 0; }
+  .обр .м-список { height: 92px; margin: 4px 8px; border-radius: 8px; background: repeating-linear-gradient(180deg, var(--чёрный-6) 0 22px, transparent 22px 30px); }
+  .обр .м-низ { display: flex; justify-content: space-around; padding: 4px 0 6px; background: var(--функц); border-top: 1px solid var(--чёрный-12); font-size: 13px; }
+  .обр .м-низ span.т { background: var(--навигация); border-radius: 999px; padding: 0 10px; }
+  .обр .м-пуз { margin-left: auto; background: var(--активность); color: var(--текст); border-radius: 999px; padding: 0 6px; font-size: 10px; }
+  .стр-обл { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--чёрный-6); font-size: 14.5px; font-weight: 700; }
+  .стр-обл .имя { flex: 1 1 auto; }
+  .стр-обл.метка { color: var(--чёрный-50); font-weight: 600; background: var(--чёрный-6); }
+  .стр-обл .стрелка-кр { width: 32px; height: 32px; border-radius: 50%; background: var(--чёрный-6); display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .стр-обл .стрелка-кр.нет { opacity: 0.3; }
+  .перекл { width: 44px; height: 26px; border-radius: 13px; background: var(--навигация); position: relative; flex: 0 0 44px; }
+  .перекл::after { content: ""; position: absolute; right: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; }
+  .перекл.выкл { background: var(--чёрный-35); }
+  .перекл.выкл::after { right: auto; left: 3px; }
+  .выбор { display: inline-flex; border-radius: 999px; background: var(--чёрный-6); padding: 3px; gap: 2px; }
+  .выбор span { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--чёрный-70); }
+  .выбор span.да { background: var(--навигация); color: #fff; }
+  .стр-пер { padding: 9px 16px; border-bottom: 1px solid var(--чёрный-6); }
+  .стр-пер .имя { font-size: 14.5px; font-weight: 700; margin-bottom: 6px; }
 </style>
 
 <div class="лист-док">
@@ -136,6 +160,7 @@
   <a href="#п2">2 · панель окон снизу</a>
   <a href="#п3">3 · счётчики в шапке</a>
   <a href="#п4">4 · всё вместе</a>
+  <a href="#п5">5 · окно «Главное окно»</a>
 </div>
 
 <!-- ═════════════════════════════════════════════════════════════════════ -->
@@ -394,10 +419,77 @@
   </div>
 </section>
 
+
+<!-- ═════════════════════════════════════════════════════════════════════ -->
+<section class="проба" id="п5">
+  <div class="шапка-пробы"><span class="номер">5</span>
+    <span class="опис">Окно «Главное окно» в «Настройках» (ПЛАН-(ВО) ВО6 — до кода ВО5): сверху образец — меняется сразу; под ним
+    расположение: шапка всегда вверху, вкладки, разделы и панель перехода переставляются стрелками ↑↓ выше или ниже
+    списка; переключатель панели перехода; блок «Переходы» — куда ведёт вход в окно каждым способом (ПЛАН-(МП) М5).
+    Значения по умолчанию — 5а.</span></div>
+  <div class="срезы">
+
+    <div>
+      <div class="окно" style="height:auto">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">←</a>
+          <div class="тянуть"><div class="имя-окна" style="font-size:17px">Главное окно</div></div>
+        </div>
+        <div class="зона-2">
+          <div class="гр" style="padding:12px 16px 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--чёрный-50)">Образец</div>
+          <div class="обр">
+            <div class="м-шапка">Т Телефон</div>
+            <div class="м-ряд">Чаты · Контакты · Звонки</div>
+            <div class="м-ряд р">Все · Дом · Общий</div>
+            <div class="м-список"></div>
+            <div class="м-низ"><span class="т">📞</span><span>📰</span><span>💬</span><span>👤</span></div>
+          </div>
+          <div class="гр" style="padding:12px 16px 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--чёрный-50)">Расположение</div>
+          <div class="стр-обл метка"><span class="имя">Шапка — всегда вверху</span></div>
+          <div class="стр-обл"><span class="имя">Вкладки</span><span class="стрелка-кр нет">↑</span><span class="стрелка-кр">↓</span></div><div class="стр-обл"><span class="имя">Разделы</span><span class="стрелка-кр">↑</span><span class="стрелка-кр">↓</span></div><div class="стр-обл метка"><span class="имя">— список —</span></div><div class="стр-обл"><span class="имя">Панель перехода</span><span class="стрелка-кр">↑</span><span class="стрелка-кр нет">↓</span></div>
+          <div class="стр-обл"><span class="имя">Панель перехода<div style="font-size:12px;font-weight:600;color:var(--чёрный-70)">показана — уведомлений в шапке нет</div></span><span class="перекл"></span></div>
+          <div class="гр" style="padding:12px 16px 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--чёрный-50)">Переходы — куда ведёт вход в окно</div>
+          <div class="стр-пер"><div class="имя">Панель перехода</div><div class="выбор"><span class="">В точку окна</span><span class="да">С начала</span></div></div><div class="стр-пер"><div class="имя">Переключение окон (шапка)</div><div class="выбор"><span class="">В точку окна</span><span class="да">С начала</span></div></div><div class="стр-пер"><div class="имя">Свайп</div><div class="выбор"><span class="да">В точку окна</span><span class="">С начала</span></div></div>
+        </div>
+      </div>
+      <div class="подп"><b>5а. По умолчанию.</b> Вкладки и разделы над списком, панель перехода внизу и показана; панель и шапка ведут с начала, свайп — в точку окна.</div>
+    </div>
+
+    <div>
+      <div class="окно" style="height:auto">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">←</a>
+          <div class="тянуть"><div class="имя-окна" style="font-size:17px">Главное окно</div></div>
+        </div>
+        <div class="зона-2">
+          <div class="гр" style="padding:12px 16px 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--чёрный-50)">Образец</div>
+          <div class="обр">
+            <div class="м-шапка">Т Телефон <span class="м-пуз">12 📰</span></div>
+            <div class="м-ряд р">Все · Дом · Общий</div>
+            <div class="м-список"></div>
+            <div class="м-ряд">Чаты · Контакты · Звонки</div>
+          </div>
+          <div class="гр" style="padding:12px 16px 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--чёрный-50)">Расположение</div>
+          <div class="стр-обл метка"><span class="имя">Шапка — всегда вверху</span></div>
+          <div class="стр-обл"><span class="имя">Разделы</span><span class="стрелка-кр нет">↑</span><span class="стрелка-кр">↓</span></div><div class="стр-обл метка"><span class="имя">— список —</span></div><div class="стр-обл"><span class="имя">Вкладки</span><span class="стрелка-кр">↑</span><span class="стрелка-кр">↓</span></div><div class="стр-обл"><span class="имя">Панель перехода</span><span class="стрелка-кр">↑</span><span class="стрелка-кр нет">↓</span></div>
+          <div class="стр-обл"><span class="имя">Панель перехода<div style="font-size:12px;font-weight:600;color:var(--чёрный-70)">скрыта — уведомления «Телефона» и «Социума» в шапке</div></span><span class="перекл выкл"></span></div>
+          <div class="гр" style="padding:12px 16px 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--чёрный-50)">Переходы — куда ведёт вход в окно</div>
+          <div class="стр-пер"><div class="имя">Панель перехода</div><div class="выбор"><span class="">В точку окна</span><span class="да">С начала</span></div></div><div class="стр-пер"><div class="имя">Переключение окон (шапка)</div><div class="выбор"><span class="">В точку окна</span><span class="да">С начала</span></div></div><div class="стр-пер"><div class="имя">Свайп</div><div class="выбор"><span class="да">В точку окна</span><span class="">С начала</span></div></div>
+        </div>
+      </div>
+      <div class="подп"><b>5б. Переставлено.</b> Вкладки под списком — к большому пальцу; панель перехода скрыта — в шапке пузырь «Социума». Стрелка ↑ у первой и ↓ у последней строки неактивны.</div>
+    </div>
+  </div>
+</section>
+
 <h2>Вопросы к выбору</h2>
 <ol class="опис">
   <li>Анимация звонка: <b>1б</b> (зелёная панель, бегущая волна) или <b>1в</b> (белая панель, вращающаяся рамка с пропусками)?</li>
   <li>Панель окон: <b>2а</b> (значок и название) или <b>2б</b> (только значок)?</li>
   <li>Нужны ли пузыри в шапке, если есть панель окон снизу (проба 4), — или одно из двух?</li>
+  <li><b>5 (ВО6):</b> окно «Главное окно» — так (образец, расположение стрелками, переключатель панели, «Переходы» тремя
+  выборами)? После согласия — пункт настроек (ВО5).</li>
 </ol>
 </div>
