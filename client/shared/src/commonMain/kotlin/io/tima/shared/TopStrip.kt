@@ -23,13 +23,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +60,8 @@ internal class CallStripModel(
     /** Показывать ли — звонок идёт и человек не в окне звонка. */
     val shown: () -> Boolean,
     val onOpen: () -> Unit,
+    /** «Завершить» с панели — положить трубку и закрыть звонок: окна «Звонок завершён» человек не видит. */
+    val onEnd: () -> Unit,
 )
 
 /** Место панели звонка: корень рисует, `App()` кладёт — звонок живёт там. */
@@ -65,8 +73,9 @@ internal fun CallStrip(model: CallStripModel) {
     val colors = Tima.colors
     val words = Tima.words.call
     val moving = rememberInfiniteTransition()
-    // Штрих и пропуск — 18 и 10 точек; сдвиг на их сумму за 1,2 с — штрихи бегут по кругу без рывка.
-    val run by moving.animateFloat(0f, 1f, infiniteRepeatable(tween(1_200, easing = LinearEasing)))
+    // Как в пробе 1в (заказчик 2026-11-10): узор лучами из центра крутится по кругу — на длинной полосе штрихи у
+    // краёв длинные и бегут быстро, у середины короткие и медленнее. Оборот — 2 с.
+    val turn by moving.animateFloat(0f, 1f, infiniteRepeatable(tween(STRIP_TURN_MS, easing = LinearEasing)))
     val blink by moving.animateFloat(1f, 0.25f, infiniteRepeatable(tween(600), RepeatMode.Reverse))
     val title = call.group?.title ?: call.peer
     val status = stripStatus(call, words)
@@ -77,14 +86,12 @@ internal fun CallStrip(model: CallStripModel) {
                 Modifier.fillMaxWidth()
                     .drawBehind {
                         val stroke = 3.dp.toPx()
-                        val dash = 18.dp.toPx()
-                        val gap = 10.dp.toPx()
                         drawRoundRect(
-                            color = colors.confirmed,
+                            brush = Brush.sweepGradient(*rays(turn, colors.confirmed), center = center),
                             topLeft = Offset(stroke / 2, stroke / 2),
                             size = Size(size.width - stroke, size.height - stroke),
                             cornerRadius = CornerRadius(14.dp.toPx()),
-                            style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, gap), -run * (dash + gap))),
+                            style = Stroke(width = stroke),
                         )
                     }
                     .clickable(onClick = model.onOpen)
@@ -109,10 +116,16 @@ internal fun CallStrip(model: CallStripModel) {
                         .testTag(CALL_STRIP_MIC_TAG),
                     contentAlignment = Alignment.Center,
                 ) { Caption("🎤", fontSize = TimaType.sz5) }
+                // Микрофон — вдвое дальше от «Завершить», чем прочие промежутки: мимо красной не промахнуться (2026-11-10).
+                Spacer(Modifier.width(10.dp))
                 Box(
-                    Modifier.size(36.dp).background(colors.alarm, CircleShape).clickable { call.hangUp() }.testTag(CALL_STRIP_END_TAG),
+                    Modifier.size(END_SIZE).background(colors.alarm, CircleShape).clickable(onClick = model.onEnd).testTag(CALL_STRIP_END_TAG),
                     contentAlignment = Alignment.Center,
-                ) { Caption("✆", fontSize = TimaType.sz4, weight = FontWeight.Bold, color = colors.onAccent) }
+                ) {
+                    // Знак — 80 % кнопки (заказчик 2026-11-10).
+                    val glyph = with(LocalDensity.current) { (END_SIZE * 0.8f).toSp() }
+                    BasicText("✆", style = TextStyle(fontSize = glyph, lineHeight = glyph, color = colors.onAccent))
+                }
             }
         }
     }
@@ -141,6 +154,38 @@ internal fun stripStatus(
         else -> words.stripTalking + " · " + words.duration(seconds) + people
     }
 }
+
+/** Узор рамки: 12 лучей по 18° с пропусками по 12°, повёрнутый на [turn] оборота; жёсткие края — парами точек. */
+internal fun rays(turn: Float, color: Color): Array<Pair<Float, Color>> {
+    val clear = color.copy(alpha = 0f)
+    val parts = mutableListOf<Pair<Float, Float>>() // начало и конец луча в долях оборота
+    for (k in 0 until RAYS) {
+        val a = ((k * RAY_STEP + turn * 360f) % 360f) / 360f
+        val b = a + RAY_ON / 360f
+        if (b <= 1f) {
+            parts += a to b
+        } else {
+            parts += a to 1f
+            parts += 0f to (b - 1f)
+        }
+    }
+    parts.sortBy { it.first }
+    val stops = mutableListOf(0f to clear)
+    for ((a, b) in parts) {
+        stops += a to clear
+        stops += a to color
+        stops += b to color
+        stops += b to clear
+    }
+    stops += 1f to clear
+    return stops.toTypedArray()
+}
+
+private const val RAYS = 12
+private const val RAY_STEP = 30f
+private const val RAY_ON = 18f
+private const val STRIP_TURN_MS = 2_000
+private val END_SIZE = 36.dp
 
 const val CALL_STRIP_TAG = "strip:call"
 const val CALL_STRIP_MIC_TAG = "strip:call.mic"

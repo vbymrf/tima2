@@ -3229,7 +3229,17 @@ private fun App(
     // Панель звонка над шапкой рисует корень (ПЛАН-(ВО) ВО1); здесь — что показывать и куда вести.
     val callStripHolder = LocalCallStrip.current
     DisposableEffect(callHost, callStripHolder) {
-        callStripHolder?.value = CallStripModel(callHost, shown = { callHost.active && navigator.window != Window.Call }, onOpen = { showCall() })
+        callStripHolder?.value = CallStripModel(
+            callHost,
+            // Законченный звонок — без панели: «Звонок завершён» живёт в окне звонка, а не над шапкой.
+            shown = { callHost.active && callHost.state.stage != CallStage.Ended && navigator.window != Window.Call },
+            onOpen = { showCall() },
+            onEnd = {
+                Journal.note(LogCode.CALL, "завершить с панели над шапкой")
+                callHost.hangUp()
+                callHost.close()
+            },
+        )
         onDispose { callStripHolder?.value = null }
     }
     // Звонок начался — звук в сообщениях на паузу; после звонка он на паузе и остаётся (ПЛАН-(ВО) Р12).
