@@ -491,7 +491,44 @@ class LiveKitCallEngine(
         }
         if (route == _state.value.sound) return
         _state.value = _state.value.copy(sound = route)
-        Journal.note(LogCode.CALL, "звук идёт", "куда" to route.name, "устройство" to (selected?.name ?: "—"))
+        Journal.note(LogCode.CALL, "звук идёт", "куда" to route.name, "устройство" to (selected?.name ?: "—"), *voiceVolume())
+    }
+
+    /**
+     * Громкость разговора и не выключен ли микрофон системой (отчёт 3TJP, 2026-11-09: «не слышит собеседник», а
+     * журнал принимающего молчал): разговор идёт потоком голосового звонка, и его громкость на нуле — частая причина
+     * «не слышно», которую иначе не отличить от сбоя связи.
+     */
+    private fun voiceVolume(): Array<Pair<String, Any?>> = runCatching {
+        val audio = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        val now = audio.getStreamVolume(android.media.AudioManager.STREAM_VOICE_CALL)
+        val max = audio.getStreamMaxVolume(android.media.AudioManager.STREAM_VOICE_CALL)
+        arrayOf<Pair<String, Any?>>("громкость" to "$now/$max", "микрофон системы выключен" to audio.isMicrophoneMute)
+    }.getOrDefault(emptyArray())
+
+    /** Звук за звонок: слышно ли собеседника и ушёл ли свой голос — по речи, которую видит SFU. `null` — не следили. */
+    private var voiceSeen: Pair<Boolean, Boolean>? = null
+
+    /**
+     * Шёл ли звук в звонке — любом, не только групповом (отчёт 3TJP). Речь собеседника пришла на SFU — строка
+     * «собеседника слышно» один раз; своя речь ушла — «свой голос ушёл». Итог — при конце звонка ([stopWatching]):
+     * «не слышно» у принимающего при «собеседник говорил=да» значит, что звук дошёл до телефона и теряется на нём —
+     * громкость, устройство вывода.
+     */
+    private fun watchVoice(room: Room) {
+        voiceSeen = false to false
+        watchers += scope.launch {
+            while (isActive) {
+                val (peer, self) = voiceSeen ?: (false to false)
+                val peerNow = peer || room.remoteParticipants.values.any { it.isSpeaking }
+                val selfNow = self || room.localParticipant.isSpeaking
+                if (peerNow && !peer) Journal.note(LogCode.CALL, "собеседника слышно", "речь пришла на SFU" to true, *voiceVolume())
+                if (selfNow && !self) Journal.note(LogCode.CALL, "свой голос ушёл", "речь пришла на SFU" to true)
+                voiceSeen = peerNow to selfNow
+                if (peerNow && selfNow) break
+                delay(PEERS_POLL_MS)
+            }
+        }
     }
 
     /**
@@ -821,6 +858,10 @@ class LiveKitCallEngine(
 
     /** Погасить наблюдателей. Идемпотентно: гасить нечего — значит ничего. */
     private fun stopWatching() {
+        voiceSeen?.let { (peer, self) ->
+            Journal.note(LogCode.CALL, "звук за звонок", "собеседник говорил" to peer, "сами говорили" to self, *voiceVolume())
+        }
+        voiceSeen = null
         for (job in watchers) job.cancel()
         watchers.clear()
         for (job in visibilityJobs.values) job.cancel()
@@ -1150,6 +1191,7 @@ class LiveKitCallEngine(
             watchRemoteLoss(room)
         }
         watchPeers(room)
+        watchVoice(room)
         watchQuality(room)
         watchBreaks(room)
         watchTracks(room)
