@@ -1287,6 +1287,7 @@ object EnglishWords : Words {
         override val editImpossible = "This message can't be edited"
         override val linkGo = "Open"
         override val feedToday = "Today"
+        override val feedNew = "New messages"
         override val feedYesterday = "Yesterday"
         override fun feedDay(day: Int, month: Int, year: Int?) =
             "${EN_MONTHS[month - 1]} $day" + (year?.let { ", $it" } ?: "")

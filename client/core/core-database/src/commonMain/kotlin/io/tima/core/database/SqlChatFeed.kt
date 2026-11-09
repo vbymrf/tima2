@@ -74,6 +74,11 @@ class SqlChatFeed(
         emitAll(limits.flatMapLatest { limit -> rows(chatId, limit, cache) })
     }.flowOn(Dispatchers.Default)
 
+    override suspend fun firstUnread(chatId: String): Long = withContext(Dispatchers.Default) {
+        db.messagesQueries.firstUnread(chatId, io.tima.core.outbox.IncomingState.STORED.ordinal.toLong())
+            .executeAsOneOrNull() ?: 0L
+    }
+
     override suspend fun depth(chatId: String, serverId: Long): Int = withContext(Dispatchers.Default) {
         db.messagesQueries.chatDepth(serverId, chatId).executeAsOne().toInt()
     }

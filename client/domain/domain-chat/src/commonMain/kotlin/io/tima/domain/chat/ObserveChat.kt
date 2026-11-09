@@ -59,6 +59,9 @@ class ObserveChat(private val feed: ChatFeed) {
     /** Место сообщения от нового (1 — последнее); нет его в переписке — 0. */
     suspend fun depth(chatId: String, serverId: Long): Int = feed.depth(chatId, serverId)
 
+    /** Номер первого непрочитанного входящего (ПЛАН-(МП) М2); нет — 0. */
+    suspend fun firstUnread(chatId: String): Long = feed.firstUnread(chatId)
+
     companion object {
         const val DEFAULT_PAGE: Int = 50
 
@@ -225,6 +228,18 @@ fun interface ChatFeed {
 
     /** Место сообщения от нового (1 — последнее); нет — 0. Не умеет — 0. */
     suspend fun depth(chatId: String, serverId: Long): Int = 0
+
+    /** Первое непрочитанное входящее; нет или не умеет — 0. */
+    suspend fun firstUnread(chatId: String): Long = 0
+}
+
+/**
+ * Где остановились в переписке (ПЛАН-(МП) М2): номер сообщения у края экрана при выходе; 0 — внизу. У каждой
+ * переписки своё, хранится на устройстве по аккаунту.
+ */
+interface ChatPlaces {
+    suspend fun load(chatId: String): Long
+    suspend fun save(chatId: String, serverId: Long)
 }
 
 /**

@@ -37,3 +37,33 @@ class ChatDepthTest {
         assertEquals(0, q.chatDepth(1, "другая").executeAsOne().toInt())
     }
 }
+
+/** Первое непрочитанное входящее (ПЛАН-(МП) М2): с него открывается переписка. */
+class FirstUnreadTest {
+
+    private val db = testDatabase()
+    private val q = db.messagesQueries
+    private val stored = io.tima.core.outbox.IncomingState.STORED.ordinal.toLong()
+    private val read = io.tima.core.outbox.IncomingState.READ.ordinal.toLong()
+
+    private fun incoming(id: Long, at: Long, state: Long) {
+        q.insertIncoming(
+            dedup_key = "chat-1/$id", server_id = id, chat_id = "chat-1", sender_id = "peer",
+            client_ts = at, server_ts = at, state = state, attempts = 0, body_enc = byteArrayOf(1),
+        )
+    }
+
+    @Test
+    fun самое_старое_непрочитанное() {
+        incoming(1, 1_000, read)
+        incoming(2, 2_000, stored)
+        incoming(3, 3_000, stored)
+        assertEquals(2L, q.firstUnread("chat-1", stored).executeAsOneOrNull())
+    }
+
+    @Test
+    fun всё_прочитано_пусто() {
+        incoming(1, 1_000, read)
+        assertEquals(null, q.firstUnread("chat-1", stored).executeAsOneOrNull())
+    }
+}

@@ -199,6 +199,14 @@ WHERE chat_id = ? AND edit_of = 0
 ORDER BY COALESCE(server_ts, client_ts) DESC, local_id DESC
 LIMIT ?;
 
+-- Первое непрочитанное входящее переписки (ПЛАН-(МП) М2): с него открывается переписка, над ним — черта
+-- «Новые сообщения». Порядок — как у ленты. Нет — пусто.
+firstUnread:
+SELECT server_id FROM messages
+WHERE chat_id = :chatId AND edit_of = 0 AND direction = 1 AND state = :stored AND server_id IS NOT NULL
+ORDER BY COALESCE(server_ts, client_ts) ASC, local_id ASC
+LIMIT 1;
+
 -- Место сообщения в ленте, считая от нового (1 — последнее), в том же порядке, что `chatPage`:
 -- сколько строк ленты нужно, чтобы оно в неё вошло (переход к старому, заказчик 2026-11-09).
 -- Нет такого в переписке — 0.

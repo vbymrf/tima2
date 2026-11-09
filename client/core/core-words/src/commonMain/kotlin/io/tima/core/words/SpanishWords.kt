@@ -1287,6 +1287,7 @@ object SpanishWords : Words {
         override val editImpossible = "Este mensaje no se puede editar"
         override val linkGo = "Ir"
         override val feedToday = "Hoy"
+        override val feedNew = "Mensajes nuevos"
         override val feedYesterday = "Ayer"
         override fun feedDay(day: Int, month: Int, year: Int?) =
             "$day de ${ES_MONTHS[month - 1]}" + (year?.let { " de $it" } ?: "")

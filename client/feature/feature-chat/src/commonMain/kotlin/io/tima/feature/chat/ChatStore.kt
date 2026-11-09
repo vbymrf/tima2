@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -160,6 +161,8 @@ class ChatStore(
      * четыре теста покраснели ровно на этом.
      */
     private val io: CoroutineDispatcher = Dispatchers.Default,
+    /** Где остановились в переписке (ПЛАН-(МП) М2); `null` — не помнится (проверки). */
+    private val places: io.tima.domain.chat.ChatPlaces? = null,
     /**
      * Попросить ключи личной переписки у своих устройств и собеседника (заказчик 2026-10-06:
      * «сообщение недоступно, запросить»). Слова фразы — для незаверенного устройства: оно
@@ -359,7 +362,7 @@ class ChatStore(
         }?.launchIn(scope)
         // Список приходит потоком: обновление от самой базы, а не по нажатию. Значит
         // пришедшее сообщение и смена состояния отправки появляются на экране сами.
-        observe.pages(chatId, limit)
+        val pageFlow = observe.pages(chatId, limit)
             .onEach { lines ->
                 // Строк пришло столько, сколько просили, — в базе, может быть, есть старше.
                 more = lines.size >= limit.value
@@ -445,7 +448,22 @@ class ChatStore(
                 // ушедшим бы первым, потому что отметку зовут не только отсюда.
                 if (seenNow) withContext(io) { markRead?.chat(chatId) }
             }
-            .launchIn(scope)
+        // С чего открыть (ПЛАН-(МП) М2): первое непрочитанное — оно узнаётся до отметки «прочитано»; нет — где
+        // остановились; нет и его — внизу. Лента сразу дорастает до него.
+        scope.launch {
+            val unread = withContext(io) { runCatching { observe.firstUnread(chatId) }.getOrDefault(0L) }
+            val saved = if (unread > 0) 0L else withContext(io) { runCatching { places?.load(chatId) ?: 0L }.getOrDefault(0L) }
+            val at = if (unread > 0) unread else saved
+            if (at > 0) reach(at)
+            _state.value = _state.value.copy(firstUnread = unread, openAt = at)
+            pageFlow.collect()
+        }
+    }
+
+    /** Где остановились — при выходе из переписки (ПЛАН-(МП) М2); 0 — внизу. */
+    fun savePlace(serverId: Long) {
+        val keep = places ?: return
+        scope.launch { withContext(io) { runCatching { keep.save(chatId, serverId) } } }
     }
 
     /** Видит ли человек переписку сейчас — только тогда приходящее в ней прочитано. */
@@ -1468,6 +1486,10 @@ class ChatStore(
 data class ChatState(
     /** Новое сверху — так же, как отдаёт запрос к базе. */
     val lines: List<ChatLine> = emptyList(),
+    /** Первое непрочитанное при открытии — над ним черта «Новые сообщения» (ПЛАН-(МП) М2); 0 — нет. */
+    val firstUnread: Long = 0,
+    /** С какого сообщения открыть: первое непрочитанное, иначе где остановились; 0 — внизу. */
+    val openAt: Long = 0,
     /** «Только продолжение» (Решения §11.3): в ленте нет, но подкладке есть что показать. */
     val continuations: List<ChatLine> = emptyList(),
     /** Набранное, но не отправленное. Живёт до подтверждения постановки в очередь. */

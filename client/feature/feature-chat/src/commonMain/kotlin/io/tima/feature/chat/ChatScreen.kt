@@ -9,6 +9,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -289,6 +290,8 @@ fun ChatScreen(
     onOlder: (() -> Unit)? = null,
     /** Дорастить ленту до сообщения этой переписки: `true` — оно здесь и придёт в ленту. */
     onReach: (suspend (Long) -> Boolean)? = null,
+    /** Где остановились — при выходе (ПЛАН-(МП) М2): номер сообщения у верхнего края; 0 — внизу. */
+    onPlace: ((Long) -> Unit)? = null,
 ) {
     val cancelledMark = Tima.words.auth.identityCancelledMark
     val colors = Tima.colors
@@ -354,6 +357,18 @@ fun ChatScreen(
         val arrive = jumpPlace?.jumpTo
         var arriving by remember(jumpPlace?.chatId, arrive) { mutableStateOf(arrive) }
         var reaching by remember(jumpPlace?.chatId, arrive) { mutableStateOf<Boolean?>(null) }
+        // Открыть с первого непрочитанного или где остановились (ПЛАН-(МП) М2) — один раз; явный переход главнее.
+        var placed by remember(jumpPlace?.chatId) { mutableStateOf(false) }
+        LaunchedEffect(state.openAt, state.lines.size) {
+            if (placed || arrive != null || state.lines.isEmpty()) return@LaunchedEffect
+            val at = state.openAt
+            if (at <= 0) {
+                placed = true
+            } else if (state.lines.any { it.serverId == at }) {
+                placed = true
+                jumps.settle(at)
+            }
+        }
         LaunchedEffect(arriving, state.lines.size) {
             val target = arriving ?: return@LaunchedEffect
             if (state.lines.any { it.serverId == target }) {
@@ -391,6 +406,8 @@ fun ChatScreen(
         Feed(
             jumps = jumps,
             onOlder = onOlder,
+            firstUnread = state.firstUnread,
+            onLeave = onPlace,
             // Сообщение только из фото, которых уже не будет, — не показывается (ADR-0052).
             lines = state.lines.filterNot { attachments.photosGone(it.rich) },
             // **В личной переписке подписи нет вовсе.** Так в макете: у чужой реплики
@@ -536,6 +553,10 @@ private fun Feed(
     onOlder: (() -> Unit)? = null,
     /** Разделитель дней между сообщениями (заказчик 2026-11-09); в подокне одного сообщения — нет. */
     days: Boolean = jumps != null,
+    /** Первое непрочитанное при открытии — над ним черта «Новые сообщения» (ПЛАН-(МП) М2); 0 — нет. */
+    firstUnread: Long = 0,
+    /** Выход из ленты — номер сообщения у верхнего края, 0 — внизу (ПЛАН-(МП) М2). */
+    onLeave: ((Long) -> Unit)? = null,
 ) =
     // Сообщения — своя группа размера (ПЛАН-(Ш)-ШРИФТОВ Ш3): её укрупняют чаще всего, и
     // от списка чатов она не зависит.
@@ -565,10 +586,22 @@ private fun Feed(
         LaunchedEffect(jumps.request) {
             val target = jumps.request ?: return@LaunchedEffect
             jumps.taken()
-            jumpScope.launch { jumps.performReaching(target, { feed }, listState, record = jumps.record) }
+            jumpScope.launch { jumps.performReaching(target, { feed }, listState, record = jumps.record, flash = !jumps.quiet) }
         }
     }
     // Дошли до верха ленты — ещё порция старых (заказчик 2026-11-09). Лента перевёрнута: верх — конец списка.
+    // Где остановились — при выходе (ПЛАН-(МП) М2): верхнее видимое сообщение; у самого низа — 0, откроется внизу.
+    if (onLeave != null) {
+        val leave by androidx.compose.runtime.rememberUpdatedState(onLeave)
+        val shown by androidx.compose.runtime.rememberUpdatedState(lines)
+        androidx.compose.runtime.DisposableEffect(listState) {
+            onDispose {
+                val top = listState.layoutInfo.visibleItemsInfo.maxByOrNull { it.index }?.index
+                val at = if (listState.firstVisibleItemIndex <= 1 || top == null) 0L else shown.getOrNull(top)?.serverId ?: 0L
+                leave(at)
+            }
+        }
+    }
     if (onOlder != null) {
         val older by androidx.compose.runtime.rememberUpdatedState(onOlder)
         LaunchedEffect(listState) {
@@ -619,6 +652,7 @@ private fun Feed(
             val previous = lines.getOrNull(index + 1)
             // Первое сообщение дня — над ним день (заказчик 2026-11-09): «Сегодня», «Вчера», «29 октября».
             if (days && (previous == null || !sameDay(previous.atMs, line.atMs))) DayDivider(line.atMs)
+            if (firstUnread > 0 && line.serverId == firstUnread) NewMessagesDivider()
             // Приглашение в групповой звонок — карточкой словами читающего (решение 3а).
             val called = invite(line)
             if (called != null) {
@@ -709,6 +743,20 @@ internal fun PointerFeed(
 
 /** За сколько строк до верха ленты просить ещё старых. */
 private const val OLDER_AHEAD = 10
+
+/** Черта «Новые сообщения» над первым непрочитанным (ПЛАН-(МП) М2). */
+@Composable
+private fun NewMessagesDivider() {
+    val colors = Tima.colors
+    Row(Modifier.fillMaxWidth().padding(vertical = TimaSpacing.about3 / 2).testTag(NEW_DIVIDER_TAG), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f).height(1.5.dp).background(colors.activity))
+        Caption(Tima.words.chat.feedNew, fontSize = TimaType.sz6, weight = FontWeight.Bold, color = colors.text2, modifier = Modifier.padding(horizontal = 10.dp))
+        Box(Modifier.weight(1f).height(1.5.dp).background(colors.activity))
+    }
+}
+
+/** Метка черты «Новые сообщения» — для сценариев. */
+const val NEW_DIVIDER_TAG = "chat:new"
 
 /** Метка разделителя дней — для сценариев. */
 const val DAY_DIVIDER_TAG = "chat:day"

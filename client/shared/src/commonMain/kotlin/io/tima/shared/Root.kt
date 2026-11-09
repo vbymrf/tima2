@@ -4905,6 +4905,8 @@ private fun Chat(
             observe = environment.chat,
             send = environment.send,
             scope = scope,
+            // Где остановились — у каждой переписки своё (ПЛАН-(МП) М2).
+            places = ChatPlacesInSettings(environment.settings),
             markRead = environment.reading,
             seenAtStart = false,
             // Запрос недостающего ключа и имена авторов — только у группы: у личной
@@ -5333,6 +5335,7 @@ private fun Chat(
             onPeek = if (finder != null) store::peek else null,
             onOlder = store::older,
             onReach = store::reach,
+            onPlace = store::savePlace,
             onPeekClose = store::peekClosed,
             onUnpin = if (pins != null) store::unpin else null,
             onShowcase = onShowcase,

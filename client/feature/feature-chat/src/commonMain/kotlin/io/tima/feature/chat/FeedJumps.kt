@@ -137,8 +137,20 @@ class FeedJumps(private val place: JumpPlace? = null) {
 
     fun go(serverId: Long, record: Boolean = true) {
         this.record = record
+        quiet = false
         request = serverId
     }
+
+    /** Встать на сообщение при открытии (ПЛАН-(МП) М2): без записи в буфер и без подсветки. */
+    fun settle(serverId: Long) {
+        record = false
+        quiet = true
+        request = serverId
+    }
+
+    /** Переход без подсветки — встать на место при открытии. */
+    var quiet: Boolean = false
+        private set
 
     internal fun taken() {
         request = null
@@ -205,7 +217,7 @@ private fun anchorOf(lines: List<ChatLine>, state: LazyListState): Long? =
  * Перейти к сообщению, которого может не быть в ленте: старое — лента дорастает до него ([FeedJumps.reach]),
  * и переход ждёт, пока оно придёт. Не дождались — ничего (заказчик 2026-11-09: указатели на старое молчали).
  */
-internal suspend fun FeedJumps.performReaching(target: Long, lines: () -> List<ChatLine>, state: LazyListState, record: Boolean = true) {
+internal suspend fun FeedJumps.performReaching(target: Long, lines: () -> List<ChatLine>, state: LazyListState, record: Boolean = true, flash: Boolean = true) {
     if (lines().none { it.serverId == target }) {
         if (reach?.invoke(target) != true) return
         kotlinx.coroutines.withTimeoutOrNull(REACH_WAIT_MS) {
@@ -214,7 +226,7 @@ internal suspend fun FeedJumps.performReaching(target: Long, lines: () -> List<C
         // Пришедшее — сначала разложить на экране, потом крутить к нему.
         state.scrollToItem(state.firstVisibleItemIndex)
     }
-    perform(target, lines(), state, record)
+    perform(target, lines(), state, record, flash)
 }
 
 /** Сколько ждать, пока дорощенная лента принесёт сообщение. */
@@ -227,7 +239,7 @@ private const val REACH_WAIT_MS = 5_000L
  * встаёт **верхом к верху** видимой ленты (заказчик 2026-10-20: «переход идёт на низ сообщения —
  * сделай на верх»). Видимое — область самой ленты без её полей и без [FeedJumps.topCover].
  */
-internal suspend fun FeedJumps.perform(target: Long, lines: List<ChatLine>, state: LazyListState, record: Boolean = true) {
+internal suspend fun FeedJumps.perform(target: Long, lines: List<ChatLine>, state: LazyListState, record: Boolean = true, flash: Boolean = true) {
     val index = lines.indexOfFirst { it.serverId == target }
     if (index < 0) return
     if (record) {
@@ -246,7 +258,7 @@ internal suspend fun FeedJumps.perform(target: Long, lines: List<ChatLine>, stat
     } finally {
         moving = false
     }
-    flash(target)
+    if (flash) flash(target)
 }
 
 /**

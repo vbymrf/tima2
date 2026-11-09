@@ -1515,6 +1515,8 @@ interface ChatWords {
 
     /** Разделитель дней в ленте (заказчик 2026-11-09): «Сегодня», «Вчера», «29 октября», «29 октября 2025». */
     val feedToday: String
+    /** Черта над первым непрочитанным (ПЛАН-(МП) М2). */
+    val feedNew: String
     val feedYesterday: String
     /** День и месяц (1–12) словами; [year] — только когда год не нынешний. */
     fun feedDay(day: Int, month: Int, year: Int?): String
@@ -3855,6 +3857,7 @@ object RussianWords : Words {
         override val editImpossible = "Это сообщение изменить нельзя"
         override val linkGo = "Перейти"
         override val feedToday = "Сегодня"
+        override val feedNew = "Новые сообщения"
         override val feedYesterday = "Вчера"
         override fun feedDay(day: Int, month: Int, year: Int?) =
             "$day ${RU_MONTHS[month - 1]}" + (year?.let { " $it" } ?: "")
