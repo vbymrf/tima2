@@ -56,6 +56,12 @@ internal class Navigator(
     /** Цепочка «откуда», от старого к новому. */
     fun origins(): List<Point> = from.toList()
 
+    /** Все цепочки — для хранения (МП4): строкой [NavStore]. Читает состояние — годится для `snapshotFlow`. */
+    fun stored(): String = NavStore.encode(chains.toMap(), from.toList())
+
+    /** Пусто ли всё — восстанавливать хранимое можно, только пока человек никуда не перешёл. */
+    val untouched: Boolean get() = chains.values.all { it.isEmpty() } && from.isEmpty()
+
     /** Восстановить из хранения (МП4): цепочки окон и «откуда». Черновые подокна не восстанавливаются. */
     fun restore(windows: Map<Window, List<Where>>, origins: List<Point>) {
         chains.clear()
@@ -383,4 +389,75 @@ internal fun whereCode(where: Where): String = when (where) {
     is Where.Transfer -> if (where.virtualUserId == null) "account.take" else "account.give"
     // Пункт настроек — именем перечня: оно и есть ключ навигации, и латиницей.
     is Where.Settings -> "settings" + (where.item?.let { "." + it.name.lowercase() } ?: "")
+}
+
+/**
+ * Хранение цепочек (ПЛАН-(МП) М6, М19): цепочки окон и «откуда» строкой в настройках аккаунта. Черновые подокна и
+ * подокна со вложенным кодом (привязка, заверение, передача) не хранятся; неизвестное при чтении пропускается.
+ * Поля — через знак 0x1F, звенья — через 0x1E, строки — переводом строки: в именах их не бывает.
+ */
+internal object NavStore {
+    private const val FIELD = '\u001F'
+    private const val LINK = '\u001E'
+
+    fun encode(chains: Map<Window, List<Where>>, origins: List<Point>): String = buildString {
+        for ((w, chain) in chains) {
+            val links = chain.mapNotNull(::code)
+            if (links.isNotEmpty()) append("w").append(FIELD).append(w.name).append(FIELD).append(links.joinToString(LINK.toString())).append('\n')
+        }
+        for (p in origins) {
+            append("o").append(FIELD).append(p.window.name).append(FIELD).append(p.chain.mapNotNull(::code).joinToString(LINK.toString())).append('\n')
+        }
+    }
+
+    fun decode(text: String): Pair<Map<Window, List<Where>>, List<Point>> {
+        val chains = mutableMapOf<Window, List<Where>>()
+        val origins = mutableListOf<Point>()
+        for (line in text.lineSequence()) {
+            val parts = line.split(FIELD, limit = 3)
+            if (parts.size < 2) continue
+            val window = Window.entries.firstOrNull { it.name == parts[1] } ?: continue
+            val chain = parts.getOrNull(2).orEmpty().split(LINK).filter { it.isNotEmpty() }.mapNotNull(::where)
+            when (parts[0]) {
+                "w" -> chains[window] = chain
+                "o" -> origins += Point(window, chain)
+            }
+        }
+        return chains to origins
+    }
+
+    private fun code(w: Where): String? {
+        val f = FIELD.toString()
+        return when (w) {
+            is Where.Chat -> listOf("chat", w.chatId, w.name.orEmpty()).joinToString(f)
+            is Where.Person -> listOf("person", w.userId).joinToString(f)
+            is Where.Community -> listOf("community", w.communityId).joinToString(f)
+            is Where.Members -> listOf("members", w.groupId, w.name.orEmpty()).joinToString(f)
+            is Where.Access -> listOf("access", w.groupId, w.name.orEmpty()).joinToString(f)
+            is Where.Showcase -> listOf("showcase", w.kind, w.id, w.title).joinToString(f)
+            is Where.Comments -> listOf("comments", w.channelId, w.postId.toString()).joinToString(f)
+            is Where.Settings -> listOf("settings", w.item?.name.orEmpty()).joinToString(f)
+            Where.Profile -> "profile"
+            Where.SelfPage -> "self"
+            else -> null
+        }
+    }
+
+    private fun where(code: String): Where? {
+        val p = code.split(FIELD)
+        fun at(i: Int) = p.getOrNull(i).orEmpty()
+        return when (p[0]) {
+            "chat" -> Where.Chat(at(1), at(2).ifEmpty { null })
+            "person" -> Where.Person(at(1))
+            "community" -> Where.Community(at(1))
+            "members" -> Where.Members(at(1), at(2).ifEmpty { null })
+            "access" -> Where.Access(at(1), at(2).ifEmpty { null })
+            "showcase" -> Where.Showcase(at(1), at(2), at(3))
+            "comments" -> at(2).toLongOrNull()?.let { Where.Comments(at(1), it) }
+            "settings" -> Where.Settings(SettingsItem.entries.firstOrNull { it.name == at(1) })
+            "profile" -> Where.Profile
+            "self" -> Where.SelfPage
+            else -> null
+        }
+    }
 }

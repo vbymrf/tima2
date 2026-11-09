@@ -142,3 +142,37 @@ class ArriveSettingTest {
         assertEquals(Arrive.Point, by(Via.Rail), "по умолчанию — точка")
     }
 }
+
+/** Хранение цепочек (МП М6, М19): туда и обратно без потерь; черновые и кодовые подокна не хранятся. */
+class NavStoreTest {
+
+    @Test
+    fun туда_и_обратно() {
+        val nav = Navigator(mutableStateOf(Window.Phone))
+        nav.where = Where.Chat("c-1", "Аня")
+        nav.where = Where.Person("u-1")
+        nav.enter(Window.Social, Via.HeaderNotice)
+        nav.where = Where.Community("co-1")
+        nav.where = Where.Showcase("group", "g", "Дача")
+        nav.where = Where.Settings(SettingsItem.DEVICES)
+        val text = nav.stored()
+
+        val again = Navigator(mutableStateOf(Window.Phone))
+        assertTrue(again.untouched)
+        val (chains, origins) = NavStore.decode(text)
+        again.restore(chains, origins)
+        assertEquals(nav.chain(Window.Phone), again.chain(Window.Phone))
+        assertEquals(nav.chain(Window.Social), again.chain(Window.Social))
+        assertEquals(nav.origins(), again.origins())
+    }
+
+    @Test
+    fun черновые_и_кодовые_не_хранятся() {
+        val nav = Navigator(mutableStateOf(Window.Phone))
+        nav.where = Where.Chat("c-1", null)
+        nav.where = Where.Link("секрет")
+        val (chains, _) = NavStore.decode(nav.stored())
+        assertEquals(listOf<Where>(Where.Chat("c-1", null)), chains[Window.Phone])
+        assertEquals(emptyMap(), NavStore.decode("мусор\nw\u001FНетТакого\u001Fchat").first)
+    }
+}

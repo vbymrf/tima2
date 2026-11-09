@@ -150,6 +150,7 @@ import io.tima.core.notify.SoundKeys
 import io.tima.core.notify.SoundChoice
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.Dispatchers
@@ -998,6 +999,30 @@ private fun App(
         environment.settings.all().map { all -> all.filterKeys { it.startsWith(MainLayoutKeys.ARRIVE) } }.distinctUntilChanged()
     }.collectAsState(emptyMap())
     SideEffect { navigator.arriveBy = arriveFrom(arriveStored) }
+    // Цепочки переходов переживают перезапуск (ПЛАН-(МП) М6, М19): читаются один раз — после снятия замка, чтобы
+    // переписка не мелькнула до пин-кода (М13), и только если человек ещё никуда не перешёл (ссылка, уведомление).
+    // Пишутся при каждой смене, с выдержкой: уход в фон и выход из окна записи не теряют.
+    val navStored by androidx.compose.runtime.produceState<String?>(null) {
+        value = runCatching { environment.settings.all().first()[MainLayoutKeys.CHAINS] }.getOrNull().orEmpty()
+    }
+    var navRestored by remember { mutableStateOf(false) }
+    LaunchedEffect(navStored, locked) {
+        val text = navStored ?: return@LaunchedEffect
+        if (navRestored || locked) return@LaunchedEffect
+        navRestored = true
+        if (text.isNotEmpty() && navigator.untouched) {
+            val (chains, origins) = NavStore.decode(text)
+            navigator.restore(chains, origins)
+            Journal.note(LogCode.NAV, "восстановлено", "окон" to chains.count { it.value.isNotEmpty() }, "откуда" to origins.size)
+        }
+    }
+    LaunchedEffect(navRestored) {
+        if (!navRestored) return@LaunchedEffect
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
+        snapshotFlow { navigator.stored() }.distinctUntilChanged().debounce(600).collect { text ->
+            runCatching { environment.settings.put(MainLayoutKeys.CHAINS, text) }
+        }
+    }
     // Подсказка к панели перехода (ВО8) показана? `null` — ещё не прочли настройки: не мигать подсказкой.
     val navTipSeen by remember { environment.settings.all().map { it[MainLayoutKeys.NAV_TIP] == "1" }.distinctUntilChanged() }
         .collectAsState(null)
