@@ -993,6 +993,11 @@ private fun App(
     var window by navigator::window
     // Вид главного окна (ПЛАН-(ВО)): панель перехода — показана, пока настройка не сказала «0» (Р2).
     val layoutNav by remember { environment.settings.all().map { it[MainLayoutKeys.NAV] != "0" }.distinctUntilChanged() }.collectAsState(true)
+    // Настройка «Переходы» (ПЛАН-(МП) М5): куда ведёт вход в окно каждым способом.
+    val arriveStored by remember {
+        environment.settings.all().map { all -> all.filterKeys { it.startsWith(MainLayoutKeys.ARRIVE) } }.distinctUntilChanged()
+    }.collectAsState(emptyMap())
+    SideEffect { navigator.arriveBy = arriveFrom(arriveStored) }
     // Буферы переходов (ПЛАН-(БП)): на устройстве, в настройках; читаются один раз — дальше живут здесь.
     val jumpStored by androidx.compose.runtime.produceState<Map<String, String>?>(null) {
         value = runCatching { environment.settings.all().first() }.getOrDefault(emptyMap())

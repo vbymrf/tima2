@@ -163,6 +163,21 @@ internal class Navigator(
     }
 }
 
+/**
+ * Настройка «Переходы» (МП М5) — куда ведёт вход каждым способом: `shell.arrive.<код>` = `point` или `start`; нет
+ * записи — по умолчанию способа (М3). Настраиваются панель перехода, переключатель окон, свайп и рейка.
+ */
+internal fun arriveFrom(stored: Map<String, String>): (Via) -> Arrive = { via ->
+    when (stored[MainLayoutKeys.ARRIVE + via.code]) {
+        Arrive.Point.code -> Arrive.Point
+        Arrive.Start.code -> Arrive.Start
+        else -> via.arrive
+    }
+}
+
+/** Способы входа, которые меняет настройка «Переходы» (МП М5). */
+internal val ARRIVE_SETTABLE = listOf(Via.Panel, Via.Switcher, Via.Swipe, Via.Rail)
+
 /** Точка: окно и его цепочка подокон (МП М1). */
 internal data class Point(val window: Window, val chain: List<Where>)
 

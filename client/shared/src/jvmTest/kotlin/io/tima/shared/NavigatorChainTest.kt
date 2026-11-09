@@ -129,3 +129,16 @@ class NavigatorChainTest {
         assertTrue(log.any { it.startsWith("открыто") && "как=link" in it && "что=chat" in it }, log.toString())
     }
 }
+
+/** Настройка «Переходы» (МП М5): запись `shell.arrive.<код>` меняет способ, без записи — по умолчанию. */
+class ArriveSettingTest {
+
+    @Test
+    fun запись_меняет_способ_без_неё_по_умолчанию() {
+        val by = arriveFrom(mapOf("shell.arrive.swipe" to "start", "shell.arrive.panel" to "point"))
+        assertEquals(Arrive.Start, by(Via.Swipe))
+        assertEquals(Arrive.Point, by(Via.Panel))
+        assertEquals(Arrive.Start, by(Via.Switcher), "по умолчанию — начальное положение")
+        assertEquals(Arrive.Point, by(Via.Rail), "по умолчанию — точка")
+    }
+}
