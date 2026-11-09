@@ -494,7 +494,7 @@ object SpanishWords : Words {
 
         override fun youAreHere(about: String) = "$about · está aquí"
         override val navTipTitle = "Barra de navegación"
-        override val navTipText = "Abajo están las ventanas de la aplicación. El número en un icono indica lo nuevo. Un toque abre la ventana desde el inicio."
+        override val navTipText = "Abajo están las ventanas de la aplicación. El número en un icono indica cuántas notificaciones nuevas hay en la ventana."
         override val navTipHow = "Puede ocultar o mover la barra en los ajustes."
         override val navTipOk = "Entendido"
         override val navTipSettings = "Ajustes"

@@ -3060,7 +3060,7 @@ object RussianWords : Words {
 
         override fun youAreHere(about: String) = "$about · вы здесь"
         override val navTipTitle = "Панель перехода"
-        override val navTipText = "Внизу — окна приложения. Число на значке — сколько в окне нового. Нажатие открывает окно с начала."
+        override val navTipText = "Внизу — окна приложения. Число на значке — сколько в окне новых уведомлений."
         override val navTipHow = "Убрать панель или переставить её можно в настройках."
         override val navTipOk = "Понятно"
         override val navTipSettings = "Настройки"
