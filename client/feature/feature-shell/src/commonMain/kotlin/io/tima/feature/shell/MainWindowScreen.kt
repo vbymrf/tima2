@@ -155,7 +155,7 @@ private fun Sample(order: List<Area>, nav: Boolean) {
     ) {
         Box(Modifier.padding(6.dp).fillMaxWidth().height(26.dp).background(colors.navigation, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Caption("Т  " + w.short(Window.Phone), fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, color = colors.onAccent, modifier = Modifier.weight(1f))
+                Caption(w.short(Window.Phone), fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, color = colors.onAccent, modifier = Modifier.weight(1f))
                 if (!nav) {
                     Box(Modifier.background(colors.activity, RoundedCornerShape(9.dp)).padding(horizontal = 6.dp)) {
                         Caption("12 " + Window.Social.glyph, fontSize = TimaType.sz6, color = colors.text)
