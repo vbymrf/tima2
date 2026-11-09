@@ -28,7 +28,7 @@ import org.jetbrains.skia.ImageInfo
  * лежит, и обрезка срезала бы ему голову и подбородок.
  */
 @Composable
-actual fun CallVideo(handle: VideoHandle, modifier: Modifier) {
+actual fun CallVideo(handle: VideoHandle, modifier: Modifier, mirror: Boolean) {
     val video = handle as? PictureVideo ?: return
     val picture by video.pictures.collectAsState()
     val shown = picture ?: return

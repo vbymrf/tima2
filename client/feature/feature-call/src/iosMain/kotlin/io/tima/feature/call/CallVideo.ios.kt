@@ -9,4 +9,4 @@ import io.tima.core.call.VideoHandle
  * создаёт. Пустая реализация нужна только для того, чтобы общий экран собирался.
  */
 @Composable
-actual fun CallVideo(handle: VideoHandle, modifier: Modifier) = Unit
+actual fun CallVideo(handle: VideoHandle, modifier: Modifier, mirror: Boolean) = Unit

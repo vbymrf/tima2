@@ -176,15 +176,17 @@ private fun SheetRow(glyph: String, title: String, about: String, on: Boolean, m
  * «1×». Своё изображение обрезается перед отправкой, и собеседник видит то же, что окошко.
  */
 @Composable
-internal fun AdaptBar(crop: CameraCrop, onCrop: (CameraCrop) -> Unit, modifier: Modifier = Modifier) = Column(
+internal fun AdaptBar(crop: CameraCrop, onCrop: (CameraCrop) -> Unit, modifier: Modifier = Modifier, mirror: Boolean = false) = Column(
     modifier,
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
 ) {
     // Сдвиг цифрами (заказчик 2026-11-10): проценты кадра, вправо и вверх — плюс; отдельно — сколько ушло за край.
     val words = Tima.words.call
-    val (sx, sy) = crop.shiftPercent
-    val (ox, oy) = crop.overPercent
+    // В зеркале своего окошка — как видно на экране: «влево» — влево (заказчик 2026-11-10).
+    val seen = crop.mirrored(mirror)
+    val (sx, sy) = seen.shiftPercent
+    val (ox, oy) = seen.overPercent
     Row(
         Modifier.background(TimaFixed.videoShade.copy(alpha = 0.45f), RoundedCornerShape(50))
             .padding(horizontal = TimaSpacing.about2, vertical = 2.dp)
@@ -200,7 +202,7 @@ internal fun AdaptBar(crop: CameraCrop, onCrop: (CameraCrop) -> Unit, modifier: 
             lineOne = true,
         )
     }
-    AdaptKeys(crop, onCrop)
+    AdaptKeys(seen) { next -> onCrop(next.mirrored(mirror)) }
 }
 
 @Composable
@@ -242,10 +244,11 @@ private fun AdaptKey(text: String, enabled: Boolean, tag: String, onClick: () ->
  * Приблизить показ своего изображения так, как режется уходящий кадр: середина видимой части —
  * в середину окна. Для платформ, что показывают себя мимо обрезки ([io.tima.core.call.VideoHandle.cropped]).
  */
-internal fun cropView(crop: CameraCrop): Modifier = Modifier.graphicsLayer {
+internal fun cropView(crop: CameraCrop, mirror: Boolean = false): Modifier = Modifier.graphicsLayer {
     scaleX = crop.zoom
     scaleY = crop.zoom
-    translationX = -crop.x * size.width * crop.zoom
+    // В зеркале своего окошка сдвиг по горизонтали — в другую сторону.
+    translationX = (if (mirror) crop.x else -crop.x) * size.width * crop.zoom
     translationY = -crop.y * size.height * crop.zoom
 }
 

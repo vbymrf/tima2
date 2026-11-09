@@ -55,6 +55,12 @@ data class CameraCrop(val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f
             return over(x) to over(-y)
         }
 
+    /**
+     * Как обрезка выглядит в зеркале своего окошка: сдвиг по горизонтали — в другую сторону. Стрелки и цифры режима
+     * адаптации считаются в нём, чтобы «влево» было влево на экране; уходит — прямая.
+     */
+    fun mirrored(on: Boolean): CameraCrop = if (on) copy(x = -x) else this
+
     /** Видна ли часть за краем кадра — тогда кадр собирается с полем ([cut]), а не одной обрезкой. */
     val beyond: Boolean get() = abs(x) > reach + EPS || abs(y) > reach + EPS
 

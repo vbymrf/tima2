@@ -266,10 +266,14 @@ fun CallScreen(
             val swap = swapped && mine != null
             // Своё изображение при приближении (ЗН5): платформа, что показывает себя мимо обрезки,
             // приближается здесь так же, как режется уходящий кадр.
-            val mineZoom = ownCrop.takeIf { group == null && !it.full && mine?.cropped == false && !state.screenSharing }?.let { cropView(it) } ?: Modifier
+            // Своё изображение с передней камеры — зеркалом, как в камере телефона и в imo (заказчик 2026-11-10); уходит
+            // прямое. Заодно при запрещённом повороте экрана оно больше не встаёт вверх ногами.
+            val mirrorOwn = mine != null && mine.mirrorable && state.cameraFront && !state.screenSharing
+            val mineZoom = ownCrop.takeIf { group == null && !it.full && mine?.cropped == false && !state.screenSharing }
+                ?.let { cropView(it, mirrorOwn) } ?: Modifier
             val big = if (swap) mine else remoteShown
             if (big != null) {
-                CallVideo(big, Modifier.fillMaxSize().then(if (swap) mineZoom else Modifier))
+                CallVideo(big, Modifier.fillMaxSize().then(if (swap) mineZoom else Modifier), mirror = swap && mirrorOwn)
             }
 
             if (big == null) {
@@ -381,8 +385,10 @@ fun CallScreen(
                     onMove = { delta -> pipOffset = clampPip(pipOffset + delta, area.belowBy(pipBelowPx), pipSizePx) },
                     modifier = Modifier.align(Alignment.TopEnd),
                     zoom = if (swap) Modifier else mineZoom,
+                    mirror = !swap && mirrorOwn,
+                    // В окошке — слева вверху (заказчик 2026-11-10); на весь экран — справа внизу, ниже.
                     corner = flip?.takeIf { !swap }?.let { switch ->
-                        { CameraFlip(switch, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about1)) }
+                        { CameraFlip(switch, Modifier.align(Alignment.TopStart).padding(TimaSpacing.about1)) }
                     },
                 )
             }
@@ -392,7 +398,7 @@ fun CallScreen(
             // Режим адаптации (ЗН5) — выше ряда кнопок, пока своя камера в кадре.
             val crop = fresh?.crop
             if (fresh != null && freshTalk && crop != null && state.cameraOn && !state.screenSharing && !sheetOpen) {
-                AdaptBar(crop, fresh.onCrop, Modifier.align(Alignment.BottomCenter).padding(bottom = TimaSpacing.about2))
+                AdaptBar(crop, fresh.onCrop, Modifier.align(Alignment.BottomCenter).padding(bottom = TimaSpacing.about2), mirror = mirrorOwn)
             }
             if (fresh != null && freshTalk && sheetOpen) {
                 CallSheet(

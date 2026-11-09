@@ -16,7 +16,7 @@ import io.tima.core.call.VideoHandle
  * уходе узнаём.
  */
 @Composable
-actual fun CallVideo(handle: VideoHandle, modifier: Modifier) {
+actual fun CallVideo(handle: VideoHandle, modifier: Modifier, mirror: Boolean) {
     // Чужая реализация ручки сюда прийти не может — их одна на платформу, — но проверка
     // стоит ноль и превращает невозможное падение в пустое место.
     val live = handle as? LiveKitVideoHandle ?: return
@@ -27,6 +27,7 @@ actual fun CallVideo(handle: VideoHandle, modifier: Modifier) {
         AndroidView(
             modifier = modifier,
             factory = { context -> live.open(context) },
+            update = { view -> live.mirror(view, mirror) },
             onRelease = { view -> live.close(view) },
         )
     }

@@ -363,6 +363,8 @@ internal fun Pip(
     instead: @Composable () -> Unit = {},
     /** Как приблизить картинку окошка — своё изображение при режиме адаптации (ЗН5). */
     zoom: Modifier = Modifier,
+    /** Зеркалом — своё изображение с передней камеры (заказчик 2026-11-10). */
+    mirror: Boolean = false,
     /** Поверх окошка, над слоем жестов: смена камеры нового вида (ПЛАН-(ЗН) ЗН4). */
     corner: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
 ) {
@@ -382,7 +384,7 @@ internal fun Pip(
     ) {
         if (video != null) {
             Box(Modifier.fillMaxSize().padding(if (dragging) PIP_FRAME else 0.dp).clipToBounds()) {
-                CallVideo(video, Modifier.fillMaxSize().then(zoom))
+                CallVideo(video, Modifier.fillMaxSize().then(zoom), mirror)
             }
         } else {
             Box(

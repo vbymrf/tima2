@@ -15,4 +15,4 @@ import io.tima.core.call.VideoHandle
  * функцию: разойтись между платформами может только она.
  */
 @Composable
-expect fun CallVideo(handle: VideoHandle, modifier: Modifier)
+expect fun CallVideo(handle: VideoHandle, modifier: Modifier, mirror: Boolean = false)

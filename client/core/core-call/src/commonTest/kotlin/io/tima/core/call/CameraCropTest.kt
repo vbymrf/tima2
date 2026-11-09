@@ -107,6 +107,16 @@ class CameraCropTest {
     }
 
     @Test
+    fun в_зеркале_влево_это_вправо_у_уходящего() {
+        // Своё окошко с передней камеры — зеркалом (заказчик 2026-11-10): «◀» на экране двигает уходящий кадр вправо.
+        val sent = CameraCrop(2f)
+        val next = sent.mirrored(true).moved(-1, 0).mirrored(true)
+        assertTrue(next.x > 0f, "в зеркале «◀» сдвинула уходящий кадр влево")
+        assertEquals(-12 to -14, CameraCrop(1.4f, 0.12f, 0.14f).mirrored(true).shiftPercent)
+        assertEquals(sent, sent.mirrored(false))
+    }
+
+    @Test
     fun вид_по_умолчанию_новый_адаптация_выключена() {
         assertTrue(CallLookKeys.fresh(emptyMap()), "ответ заказчика 5: по умолчанию новый")
         assertFalse(CallLookKeys.fresh(mapOf(CallLookKeys.LOOK to "old")))

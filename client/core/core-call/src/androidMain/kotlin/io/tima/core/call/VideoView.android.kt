@@ -51,6 +51,13 @@ class LiveKitVideoHandle internal constructor(
         return view
     }
 
+    override val mirrorable: Boolean get() = true
+
+    /** Зеркалом или прямо (своё изображение с передней камеры — зеркалом, заказчик 2026-11-10). */
+    fun mirror(view: View, on: Boolean) {
+        (view as? TextureViewRenderer)?.setMirror(on)
+    }
+
     /** Перестать рисовать и отпустить поверхность. */
     fun close(view: View) {
         if (view !is TextureViewRenderer) return
