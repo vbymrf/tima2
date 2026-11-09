@@ -1130,6 +1130,11 @@ object EnglishWords : Words {
         override val noMicrophone = "No microphone access — a call cannot work without it. Turn the permission on in device settings"
         override val noCamera = "Camera not allowed — the call continues with audio. Turn the permission on in device settings"
         override val activeCall = "Active call"
+        override val stripIncoming = "incoming call"
+        override val stripCalling = "calling…"
+        override val stripConnecting = "connecting…"
+        override val stripTalking = "in call"
+        override fun stripPeople(n: Int) = "participants: $n"
         override val codingTitle = "Video in calls"
         override val codingAbout = "Video is encoded and decoded by the phone's chip. If the picture shows stripes or ripples, " +
             "turn off the matching switch and the phone moves to software. Takes effect at once, even during a call."

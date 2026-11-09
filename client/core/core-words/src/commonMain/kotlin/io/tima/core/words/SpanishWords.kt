@@ -1130,6 +1130,11 @@ object SpanishWords : Words {
         override val noMicrophone = "Sin acceso al micrófono: la llamada no funciona sin él. Actívalo en los ajustes del dispositivo"
         override val noCamera = "Cámara no permitida: la llamada sigue con audio. Actívala en los ajustes del dispositivo"
         override val activeCall = "Llamada activa"
+        override val stripIncoming = "llamada entrante"
+        override val stripCalling = "llamando…"
+        override val stripConnecting = "conectando…"
+        override val stripTalking = "en llamada"
+        override fun stripPeople(n: Int) = "participantes: $n"
         override val codingTitle = "Vídeo en llamadas"
         override val codingAbout = "El vídeo lo codifica y decodifica el chip del teléfono. Si la imagen sale con rayas u ondas, " +
             "apaga el interruptor correspondiente y el teléfono pasará a software. Surte efecto al instante, también en una llamada."

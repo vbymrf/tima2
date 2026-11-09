@@ -517,9 +517,13 @@ fun Root(
             onDispose { off() }
         }
         androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize()) {
-        // «Сейчас играет» — над любым окном, пока звучит «Аудио» или «Поток» (ПЛАН-(ВМ) Р22).
-        io.tima.feature.chat.NowPlayingBar(audioHub)
+        // Панель над шапкой (ПЛАН-(ВО) ВО1): идёт звонок — панель звонка, иначе «сейчас играет», пока звучит
+        // «Аудио» или «Поток» (ПЛАН-(ВМ) Р22). Звонок важнее звука (Р1). Модель звонка кладёт `App()`.
+        val callStrip = remember { mutableStateOf<CallStripModel?>(null) }
+        val strip = callStrip.value
+        if (strip != null && strip.shown()) CallStrip(strip) else io.tima.feature.chat.NowPlayingBar(audioHub)
         androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.weight(1f)) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalCallStrip provides callStrip) {
         Inside(
             entry = entry,
             callEngine = callEngine,
@@ -553,6 +557,7 @@ fun Root(
                 }
             },
         )
+        }
         }
         }
         }
@@ -3149,6 +3154,14 @@ private fun App(
     // Один объект на всё время: секунды читает только плашка (ПЛАН-(БС) Э5.6), а новый
     // объект на каждую перерисовку корня перерисовывал бы все окна, которые его читают.
     val activeCall = remember(callHost, session.deviceId) { ActiveCall(seconds = { callHost.seconds }, onOpen = { showCall() }) }
+    // Панель звонка над шапкой рисует корень (ПЛАН-(ВО) ВО1); здесь — что показывать и куда вести.
+    val callStripHolder = LocalCallStrip.current
+    DisposableEffect(callHost, callStripHolder) {
+        callStripHolder?.value = CallStripModel(callHost, shown = { callHost.active && navigator.window != Window.Call }, onOpen = { showCall() })
+        onDispose { callStripHolder?.value = null }
+    }
+    // Звонок начался — звук в сообщениях на паузу; после звонка он на паузе и остаётся (ПЛАН-(ВО) Р12).
+    LaunchedEffect(callHost.active) { if (callHost.active) audioHubHere?.stop() }
     // Смотрит ли человек на приложение (заказчик 2026-10-20): окно на экране, замка нет, окно звонка
     // не открыто. Отсюда «прочитано» и снятие уведомлений — [rememberSeen].
     val windowUp by assembled.notices.shown.collectAsState()

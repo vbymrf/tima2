@@ -1202,6 +1202,13 @@ interface CallWords {
      */
     val activeCall: String
 
+    /** Панель звонка над шапкой (ПЛАН-(ВО) ВО1, Р11): что со звонком. */
+    val stripIncoming: String
+    val stripCalling: String
+    val stripConnecting: String
+    val stripTalking: String
+    fun stripPeople(n: Int): String
+
     // ── «Настройки → Звонки»: аппаратное кодирование (ПЛАН-(В)-ВИДЕО.md В4) ─────
     val codingTitle: String
     val codingAbout: String
@@ -3684,6 +3691,11 @@ object RussianWords : Words {
         override val noMicrophone = "Нет доступа к микрофону — звонок без него не идёт. Разрешение включается в настройках устройства"
         override val noCamera = "Камера не разрешена — разговор идёт голосом. Разрешение включается в настройках устройства"
         override val activeCall = "Активный звонок"
+        override val stripIncoming = "входящий звонок"
+        override val stripCalling = "вызов…"
+        override val stripConnecting = "соединяется…"
+        override val stripTalking = "идёт"
+        override fun stripPeople(n: Int) = "участников: $n"
         override val codingTitle = "Видео в звонке"
         override val codingAbout = "Видео кодирует и раскодирует чип телефона. Если картинка идёт с полосами или рябью, " +
             "выключите нужный переключатель — телефон перейдёт на программный. Действует сразу, и в идущем звонке."
