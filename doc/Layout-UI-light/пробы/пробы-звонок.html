@@ -1,0 +1,167 @@
+<meta charset="utf-8">
+<title>Пробы: окно звонка — свернуть, звук, настройки</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  /* Заказчик 2026-11-10: «Сделай макет Звонок. Слева кнопка свернуть — переключиться на Телефон, Чаты. Далее звук,
+     переключатель звука (динамик, ухо), камера, настройки (полосы), завершить. В настройках — показать экран
+     устройства, экономить трафик (глаз — отключить входной и исходящий поток камеры). Кнопки переключения накладываем
+     на верх изображения видео (смену камеры)». */
+  .проба { padding: 20px 0 26px; border-bottom: 1px solid var(--чёрный-12); }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); max-width: 900px; }
+  .срезы { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+  .подп { width: 360px; margin-top: 8px; font-size: 12.5px; color: var(--чёрный-70); line-height: 1.4; }
+  .подп b { color: var(--текст); }
+
+  /* Окно звонка: тёмное поле, кто, время, внизу ряд кнопок */
+  .звонок { flex: 1 1 auto; position: relative; background: #1d2421; color: #fff; display: flex; flex-direction: column; }
+  .кто { padding: 54px 20px 0; text-align: center; }
+  .кто .ава-б { width: 96px; height: 96px; margin: 0 auto 14px; border-radius: 22px; background: rgba(255,255,255,.14); display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; }
+  .кто b { display: block; font-size: 22px; }
+  .кто span { font-size: 14px; color: rgba(255,255,255,.7); }
+  .видео { position: absolute; inset: 0; background: linear-gradient(160deg, #4b6a5c 0%, #2b3a33 55%, #1d2421 100%); }
+  .видео .подпись-в { position: absolute; left: 14px; top: 14px; font-size: 13px; font-weight: 700; background: rgba(0,0,0,.35); padding: 4px 10px; border-radius: 999px; }
+  .своё { position: absolute; right: 12px; top: 56px; width: 92px; height: 132px; border-radius: 14px; background: linear-gradient(160deg, #8a9d93, #55665d); border: 2px solid rgba(255,255,255,.6); }
+  /* Смена камеры — поверх изображения, на своём окошке */
+  .смена { position: absolute; right: 6px; top: 6px; width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .низ-зв { margin-top: auto; position: relative; padding: 14px 8px 18px; display: flex; justify-content: space-between; align-items: flex-start; background: linear-gradient(0deg, rgba(0,0,0,.55), rgba(0,0,0,0)); }
+  .к { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 54px; font-size: 9.5px; letter-spacing: -0.02em; font-weight: 700; color: rgba(255,255,255,.85); text-align: center; }
+  .к i { font-style: normal; width: 46px; height: 46px; border-radius: 50%; background: rgba(255,255,255,.16); display: flex; align-items: center; justify-content: center; font-size: 19px; }
+  .к.вкл i { background: #fff; color: var(--текст); }
+  .к.выкл i { background: rgba(255,255,255,.16); position: relative; }
+  .к.выкл i::after { content: ""; position: absolute; width: 30px; height: 2.5px; background: #e5484d; transform: rotate(-45deg); border-radius: 2px; }
+  .к.конец i { background: #d32f2f; font-size: 26px; }
+  .к.свернуть i { background: rgba(255,255,255,.08); border: 1.5px solid rgba(255,255,255,.45); }
+  /* Переключатель звука: две половинки — ухо и динамик */
+  .к .дв { width: 52px; height: 46px; border-radius: 23px; background: rgba(255,255,255,.16); display: flex; overflow: hidden; }
+  .к .дв span { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .к .дв span.да { background: #fff; color: var(--текст); }
+
+  /* Лист настроек звонка */
+  .лист-зв { position: absolute; left: 0; right: 0; bottom: 0; background: var(--поверхность); color: var(--текст); border-radius: 18px 18px 0 0; padding: 8px 0 14px; box-shadow: 0 -6px 24px rgba(0,0,0,.35); }
+  .лист-зв .ручка { width: 40px; height: 4px; border-radius: 2px; background: var(--чёрный-35); margin: 2px auto 8px; }
+  .лист-зв .загл { padding: 4px 16px 8px; font-size: 16px; font-weight: 800; }
+  .пункт-зв { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-top: 1px solid var(--чёрный-6); }
+  .пункт-зв .зн { width: 34px; height: 34px; border-radius: 10px; background: var(--чёрный-6); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .пункт-зв .сер { flex: 1; }
+  .пункт-зв .сер b { display: block; font-size: 15px; }
+  .пункт-зв .сер span { font-size: 12.5px; color: var(--чёрный-70); }
+  .перекл { width: 44px; height: 26px; border-radius: 13px; background: var(--чёрный-35); position: relative; flex: 0 0 44px; }
+  .перекл::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; }
+  .перекл.да { background: var(--навигация); }
+  .перекл.да::after { left: auto; right: 3px; }
+
+  /* Панель звонка над шапкой (1в) — после «Свернуть» */
+  .панель-зв { margin: 4px 6px; padding: 9px 12px; border-radius: 14px; border: 3px dashed var(--подтверждено); display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .панель-зв b { display: block; font-size: 14px; }
+  .панель-зв .кр { width: 32px; height: 32px; border-radius: 50%; background: var(--чёрный-6); display: flex; align-items: center; justify-content: center; }
+  .панель-зв .кр.конец { background: #d32f2f; color: #fff; font-size: 24px; }
+</style>
+
+<div class="лист-док">
+<h1>Пробы: окно звонка — свернуть, звук, настройки</h1>
+<p class="опис">Заказчик 2026-11-10. Ряд кнопок внизу слева направо: <b>Свернуть</b> (в «Телефон», «Чаты»; звонок
+остаётся панелью над шапкой) · <b>Звук</b> · <b>переключатель звука</b> (ухо / динамик) · <b>Камера</b> · <b>Настройки</b>
+(≡) · <b>Завершить</b>. В настройках — «Показать экран устройства» и «Экономить трафик». Смена камеры — кнопкой поверх
+изображения.</p>
+
+<section class="проба" id="п1">
+  <div class="шапка-пробы"><span class="номер">1</span><span class="опис">Голосовой и видеозвонок.</span></div>
+  <div class="срезы">
+
+    <div>
+      <div class="окно">
+        <div class="статус" style="background:#1d2421;color:rgba(255,255,255,.7)"><span>9:41</span><span>E2E</span></div>
+        <div class="звонок">
+          <div class="кто"><div class="ава-б">АК</div><b>Анна Ковалёва</b><span>идёт · 03:12</span></div>
+          <div class="низ-зв">
+            <div class="к свернуть"><i>⌄</i>Свернуть</div>
+            <div class="к вкл"><i>🎤</i>Звук</div>
+            <div class="к"><div class="дв"><span class="да">👂</span><span>🔊</span></div>Ухо</div>
+            <div class="к выкл"><i>📷</i>Камера</div>
+            <div class="к"><i>≡</i>Настройки</div>
+            <div class="к конец"><i>✆</i>Завершить</div>
+          </div>
+        </div>
+      </div>
+      <div class="подп"><b>1а. Голосовой.</b> Шесть кнопок в ряд. «Свернуть» — первая слева: в «Телефон» на «Чаты», звонок
+      остаётся панелью над шапкой. «Звук» включён — белый круг; выключен — зачёркнут. Переключатель звука — двумя
+      половинками: ухо или динамик, выбранное — белым. Камера выключена — зачёркнута.</div>
+    </div>
+
+    <div>
+      <div class="окно">
+        <div class="статус" style="background:#000;color:rgba(255,255,255,.7)"><span>9:41</span><span>E2E</span></div>
+        <div class="звонок">
+          <div class="видео"><span class="подпись-в">Анна Ковалёва · 03:12</span></div>
+          <div class="своё"><span class="смена">🔄</span></div>
+          <div class="низ-зв">
+            <div class="к свернуть"><i>⌄</i>Свернуть</div>
+            <div class="к вкл"><i>🎤</i>Звук</div>
+            <div class="к"><div class="дв"><span>👂</span><span class="да">🔊</span></div>Динамик</div>
+            <div class="к вкл"><i>📷</i>Камера</div>
+            <div class="к"><i>≡</i>Настройки</div>
+            <div class="к конец"><i>✆</i>Завершить</div>
+          </div>
+        </div>
+      </div>
+      <div class="подп"><b>1б. Видеозвонок.</b> Своё изображение — окошком справа сверху; <b>смена камеры</b> (передняя /
+      задняя) — кругом поверх него, а не в ряду кнопок. Ряд тот же; звук — в динамике.</div>
+    </div>
+
+  </div>
+</section>
+
+<section class="проба" id="п2">
+  <div class="шапка-пробы"><span class="номер">2</span><span class="опис">Настройки звонка (≡) и «Свернуть».</span></div>
+  <div class="срезы">
+
+    <div>
+      <div class="окно">
+        <div class="статус" style="background:#000;color:rgba(255,255,255,.7)"><span>9:41</span><span>E2E</span></div>
+        <div class="звонок">
+          <div class="видео"><span class="подпись-в">Анна Ковалёва · 03:12</span></div>
+          <div class="своё"><span class="смена">🔄</span></div>
+          <div class="лист-зв">
+            <div class="ручка"></div>
+            <div class="загл">Настройки звонка</div>
+            <div class="пункт-зв"><span class="зн">📱</span><div class="сер"><b>Показать экран устройства</b><span>собеседник видит ваш экран вместо камеры</span></div><span class="перекл"></span></div>
+            <div class="пункт-зв"><span class="зн">👁</span><div class="сер"><b>Экономить трафик</b><span>видео не принимается и не отправляется — только голос</span></div><span class="перекл да"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="подп"><b>2а. Настройки (≡).</b> Лист снизу поверх звонка. «Показать экран устройства» — вместо камеры
+      уходит экран телефона. «Экономить трафик» (глаз) — отключает и входящее, и исходящее видео; звонок становится
+      голосовым, пока выключатель стоит.</div>
+    </div>
+
+    <div>
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="панель-зв"><span style="width:10px;height:10px;border-radius:50%;background:var(--подтверждено)"></span><div style="flex:1"><b>Анна Ковалёва</b><span>идёт · 03:15</span></div><span class="кр">🎤</span><span style="width:10px"></span><span class="кр конец">✆</span></div>
+        <div class="зона-1">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Телефон</span></a>
+          <a class="икона" href="#">🔍</a><a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Чаты</a><a class="таб" href="#">Контакты</a><a class="таб" href="#">Звонки</a></div>
+        <div class="зона-2">
+          <a class="строка" href="#"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">звонок · идёт</div></div><div class="мета"><span class="трет">12:31</span></div></a>
+          <a class="строка" href="#"><div class="ава">БП</div><div class="тянуть"><div class="имя обрез">Борис Петрович</div><div class="втор обрез">смета.pdf</div></div><div class="мета"><span class="трет">11:04</span></div></a>
+        </div>
+      </div>
+      <div class="подп"><b>2б. После «Свернуть».</b> «Телефон», вкладка «Чаты»; звонок — панелью над шапкой (1в): нажатие
+      на неё возвращает в окно звонка, микрофон и «Завершить» — прямо с панели.</div>
+    </div>
+
+  </div>
+</section>
+
+<h2>Вопросы к выбору</h2>
+<ol class="опис">
+  <li><b>«Звук»</b> — это свой микрофон (вас не слышат) или звук собеседника (вы не слышите)? В макете — микрофон.</li>
+  <li><b>Подписи под кнопками</b> оставить или только значки (шесть кнопок в 360 точек — подписи мелкие)?</li>
+  <li><b>«Экономить трафик»</b> выключает видео в обе стороны — а «Камера» в ряду остаётся включать своё видео? Или при
+  экономии «Камера» гаснет?</li>
+</ol>
+</div>
