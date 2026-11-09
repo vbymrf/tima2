@@ -998,6 +998,9 @@ private fun App(
         environment.settings.all().map { all -> all.filterKeys { it.startsWith(MainLayoutKeys.ARRIVE) } }.distinctUntilChanged()
     }.collectAsState(emptyMap())
     SideEffect { navigator.arriveBy = arriveFrom(arriveStored) }
+    // Подсказка к панели перехода (ВО8) показана? `null` — ещё не прочли настройки: не мигать подсказкой.
+    val navTipSeen by remember { environment.settings.all().map { it[MainLayoutKeys.NAV_TIP] == "1" }.distinctUntilChanged() }
+        .collectAsState(null)
     // Буферы переходов (ПЛАН-(БП)): на устройстве, в настройках; читаются один раз — дальше живут здесь.
     val jumpStored by androidx.compose.runtime.produceState<Map<String, String>?>(null) {
         value = runCatching { environment.settings.all().first() }.getOrDefault(emptyMap())
@@ -3177,6 +3180,22 @@ private fun App(
         LocalLooking provides looking,
         LocalActiveCall provides activeCall.takeIf { callHost.active && window != Window.Call },
         // Панель перехода (ПЛАН-(ВО) ВО2): показана по умолчанию (Р2); скрыта настройкой — пузыри в шапке (ВО3).
+        // Подсказка к панели — пока не закрыли (ВО8): «Понятно» и «Настройки» помечают её показанной.
+        io.tima.feature.shell.LocalWindowNavTip provides if (layoutNav && navTipSeen == false) {
+            io.tima.feature.shell.WindowNavTip(
+                onClose = {
+                    Journal.note(LogCode.NAV, "подсказка", "итог" to "close")
+                    scope.launch { runCatching { environment.settings.put(MainLayoutKeys.NAV_TIP, "1") } }
+                },
+                onSettings = {
+                    Journal.note(LogCode.NAV, "подсказка", "итог" to "settings")
+                    scope.launch { runCatching { environment.settings.put(MainLayoutKeys.NAV_TIP, "1") } }
+                    where = Where.Settings()
+                },
+            )
+        } else {
+            null
+        },
         io.tima.feature.shell.LocalWindowNav provides if (layoutNav) {
             io.tima.feature.shell.WindowNav(
                 current = window,

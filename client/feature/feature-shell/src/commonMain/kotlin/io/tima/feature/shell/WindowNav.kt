@@ -95,3 +95,44 @@ const val WINDOW_NAV_TAG = "nav:bar"
 
 /** Метка кнопки окна — `nav:phone`, `nav:social`… */
 fun navTag(window: Window): String = "nav:" + window.name.lowercase()
+
+/**
+ * Подсказка к панели перехода (ПЛАН-(ВО) ВО8, Р14): пузырь над панелью при первом её показе — что это, как убрать;
+ * «Настройки» — туда, где панель убирают и переставляют. Показывается один раз; помнит это вызывающий.
+ */
+class WindowNavTip(val onClose: () -> Unit, val onSettings: () -> Unit)
+
+/** Подсказка для каркаса окна; `null` — её нет (уже показана, панель скрыта). */
+val LocalWindowNavTip = compositionLocalOf<WindowNavTip?> { null }
+
+@Composable
+fun WindowNavTipBubble(tip: WindowNavTip) {
+    val colors = Tima.colors
+    val w = Tima.words.windows
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+            .background(colors.surface, RoundedCornerShape(14.dp))
+            .border(2.dp, colors.navigation, RoundedCornerShape(14.dp))
+            .padding(14.dp)
+            .testTag(NAV_TIP_TAG),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Caption(w.navTipTitle, fontSize = TimaType.sz4, weight = FontWeight.Bold)
+        Caption(w.navTipText, fontSize = TimaType.sz5, color = colors.text2)
+        Caption(w.navTipHow, fontSize = TimaType.sz5, color = colors.text2)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+            Box(
+                Modifier.background(colors.functional, RoundedCornerShape(18.dp)).clickable(onClick = tip.onSettings)
+                    .padding(horizontal = 14.dp, vertical = 8.dp).testTag(NAV_TIP_SETTINGS_TAG),
+            ) { Caption(w.navTipSettings, fontSize = TimaType.sz5, weight = FontWeight.SemiBold) }
+            Box(
+                Modifier.background(colors.navigation, RoundedCornerShape(18.dp)).clickable(onClick = tip.onClose)
+                    .padding(horizontal = 14.dp, vertical = 8.dp).testTag(NAV_TIP_CLOSE_TAG),
+            ) { Caption(w.navTipOk, fontSize = TimaType.sz5, weight = FontWeight.SemiBold, color = colors.onAccent) }
+        }
+    }
+}
+
+const val NAV_TIP_TAG = "tip:nav"
+const val NAV_TIP_SETTINGS_TAG = "tip:nav.settings"
+const val NAV_TIP_CLOSE_TAG = "tip:nav.close"

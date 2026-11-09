@@ -217,6 +217,13 @@ interface WindowWords {
     /** Окно стенда. Временное: его видно, только пока включён испытательный режим. */
     val bench: WindowName
 
+    /** Подсказка к панели перехода (ПЛАН-(ВО) ВО8): что это, как убрать, кнопки. */
+    val navTipTitle: String
+    val navTipText: String
+    val navTipHow: String
+    val navTipOk: String
+    val navTipSettings: String
+
     /** Пометка у окна, в котором человек сейчас: цвет здесь занят навигацией. */
     fun youAreHere(about: String): String
     fun cameFrom(window: String): String
@@ -3030,6 +3037,11 @@ object RussianWords : Words {
         )
 
         override fun youAreHere(about: String) = "$about · вы здесь"
+        override val navTipTitle = "Панель перехода"
+        override val navTipText = "Внизу — окна приложения. Число на значке — сколько в окне нового. Нажатие открывает окно с начала."
+        override val navTipHow = "Убрать панель или переставить её можно в настройках."
+        override val navTipOk = "Понятно"
+        override val navTipSettings = "Настройки"
         override fun cameFrom(window: String) = "Вы пришли из окна «$window»"
         override fun cameFromTab(window: String, tab: String) =
             "Вы пришли из окна «$window», вкладка «$tab»"

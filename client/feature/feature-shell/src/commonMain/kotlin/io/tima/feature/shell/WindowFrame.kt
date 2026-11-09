@@ -153,7 +153,11 @@ fun WindowFrame(
 
         // Панель перехода (ПЛАН-(ВО) ВО2) — внизу, только на телефоне; клавиатура открыта — прячется (Р9).
         val nav = LocalWindowNav.current
-        if (nav != null && LayoutLocal.current.phone && !imeOpen()) WindowNavBar(nav)
+        if (nav != null && LayoutLocal.current.phone && !imeOpen()) {
+            // Подсказка — над панелью, один раз (ВО8).
+            LocalWindowNavTip.current?.let { WindowNavTipBubble(it) }
+            WindowNavBar(nav)
+        }
     }
 }
 
