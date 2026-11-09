@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.draw.drawWithContent
@@ -407,7 +408,16 @@ fun NowPlayingBar(hub: AudioHub?) {
     Row(
         // Над окном, под строкой состояния телефона.
         // Нажатие на полосу — к сообщению, где запущено (заказчик 2026-10-24); ▶ и ✕ — свои.
-        Modifier.fillMaxWidth().background(colors.softAccent).statusBarsPadding()
+        Modifier.fillMaxWidth().background(colors.softAccent)
+            // Шкала прошедшего — тонкой линией внизу полосы (ПЛАН-(ВО), проба 1а); у эфира её нет.
+            .drawBehind {
+                if (!n.live && n.durationMs > 0) {
+                    val h = 3.dp.toPx()
+                    val part = (n.positionMs.toFloat() / n.durationMs).coerceIn(0f, 1f)
+                    drawRect(colors.navigation, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - h), size = androidx.compose.ui.geometry.Size(size.width * part, h))
+                }
+            }
+            .statusBarsPadding()
             .then(
                 hub.current?.from?.let { place -> hub.onOpenPlace?.let { open -> Modifier.clickable { open(place) } } } ?: Modifier,
             )
