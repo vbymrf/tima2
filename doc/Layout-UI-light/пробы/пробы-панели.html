@@ -1,0 +1,405 @@
+<meta charset="utf-8">
+<title>Пробы: панель над шапкой, панель окон, счётчики в шапке</title>
+<link rel="stylesheet" href="../стиль.css">
+<style>
+  /* Заказчик 2026-11-09: «Панель сверху и снизу — делаем макеты».
+     1 — панель над шапкой: то, что проигрывается, или текущий звонок (вместо полосы «сейчас играет»
+         и кнопки возврата к звонку); у звонка — анимация: бегущая зелёная полоса или вращающаяся рамка
+         с пропусками.
+     2 — панель снизу: переключатель четырёх окон со счётчиком новых уведомлений окна; со значком и
+         названием или только значком.
+     3 — счётчики соседних окон в шапке перед «Поиском»: на «Телефоне» — стрелка вправо и число
+         «Социума», на «Социуме» — стрелка влево и число «Телефона», на остальных — оба числа. */
+
+  .проба { padding: 20px 0 26px; border-bottom: 1px solid var(--чёрный-12); }
+  .проба:target { box-shadow: inset 6px 0 0 var(--навигация); padding-left: 16px; }
+  .шапка-пробы { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .номер { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
+  .опис { font-size: 13.5px; color: var(--чёрный-70); max-width: 900px; }
+  .срезы { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+  .подп { width: 360px; margin-top: 8px; font-size: 12.5px; color: var(--чёрный-70); line-height: 1.4; }
+  .подп b { color: var(--текст); }
+  .навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+  .навигация-проб a {
+    display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+    font-size: 12.5px; font-weight: 700;
+  }
+  .окно.низк { height: 560px; }
+
+  /* ── 1. ПАНЕЛЬ НАД ШАПКОЙ ─────────────────────────────────────────────────
+     Стоит между строкой состояния и шапкой окна, во всю ширину, над любым окном и подокном.
+     Нет ни звука, ни звонка — панели нет вовсе, шапка на прежнем месте. Нажатие на панель —
+     к источнику: к сообщению, где запущен звук, или в окно звонка. */
+  .панель {
+    position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; background: var(--акцент-мягкий, rgba(138, 196, 74, 0.20));
+    font-size: 13px; overflow: hidden;
+  }
+  .панель > * { position: relative; z-index: 1; }
+  .панель .кр {
+    width: 32px; height: 32px; flex: 0 0 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800;
+    background: #ffffff; color: var(--текст);
+  }
+  .панель .кр.конец { background: #d32f2f; color: #ffffff; }
+  .панель .что { flex: 1 1 auto; min-width: 0; }
+  .панель .что b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .панель .что span { font-size: 12px; color: var(--чёрный-70); }
+  .панель .время { font-variant-numeric: tabular-nums; font-weight: 800; }
+
+  /* Звук: тонкая шкала прошедшего внизу панели */
+  .шкала { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--навигация); z-index: 1; }
+
+  /* Звонок — зелёная панель */
+  .панель.звонок { background: var(--подтверждено); color: #ffffff; }
+  .панель.звонок .что span { color: rgba(255, 255, 255, 0.85); }
+
+  /* 1б: бегущая полоса — светлая волна идёт слева направо и уходит за край */
+  .панель.бег::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 40%; z-index: 0;
+    background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.45) 50%, rgba(255,255,255,0) 100%);
+    animation: бег 1.8s linear infinite;
+  }
+  @keyframes бег { from { left: -40%; } to { left: 100%; } }
+
+  /* 1в: вращающаяся рамка с пропусками — штрихи по краю панели бегут по кругу */
+  .панель.рамка { background: #ffffff; color: var(--текст); padding: 10px 14px; margin: 4px 6px; border-radius: 14px; }
+  .панель.рамка::before {
+    content: ""; position: absolute; inset: -60%; z-index: 0;
+    background: repeating-conic-gradient(var(--подтверждено) 0deg 18deg, transparent 18deg 30deg);
+    animation: круг 3s linear infinite;
+  }
+  .панель.рамка::after {
+    content: ""; position: absolute; inset: 3px; border-radius: 11px; background: #ffffff; z-index: 0;
+  }
+  @keyframes круг { to { transform: rotate(360deg); } }
+  .панель.рамка .что span { color: var(--чёрный-70); }
+
+  /* 1г: точка «идёт» — для обоих видов слева, мигает */
+  .жив-точка { width: 10px; height: 10px; flex: 0 0 10px; border-radius: 50%; background: #ffffff; animation: миг 1.2s ease-in-out infinite; }
+  .панель.рамка .жив-точка { background: var(--подтверждено); }
+  @keyframes миг { 50% { opacity: 0.25; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .панель.бег::before, .панель.рамка::before, .жив-точка { animation: none; }
+  }
+
+  /* ── 2. ПАНЕЛЬ ОКОН СНИЗУ ─────────────────────────────────────────────────
+     Четыре окна, текущее — салатовым. Счётчик — янтарь в углу значка: сколько нового в окне. */
+  .низ {
+    flex: 0 0 auto; display: flex; justify-content: space-around; align-items: stretch;
+    border-top: 1px solid var(--чёрный-12); background: var(--функц); padding: 6px 4px 4px;
+  }
+  .низ a { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 2px; text-decoration: none; color: var(--чёрный-70); padding: 2px 0; }
+  .низ .зн {
+    position: relative; width: 52px; height: 30px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .низ a.тек .зн { background: var(--навигация); }
+  .низ a.тек { color: var(--текст); font-weight: 800; }
+  .низ .имя-з { font-size: 11.5px; font-weight: 700; }
+  .низ .счёт { position: absolute; top: -5px; right: -2px; min-width: 18px; height: 18px; font-size: 10px; padding: 0 5px; border: 2px solid var(--функц); }
+  .низ.без-имён .зн { height: 38px; width: 56px; font-size: 20px; }
+
+  /* ── 3. СЧЁТЧИКИ СОСЕДНИХ ОКОН В ШАПКЕ ────────────────────────────────────
+     Белая пилюля перед «Поиском»: стрелка — куда ведёт, число — сколько нового там. Нажатие —
+     переход в то окно. Нового нет — пилюли нет. */
+  .сосед {
+    position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 3px;
+    height: 30px; padding: 0 7px; border-radius: 999px; background: #ffffff; color: var(--текст);
+    font-size: 13px; font-weight: 800; text-decoration: none; white-space: nowrap;
+  }
+  .сосед .ч { min-width: 18px; height: 18px; border-radius: 999px; padding: 0 5px; background: var(--активность); font-size: 11px; display: inline-flex; align-items: center; justify-content: center; }
+  .сосед .б { font-size: 11px; color: var(--чёрный-70); }
+  .зона-1 .имя-окна { font-size: 17px; }
+  /* Соседи в шапке: место под пилюлю — за счёт полей плашки, а не переносом */
+  .зона-1.с-соседом { padding-left: 16px; padding-right: 16px; gap: 7px; flex-wrap: nowrap; }
+  .зона-1.с-соседом .икона { width: 32px; height: 32px; flex-basis: 32px; }
+</style>
+
+<div class="лист-док">
+<h1>Пробы: панель над шапкой, панель окон, счётчики в шапке</h1>
+<p class="опис">Заказчик 2026-11-09. Три вещи одного каркаса: что идёт сейчас — сверху, куда переключиться — снизу или в шапке.
+Анимации живые: открыть в браузере. Окна в панели снизу — четыре из переключателя окон: Телефон, Социум, Медиа, Общение
+(«Страница» и «Стенд» — в переключателе, как сейчас).</p>
+<div class="навигация-проб">
+  <a href="#п1">1 · панель над шапкой</a>
+  <a href="#п2">2 · панель окон снизу</a>
+  <a href="#п3">3 · счётчики в шапке</a>
+  <a href="#п4">4 · всё вместе</a>
+</div>
+
+<!-- ═════════════════════════════════════════════════════════════════════ -->
+<section class="проба" id="п1">
+  <div class="шапка-пробы"><span class="номер">1</span>
+    <span class="опис">Панель над шапкой — одна на всё приложение. Звонок важнее звука: идёт звонок — панель звонка (звук на это
+    время и так на паузе). Нажатие на панель — к источнику. Звонка и звука нет — панели нет.</span></div>
+  <div class="срезы">
+
+    <div>
+      <div class="окно низк">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="панель">
+          <span class="кр">⏸</span>
+          <div class="что"><b>Утренний эфир · Радио «Маяк»</b><span>из переписки «Анна Ковалёва»</span></div>
+          <span class="кр">✕</span>
+          <span class="шкала" style="width:38%"></span>
+        </div>
+        <div class="зона-1">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Телефон</span></a>
+          <a class="икона" href="#">🔍</a><a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Чаты</a><a class="таб" href="#">Контакты</a><a class="таб" href="#">Звонки</a></div>
+        <div class="зона-2">
+          <a class="строка" href="#"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">♪ Утренний эфир</div></div><div class="мета"><span class="трет">12:31</span></div></a>
+          <a class="строка" href="#"><div class="ава">БП</div><div class="тянуть"><div class="имя обрез">Борис Петрович</div><div class="втор обрез">смета.pdf</div></div><div class="мета"><span class="трет">11:04</span><span class="счёт">2</span></div></a>
+        </div>
+      </div>
+      <div class="подп"><b>1а. Играет.</b> ⏸/▶, что играет и откуда, ✕ — остановить. Тонкая шкала прошедшего внизу. Нажатие — к сообщению, где запущено.</div>
+    </div>
+
+    <div>
+      <div class="окно низк">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="панель звонок бег">
+          <span class="жив-точка"></span>
+          <div class="что"><b>Анна Ковалёва</b><span>идёт звонок · <span class="время">03:12</span></span></div>
+          <span class="кр">🎤</span>
+          <span class="кр конец">✆</span>
+        </div>
+        <div class="зона-1">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Телефон</span></a>
+          <a class="икона" href="#">🔍</a><a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Чаты</a><a class="таб" href="#">Контакты</a><a class="таб" href="#">Звонки</a></div>
+        <div class="зона-2">
+          <a class="строка" href="#"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">звонок · идёт</div></div><div class="мета"><span class="трет">12:31</span></div></a>
+          <a class="строка" href="#"><div class="ава">БП</div><div class="тянуть"><div class="имя обрез">Борис Петрович</div><div class="втор обрез">смета.pdf</div></div><div class="мета"><span class="трет">11:04</span></div></a>
+        </div>
+      </div>
+      <div class="подп"><b>1б. Звонок — бегущая полоса.</b> Зелёная панель, по ней слева направо идёт светлая волна. С кем, сколько идёт,
+      микрофон, красная — завершить. Нажатие на панель — в окно звонка.</div>
+    </div>
+
+    <div>
+      <div class="окно низк">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="панель рамка">
+          <span class="жив-точка"></span>
+          <div class="что"><b>Анна Ковалёва</b><span>идёт звонок · <span class="время">03:12</span></span></div>
+          <span class="кр" style="background:var(--чёрный-6)">🎤</span>
+          <span class="кр конец">✆</span>
+        </div>
+        <div class="зона-1">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Телефон</span></a>
+          <a class="икона" href="#">🔍</a><a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Чаты</a><a class="таб" href="#">Контакты</a><a class="таб" href="#">Звонки</a></div>
+        <div class="зона-2">
+          <a class="строка" href="#"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">звонок · идёт</div></div><div class="мета"><span class="трет">12:31</span></div></a>
+          <a class="строка" href="#"><div class="ава">БП</div><div class="тянуть"><div class="имя обрез">Борис Петрович</div><div class="втор обрез">смета.pdf</div></div><div class="мета"><span class="трет">11:04</span></div></a>
+        </div>
+      </div>
+      <div class="подп"><b>1в. Звонок — вращающаяся рамка.</b> Белая панель, по её краю по кругу бегут зелёные штрихи с пропусками.
+      Тише, чем 1б: не заливает верх экрана зелёным.</div>
+    </div>
+
+    <div>
+      <div class="окно низк">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="панель звонок бег">
+          <span class="жив-точка"></span>
+          <div class="что"><b>Анна Ковалёва</b><span>идёт звонок · <span class="время">03:12</span></span></div>
+          <span class="кр">🎤</span>
+          <span class="кр конец">✆</span>
+        </div>
+        <div class="зона-1 подокно">
+          <a class="икона" href="#">←</a>
+          <div class="ава мал">БП</div>
+          <div class="тянуть"><div class="имя-окна" style="font-size:16px">Борис Петрович</div><div class="трет">в сети</div></div>
+          <a class="икона" href="#">📞</a>
+        </div>
+        <div class="зона-2 вокруг">
+          <div class="трет" style="text-align:center;margin:8px 0">Сегодня</div>
+          <div class="втор" style="background:#fff;border:1px solid var(--чёрный-12);border-radius:14px;padding:10px 12px;width:70%">Смета готова, посмотри</div>
+        </div>
+      </div>
+      <div class="подп"><b>1г. В подокне.</b> Панель та же и на том же месте — над шапкой переписки. Позвонить второму, пока идёт
+      первый, кнопкой 📞 нельзя — она ведёт в идущий звонок.</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════ -->
+<section class="проба" id="п2">
+  <div class="шапка-пробы"><span class="номер">2</span>
+    <span class="опис">Панель окон снизу: четыре окна, текущее — салатовым. Янтарный счётчик на значке — сколько нового в окне
+    (у «Телефона» — непрочитанные и пропущенные, у «Социума» и «Общения» — ответы и реакции). Нажатие — в окно,
+    на том месте, где из него ушли.</span></div>
+  <div class="срезы">
+
+    <div>
+      <div class="окно низк">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="зона-1">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Телефон</span></a>
+          <a class="икона" href="#">🔍</a><a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Чаты</a><a class="таб" href="#">Контакты</a><a class="таб" href="#">Звонки</a></div>
+        <div class="зона-2">
+          <a class="строка" href="#"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="трет">12:31</span><span class="счёт">2</span></div></a>
+          <a class="строка" href="#"><div class="ава">БП</div><div class="тянуть"><div class="имя обрез">Борис Петрович</div><div class="втор обрез">смета.pdf</div></div><div class="мета"><span class="трет">11:04</span><span class="счёт">1</span></div></a>
+          <a class="строка" href="#"><div class="ава">СМ</div><div class="тянуть"><div class="имя обрез">Сергей М.</div><div class="втор обрез">голосовое, 0:12</div></div><div class="мета"><span class="трет">вчера</span></div></a>
+        </div>
+        <nav class="низ">
+          <a class="тек" href="#"><span class="зн">📞<span class="счёт">3</span></span><span class="имя-з">Телефон</span></a>
+          <a href="#"><span class="зн">📰<span class="счёт">12</span></span><span class="имя-з">Социум</span></a>
+          <a href="#"><span class="зн">🖼</span><span class="имя-з">Медиа</span></a>
+          <a href="#"><span class="зн">💬<span class="счёт">5</span></span><span class="имя-з">Общение</span></a>
+        </nav>
+      </div>
+      <div class="подп"><b>2а. Значок и название.</b> Понятнее с первого раза. Занимает 56 точек высоты.</div>
+    </div>
+
+    <div>
+      <div class="окно низк">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="зона-1">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Телефон</span></a>
+          <a class="икона" href="#">🔍</a><a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Чаты</a><a class="таб" href="#">Контакты</a><a class="таб" href="#">Звонки</a></div>
+        <div class="зона-2">
+          <a class="строка" href="#"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">завтра в семь</div></div><div class="мета"><span class="трет">12:31</span><span class="счёт">2</span></div></a>
+          <a class="строка" href="#"><div class="ава">БП</div><div class="тянуть"><div class="имя обрез">Борис Петрович</div><div class="втор обрез">смета.pdf</div></div><div class="мета"><span class="трет">11:04</span><span class="счёт">1</span></div></a>
+          <a class="строка" href="#"><div class="ава">СМ</div><div class="тянуть"><div class="имя обрез">Сергей М.</div><div class="втор обрез">голосовое, 0:12</div></div><div class="мета"><span class="трет">вчера</span></div></a>
+        </div>
+        <nav class="низ без-имён">
+          <a class="тек" href="#"><span class="зн">📞<span class="счёт">3</span></span></a>
+          <a href="#"><span class="зн">📰<span class="счёт">12</span></span></a>
+          <a href="#"><span class="зн">🖼</span></a>
+          <a href="#"><span class="зн">💬<span class="счёт">5</span></span></a>
+        </nav>
+      </div>
+      <div class="подп"><b>2б. Только значок.</b> Ниже на 10 точек, спокойнее. Название окна и так в шапке; долгое нажатие на значок —
+      подсказка с названием.</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════ -->
+<section class="проба" id="п3">
+  <div class="шапка-пробы"><span class="номер">3</span>
+    <span class="опис">Счётчики соседних окон в шапке, перед «Поиском». Смотрим только «Телефон» и «Социум»: на «Телефоне» —
+    стрелка вправо и сколько нового в «Социуме», на «Социуме» — стрелка влево и сколько нового в «Телефоне», на остальных
+    окнах — оба. Нажатие на пилюлю — в то окно. Нового нет — пилюли нет, шапка как сейчас.</span></div>
+  <div class="срезы">
+
+    <div>
+      <div class="окно" style="height:auto">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="зона-1 с-соседом">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Телефон</span></a>
+          <a class="сосед" href="#">→ <span class="ч">12</span></a>
+          <a class="икона" href="#">🔍</a><a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Чаты</a><a class="таб" href="#">Контакты</a><a class="таб" href="#">Звонки</a></div>
+      </div>
+      <div class="подп"><b>3а. Телефон.</b> «→ 12» — в «Социуме» 12 новых; нажатие — туда.</div>
+    </div>
+
+    <div>
+      <div class="окно" style="height:auto">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="зона-1 с-соседом">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Социум</span></a>
+          <a class="сосед" href="#">← <span class="ч">3</span></a>
+          <a class="икона" href="#">🔍</a><a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Общая</a><a class="таб" href="#">Друзья</a><a class="таб" href="#">Каталог</a></div>
+      </div>
+      <div class="подп"><b>3б. Социум.</b> «← 3» — в «Телефоне» 3 новых. Стрелка повторяет жест: «Телефон» слева от «Социума».</div>
+    </div>
+
+    <div>
+      <div class="окно" style="height:auto">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="зона-1 с-соседом">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Медиа</span></a>
+          <a class="сосед" href="#"><span class="б">Т</span><span class="ч">3</span><span class="б" style="margin-left:3px">С</span><span class="ч">12</span></a>
+          <a class="икона" href="#">🔍</a><a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Лента</a><a class="таб" href="#">Слайды</a></div>
+      </div>
+      <div class="подп"><b>3в. Медиа, Общение, Страница.</b> Оба числа одной пилюлей: «Т 3 · С 12». Нажатие на половину — в её окно.</div>
+    </div>
+
+    <div>
+      <div class="окно" style="height:auto">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="зона-1 с-соседом">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Общение</span></a>
+          <a class="сосед" href="#">📞 <span class="ч">3</span></a>
+          <a class="сосед" href="#">📰 <span class="ч">12</span></a>
+          <a class="икона" href="#">🔍</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Истории</a><a class="таб" href="#">Ответы</a><a class="таб" href="#">Указатели</a></div>
+      </div>
+      <div class="подп"><b>3г. Вариант 3в значками окон</b> — две пилюли. Шире: «Настройки» уходят в меню, иначе шапка не
+      помещается в 360.</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═════════════════════════════════════════════════════════════════════ -->
+<section class="проба" id="п4">
+  <div class="шапка-пробы"><span class="номер">4</span>
+    <span class="опис">Всё вместе: панель звонка сверху, счётчик соседа в шапке, панель окон снизу. Пилюля в шапке и панель окон
+    отвечают на один вопрос «где новое» — скорее всего, нужна одна из двух.</span></div>
+  <div class="срезы">
+    <div>
+      <div class="окно">
+        <div class="статус"><span>9:41</span><span>E2E</span></div>
+        <div class="панель рамка">
+          <span class="жив-точка"></span>
+          <div class="что"><b>Анна Ковалёва</b><span>идёт звонок · <span class="время">03:12</span></span></div>
+          <span class="кр" style="background:var(--чёрный-6)">🎤</span>
+          <span class="кр конец">✆</span>
+        </div>
+        <div class="зона-1 с-соседом">
+          <a class="переход-окон тянуть" href="#"><span class="лого">Т</span><span class="имя-окна">Телефон</span></a>
+          <a class="сосед" href="#">→ <span class="ч">12</span></a>
+          <a class="икона" href="#">🔍</a><a class="икона" href="#">⚙</a>
+        </div>
+        <div class="табы"><a class="таб тек" href="#">Чаты</a><a class="таб" href="#">Контакты</a><a class="таб" href="#">Звонки</a></div>
+        <div class="зона-2">
+          <a class="строка" href="#"><div class="ава">АК</div><div class="тянуть"><div class="имя обрез">Анна Ковалёва</div><div class="втор обрез">звонок · идёт</div></div><div class="мета"><span class="трет">12:31</span></div></a>
+          <a class="строка" href="#"><div class="ава">БП</div><div class="тянуть"><div class="имя обрез">Борис Петрович</div><div class="втор обрез">смета.pdf</div></div><div class="мета"><span class="трет">11:04</span><span class="счёт">1</span></div></a>
+          <a class="строка" href="#"><div class="ава">СМ</div><div class="тянуть"><div class="имя обрез">Сергей М.</div><div class="втор обрез">голосовое, 0:12</div></div><div class="мета"><span class="трет">вчера</span><span class="счёт">2</span></div></a>
+        </div>
+        <nav class="низ">
+          <a class="тек" href="#"><span class="зн">📞<span class="счёт">3</span></span><span class="имя-з">Телефон</span></a>
+          <a href="#"><span class="зн">📰<span class="счёт">12</span></span><span class="имя-з">Социум</span></a>
+          <a href="#"><span class="зн">🖼</span><span class="имя-з">Медиа</span></a>
+          <a href="#"><span class="зн">💬<span class="счёт">5</span></span><span class="имя-з">Общение</span></a>
+        </nav>
+        <div class="дом-полоса"></div>
+      </div>
+      <div class="подп"><b>4.</b> Сверху вниз: строка состояния · панель звонка (1в) · шапка с соседом (3а) · вкладки · список ·
+      панель окон (2а) · полоса системы.</div>
+    </div>
+  </div>
+</section>
+
+<h2>Вопросы к выбору</h2>
+<ol class="опис">
+  <li>Анимация звонка: <b>1б</b> (зелёная панель, бегущая волна) или <b>1в</b> (белая панель, вращающаяся рамка с пропусками)?</li>
+  <li>Панель окон: <b>2а</b> (значок и название) или <b>2б</b> (только значок)?</li>
+  <li>Соседи в шапке на «Медиа» и «Общении»: <b>3в</b> (одна пилюля «Т 3 · С 12») или <b>3г</b> (две пилюли значками)?</li>
+  <li>Нужны ли пилюли в шапке, если есть панель окон снизу (проба 4), — или одно из двух?</li>
+</ol>
+</div>
