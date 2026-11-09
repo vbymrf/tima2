@@ -281,6 +281,12 @@ class ChatStore(
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
     /**
+     * Ключи недоступных сообщений — своим делегатом (ПЛАН-(РФ) РФ5): просьба своим и собеседнику, фраза, окно «Ждём
+     * ключ…». До `init`: поток ленты зовёт из него первую просьбу сам.
+     */
+    private val keys = ChatKeys(chatId, requestKeys, askChatKeys, lostKeys, autoAskAllowed, openByPhrase, fromPhoneMay, scope, words, _state)
+
+    /**
      * Последний список из базы **целиком**, вместе с ответами веток.
      *
      * Экрану отдаётся свёрнутый (ответы убраны в ветки), а здесь лежит полный: открытие
@@ -411,10 +417,10 @@ class ChatStore(
                     scope.launch {
                         lostKeys?.let { _state.value = _state.value.copy(lostKeys = it()) }
                         // В личной — только если есть что вернуть: потерянное просить незачем.
-                        val worth = requestKeys != null || askable().isNotEmpty()
+                        val worth = requestKeys != null || keys.askable().isNotEmpty()
                         if (worth && autoAskAllowed?.invoke() == true && !_state.value.expectKey) {
                             _state.value = _state.value.copy(expectKey = true)
-                            askKeysNow(null, quiet = true)
+                            keys.askKeysNow(null, quiet = true)
                         }
                     }
                 }
@@ -771,53 +777,24 @@ class ChatStore(
         }
     }
 
+    /** Удаление — своим делегатом (ПЛАН-(РФ) РФ5): у себя, у всех с вопросом, выбранные. */
+    private val deletion = ChatDeletion(deleter, chatId, scope, io, words, _state, cancelEdit = { editCancelled() })
+
     /** «Удалить у себя» — только на устройстве, без вопросов: у остальных всё остаётся. */
-    fun deleteForMe(line: ChatLine) {
-        val port = deleter ?: return
-        if (_state.value.editing == line.serverId) editCancelled()
-        scope.launch { withContext(io) { port.forMe(chatId, line.dedupKey, line.serverId) } }
-    }
+    fun deleteForMe(line: ChatLine) = deletion.forMe(line)
 
     /** «Удалить у всех» — сначала вопрос: вернуть нельзя. */
-    fun deleteForAllAsked(line: ChatLine) {
-        if (deleter == null || line.serverId <= 0) return
-        _state.value = _state.value.copy(notice = ChatNotice.DeleteAsk(line.serverId))
-    }
+    fun deleteForAllAsked(line: ChatLine) = deletion.forAllAsked(line)
 
-    fun deleteForAllConfirmed() {
-        val ask = _state.value.notice as? ChatNotice.DeleteAsk ?: return
-        val port = deleter ?: return
-        _state.value = _state.value.copy(notice = null)
-        val ids = listOf(ask.serverId) + ask.more
-        if (_state.value.editing in ids) editCancelled()
-        scope.launch {
-            val w = words().chat
-            var said: String? = null
-            for (id in ids) {
-                val result = withContext(io) { port.forAll(chatId, id, _state.value.group) }
-                said = said ?: when (result) {
-                    DeleteResult.Deleted -> null
-                    DeleteResult.NotSent -> w.deleteRefused("not_sent")
-                    DeleteResult.Offline -> w.deleteOffline
-                    is DeleteResult.Refused -> w.deleteRefused(result.code)
-                }
-            }
-            if (said != null) _state.value = _state.value.copy(notice = ChatNotice.Said(said))
-        }
-    }
+    fun deleteForAllConfirmed() = deletion.forAllConfirmed()
 
     // ── Выбор нескольких сообщений (заказчик 2026-10-19) ───────────────────────
 
     /** «Удалить у себя» для выбранных. */
-    fun deleteForMeMany(lines: List<ChatLine>) = lines.forEach(::deleteForMe)
+    fun deleteForMeMany(lines: List<ChatLine>) = deletion.forMeMany(lines)
 
     /** «Удалить у всех» для выбранных — сначала вопрос: вернуть нельзя. Только своё отправленное. */
-    fun deleteForAllManyAsked(lines: List<ChatLine>) {
-        if (deleter == null) return
-        val ids = lines.filter { it.outgoing && it.serverId > 0 }.map { it.serverId }
-        if (ids.isEmpty()) return
-        _state.value = _state.value.copy(notice = ChatNotice.DeleteAsk(ids.first(), ids.drop(1)))
-    }
+    fun deleteForAllManyAsked(lines: List<ChatLine>) = deletion.forAllManyAsked(lines)
 
     /** «В Подборку» для выбранных: сказать один раз — сколько добавлено. */
     fun pickedMany(lines: List<ChatLine>) {
@@ -902,116 +879,29 @@ class ChatStore(
     /** В группе файлы — только ссылкой на облако (Решения §2). */
     val filesByLink: Boolean get() = peerId == null
 
+    /** Вложения — своим делегатом (ПЛАН-(РФ) РФ5): фото, файлы, голосовые, контакт, место, ссылка. */
+    private val attachments = ChatAttachments(attach, chatId, peerId, selfChat, scope, io, words, _state)
+
     /** Отказ вложению — журналу (FILE-SEND): причина словом кода, без имени файла. */
-    var attachLog: ((reason: String) -> Unit)? = null
-
-    private fun attachResult(result: AttachResult, warn: String? = null) {
-        when (result) {
-            AttachResult.TooMany -> attachLog?.invoke("too_many")
-            is AttachResult.Refused -> attachLog?.invoke(result.reason)
-            else -> Unit
+    var attachLog: ((reason: String) -> Unit)?
+        get() = attachments.log
+        set(value) {
+            attachments.log = value
         }
-        val w = words().chat
-        val said = when (result) {
-            is AttachResult.Queued -> warn
-            AttachResult.Offline -> w.sendFailed
-            AttachResult.TooMany -> w.photoTooMany
-            is AttachResult.Refused -> w.fileRefused(result.reason)
-        }
-        _state.value = _state.value.copy(notice = said?.let { ChatNotice.Said(it) })
-    }
 
-    /** Фото: 1280 готовится здесь же, на фоне (ПЛАН-(ПФ) ПФ3); превью в теле нет (ADR-0052). */
-    fun sendPhotos(images: List<Pair<ByteArray, String>>) {
-        val port = attach ?: return
-        _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.sending))
-        scope.launch {
-            // Сторона фото и сколько их за раз — по правилам сервера (ПЛАН-(ИФ) ИФ2).
-            val rules = withContext(io) { port.rules() }
-            if (images.size > rules.maxPhotos) {
-                attachLog?.invoke("too_many")
-                _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.photoTooMany))
-                return@launch
-            }
-            val result = withContext(io) {
-                val photos = images.mapNotNull { (bytes, _) ->
-                    PhotoPrep.prepare(bytes, side = rules.photoSide)?.let { SendAttachments.Photo(it.full, it.width, it.height) }
-                }
-                port.photos(chatId, _state.value.level, peerId, photos)
-            }
-            attachResult(result)
-        }
-    }
+    fun sendPhotos(images: List<Pair<ByteArray, String>>) = attachments.sendPhotos(images)
 
-    /**
-     * Одно фото после редактора (ADR-0052, заказчик 2026-10-22): [make] сводит слои на исходнике и
-     * уменьшает до стороны из правил сервера — её он и получает. `null` — свести не вышло.
-     */
-    fun sendPhotoMade(make: suspend (side: Int) -> PhotoPrep.Prepared?) {
-        val port = attach ?: return
-        _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.sending))
-        scope.launch {
-            val rules = withContext(io) { port.rules() }
-            val ready = withContext(io) { make(rules.photoSide) }
-            if (ready == null) {
-                attachResult(AttachResult.Refused("nothing"))
-                return@launch
-            }
-            val result = withContext(io) {
-                port.photos(chatId, _state.value.level, peerId, listOf(SendAttachments.Photo(ready.full, ready.width, ready.height)))
-            }
-            attachResult(result)
-        }
-    }
+    fun sendPhotoMade(make: suspend (side: Int) -> PhotoPrep.Prepared?) = attachments.sendPhotoMade(make)
 
-    /** Файл почтальоном (личная переписка): запреты и предупреждения — по имени (Решения §6). */
-    fun sendFile(bytes: ByteArray, mime: String, name: String) {
-        val port = attach ?: return
-        val peer = peerId ?: return
-        if (FileRules.forbidden(name)) {
-            attachResult(AttachResult.Refused("type"))
-            return
-        }
-        _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.sending))
-        val warn = if (FileRules.warned(name)) words().chat.fileRefused("archive") else null
-        scope.launch {
-            val result = withContext(io) { port.file(chatId, _state.value.level, peer, selfChat, bytes, mime, name) }
-            attachResult(result, warn)
-        }
-    }
+    fun sendFile(bytes: ByteArray, mime: String, name: String) = attachments.sendFile(bytes, mime, name)
 
-    /**
-     * Голосовое (ПЛАН-(ВМ) ВМ3): в личной — файл на срок для собеседника, в группе — для её
-     * участников ([chatId] — номер группы). В канале голосовых нет (Р19): экран кнопки не даёт.
-     */
-    fun sendVoice(ogg: ByteArray, durationMs: Long, wave: ByteArray) {
-        val port = attach ?: return
-        _state.value = _state.value.copy(notice = ChatNotice.Said(words().chat.sending))
-        scope.launch {
-            val result = withContext(io) {
-                port.voice(chatId, _state.value.level, peerId, if (peerId == null) chatId else null, ogg, durationMs, wave)
-            }
-            attachResult(result)
-        }
-    }
+    fun sendVoice(ogg: ByteArray, durationMs: Long, wave: ByteArray) = attachments.sendVoice(ogg, durationMs, wave)
 
-    fun sendContact(name: String, phone: String) {
-        val port = attach ?: return
-        if (name.isBlank() && phone.isBlank()) return
-        attachResult(port.contact(chatId, _state.value.level, name, phone))
-    }
+    fun sendContact(name: String, phone: String) = attachments.sendContact(name, phone)
 
-    fun sendPlace(lat: Double, lon: Double, label: String = "") {
-        val port = attach ?: return
-        attachResult(port.place(chatId, _state.value.level, lat, lon, label))
-    }
+    fun sendPlace(lat: Double, lon: Double, label: String = "") = attachments.sendPlace(lat, lon, label)
 
-    fun sendLink(url: String, title: String = "", cloudKind: String = "") {
-        val port = attach ?: return
-        val clean = url.trim().let { if ("://" in it) it else "https://$it" }
-        if (clean.length < 10) return
-        attachResult(port.link(chatId, _state.value.level, clean, title, cloudKind))
-    }
+    fun sendLink(url: String, title: String = "", cloudKind: String = "") = attachments.sendLink(url, title, cloudKind)
 
     // ── Редактор (Решения §9, §10) ──────────────────────────────────────────────
 
@@ -1181,35 +1071,24 @@ class ChatStore(
         _state.value = _state.value.copy(peek = null)
     }
 
+    /** Закреплённое — своим делегатом (ПЛАН-(РФ) РФ5). */
+    private val pinning = ChatPinning(pins, chatId, scope, io, words, _state)
+
     /** Право закреплять стало известно позже открытия: роль приезжает со списком групп. */
-    fun pinAllowed(may: Boolean) {
-        if (pins != null) _state.value = _state.value.copy(pinMay = may)
-    }
+    fun pinAllowed(may: Boolean) = pinning.allowed(may)
 
     /** Закрепить сообщение (ПЛАН-(ЗО) ЗО3): одно на переписку, прежнее заменяется. */
-    fun pin(line: ChatLine) = pinChange(line.serverId)
+    fun pin(line: ChatLine) = pinning.change(line.serverId)
 
     /** Снять закрепление. */
-    fun unpin() = pinChange(0)
-
-    private fun pinChange(serverId: Long) {
-        val board = pins ?: return
-        if (serverId < 0 || (serverId == 0L && _state.value.pinned == 0L)) return
-        val group = _state.value.group
-        scope.launch {
-            val step = withContext(io) { if (serverId > 0) board.pin(chatId, group, serverId) else board.unpin(chatId, group) }
-            val w = words().showcase
-            when (step) {
-                PinStep.Done -> Unit
-                is PinStep.Refused -> _state.value = _state.value.copy(notice = ChatNotice.Said(w.pinRefused(step.code)))
-                PinStep.Offline -> _state.value = _state.value.copy(notice = ChatNotice.Said(w.pinRefused("offline")))
-            }
-            pinLog?.invoke(serverId > 0, step)
-        }
-    }
+    fun unpin() = pinning.change(0)
 
     /** Журнал закрепления — у вызывающего: модуль окна журнала не знает (core-diag). */
-    var pinLog: ((on: Boolean, step: PinStep) -> Unit)? = null
+    var pinLog: ((on: Boolean, step: PinStep) -> Unit)?
+        get() = pinning.log
+        set(value) {
+            pinning.log = value
+        }
 
     /**
      * Суперсообщение описания (ПЛАН-(ЗО) ЗО5): редактор с подкладками всех сообщений уровня 0;
@@ -1344,137 +1223,27 @@ class ChatStore(
     }
 
     /** Человек набирает секретную фразу — её просят только после отказа по подписи. */
-    fun changedPhrase(text: String) {
-        _state.value = _state.value.copy(phrase = text)
-    }
+    fun changedPhrase(text: String) = keys.changedPhrase(text)
 
-    /**
-     * Отправить просьбу с набранной фразой — после отказа по подписи. Слова берутся из поля и
-     * дальше нигде не сохраняются: держать их значило бы отдать вместе с устройством и тот
-     * заслон, ради которого фразу спрашивают.
-     */
-    fun requestKey() {
-        if (requestKeys == null && askChatKeys == null) return
-        if (_state.value.expectKey) return
-        val words = PhraseWords.parse(_state.value.phrase).takeIf { it.isNotEmpty() }
-        _state.value = _state.value.copy(expectKey = true, notice = null)
-        scope.launch { askKeysNow(words, quiet = false) }
-    }
+    /** Отправить просьбу ключей с набранной фразой — после отказа по подписи. */
+    fun requestKey() = keys.requestKey()
 
-    /**
-     * «Сообщение недоступно, запросить» — нажатие на недоступное сообщение, в личной переписке
-     * и в группе (2026-10-06). Сначала без фразы: заверенному устройству она не нужна. Не всякое
-     * устройство можно заверить — тогда сервер отказывает по подписи, и открывается поле фразы.
-     */
-    fun askChatKeys() {
-        if (requestKeys == null && askChatKeys == null) return
-        if (_state.value.expectKey) return
-        _state.value = _state.value.copy(expectKey = true, notice = null)
-        scope.launch { askKeysNow(null, quiet = false) }
-    }
+    /** «Сообщение недоступно, запросить» — сначала без фразы. */
+    fun askChatKeys() = keys.askNow()
 
-    /**
-     * Нажатие на «Не расшифровано» (план КК, КК4, Р9) — окно «Ждём ключ…». Просьба своим устройствам и
-     * собеседнику (участникам) уходит, если её не было за сутки; у «ключа не осталось» просить незачем —
-     * окно сразу предлагает фразу.
-     */
-    fun unreadableTapped() {
-        val lostAll = askable().isEmpty()
-        _state.value = _state.value.copy(keyWait = KeyWait(lost = lostAll, phraseOpen = lostAll, fromPhone = fromPhoneMay))
-        if (lostAll || _state.value.expectKey || (requestKeys == null && askChatKeys == null)) return
-        scope.launch {
-            if (autoAskAllowed?.invoke() == false) return@launch
-            _state.value = _state.value.copy(expectKey = true)
-            askKeysNow(null, quiet = false)
-        }
-    }
+    /** Нажатие на «Не расшифровано» — окно «Ждём ключ…» (КК4). */
+    fun unreadableTapped() = keys.unreadableTapped()
 
-    fun keyWaitClosed() {
-        _state.value = _state.value.copy(keyWait = null, phrase = "")
-    }
+    fun keyWaitClosed() = keys.keyWaitClosed()
 
     /** «Открыть через фразу» — поле фразы в окне. */
-    fun phraseOpenStarted() {
-        _state.value.keyWait?.let { _state.value = _state.value.copy(keyWait = it.copy(phraseOpen = true)) }
-    }
+    fun phraseOpenStarted() = keys.phraseOpenStarted()
 
-    /**
-     * «Открыть» с набранной фразой: ключи из копии (КК1, КК4) и, если устройство не заверено, та же фраза
-     * подписывает просьбу своим и собеседнику. Слова дальше нигде не хранятся.
-     */
-    fun openByPhrasePressed() {
-        val wait = _state.value.keyWait ?: return
-        val words = PhraseWords.parse(_state.value.phrase).takeIf { it.isNotEmpty() } ?: return
-        _state.value = _state.value.copy(keyWait = wait.copy(opening = true, said = null))
-        scope.launch {
-            if (_state.value.phraseWanted && !_state.value.expectKey) {
-                _state.value = _state.value.copy(expectKey = true)
-                askKeysNow(words, quiet = true)
-            }
-            val outcome = runCatching { openByPhrase?.invoke(words) }.getOrNull()
-            val said = when (outcome) {
-                is PhraseOpen.Opened -> words().chat.phraseOpened(outcome.count)
-                PhraseOpen.WrongPhrase -> words().chat.phraseWrong
-                PhraseOpen.NoCopy -> words().chat.copyMissing
-                PhraseOpen.Offline, null -> words().chat.offlineRetryIn(5)
-            }
-            val now = _state.value.keyWait ?: return@launch
-            _state.value = _state.value.copy(
-                keyWait = now.copy(opening = false, said = said),
-                phrase = if (outcome is PhraseOpen.Opened) "" else _state.value.phrase,
-            )
-        }
-    }
+    /** «Открыть» с набранной фразой (КК1, КК4). */
+    fun openByPhrasePressed() = keys.openByPhrasePressed()
 
-    /** ПК, «Передать с телефона»: просьба своим устройствам сейчас, без суточного предела (КК4). */
-    fun fromPhonePressed() {
-        val wait = _state.value.keyWait ?: return
-        _state.value = _state.value.copy(keyWait = wait.copy(said = words().chat.fromPhoneHint))
-        if (_state.value.expectKey || (requestKeys == null && askChatKeys == null)) return
-        _state.value = _state.value.copy(expectKey = true)
-        scope.launch { askKeysNow(null, quiet = false) }
-    }
-
-    /** Недоступные сообщения, которые стоит просить: с номером сервера и не потерянные, новые первыми. */
-    private fun askable(): List<Long> {
-        val lost = _state.value.lostKeys
-        return _state.value.lines
-            .filter { it.display == MessageDisplay.UNREADABLE && it.serverId > 0 && it.serverId !in lost }
-            .map { it.serverId }
-            .distinct()
-            .sortedDescending()
-    }
-
-    /** Признак «запрос в пути» ставит вызывающий — до запуска, чтобы второе нажатие его видело. */
-    private suspend fun askKeysNow(words: List<String>?, quiet: Boolean) {
-        val outcome = requestKeys?.request(chatId, words) ?: askChatKeys?.invoke(words, askable()) ?: return
-        lostKeys?.let { _state.value = _state.value.copy(lostKeys = it()) }
-        val needs = outcome == RequestKeysStep.NeedsSecretPhrase
-        _state.value = _state.value.copy(
-            // Отказ по подписи — в открытом окне сразу поле фразы (КК4): «Открыть» подпишет просьбу ею же.
-            keyWait = _state.value.keyWait?.let { if (needs) it.copy(phraseOpen = true) else it },
-            expectKey = false,
-            // Фраза нужна — поле остаётся открытым, пока просьба не уйдёт.
-            phraseWanted = needs || (_state.value.phraseWanted && outcome !is RequestKeysStep.Asked),
-            // Набранная фраза живёт до успеха и стирается сразу после него: держать её на
-            // экране дольше нужного незачем.
-            phrase = if (outcome is RequestKeysStep.Asked) "" else _state.value.phrase,
-            notice = if (quiet) _state.value.notice else noticeOf(outcome),
-        )
-    }
-
-    private fun noticeOf(outcome: RequestKeysStep): ChatNotice = when (outcome) {
-        is RequestKeysStep.Asked -> ChatNotice.KeysAsked(outcome.devices)
-        RequestKeysStep.NoHelpers -> ChatNotice.KeysNoHelpers
-        is RequestKeysStep.Lost -> ChatNotice.KeysLost(outcome.messages)
-        RequestKeysStep.NothingMissing -> ChatNotice.KeysNothingMissing
-        RequestKeysStep.NeedsSecretPhrase -> ChatNotice.KeysNeedPhrase
-        RequestKeysStep.NotMember -> ChatNotice.KeysRefused(words().chat.notMemberAnyMore)
-        is RequestKeysStep.Offline -> ChatNotice.KeysRefused(
-            words().chat.offlineRetryIn((outcome.retryAfterMs / 1000).coerceAtLeast(1).toInt()),
-        )
-        is RequestKeysStep.Refused -> ChatNotice.KeysRefused(words().trouble.refused(outcome.reason))
-    }
+    /** ПК, «Передать с телефона» (КК4). */
+    fun fromPhonePressed() = keys.fromPhonePressed()
 
     /** Человек закрыл сообщение о беде. */
     fun noticeDismissed() {
