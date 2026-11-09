@@ -1327,6 +1327,10 @@ interface CallWords {
     val adaptTitle: String
     val adaptAbout: String
 
+    /** Над кнопками адаптации: сдвиг в процентах кадра и сколько ушло за край (заказчик 2026-11-10). */
+    fun adaptShift(x: String, y: String): String
+    fun adaptOver(x: String, y: String): String
+
     /** Набор публикации сменили посреди разговора: связь прервалась не сама. */
     fun presetApplied(name: String): String
 
@@ -3807,6 +3811,8 @@ object RussianWords : Words {
         override val lookOld = "Прежний"
         override val lookAbout = "Новый — кнопки одним рядом: свернуть, микрофон, ухо или динамик, камера, настройки звонка, завершить. Действует со следующего звонка. Групповой звонок — всегда в прежнем виде."
         override val adaptTitle = "Режим адаптации изображения"
+        override fun adaptShift(x: String, y: String) = "сдвиг $x $y"
+        override fun adaptOver(x: String, y: String) = "за краем $x $y"
         override val adaptAbout = "Поверх изображения — кнопки: приблизить своё изображение до 3× и сдвинуть его в любую сторону. Собеседник видит то же, что ваше окошко. Только в новом виде и в звонке на двоих; к следующему звонку — снова весь кадр."
         override val noAnswer = "Не дозвонились: никто не ответил"
         override val peerBusy = "Собеседник занят другим звонком"

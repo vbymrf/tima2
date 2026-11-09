@@ -1197,6 +1197,8 @@ object SpanishWords : Words {
         override val lookOld = "Clásica"
         override val lookAbout = "Nueva — botones en una fila: minimizar, micrófono, auricular o altavoz, cámara, ajustes de la llamada, colgar. Se aplica desde la próxima llamada. Las llamadas de grupo siempre usan la vista clásica."
         override val adaptTitle = "Modo de adaptación de imagen"
+        override fun adaptShift(x: String, y: String) = "desplazamiento $x $y"
+        override fun adaptOver(x: String, y: String) = "fuera del borde $x $y"
         override val adaptAbout = "Botones sobre la imagen: acercar tu propia imagen hasta 3× y moverla en cualquier dirección. La otra persona ve lo mismo que tu vista previa. Solo en la vista nueva y en llamadas de dos; la próxima llamada empieza con el encuadre completo."
         override val noAnswer = "Sin respuesta"
         override val peerBusy = "La otra persona está en otra llamada"

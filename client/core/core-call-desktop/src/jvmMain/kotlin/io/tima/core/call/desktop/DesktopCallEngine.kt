@@ -1704,6 +1704,42 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             }
             // Режим адаптации (ЗН5): часть кратной середины, тоже кратная 16, — смещением, без копии.
             val c = crop
+            if (c.beyond) {
+                // Ушли за край (вариант «а», 2026-11-10): кадр размером видимой части, чёрный, видимое — на своём месте.
+                val ow = ((w / c.zoom).toInt() / 16 * 16).coerceAtLeast(16)
+                val oh = ((h / c.zoom).toInt() / 16 * 16).coerceAtLeast(16)
+                val cut = c.cut(w, h, 0, ow, oh)
+                val size = ow * oh * 3
+                val buf = framedMemory?.takeIf { it.size() == size.toLong() } ?: com.sun.jna.Memory(size.toLong()).also { framedMemory = it }
+                buf.clear()
+                val n = minOf(cut.src.width, cut.dst.width) * 3
+                val row = ByteArray(n)
+                for (line in 0 until minOf(cut.src.height, cut.dst.height)) {
+                    opened.frame.read(((y + cut.src.top + line).toLong() * opened.width + x + cut.src.left) * 3, row, 0, n)
+                    buf.write(((cut.dst.top + line).toLong() * ow + cut.dst.left) * 3, row, 0, n)
+                }
+                runCatching {
+                    Ffi.request(
+                        FfiRequest(
+                            capture_video_frame = CaptureVideoFrameRequest(
+                                source_handle = source,
+                                buffer = VideoBufferInfo(
+                                    type = VideoBufferType.RGB24,
+                                    width = ow,
+                                    height = oh,
+                                    data_ptr = Pointer.nativeValue(buf),
+                                    stride = ow * 3,
+                                ),
+                                timestamp_us = System.nanoTime() / 1000,
+                                rotation = VideoRotation.VIDEO_ROTATION_0,
+                            ),
+                        ),
+                    )
+                }
+                cropFrames++
+                if (shown++ % 2 == 0) preview.pictures.value = rgbToPicture(ow, oh, buf.getByteArray(0, size))
+                continue
+            }
             val part = if (c.full) null else c.region(w, h).let { r ->
                 val pw = (r.width / 16 * 16).coerceAtLeast(16)
                 val ph = (r.height / 16 * 16).coerceAtLeast(16)
@@ -1954,6 +1990,9 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
     /** Читается насосом камеры на каждом кадре — отсюда `@Volatile`. */
     @Volatile
     private var crop: CameraCrop = CameraCrop.FULL
+
+    /** Кадр с полем за краем (вариант «а») — память на один размер, переиспользуется. */
+    private var framedMemory: com.sun.jna.Memory? = null
     private var cropFrames = 0L
     private var cropSince = System.nanoTime()
 

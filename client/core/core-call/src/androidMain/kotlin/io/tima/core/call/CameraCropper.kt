@@ -5,6 +5,7 @@ import io.livekit.android.room.track.LocalVideoTrack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import livekit.org.webrtc.JavaI420Buffer
 import livekit.org.webrtc.VideoFrame
 import livekit.org.webrtc.VideoProcessor
 import livekit.org.webrtc.VideoSink
@@ -55,14 +56,73 @@ internal class CameraCropper : VideoProcessor {
         }
         val started = System.nanoTime()
         val buffer = frame.buffer
-        val r = c.region(buffer.width, buffer.height, frame.rotation)
-        val cut = buffer.cropAndScale(r.left, r.top, r.width, r.height, buffer.width, buffer.height)
+        val cut = if (c.beyond) {
+            framed(buffer, c.cut(buffer.width, buffer.height, frame.rotation))
+        } else {
+            val r = c.region(buffer.width, buffer.height, frame.rotation)
+            buffer.cropAndScale(r.left, r.top, r.width, r.height, buffer.width, buffer.height)
+        }
         val next = VideoFrame(cut, frame.rotation, frame.timestampNs)
         cropNs += System.nanoTime() - started
         try {
             out.onFrame(next)
         } finally {
             next.release()
+        }
+    }
+
+    /**
+     * Видимая часть ушла за край кадра (заказчик 2026-11-10, вариант «а»): кадр того же размера, чёрный, и в нём на
+     * своём месте — то, что от кадра камеры ещё видно. Обрезку и растяжение делает WebRTC, сюда приходит готовая часть.
+     */
+    private fun framed(buffer: VideoFrame.Buffer, cut: CameraCrop.Cut): VideoFrame.Buffer {
+        val w = buffer.width
+        val h = buffer.height
+        val out = JavaI420Buffer.allocate(w, h)
+        blank(out)
+        val s = cut.src
+        val d = cut.dst
+        val part = buffer.cropAndScale(s.left, s.top, s.width, s.height, d.width, d.height)
+        val yuv = part.toI420()
+        part.release()
+        if (yuv != null) {
+            place(yuv.dataY, yuv.strideY, out.dataY, out.strideY, d.left, d.top, d.width, d.height)
+            place(yuv.dataU, yuv.strideU, out.dataU, out.strideU, d.left / 2, d.top / 2, d.width / 2, d.height / 2)
+            place(yuv.dataV, yuv.strideV, out.dataV, out.strideV, d.left / 2, d.top / 2, d.width / 2, d.height / 2)
+            yuv.release()
+        }
+        return out
+    }
+
+    /** Чёрное: яркость 16, цвет 128 — чёрный в YUV узкого размаха, как пишет камера. */
+    private var blackY = ByteArray(0)
+    private var blackUv = ByteArray(0)
+
+    private fun blank(out: JavaI420Buffer) {
+        val y = out.dataY
+        val u = out.dataU
+        val v = out.dataV
+        if (blackY.size != y.capacity()) blackY = ByteArray(y.capacity()) { 16 }
+        if (blackUv.size != u.capacity()) blackUv = ByteArray(u.capacity()) { -128 }
+        y.duplicate().apply { clear() }.put(blackY)
+        u.duplicate().apply { clear() }.put(blackUv, 0, minOf(blackUv.size, u.capacity()))
+        v.duplicate().apply { clear() }.put(blackUv, 0, minOf(blackUv.size, v.capacity()))
+    }
+
+    private fun place(src: java.nio.ByteBuffer, srcStride: Int, dst: java.nio.ByteBuffer, dstStride: Int, x: Int, y: Int, w: Int, h: Int) {
+        val from = src.duplicate()
+        val to = dst.duplicate()
+        for (row in 0 until h) {
+            val start = row * srcStride
+            if (start + w > from.capacity()) break
+            from.clear()
+            from.limit(start + w)
+            from.position(start)
+            val at = (y + row) * dstStride + x
+            if (at + w > to.capacity()) break
+            to.clear()
+            to.position(at)
+            to.put(from)
         }
     }
 

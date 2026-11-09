@@ -1,6 +1,9 @@
 package io.tima.core.call
 
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * Режим адаптации изображения (ПЛАН-(ЗН) ЗН5, заказчик 2026-11-10): **своё** изображение
@@ -8,20 +11,28 @@ import kotlin.math.abs
  *
  * [zoom] — ступень из [STEPS]; [x], [y] — середина видимой части относительно середины кадра,
  * долями ширины и высоты кадра, как его видит человек (уже повёрнутого): вправо и вниз —
- * положительные. Сдвиг не выходит за край кадра ([clamped]).
+ * положительные.
+ *
+ * **Сдвиг выходит за край кадра** (заказчик 2026-11-10, вариант «а»): до края ход при малом приближении короток —
+ * при 1,3× всего 11 % кадра. За краем — чёрное поле, и его видит собеседник. Середина видимой части доходит до края
+ * кадра ([MAX_SHIFT]): хотя бы половина видимого остаётся картинкой. Сдвигать можно и при 1×.
  */
 data class CameraCrop(val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f) {
-    val full: Boolean get() = zoom <= 1f
+    /** Весь кадр как есть: не приближено и не сдвинуто — обрезать нечего. */
+    val full: Boolean get() = zoom <= 1f + EPS && abs(x) < EPS && abs(y) < EPS
 
-    /** Насколько середина может отойти от середины кадра: видна 1/zoom, остальное — поровну с краёв. */
+    /** Насколько середина может отойти от середины кадра, не показав края: видна 1/zoom, остальное — поровну. */
     private val reach: Float get() = (1f - 1f / zoom) / 2f
 
-    fun clamped(): CameraCrop = if (full) FULL else copy(x = x.coerceIn(-reach, reach), y = y.coerceIn(-reach, reach))
+    fun clamped(): CameraCrop {
+        val c = copy(zoom = zoom.coerceIn(1f, STEPS.last()), x = x.coerceIn(-MAX_SHIFT, MAX_SHIFT), y = y.coerceIn(-MAX_SHIFT, MAX_SHIFT))
+        return if (c.full) FULL else c
+    }
 
     /** «+»: следующая ступень, сдвиг сохраняется в пределах нового края. */
     fun closer(): CameraCrop = copy(zoom = STEPS.firstOrNull { it > zoom + EPS } ?: zoom).clamped()
 
-    /** «−»: прежняя ступень; на 1× — весь кадр. */
+    /** «−»: прежняя ступень, сдвиг остаётся. */
     fun farther(): CameraCrop = copy(zoom = STEPS.lastOrNull { it < zoom - EPS } ?: 1f).clamped()
 
     /** Стрелки: шаг — 1/20 видимой части (заказчик 2026-11-10: в 5 раз мельче четверти); [dx], [dy] — −1, 0 или 1. */
@@ -30,9 +41,22 @@ data class CameraCrop(val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f
     private val step: Float get() = 1f / zoom / PAN_PARTS
 
     val canCloser: Boolean get() = STEPS.any { it > zoom + EPS }
-    val canFarther: Boolean get() = !full
+    val canFarther: Boolean get() = zoom > 1f + EPS
     fun canMove(dx: Int, dy: Int): Boolean =
-        !full && ((dx < 0 && x > -reach + EPS) || (dx > 0 && x < reach - EPS) || (dy < 0 && y > -reach + EPS) || (dy > 0 && y < reach - EPS))
+        (dx < 0 && x > -MAX_SHIFT + EPS) || (dx > 0 && x < MAX_SHIFT - EPS) || (dy < 0 && y > -MAX_SHIFT + EPS) || (dy > 0 && y < MAX_SHIFT - EPS)
+
+    /** Сдвиг в процентах кадра для показа: вправо и **вверх** — плюс (заказчик 2026-11-10: «+11 −25»). */
+    val shiftPercent: Pair<Int, Int> get() = (x * 100).roundToInt() to (-y * 100).roundToInt()
+
+    /** На сколько видимая часть ушла за край кадра, в процентах кадра; знак — та же сторона, что у сдвига. */
+    val overPercent: Pair<Int, Int>
+        get() {
+            fun over(v: Float) = (max(0f, abs(v) - reach) * 100 * (if (v < 0) -1 else 1)).roundToInt()
+            return over(x) to over(-y)
+        }
+
+    /** Видна ли часть за краем кадра — тогда кадр собирается с полем ([cut]), а не одной обрезкой. */
+    val beyond: Boolean get() = abs(x) > reach + EPS || abs(y) > reach + EPS
 
     /** Для журнала: «2×, сдвиг 0.13 / -0.06». */
     fun describe(): String = "${label(zoom)}×" + if (abs(x) < EPS && abs(y) < EPS) "" else ", сдвиг ${round2(x)} / ${round2(y)}"
@@ -46,13 +70,7 @@ data class CameraCrop(val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f
         val c = clamped()
         val w = (width / c.zoom).toInt().coerceAtLeast(2) and 1.inv()
         val h = (height / c.zoom).toInt().coerceAtLeast(2) and 1.inv()
-        // Сдвиг экрана → сдвиг буфера: поворот на 90 по часовой кладёт ось y буфера влево.
-        val (bx, by) = when (((rotation % 360) + 360) % 360) {
-            90 -> c.y to -c.x
-            180 -> -c.x to -c.y
-            270 -> -c.y to c.x
-            else -> c.x to c.y
-        }
+        val (bx, by) = turned(c, rotation)
         val left = ((width - w) / 2f + bx * width).toInt().coerceIn(0, width - w) and 1.inv()
         val top = ((height - h) / 2f + by * height).toInt().coerceIn(0, height - h) and 1.inv()
         return Region(left, top, w, h)
@@ -60,8 +78,54 @@ data class CameraCrop(val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f
 
     data class Region(val left: Int, val top: Int, val width: Int, val height: Int)
 
+    /**
+     * Видимая часть, ушедшая за край ([beyond]): [src] — что из кадра [width]×[height] (не повёрнутого) ещё видно,
+     * [dst] — куда это ложится в кадре на выход [outW]×[outH]; остальное — поле. Всё чётное.
+     */
+    fun cut(width: Int, height: Int, rotation: Int = 0, outW: Int = width, outH: Int = height): Cut {
+        val c = clamped()
+        val w = width / c.zoom
+        val h = height / c.zoom
+        val (bx, by) = turned(c, rotation)
+        val left = (width - w) / 2f + bx * width
+        val top = (height - h) / 2f + by * height
+        val x0 = max(0f, left)
+        val y0 = max(0f, top)
+        val x1 = min(width.toFloat(), left + w)
+        val y1 = min(height.toFloat(), top + h)
+        val sx = outW / w
+        val sy = outH / h
+        val src = Region(even(x0), even(y0), even(x1 - x0).coerceAtLeast(2), even(y1 - y0).coerceAtLeast(2))
+        val dw = even((x1 - x0) * sx).coerceIn(2, outW)
+        val dh = even((y1 - y0) * sy).coerceIn(2, outH)
+        val dst = Region(even((x0 - left) * sx).coerceIn(0, outW - dw), even((y0 - top) * sy).coerceIn(0, outH - dh), dw, dh)
+        return Cut(src.copy(left = src.left.coerceIn(0, width - src.width), top = src.top.coerceIn(0, height - src.height)), dst)
+    }
+
+    data class Cut(val src: Region, val dst: Region)
+
     companion object {
         val FULL = CameraCrop()
+
+        /** Дальше всего середина видимой части отходит до края кадра. */
+        const val MAX_SHIFT = 0.5f
+
+        /** Сдвиг экрана → сдвиг буфера: поворот на 90 по часовой кладёт ось y буфера влево. */
+        private fun turned(c: CameraCrop, rotation: Int): Pair<Float, Float> = when (((rotation % 360) + 360) % 360) {
+            90 -> c.y to -c.x
+            180 -> -c.x to -c.y
+            270 -> -c.y to c.x
+            else -> c.x to c.y
+        }
+
+        private fun even(v: Float): Int = v.toInt() and 1.inv()
+
+        /** «+11», «−25», «0» — для показа сдвига. */
+        fun signed(v: Int): String = when {
+            v > 0 -> "+$v"
+            v < 0 -> "\u2212${-v}"
+            else -> "0"
+        }
 
         /**
          * Ступени приближения (ответ заказчика 2: до 3×) — через 0,1× (заказчик 2026-11-10: было 1 · 1,5 · 2 · 3,

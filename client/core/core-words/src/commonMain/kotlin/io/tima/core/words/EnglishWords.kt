@@ -1197,6 +1197,8 @@ object EnglishWords : Words {
         override val lookOld = "Classic"
         override val lookAbout = "New — buttons in one row: minimize, microphone, earpiece or speaker, camera, call settings, end. Applies from the next call. Group calls always use the classic look."
         override val adaptTitle = "Picture adaptation mode"
+        override fun adaptShift(x: String, y: String) = "shift $x $y"
+        override fun adaptOver(x: String, y: String) = "beyond edge $x $y"
         override val adaptAbout = "Buttons over the picture: zoom your own picture up to 3× and move it in any direction. The other person sees the same as your preview. New look and one-to-one calls only; the next call starts with the full frame."
         override val noAnswer = "No answer"
         override val peerBusy = "The other side is on another call"

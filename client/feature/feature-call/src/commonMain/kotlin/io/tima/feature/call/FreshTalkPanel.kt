@@ -176,9 +176,37 @@ private fun SheetRow(glyph: String, title: String, about: String, on: Boolean, m
  * «1×». Своё изображение обрезается перед отправкой, и собеседник видит то же, что окошко.
  */
 @Composable
-internal fun AdaptBar(crop: CameraCrop, onCrop: (CameraCrop) -> Unit, modifier: Modifier = Modifier) {
+internal fun AdaptBar(crop: CameraCrop, onCrop: (CameraCrop) -> Unit, modifier: Modifier = Modifier) = Column(
+    modifier,
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+) {
+    // Сдвиг цифрами (заказчик 2026-11-10): проценты кадра, вправо и вверх — плюс; отдельно — сколько ушло за край.
+    val words = Tima.words.call
+    val (sx, sy) = crop.shiftPercent
+    val (ox, oy) = crop.overPercent
     Row(
-        modifier
+        Modifier.background(TimaFixed.videoShade.copy(alpha = 0.45f), RoundedCornerShape(50))
+            .padding(horizontal = TimaSpacing.about2, vertical = 2.dp)
+            .testTag(ADAPT_NUMBERS_TAG),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+    ) {
+        Caption(words.adaptShift(CameraCrop.signed(sx), CameraCrop.signed(sy)), fontSize = TimaType.sz6, weight = FontWeight.Bold, color = TimaFixed.onVideo, lineOne = true)
+        Caption(
+            words.adaptOver(CameraCrop.signed(ox), CameraCrop.signed(oy)),
+            fontSize = TimaType.sz6,
+            weight = FontWeight.Bold,
+            color = if (ox != 0 || oy != 0) Tima.colors.activity else TimaFixed.onVideo,
+            lineOne = true,
+        )
+    }
+    AdaptKeys(crop, onCrop)
+}
+
+@Composable
+private fun AdaptKeys(crop: CameraCrop, onCrop: (CameraCrop) -> Unit) {
+    Row(
+        Modifier
             .background(TimaFixed.videoShade.copy(alpha = 0.45f), RoundedCornerShape(50))
             .padding(horizontal = TimaSpacing.about2, vertical = TimaSpacing.about1)
             .testTag(ADAPT_TAG),
@@ -301,3 +329,4 @@ const val ADAPT_RIGHT_TAG: String = "call:adapt:right"
 const val ADAPT_UP_TAG: String = "call:adapt:up"
 const val ADAPT_DOWN_TAG: String = "call:adapt:down"
 const val ADAPT_RESET_TAG: String = "call:adapt:reset"
+const val ADAPT_NUMBERS_TAG: String = "call:adapt:numbers"
