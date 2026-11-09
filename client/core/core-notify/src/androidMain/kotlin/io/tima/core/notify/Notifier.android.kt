@@ -64,11 +64,13 @@ class AndroidNotifier(
         // бы прятать от человека ровно то, ради чего он уведомление и включил.
         builder.setVisibility(Notification.VISIBILITY_PRIVATE)
         open?.let { intent ->
+            // Своё «что открыть» у каждой строки (ПЛАН-(МП) М8): номер запроса — по ключу строки, иначе строки делили
+            // бы одно намерение, и нажатие на «Чаты» открывало бы то, что положила последняя «Группы».
             builder.setContentIntent(
                 PendingIntent.getActivity(
                     context,
-                    0,
-                    intent(),
+                    notice.key.hashCode(),
+                    intent().apply { notice.open?.let { putExtra(EXTRA_OPEN, it) } },
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 ),
             )
@@ -381,6 +383,9 @@ fun callRequestOf(intent: Intent?): CallRequest? {
         else -> null
     }
 }
+
+/** Что открыть по нажатию на строку — в намерении окна (ПЛАН-(МП) М8). */
+const val EXTRA_OPEN = "io.tima.notice.open"
 
 object AndroidNotices {
 

@@ -239,7 +239,13 @@ class MainActivity : ComponentActivity() {
         code.value = linkFrom(intent)
         transfer.value = transferFrom(intent)
         takeCallOrder(intent)
+        takeNoticeTap(intent)
         setContent {
+            // Системная «Назад» — по цепочке переходов приложения (ПЛАН-(МП) М7); в начале «Телефона» — в фон, как
+            // делает сама система у корневого окна: процесс и канал живут.
+            androidx.activity.compose.BackHandler {
+                if (io.tima.shared.SystemBack.handle?.invoke() != true) moveTaskToBack(true)
+            }
             val entry = remember { Entry.create(Platform.Android) }
             // ── МЕТКИ СЦЕНАРИЕВ ПОПАДАЮТ В ДЕРЕВО ДОСТУПНОСТИ ────────────────
             //
@@ -335,6 +341,13 @@ class MainActivity : ComponentActivity() {
         linkFrom(intent)?.let { code.value = it }
         transferFrom(intent)?.let { transfer.value = it }
         takeCallOrder(intent)
+        takeNoticeTap(intent)
+    }
+
+    /** Нажали строку уведомления — что открыть (ПЛАН-(МП) М8). */
+    private fun takeNoticeTap(intent: Intent?) {
+        intent?.getStringExtra(io.tima.core.notify.EXTRA_OPEN)?.let { io.tima.shared.NoticeTaps.open(it) }
+        intent?.removeExtra(io.tima.core.notify.EXTRA_OPEN)
     }
 
     /**

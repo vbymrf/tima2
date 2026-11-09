@@ -757,3 +757,9 @@ internal fun windowTabOf(tab: io.tima.domain.chat.NoticeTab): WindowTab = when (
     io.tima.domain.chat.NoticeTab.Groups -> WindowTab.Groups
 }
 
+/** Окно вкладки журнала уведомлений: «Чаты» и «Звонки» — «Телефон», «Каналы» — «Социум», «Группы» — «Страница». */
+internal fun noticeWindowOf(tab: io.tima.domain.chat.NoticeTab): Window = when (tab) {
+    io.tima.domain.chat.NoticeTab.Chats, io.tima.domain.chat.NoticeTab.Calls -> Window.Phone
+    io.tima.domain.chat.NoticeTab.Channels -> Window.Social
+    io.tima.domain.chat.NoticeTab.Groups -> Window.Page
+}

@@ -23,3 +23,21 @@ class HeaderNoticeTest {
         assertEquals(WindowTab.Groups, windowTabOf(NoticeTab.Groups))
     }
 }
+
+/** Нажатие на строку уведомления (ПЛАН-(МП) М8): одна сущность — в неё, несколько — на вкладку. */
+class NoticeTapTest {
+
+    @Test
+    fun код_туда_и_обратно() {
+        assertEquals(NoticeTab.Chats to "c-1", NoticeTaps.parse(NoticeTaps.code(NoticeTab.Chats, "c-1")))
+        assertEquals(NoticeTab.Groups to null, NoticeTaps.parse(NoticeTaps.code(NoticeTab.Groups, null)))
+        assertEquals(null, NoticeTaps.parse("нет такой"))
+    }
+
+    @Test
+    fun окно_вкладки_уведомлений() {
+        assertEquals(Window.Phone, noticeWindowOf(NoticeTab.Calls))
+        assertEquals(Window.Social, noticeWindowOf(NoticeTab.Channels))
+        assertEquals(Window.Page, noticeWindowOf(NoticeTab.Groups))
+    }
+}

@@ -1125,6 +1125,33 @@ private fun App(
     // было, и «открыл Звонки» приходилось угадывать по запросу `calls/seen`.
     // Вкладки всех окон — одно место (беда 2026-10-08); у «Социума» и «Телефона» — оно же.
     val windowTabs = remember { io.tima.feature.shell.WindowTabs() }
+    // Нажали строку уведомления (ПЛАН-(МП) М8): одна переписка — в неё, несколько — на вкладку; «откуда» запоминается.
+    // Ждём восстановления цепочек и снятия замка: иначе восстановленное перекрыло бы переход.
+    val noticeTap by NoticeTaps.pending.collectAsState()
+    LaunchedEffect(noticeTap, navRestored, locked) {
+        val code = noticeTap ?: return@LaunchedEffect
+        if (!navRestored || locked) return@LaunchedEffect
+        NoticeTaps.pending.value = null
+        val (tab, entity) = NoticeTaps.parse(code) ?: return@LaunchedEffect
+        val target = noticeWindowOf(tab)
+        navigator.enter(target, Via.SystemNotice)
+        windowTabs.choose(target, windowTabOf(tab))
+        if (entity != null && (tab == io.tima.domain.chat.NoticeTab.Chats || tab == io.tima.domain.chat.NoticeTab.Groups)) {
+            navigator.open(Where.Chat(entity, null), Via.SystemNotice)
+        }
+    }
+    // Системная «Назад» (ПЛАН-(МП) М7): сначала закрыть переключатель окон, потом — по цепочке переходов.
+    DisposableEffect(navigator) {
+        SystemBack.handle = {
+            if (windowSwitcher) {
+                windowSwitcher = false
+                true
+            } else {
+                navigator.back()
+            }
+        }
+        onDispose { SystemBack.handle = null }
+    }
     var socialTab by remember(windowTabs) { windowTabs.state(Window.Social, WindowTab.Catalogue) }
     LaunchedEffect(socialTab) { Journal.note(LogCode.SCREEN_OPEN, "tab", "окно" to Window.Social.name, "вкладка" to socialTab.name) }
     // Люди за идентификаторами — одно место на книгу, реплики и состав (2026-09-18).
