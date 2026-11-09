@@ -74,8 +74,8 @@ internal fun CallStrip(model: CallStripModel) {
     val words = Tima.words.call
     val moving = rememberInfiniteTransition()
     // Как в пробе 1в (заказчик 2026-11-10): узор лучами из центра крутится по кругу — на длинной полосе штрихи у
-    // краёв длинные и бегут быстро, у середины короткие и медленнее. Оборот — 4 с: вдвое медленнее прежнего
-    // (заказчик 2026-11-10; в пробе — 3 с). Цвет — шапки (`navigation`), а не «подтверждено».
+    // краёв длинные и бегут быстро, у середины короткие и медленнее. Оборот — 6 с (заказчик 2026-11-10: было 2 с,
+    // потом 4 с; в пробе — 3 с). Цвет — шапки (`navigation`), а не «подтверждено».
     val turn by moving.animateFloat(0f, 1f, infiniteRepeatable(tween(STRIP_TURN_MS, easing = LinearEasing)))
     val blink by moving.animateFloat(1f, 0.25f, infiniteRepeatable(tween(600), RepeatMode.Reverse))
     val title = call.group?.title ?: call.peer
@@ -185,7 +185,7 @@ internal fun rays(turn: Float, color: Color): Array<Pair<Float, Color>> {
 private const val RAYS = 12
 private const val RAY_STEP = 30f
 private const val RAY_ON = 18f
-private const val STRIP_TURN_MS = 4_000
+private const val STRIP_TURN_MS = 6_000
 private val END_SIZE = 36.dp
 
 const val CALL_STRIP_TAG = "strip:call"
