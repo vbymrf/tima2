@@ -485,6 +485,11 @@ class InstallResultReceiver : BroadcastReceiver() {
  *
  * Ждёт ли окно — спрашиваем систему (`getSessionInfo`): отменённый сеанс система стирает сразу, поэтому
  * окно, закрытое человеком намеренно, заново не открывается.
+ *
+ * **Нажали «Установить» — окно не открывать** (отчёт C455, 2026-11-09): сеанс живёт и пока система ставит пакет, и
+ * мы открывали окно снова каждые 3 с; человек отвечал «Отмена» — и уничтожал уже идущую установку. Пока окно ждёт
+ * ответа, сеанс неактивен (свой сеанс мы закрыли после передачи); после «Установить» система берёт его в работу —
+ * он активен, прогресс выше 0,8. Тогда — строка «установка идёт», без окна.
  */
 object InstallPending {
     @Volatile private var confirm: Intent? = null
@@ -517,11 +522,20 @@ object InstallPending {
         session = -1
     }
 
-    /** Окно ждёт ответа — открыть то же. `false` — не ждёт (нет окна или сеанс закрыт). */
+    /**
+     * Окно ждёт ответа — открыть то же. Человек уже нажал «Установить» и система ставит — окна не открывать, но
+     * ответить `true`: вторую установку заводить нельзя. `false` — не ждёт (нет окна или сеанс закрыт).
+     */
     fun reopen(context: Context, what: String): Boolean {
         confirm ?: return false
-        if (!alive(context)) return false
-        open(context, what)
+        when (val state = sessionState(context)) {
+            SessionState.Gone -> return false
+            is SessionState.Installing -> {
+                note("установка идёт — окно не открываю", "активен" to state.active, "прогресс" to state.progress, "мс от передачи" to since())
+                return true
+            }
+            is SessionState.Waiting -> open(context, what, "прогресс" to state.progress)
+        }
         return true
     }
 
@@ -545,20 +559,31 @@ object InstallPending {
         }
     }
 
-    private fun alive(context: Context): Boolean {
-        val id = session
-        if (id < 0) return false
-        val info = runCatching { context.packageManager.packageInstaller.getSessionInfo(id) }.getOrNull()
-        if (info == null) done()
-        return info != null
+    /** Что с сеансом: стёрт (отменили, кончился), ждёт ответа человека или система уже ставит. */
+    private sealed interface SessionState {
+        data object Gone : SessionState
+        data class Waiting(val progress: Float) : SessionState
+        data class Installing(val active: Boolean, val progress: Float) : SessionState
     }
 
-    private fun open(context: Context, what: String) {
+    private fun sessionState(context: Context): SessionState {
+        val id = session
+        if (id < 0) return SessionState.Gone
+        val info = runCatching { context.packageManager.packageInstaller.getSessionInfo(id) }.getOrNull()
+        if (info == null) {
+            done()
+            return SessionState.Gone
+        }
+        val progress = (info.progress * 100).toInt() / 100f
+        return if (info.isActive || info.progress > INSTALLING_PROGRESS) SessionState.Installing(info.isActive, progress) else SessionState.Waiting(progress)
+    }
+
+    private fun open(context: Context, what: String, vararg tail: Pair<String, Any?>) {
         val intent = confirm ?: return
         runCatching { context.startActivity(Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             .onSuccess {
                 openedAt = now()
-                note(what, "мс от передачи" to since())
+                note(what, "мс от передачи" to since(), *tail)
             }
             .onFailure { Journal.trouble(LogCode.UPD_CONFIRM, "окно установки не открылось", "почему" to (it.message ?: it::class.simpleName.orEmpty())) }
     }
@@ -575,4 +600,7 @@ object InstallPending {
     }
 
     private const val RETURN_PAUSE_MS = 1_500L
+
+    /** Выше — сеанс в работе у системы: до подтверждения прогресс сеанса не выше 0,8. */
+    private const val INSTALLING_PROGRESS = 0.81f
 }
