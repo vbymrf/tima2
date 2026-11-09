@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -360,6 +361,8 @@ internal fun Pip(
     onMove: (Offset) -> Unit,
     modifier: Modifier = Modifier,
     instead: @Composable () -> Unit = {},
+    /** Как приблизить картинку окошка — своё изображение при режиме адаптации (ЗН5). */
+    zoom: Modifier = Modifier,
     /** Поверх окошка, над слоем жестов: смена камеры нового вида (ПЛАН-(ЗН) ЗН4). */
     corner: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
 ) {
@@ -378,7 +381,9 @@ internal fun Pip(
             .testTag(PIP_TAG),
     ) {
         if (video != null) {
-            CallVideo(video, Modifier.fillMaxSize().padding(if (dragging) PIP_FRAME else 0.dp))
+            Box(Modifier.fillMaxSize().padding(if (dragging) PIP_FRAME else 0.dp).clipToBounds()) {
+                CallVideo(video, Modifier.fillMaxSize().then(zoom))
+            }
         } else {
             Box(
                 Modifier.fillMaxSize().padding(if (dragging) PIP_FRAME else 0.dp)

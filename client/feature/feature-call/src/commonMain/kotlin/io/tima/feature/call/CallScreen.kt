@@ -259,9 +259,12 @@ fun CallScreen(
             // Нажали на своё окошко — меняется местами с собеседником (заказчик 2026-10-08).
             // Собеседник без видео — меняется с его аватаром: своё крупно, аватар в окошке.
             val swap = swapped && mine != null
+            // Своё изображение при приближении (ЗН5): платформа, что показывает себя мимо обрезки,
+            // приближается здесь так же, как режется уходящий кадр.
+            val mineZoom = fresh?.crop?.takeIf { freshTalk && !it.full && mine?.cropped == false }?.let { cropView(it) } ?: Modifier
             val big = if (swap) mine else remoteShown
             if (big != null) {
-                CallVideo(big, Modifier.fillMaxSize())
+                CallVideo(big, Modifier.fillMaxSize().then(if (swap) mineZoom else Modifier))
             }
 
             if (big == null) {
@@ -372,6 +375,7 @@ fun CallScreen(
                     onDrag = { moving -> pipDragging = moving },
                     onMove = { delta -> pipOffset = clampPip(pipOffset + delta, area.belowBy(pipBelowPx), pipSizePx) },
                     modifier = Modifier.align(Alignment.TopEnd),
+                    zoom = if (swap) Modifier else mineZoom,
                     corner = flip?.takeIf { !swap }?.let { switch ->
                         { CameraFlip(switch, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about1)) }
                     },

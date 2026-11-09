@@ -186,6 +186,13 @@ class LiveKitCallEngine(
     /** Наблюдатели видимости видео собеседников (ПЗ3): по дорожке. */
     private val visibilityJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
 
+    /**
+     * Дорожки собеседника, которых у нас сейчас не видно (adaptiveStream): окно звонка свёрнуто
+     * или ушли в другое окно. Сервер их не шлёт — и это не «видео не приходит» (живая проверка
+     * «Свернуть» 2026-11-10).
+     */
+    private val remoteHidden: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     /** Обычный звонок, а не прогон стенда: набор стенда — закон (заказчик 2026-10-02, 2а). */
     private fun ordinaryCall(): Boolean = publishing?.name == BASE_PRESET
 
@@ -940,6 +947,7 @@ class LiveKitCallEngine(
         watchers.clear()
         for (job in visibilityJobs.values) job.cancel()
         visibilityJobs.clear()
+        remoteHidden.clear()
     }
 
     override suspend fun disconnect() {
@@ -1405,6 +1413,7 @@ class LiveKitCallEngine(
                 when (ev) {
                     is io.livekit.android.events.TrackEvent.VisibilityChanged -> if (ev.isVisible != shown) {
                         shown = ev.isVisible
+                        if (ev.isVisible) remoteHidden -= sid else remoteHidden += sid
                         Journal.note(
                             LogCode.CALL_ADAPT,
                             if (ev.isVisible) "видео собеседника показано — серверу «слать»" else "видео собеседника скрыто — серверу «не слать»",
@@ -1538,7 +1547,14 @@ class LiveKitCallEngine(
                 delay(STATS_EVERY_MS)
                 val publications = room.remoteParticipants.values.flatMap { it.videoTrackPublications }
                 val published = publications.any { !it.first.muted }
-                val track = publications.firstNotNullOfOrNull { it.second as? VideoTrack }
+                // Та же дорожка, что показывается ([pickRemote]): при показе экрана первой стоит
+                // приглушённая камера, и по ней «не приходит» было ложным (живая проверка 2026-11-10).
+                val shownPublication = publications.filterNot { it.first.muted }
+                    .sortedBy { if (it.first.source == Track.Source.SCREEN_SHARE) 0 else 1 }
+                    .firstOrNull { it.second is VideoTrack }
+                    ?: publications.firstOrNull { it.second is VideoTrack }
+                val track = shownPublication?.second as? VideoTrack
+                val hidden = shownPublication?.first?.sid?.let { it in remoteHidden } == true
                 val report = track?.let { runCatching { it.getRTCStats()?.statsMap?.values }.getOrNull() }
                 val incoming = report?.firstOrNull { it.type == "inbound-rtp" && it.members["kind"] == "video" }
                 val codec = incoming?.members?.get("codecId")?.toString()?.let { id ->
@@ -1549,7 +1565,8 @@ class LiveKitCallEngine(
                     RemoteVideoWatch.Poll(
                         published = published,
                         // Скрыто нами или погашено сервером — у этого свои события.
-                        excused = !now.remoteVideoTaken || now.videoPaused || now.stage != CallStage.Connected,
+                        // Не видно у нас (свёрнуто) — сервер не шлёт по нашей же просьбе.
+                        excused = !now.remoteVideoTaken || now.videoPaused || now.stage != CallStage.Connected || hidden,
                         bytes = (incoming?.members?.get("bytesReceived") as? Number)?.toLong(),
                         frames = (incoming?.members?.get("framesDecoded") as? Number)?.toLong(),
                         codec = codec,

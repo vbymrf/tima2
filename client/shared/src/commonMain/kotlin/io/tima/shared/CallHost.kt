@@ -870,7 +870,10 @@ class CallHost(
 
     /** «Экономить трафик» нового вида (ЗН3) — поведением нынешнего глаза (ответ заказчика 7). */
     fun saveTraffic(on: Boolean) {
-        Journal.note(LogCode.CALL, "экономить трафик", "включено" to on, "камера была" to state.cameraOn)
+        Journal.note(
+            LogCode.CALL, "экономить трафик", "включено" to on,
+            if (on) "камера была" to state.cameraOn else "камера вернётся" to cameraBeforeSaving,
+        )
         if (on) {
             cameraBeforeSaving = state.cameraOn
             remoteVideo(false)
@@ -992,7 +995,8 @@ class CallHost(
         // показывает себя, ваша камера выключена» ниже.
         if (now.cameraOn) forget(NO_CAMERA)
 
-        val peerAlone = now.remoteVideoShown && !now.cameraOn
+        // Показываем экран (ЗН6) — камера выключена не «забыта»: просить её включить незачем.
+        val peerAlone = now.remoteVideoShown && !now.cameraOn && !now.screenSharing
         if (peerAlone) note(words.peerShowsSelf, whileTrue = PEER_ALONE) else forget(PEER_ALONE)
 
         if (now.videoPaused) note(words.videoPaused, whileTrue = PAUSED) else forget(PAUSED)

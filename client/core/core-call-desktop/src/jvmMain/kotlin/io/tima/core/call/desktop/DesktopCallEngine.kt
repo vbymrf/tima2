@@ -2155,6 +2155,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
 /** Ручка видео ПК: последний кадр потоком. */
 internal class Frames : PictureVideo {
     override val pictures = MutableStateFlow<VideoPicture?>(null)
+    override val cropped: Boolean get() = true
 }
 
 /**

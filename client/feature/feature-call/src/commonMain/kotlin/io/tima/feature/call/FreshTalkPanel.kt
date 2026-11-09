@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -186,10 +187,12 @@ internal fun AdaptBar(crop: CameraCrop, onCrop: (CameraCrop) -> Unit, modifier: 
     ) {
         AdaptKey("−", crop.canFarther, ADAPT_OUT_TAG) { onCrop(crop.farther()) }
         AdaptKey("+", crop.canCloser, ADAPT_IN_TAG) { onCrop(crop.closer()) }
-        AdaptKey("◀", crop.canMove(-1, 0), ADAPT_LEFT_TAG) { onCrop(crop.moved(-1, 0)) }
-        AdaptKey("▲", crop.canMove(0, -1), ADAPT_UP_TAG) { onCrop(crop.moved(0, -1)) }
-        AdaptKey("▼", crop.canMove(0, 1), ADAPT_DOWN_TAG) { onCrop(crop.moved(0, 1)) }
-        AdaptKey("▶", crop.canMove(1, 0), ADAPT_RIGHT_TAG) { onCrop(crop.moved(1, 0)) }
+        // Знак текстового начертания (U+FE0E): без него Samsung рисует ◀ и ▶ цветными значками,
+        // а ▲ и ▼ — текстом (живая проверка 2026-11-10).
+        AdaptKey("◀\uFE0E", crop.canMove(-1, 0), ADAPT_LEFT_TAG) { onCrop(crop.moved(-1, 0)) }
+        AdaptKey("▲\uFE0E", crop.canMove(0, -1), ADAPT_UP_TAG) { onCrop(crop.moved(0, -1)) }
+        AdaptKey("▼\uFE0E", crop.canMove(0, 1), ADAPT_DOWN_TAG) { onCrop(crop.moved(0, 1)) }
+        AdaptKey("▶\uFE0E", crop.canMove(1, 0), ADAPT_RIGHT_TAG) { onCrop(crop.moved(1, 0)) }
         // Ступень сейчас — на «1×» не тратится отдельное место: «1×» и есть сброс, а пока не
         // приблизили, на нём стоит то, что сейчас.
         AdaptKey(CameraCrop.label(crop.zoom) + "×", !crop.full, ADAPT_RESET_TAG) { onCrop(CameraCrop.FULL) }
@@ -205,6 +208,17 @@ private fun AdaptKey(text: String, enabled: Boolean, tag: String, onClick: () ->
     contentAlignment = Alignment.Center,
 ) {
     Caption(text, modifier = Modifier.alpha(if (enabled) 1f else DIM), fontSize = TimaType.sz5, weight = FontWeight.Bold, color = TimaFixed.onVideo, lineOne = true)
+}
+
+/**
+ * Приблизить показ своего изображения так, как режется уходящий кадр: середина видимой части —
+ * в середину окна. Для платформ, что показывают себя мимо обрезки ([io.tima.core.call.VideoHandle.cropped]).
+ */
+internal fun cropView(crop: CameraCrop): Modifier = Modifier.graphicsLayer {
+    scaleX = crop.zoom
+    scaleY = crop.zoom
+    translationX = -crop.x * size.width * crop.zoom
+    translationY = -crop.y * size.height * crop.zoom
 }
 
 /** Смена камеры кругом на своём изображении (ЗН4): передняя ↔ задняя. */
