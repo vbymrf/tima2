@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -144,48 +145,110 @@ private fun Pick(text: String, on: Boolean, tag: String, onClick: () -> Unit) {
     ) { Caption(text, fontSize = TimaType.sz6, weight = FontWeight.Bold, color = if (on) colors.onAccent else colors.text2) }
 }
 
-/** Образец — уменьшенное окно «Телефон» с текущей раскладкой; меняется сразу. */
+/**
+ * Образец — уменьшенное окно «Телефон» с текущей раскладкой; меняется сразу. Ближе к настоящему (заказчик 2026-11-10):
+ * плашка шапки с логотипом, поиском и настройками, вкладки «Телефона», разделы по умолчанию, строки переписок, панель
+ * перехода со значками и названиями; панель скрыта — пузырь «Социума» в шапке.
+ */
 @Composable
 private fun Sample(order: List<Area>, nav: Boolean) {
     val colors = Tima.colors
-    val w = Tima.words.windows
     Column(
         Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2).fillMaxWidth()
-            .border(1.5.dp, colors.line, RoundedCornerShape(14.dp)).padding(bottom = 4.dp).testTag("layout:sample"),
+            .border(1.5.dp, colors.line, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp))
+            .background(colors.surface).testTag("layout:sample"),
     ) {
-        Box(Modifier.padding(6.dp).fillMaxWidth().height(26.dp).background(colors.navigation, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterStart) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Caption(w.short(Window.Phone), fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, color = colors.onAccent, modifier = Modifier.weight(1f))
-                if (!nav) {
-                    Box(Modifier.background(colors.activity, RoundedCornerShape(9.dp)).padding(horizontal = 6.dp)) {
-                        Caption("12 " + Window.Social.glyph, fontSize = TimaType.sz6, color = colors.text)
-                    }
-                }
-            }
-        }
+        SampleHeader(nav)
         for (area in order) {
             when (area) {
-                Area.Tabs -> SampleRow(w.areaTabs, filled = true)
-                Area.Sections -> SampleRow(w.areaSections, filled = false)
-                Area.Content -> Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                    repeat(3) { Box(Modifier.padding(vertical = 3.dp).fillMaxWidth().height(20.dp).background(colors.functional, RoundedCornerShape(6.dp))) }
-                }
-                Area.Nav -> if (nav) {
-                    Row(Modifier.fillMaxWidth().padding(top = 4.dp).background(colors.functional).padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceAround) {
-                        for (win in navWindows()) Caption(win.glyph, fontSize = TimaType.sz6)
-                    }
-                }
+                Area.Tabs -> SampleTabs()
+                Area.Sections -> SampleSections()
+                Area.Content -> Column(Modifier.padding(vertical = 2.dp)) { repeat(3) { SampleChatRow(it) } }
+                Area.Nav -> if (nav) SampleNav()
             }
         }
     }
 }
 
 @Composable
-private fun SampleRow(text: String, filled: Boolean) {
+private fun SampleHeader(nav: Boolean) {
     val colors = Tima.colors
-    Box(
-        Modifier.padding(horizontal = 8.dp, vertical = 3.dp).fillMaxWidth().height(20.dp)
-            .background(if (filled) colors.functional else colors.surface, RoundedCornerShape(10.dp)).padding(horizontal = 8.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) { Caption(text, fontSize = TimaType.sz6, color = colors.text2) }
+    Row(
+        Modifier.padding(6.dp).fillMaxWidth().background(colors.navigation, RoundedCornerShape(7.dp)).padding(horizontal = 6.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(Modifier.size(18.dp).background(colors.surface, RoundedCornerShape(4.dp)), contentAlignment = Alignment.Center) {
+            Caption(WINDOW_LOGO, fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, color = colors.navigation)
+        }
+        Caption(Tima.words.windows.short(Window.Phone), fontSize = TimaType.sz5, weight = FontWeight.ExtraBold, color = colors.onAccent, modifier = Modifier.weight(1f))
+        if (!nav) {
+            Box(Modifier.background(colors.activity, RoundedCornerShape(9.dp)).padding(horizontal = 6.dp)) {
+                Caption("12 " + Window.Social.glyph, fontSize = TimaType.sz6, color = colors.text)
+            }
+        }
+        for (glyph in listOf("🔍", "⚙")) {
+            Box(Modifier.size(20.dp).background(colors.surface, CircleShape), contentAlignment = Alignment.Center) {
+                Caption(glyph, fontSize = TimaType.sz6)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SampleTabs() {
+    val colors = Tima.colors
+    val tabs = Tima.words.tabs
+    Row(Modifier.fillMaxWidth().background(colors.functional).padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.background(colors.navigation, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 2.dp)) {
+            Caption(tabs.label(WindowTab.Chats), fontSize = TimaType.sz6, weight = FontWeight.Bold, color = colors.onAccent)
+        }
+        Caption(tabs.label(WindowTab.Contacts), fontSize = TimaType.sz6, weight = FontWeight.Bold, color = colors.text2, modifier = Modifier.padding(horizontal = 4.dp))
+        Caption(tabs.label(WindowTab.Calls), fontSize = TimaType.sz6, weight = FontWeight.Bold, color = colors.text2, modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.dp).weight(1f))
+        Box(Modifier.background(colors.surface, RoundedCornerShape(10.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+            Caption("▤ " + tabs.label(WindowTab.View), fontSize = TimaType.sz6, color = colors.text2)
+        }
+    }
+}
+
+@Composable
+private fun SampleSections() {
+    val colors = Tima.colors
+    val book = Tima.words.book
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column {
+            Caption(book.everyone, fontSize = TimaType.sz6, weight = FontWeight.Bold)
+            Box(Modifier.padding(top = 2.dp).size(width = 22.dp, height = 2.dp).background(colors.navigation))
+        }
+        Caption(book.commonSection, fontSize = TimaType.sz6, color = colors.text2)
+    }
+}
+
+@Composable
+private fun SampleChatRow(i: Int) {
+    val colors = Tima.colors
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(20.dp).background(colors.functional, RoundedCornerShape(5.dp)))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Box(Modifier.size(width = (60 + 14 * i).dp, height = 6.dp).background(colors.text2.copy(alpha = 0.45f), RoundedCornerShape(3.dp)))
+            Box(Modifier.size(width = (90 - 10 * i).dp, height = 5.dp).background(colors.text2.copy(alpha = 0.22f), RoundedCornerShape(3.dp)))
+        }
+        Box(Modifier.size(width = 18.dp, height = 5.dp).background(colors.text2.copy(alpha = 0.3f), RoundedCornerShape(3.dp)))
+    }
+}
+
+@Composable
+private fun SampleNav() {
+    val colors = Tima.colors
+    Row(Modifier.fillMaxWidth().background(colors.functional).padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceAround) {
+        for (win in navWindows()) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier.size(width = 30.dp, height = 16.dp).background(if (win == Window.Phone) colors.navigation else colors.functional, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center,
+                ) { Caption(win.glyph, fontSize = TimaType.sz6) }
+                Caption(Tima.words.windows.short(win), fontSize = TimaType.sz6, color = if (win == Window.Phone) colors.text else colors.text2)
+            }
+        }
+    }
 }

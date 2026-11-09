@@ -137,7 +137,7 @@ fun WindowFrame(
         Column(Modifier.bottomLine(colors.line)) {
             WindowHeader(
                 title = Tima.words.windows.short(window),
-                logo = "Т",
+                logo = WINDOW_LOGO,
                 onSwitchWindows = onSwitchWindows,
                 right = {
                     ControlRow {
@@ -297,3 +297,6 @@ fun TabStub(
 // Кнопки шапки окна — для сценариев на телефонах (ПЛАН-(МС)).
 const val WINDOW_SEARCH_TAG: String = "window:search"
 const val WINDOW_SETTINGS_TAG: String = "window:settings"
+
+/** Буква логотипа в плашке окна — одна на каркас и образец «Главного окна». */
+const val WINDOW_LOGO = "Т"
