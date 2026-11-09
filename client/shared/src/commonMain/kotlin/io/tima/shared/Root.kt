@@ -994,6 +994,9 @@ private fun App(
     var window by navigator::window
     // Вид главного окна (ПЛАН-(ВО)): панель перехода — показана, пока настройка не сказала «0» (Р2).
     val layoutNav by remember { environment.settings.all().map { it[MainLayoutKeys.NAV] != "0" }.distinctUntilChanged() }.collectAsState(true)
+    // Раскладка главного окна (ПЛАН-(ВО) ВО4): где вкладки, разделы и панель перехода относительно списка.
+    val layoutOrder by remember { environment.settings.all().map { io.tima.feature.shell.layoutOf(it[MainLayoutKeys.ORDER]) }.distinctUntilChanged() }
+        .collectAsState(io.tima.feature.shell.DEFAULT_LAYOUT)
     // Настройка «Переходы» (ПЛАН-(МП) М5): куда ведёт вход в окно каждым способом.
     val arriveStored by remember {
         environment.settings.all().map { all -> all.filterKeys { it.startsWith(MainLayoutKeys.ARRIVE) } }.distinctUntilChanged()
@@ -3266,6 +3269,7 @@ private fun App(
                 }
             }
         },
+        io.tima.feature.shell.LocalMainLayout provides layoutOrder,
         io.tima.feature.shell.LocalWindowNav provides if (layoutNav) {
             io.tima.feature.shell.WindowNav(
                 current = window,

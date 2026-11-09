@@ -1,6 +1,9 @@
 package io.tima.feature.shell
 
 import androidx.compose.foundation.layout.ime
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawWithContent
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -104,6 +107,25 @@ fun WindowFrame(
     content: @Composable () -> Unit,
 ) {
     val colors = Tima.colors
+    // Раскладка (ПЛАН-(ВО) ВО4): что над содержимым, что под ним. Панель перехода — только на телефоне.
+    val order = LocalMainLayout.current
+    val at = order.indexOf(Area.Content)
+    val above = order.take(at)
+    val below = order.drop(at + 1)
+    val searchBelow = Area.Sections in below
+    val nav = LocalWindowNav.current?.takeIf { LayoutLocal.current.phone }
+    val area: @Composable (Area) -> Unit = { a ->
+        when (a) {
+            Area.Tabs -> TabRow(tabs, selected, onTab, trailing = tabsTrailing, countOf = countOf)
+            Area.Sections -> secondRow?.invoke()
+            Area.Nav -> if (nav != null) {
+                // Подсказка — при панели, один раз (ВО8).
+                LocalWindowNavTip.current?.let { WindowNavTipBubble(it) }
+                WindowNavBar(nav)
+            }
+            Area.Content -> Unit
+        }
+    }
     Column(modifier.fillMaxSize().background(colors.surface)) {
         // Один блок управления: шапка, вкладки, второй ряд. Линия у него одна, снизу,
         // независимо от того, есть сегодня второй ряд или нет.
@@ -129,9 +151,9 @@ fun WindowFrame(
                 },
             )
 
-            TabRow(tabs, selected, onTab, trailing = tabsTrailing, countOf = countOf)
-            secondRow?.invoke()
-            searchRow?.invoke()
+            // Над содержимым — области по раскладке (ПЛАН-(ВО) ВО4); поиск — к содержимому, со стороны разделов.
+            for (a in above) area(a)
+            if (!searchBelow) searchRow?.invoke()
         }
 
         // Идущий звонок виден из любого окна (ЗВ12) — панелью над шапкой (ПЛАН-(ВО) ВО1, `CallStrip` в `shared`):
@@ -155,12 +177,16 @@ fun WindowFrame(
             ProvidePlace(TextPlace.LISTS) { content() }
         }
 
-        // Панель перехода (ПЛАН-(ВО) ВО2) — внизу, только на телефоне; клавиатура открыта — прячется (Р9).
-        val nav = LocalWindowNav.current
-        if (nav != null && LayoutLocal.current.phone && !imeOpen()) {
-            // Подсказка — над панелью, один раз (ВО8).
-            LocalWindowNavTip.current?.let { WindowNavTipBubble(it) }
-            WindowNavBar(nav)
+        // Под содержимым — области по раскладке; клавиатура открыта — прячутся (Р9): иначе она подняла бы их над
+        // собой и съела место у списка.
+        if (below.isNotEmpty() && !imeOpen()) {
+            Column(Modifier.drawWithContent {
+                drawContent()
+                drawLine(colors.line, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx())
+            }) {
+                if (searchBelow) searchRow?.invoke()
+                for (a in below) area(a)
+            }
         }
     }
 }
