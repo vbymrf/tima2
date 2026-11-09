@@ -1146,11 +1146,18 @@ private fun App(
     // Системная «Назад» (ПЛАН-(МП) М7): сначала закрыть переключатель окон, потом — по цепочке переходов.
     DisposableEffect(navigator) {
         SystemBack.handle = {
-            if (windowSwitcher) {
-                windowSwitcher = false
-                true
-            } else {
-                navigator.back()
+            val top = navigator.where
+            when {
+                windowSwitcher -> {
+                    windowSwitcher = false
+                    true
+                }
+                // Пункт настроек — назад в их список, как кнопкой в шапке пункта: настройки — одно звено цепочки.
+                top is Where.Settings && top.item != null -> {
+                    navigator.open(Where.Settings(), Via.Open)
+                    true
+                }
+                else -> navigator.back()
             }
         }
         onDispose { SystemBack.handle = null }
