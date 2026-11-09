@@ -408,8 +408,6 @@ interface SettingsListWords {
     /** «Шрифты и размеры» — второй пункт вида (ПЛАН-(Ш)-ШРИФТОВ Ш4, 2026-09-16). */
     val itemText: String
     val itemMainWindow: String
-    /** «Звонок · Вид» — вид окна звонка и режим адаптации (ПЛАН-(ЗН) ЗН1). */
-    val itemCallLook: String
     val itemLanguage: String
     val itemPrivacy: String
     val itemStorage: String
@@ -1326,6 +1324,14 @@ interface CallWords {
     val lookAbout: String
     val adaptTitle: String
     val adaptAbout: String
+
+    /** «Звонки → Увеличение изображения» (ПЛАН-(ЗН) ЗН8). */
+    val zoomTitle: String
+    val zoomAbout: String
+    val handTitle: String
+    val handRight: String
+    val handLeft: String
+    val handBoth: String
 
     /** Над кнопками адаптации: сдвиг в процентах кадра и сколько ушло за край (заказчик 2026-11-10). */
     fun adaptShift(x: String, y: String): String
@@ -3240,7 +3246,6 @@ object RussianWords : Words {
         override val itemAppearance = "Цвета"
         override val itemText = "Шрифты и размеры"
         override val itemMainWindow = "Главное окно"
-        override val itemCallLook = "Звонок · Вид"
         override val itemLanguage = "Язык"
         override val itemPrivacy = "Приватность и блокировки"
         override val itemStorage = "Память и трафик"
@@ -3812,6 +3817,12 @@ object RussianWords : Words {
         override val lookAbout = "Новый — кнопки одним рядом: свернуть, микрофон, ухо или динамик, камера, настройки звонка, завершить. Действует со следующего звонка. Групповой звонок — всегда в прежнем виде."
         override val adaptTitle = "Режим адаптации изображения"
         override fun adaptShift(x: String, y: String) = "сдвиг $x $y"
+        override val zoomTitle = "Увеличение изображения"
+        override val zoomAbout = "Своё изображение с начала звонка приближается и сдвигается к лицу: вниз и в сторону от руки, в которой телефон. Собеседник видит так же. Только передняя камера и звонок на двоих."
+        override val handTitle = "Телефон в руке"
+        override val handRight = "Правой"
+        override val handLeft = "Левой"
+        override val handBoth = "Обеими"
         override fun adaptOver(x: String, y: String) = "за краем $x $y"
         override val adaptAbout = "Поверх изображения — кнопки: приблизить своё изображение до 3× и сдвинуть его в любую сторону. Собеседник видит то же, что ваше окошко. Только в новом виде и в звонке на двоих; к следующему звонку — снова весь кадр."
         override val noAnswer = "Не дозвонились: никто не ответил"

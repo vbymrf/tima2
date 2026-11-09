@@ -147,9 +147,12 @@ data class CameraCrop(val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f
     }
 }
 
+/** В какой руке держат телефон — куда сдвигать увеличенное изображение (ЗН8). */
+enum class CallHand { Right, Left, Both }
+
 /**
- * «Настройки → Звонок · Вид» (ПЛАН-(ЗН) ЗН1). В настройках устройства: у другого телефона свой
- * экран и свой выбор.
+ * Вид окна звонка и своё изображение (ПЛАН-(ЗН)). В настройках устройства: у другого телефона свой экран и свой
+ * выбор. С 2026-11-10 вид и увеличение — в «Настройки → Звонки», режим адаптации — в «Испытательном режиме звонков».
  */
 object CallLookKeys {
     /** `old` — прежний вид окна звонка; нет ключа или иное — новый (ответ заказчика 5: по умолчанию новый). */
@@ -158,6 +161,60 @@ object CallLookKeys {
     /** `1` — режим адаптации изображения включён; по умолчанию выключен. */
     const val ADAPT = "call.adapt"
 
+    /** «Увеличение изображения» (ЗН8): `1`, `1.3`, `1.4`, `1.5`, `1.6`; нет ключа — 1. */
+    const val ZOOM = "call.zoom"
+
+    /** Рука: `right`, `left`, `both`; нет ключа — правая. */
+    const val HAND = "call.hand"
+
+    /** Ступени увеличения (заказчик 2026-11-10). */
+    val ZOOMS = listOf(1f, 1.3f, 1.4f, 1.5f, 1.6f)
+
+    /**
+     * Сдвиг для ступени, проценты кадра (заказчик 2026-11-10): вниз всегда, вбок — от руки. Не дальше края кадра
+     * («чтобы не выходило ничего»): при 1.3 до края 11,5 %, и 12 стало 11; при 1.4, 1.5, 1.6 до края 14,3, 16,7 и
+     * 18,75 % — 14, 15 и 18 внутри.
+     */
+    private val SHIFTS = mapOf(1.3f to 12, 1.4f to 14, 1.5f to 15, 1.6f to 18)
+
     fun fresh(all: Map<String, String>): Boolean = all[LOOK] != "old"
     fun adapt(all: Map<String, String>): Boolean = all[ADAPT] == "1"
+
+    fun zoom(all: Map<String, String>): Float = all[ZOOM]?.toFloatOrNull()?.takeIf { it in ZOOMS } ?: 1f
+
+    fun hand(all: Map<String, String>): CallHand = when (all[HAND]) {
+        "left" -> CallHand.Left
+        "both" -> CallHand.Both
+        else -> CallHand.Right
+    }
+
+    fun code(hand: CallHand): String = when (hand) {
+        CallHand.Right -> "right"
+        CallHand.Left -> "left"
+        CallHand.Both -> "both"
+    }
+
+    /** Сдвиг ступени в процентах кадра — уже с пределом края. */
+    fun shift(zoom: Float): Int {
+        val table = SHIFTS[zoom] ?: return 0
+        val edge = kotlin.math.floor((1f - 1f / zoom) / 2f * 100f).toInt()
+        return minOf(table, edge)
+    }
+
+    /**
+     * Обрезка с начала звонка: увеличение, вниз на сдвиг (на экране «−»), правая рука — влево («−»), левая — вправо,
+     * обе — по середине.
+     */
+    fun preset(zoom: Float, hand: CallHand): CameraCrop {
+        if (zoom <= 1f) return CameraCrop.FULL
+        val k = shift(zoom) / 100f
+        val x = when (hand) {
+            CallHand.Right -> -k
+            CallHand.Left -> k
+            CallHand.Both -> 0f
+        }
+        return CameraCrop(zoom, x, k).clamped()
+    }
+
+    fun preset(all: Map<String, String>): CameraCrop = preset(zoom(all), hand(all))
 }

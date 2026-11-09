@@ -164,6 +164,11 @@ fun CallScreen(
      * Групповой звонок остаётся прежним и с ним (ответ заказчика 4).
      */
     fresh: FreshCall? = null,
+    /**
+     * Как сейчас обрезан свой кадр (ЗН5, ЗН8): своё окошко приближается так же, если платформа показывает себя мимо
+     * обрезки. В обоих видах окна.
+     */
+    ownCrop: io.tima.core.call.CameraCrop = io.tima.core.call.CameraCrop.FULL,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -261,7 +266,7 @@ fun CallScreen(
             val swap = swapped && mine != null
             // Своё изображение при приближении (ЗН5): платформа, что показывает себя мимо обрезки,
             // приближается здесь так же, как режется уходящий кадр.
-            val mineZoom = fresh?.crop?.takeIf { freshTalk && !it.full && mine?.cropped == false }?.let { cropView(it) } ?: Modifier
+            val mineZoom = ownCrop.takeIf { group == null && !it.full && mine?.cropped == false && !state.screenSharing }?.let { cropView(it) } ?: Modifier
             val big = if (swap) mine else remoteShown
             if (big != null) {
                 CallVideo(big, Modifier.fillMaxSize().then(if (swap) mineZoom else Modifier))

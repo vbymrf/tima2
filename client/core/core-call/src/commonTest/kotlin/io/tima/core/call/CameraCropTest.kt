@@ -78,6 +78,35 @@ class CameraCropTest {
     }
 
     @Test
+    fun увеличение_с_начала_звонка_не_выходит_за_край() {
+        // Заказчик 2026-11-10: 1.3 — 12, но до края 11,5 % — стало 11; 1.4, 1.5, 1.6 — 14, 15, 18 внутри.
+        assertEquals(11, CallLookKeys.shift(1.3f))
+        assertEquals(14, CallLookKeys.shift(1.4f))
+        assertEquals(15, CallLookKeys.shift(1.5f))
+        assertEquals(18, CallLookKeys.shift(1.6f))
+        for (z in CallLookKeys.ZOOMS.drop(1)) {
+            for (hand in CallHand.entries) {
+                val c = CallLookKeys.preset(z, hand)
+                assertFalse(c.beyond, "увеличение $z, рука $hand: вышло за край")
+                assertEquals(0 to 0, c.overPercent)
+            }
+        }
+    }
+
+    @Test
+    fun рука_и_направления_увеличения() {
+        // Вниз всегда (на экране «−»), правая рука — влево («−»), левая — вправо, обе — по середине.
+        assertEquals(-14 to -14, CallLookKeys.preset(1.4f, CallHand.Right).shiftPercent)
+        assertEquals(14 to -14, CallLookKeys.preset(1.4f, CallHand.Left).shiftPercent)
+        assertEquals(0 to -18, CallLookKeys.preset(1.6f, CallHand.Both).shiftPercent)
+        assertEquals(CameraCrop.FULL, CallLookKeys.preset(1f, CallHand.Right))
+        assertEquals(1.5f, CallLookKeys.zoom(mapOf(CallLookKeys.ZOOM to "1.5")))
+        assertEquals(1f, CallLookKeys.zoom(mapOf(CallLookKeys.ZOOM to "2")), "ступени вне списка нет")
+        assertEquals(CallHand.Left, CallLookKeys.hand(mapOf(CallLookKeys.HAND to "left")))
+        assertEquals(CallHand.Right, CallLookKeys.hand(emptyMap()))
+    }
+
+    @Test
     fun вид_по_умолчанию_новый_адаптация_выключена() {
         assertTrue(CallLookKeys.fresh(emptyMap()), "ответ заказчика 5: по умолчанию новый")
         assertFalse(CallLookKeys.fresh(mapOf(CallLookKeys.LOOK to "old")))

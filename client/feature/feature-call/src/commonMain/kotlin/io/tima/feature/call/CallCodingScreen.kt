@@ -10,6 +10,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import io.tima.core.call.CallHand
+import io.tima.core.call.CallLookKeys
+import io.tima.core.call.CameraCrop
 import io.tima.core.call.HardwareCoding
 import io.tima.core.ui.Caption
 import io.tima.core.ui.Secondary
@@ -32,6 +35,14 @@ fun CallCodingScreen(
     /** «Видео при сворачивании»: `false` — пауза (по умолчанию), `true` — продолжать показывать. */
     cameraInBackground: Boolean = false,
     onCameraInBackground: ((Boolean) -> Unit)? = null,
+    /** «Увеличение изображения» и рука (ЗН8); `null` — не показывать. */
+    zoom: Float? = null,
+    onZoom: (Float) -> Unit = {},
+    hand: CallHand = CallHand.Right,
+    onHand: (CallHand) -> Unit = {},
+    /** Вид окна звонка: новый — `true` (ЗН1, с 2026-11-10 здесь). `null` — не показывать. */
+    fresh: Boolean? = null,
+    onFresh: (Boolean) -> Unit = {},
 ) {
     val words = Tima.words.call
     val onOff = listOf(true to words.codingOn, false to words.codingOff)
@@ -43,6 +54,25 @@ fun CallCodingScreen(
             .padding(TimaSpacing.about3),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
+        // Первым — увеличение своего изображения, вторым — вид окна (заказчик 2026-11-10).
+        if (zoom != null) {
+            Caption(words.zoomTitle, fontSize = TimaType.sz3, weight = FontWeight.Bold)
+            Pick(words.zoomTitle, CallLookKeys.ZOOMS.map { it to CameraCrop.label(it) + "×" }, zoom, onZoom)
+            if (zoom > 1f) {
+                Pick(
+                    words.handTitle,
+                    listOf(CallHand.Right to words.handRight, CallHand.Left to words.handLeft, CallHand.Both to words.handBoth),
+                    hand,
+                    onHand,
+                )
+            }
+            Secondary(words.zoomAbout)
+        }
+        if (fresh != null) {
+            Caption(words.lookTitle, fontSize = TimaType.sz3, weight = FontWeight.Bold)
+            Pick(words.lookTitle, listOf(true to words.lookNew, false to words.lookOld), fresh, onFresh)
+            Secondary(words.lookAbout)
+        }
         Caption(words.codingTitle, fontSize = TimaType.sz3, weight = FontWeight.Bold)
         Secondary(words.codingAbout)
         Pick(words.codingEncode, onOff, coding.encode) { onChange(coding.copy(encode = it)) }

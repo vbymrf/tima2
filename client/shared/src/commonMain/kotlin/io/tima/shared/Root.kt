@@ -1000,9 +1000,11 @@ private fun App(
     // «Звонок · Вид» (ПЛАН-(ЗН) ЗН1): новый вид окна звонка и режим адаптации. Снимок берётся при
     // начале звонка — идущий звонок вид не меняет; к следующему — новый снимок.
     val callLookNow by remember {
-        environment.settings.all().map { io.tima.core.call.CallLookKeys.fresh(it) to io.tima.core.call.CallLookKeys.adapt(it) }.distinctUntilChanged()
-    }.collectAsState(true to false)
-    var callLook by remember { mutableStateOf<Pair<Boolean, Boolean>?>(null) }
+        environment.settings.all().map {
+            CallLookSnap(io.tima.core.call.CallLookKeys.fresh(it), io.tima.core.call.CallLookKeys.adapt(it), io.tima.core.call.CallLookKeys.preset(it))
+        }.distinctUntilChanged()
+    }.collectAsState(CallLookSnap(fresh = true, adapt = false, preset = io.tima.core.call.CameraCrop.FULL))
+    var callLook by remember { mutableStateOf<CallLookSnap?>(null) }
     // Настройка «Переходы» (ПЛАН-(МП) М5): куда ведёт вход в окно каждым способом.
     val arriveStored by remember {
         environment.settings.all().map { all -> all.filterKeys { it.startsWith(MainLayoutKeys.ARRIVE) } }.distinctUntilChanged()
@@ -3250,10 +3252,26 @@ private fun App(
     }
     // Звонок начался — звук в сообщениях на паузу; после звонка он на паузе и остаётся (ПЛАН-(ВО) Р12).
     LaunchedEffect(callHost.active) { if (callHost.active) audioHubHere?.stop() }
+    // «Увеличение изображения» (ПЛАН-(ЗН) ЗН8, заказчик 2026-11-10): с начала разговора на двоих, только передняя
+    // камера; сменили на заднюю — весь кадр, вернули переднюю — снова увеличение. Уходит собеседнику.
+    val zoomPreset = callLook?.preset
+    val talkingNow = callHost.active && callHost.state.stage == CallStage.Connected
+    LaunchedEffect(talkingNow, callHost.state.cameraFront, callHost.group == null, zoomPreset) {
+        val preset = zoomPreset ?: return@LaunchedEffect
+        if (!talkingNow || callHost.group != null || preset.full) return@LaunchedEffect
+        val want = if (callHost.state.cameraFront) preset else io.tima.core.call.CameraCrop.FULL
+        if (callHost.crop != want) {
+            Journal.note(LogCode.CALL, "увеличение изображения", "стало" to want.describe(), "камера" to if (callHost.state.cameraFront) "передняя" else "задняя")
+            callHost.cropCamera(want)
+        }
+    }
     LaunchedEffect(callHost.active) {
         callLook = if (callHost.active) {
-            callLookNow.also { (fresh, adapt) ->
-                Journal.note(LogCode.CALL, "вид окна звонка", "вид" to if (fresh) "новый" else "прежний", "адаптация" to adapt)
+            callLookNow.also { look ->
+                Journal.note(
+                    LogCode.CALL, "вид окна звонка", "вид" to if (look.fresh) "новый" else "прежний", "адаптация" to look.adapt,
+                    "увеличение" to look.preset.describe(),
+                )
             }
         } else {
             null
@@ -3593,7 +3611,7 @@ private fun App(
                         navigator.leaveCall()
                     },
                     // Новый вид окна разговора (ПЛАН-(ЗН)): по снимку настройки на этот звонок.
-                    fresh = callLook?.takeIf { it.first }?.let { (_, adapt) ->
+                    fresh = callLook?.takeIf { it.fresh }?.let { look ->
                         io.tima.feature.call.FreshCall(
                             onMinimize = {
                                 Journal.note(LogCode.CALL, "окно звонка свёрнуто")
@@ -3602,10 +3620,11 @@ private fun App(
                             },
                             onSaveTraffic = callHost::saveTraffic,
                             onScreenShare = if (callHost.screenShareable) callHost::screenShare else null,
-                            crop = if (adapt) callHost.crop else null,
+                            crop = if (look.adapt) callHost.crop else null,
                             onCrop = callHost::cropCamera,
                         )
                     },
+                    ownCrop = callHost.crop,
                 )
 
                 Window.Phone -> PhoneWindow(
@@ -5159,3 +5178,6 @@ internal suspend fun probeStream(cards: io.tima.core.network.LinkCardsOverHttp, 
     val kind = io.tima.domain.chat.M3u8.widgetOf(info, variant)
     return io.tima.feature.chat.MediaProbe(kind, (variant ?: info).durationMs)
 }
+
+/** Снимок «как показывать звонок» на время одного звонка (ПЛАН-(ЗН)): вид, режим адаптации, увеличение с начала. */
+private data class CallLookSnap(val fresh: Boolean, val adapt: Boolean, val preset: io.tima.core.call.CameraCrop)

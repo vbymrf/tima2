@@ -548,22 +548,21 @@ internal fun Settings(
                     onCameraInBackground = { keep ->
                         scope.launch { deviceSettings.put(io.tima.core.call.HardwareCodingKeys.CAMERA_BACKGROUND, if (keep) "1" else "0") }
                     },
-                )
-            }
-
-            // Вид окна звонка и режим адаптации (ПЛАН-(ЗН) ЗН1): настройки устройства, читаются при начале звонка.
-            SettingsItem.CALL_LOOK -> {
-                val saved by deviceSettings.all().collectAsState(emptyMap())
-                io.tima.feature.call.CallLookScreen(
+                    // Увеличение изображения и вид окна звонка (ПЛАН-(ЗН) ЗН8, ЗН1): читаются при начале звонка.
+                    zoom = io.tima.core.call.CallLookKeys.zoom(saved),
+                    onZoom = { z ->
+                        Journal.note(LogCode.CALL, "увеличение изображения выбрано", "ступень" to z)
+                        scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.ZOOM, io.tima.core.call.CameraCrop.label(z)) }
+                    },
+                    hand = io.tima.core.call.CallLookKeys.hand(saved),
+                    onHand = { h ->
+                        Journal.note(LogCode.CALL, "рука для увеличения выбрана", "рука" to io.tima.core.call.CallLookKeys.code(h))
+                        scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.HAND, io.tima.core.call.CallLookKeys.code(h)) }
+                    },
                     fresh = io.tima.core.call.CallLookKeys.fresh(saved),
                     onFresh = { on ->
                         Journal.note(LogCode.CALL, "вид окна звонка выбран", "вид" to if (on) "новый" else "прежний")
                         scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.LOOK, if (on) "new" else "old") }
-                    },
-                    adapt = io.tima.core.call.CallLookKeys.adapt(saved),
-                    onAdapt = { on ->
-                        Journal.note(LogCode.CALL, "режим адаптации изображения выбран", "включён" to on)
-                        scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.ADAPT, if (on) "1" else "0") }
                     },
                 )
             }
@@ -678,11 +677,20 @@ internal fun Settings(
 
             // Испытательный режим звонков. Пункт временный и уйдёт вместе со стендом —
             // держать его «на всякий случай» после испытаний незачем (С-В1).
-            SettingsItem.CALLBENCH -> CallBenchSwitch(
-                on = benchState.on,
-                preset = benchState.preset.name,
-                onSwitch = bench::flag,
-            )
+            SettingsItem.CALLBENCH -> {
+                val saved by deviceSettings.all().collectAsState(emptyMap())
+                CallBenchSwitch(
+                    on = benchState.on,
+                    preset = benchState.preset.name,
+                    onSwitch = bench::flag,
+                    // Кнопки приближения и сдвига — испытательные (заказчик 2026-11-10): здесь, а не в «Звонках».
+                    adapt = io.tima.core.call.CallLookKeys.adapt(saved),
+                    onAdapt = { on ->
+                        Journal.note(LogCode.CALL, "режим адаптации изображения выбран", "включён" to on)
+                        scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.ADAPT, if (on) "1" else "0") }
+                    },
+                )
+            }
 
             else -> TabStub(
                 willWhat = Tima.words.settings2.item(item),

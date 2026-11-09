@@ -621,6 +621,9 @@ fun CallBenchSwitch(
     preset: String,
     onSwitch: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    /** «Режим адаптации изображения» — кнопки приближения и сдвига в окне звонка (ЗН5; здесь с 2026-11-10). */
+    adapt: Boolean? = null,
+    onAdapt: (Boolean) -> Unit = {},
 ) {
     val words = Tima.words.bench
     Column(
@@ -635,6 +638,12 @@ fun CallBenchSwitch(
         Secondary(words.flagAbout)
         Pick(words.flag, listOf(true to words.on, false to words.off), on, onSwitch)
         Tertiary(words.presetNow(preset))
+        if (adapt != null) {
+            val call = Tima.words.call
+            Caption(call.adaptTitle, fontSize = TimaType.sz3, weight = FontWeight.Bold)
+            Pick(call.adaptTitle, listOf(true to call.codingOn, false to call.codingOff), adapt, onAdapt)
+            Secondary(call.adaptAbout)
+        }
     }
 }
 
