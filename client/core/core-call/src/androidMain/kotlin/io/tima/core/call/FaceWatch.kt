@@ -35,6 +35,10 @@ internal class FaceWatch(private val context: Context) {
 
     @Volatile
     private var seenAt = 0L
+
+    /** Помада гаснет, пока рот движется (`LipFade`): точки прошлого поиска — сравнивать с новыми. */
+    private val fade = LipFade()
+    private var lastRaw: FloatArray? = null
     private var found: Boolean? = null
 
     // ── Замер ──
@@ -104,6 +108,9 @@ internal class FaceWatch(private val context: Context) {
         return out
     }
 
+    /** Доля силы помады на этот кадр: 1 — как на ползунке, меньше — рот движется. */
+    fun lipFade(): Float = fade.value(SystemClock.uptimeMillis())
+
     /** Для замера в журнале: сколько раз искали и сколько это стоило. */
     fun stats(): Array<Pair<String, Any?>> {
         val n = detections
@@ -146,7 +153,12 @@ internal class FaceWatch(private val context: Context) {
             found = now
             Journal.note(LogCode.CALL, if (now) "фильтры: лицо найдено" else "фильтры: лицо потеряно")
         }
-        if (raw == null) return
+        if (raw == null) {
+            lastRaw = null
+            return
+        }
+        lastRaw?.let { fade.onDetection(LipFade.motion(it, raw, WIDTH, HEIGHT), SystemClock.uptimeMillis()) }
+        lastRaw = raw
         val was = upright
         upright = if (was == null || jumped(was, raw)) raw else FacePoints.follow(was, raw)
         seenAt = SystemClock.uptimeMillis()
@@ -178,6 +190,8 @@ internal class FaceWatch(private val context: Context) {
             vnn = null
             upright = null
             found = null
+            lastRaw = null
+            fade.reset()
         }
     }
 

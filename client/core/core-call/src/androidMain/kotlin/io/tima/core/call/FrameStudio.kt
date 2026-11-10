@@ -128,7 +128,9 @@ internal class FrameStudio(private val assets: AssetManager) {
         if (f.beauty) passes += { src, dst -> drawBeauty(src, dst, w, h, f, points) }
         if (f.colour) passes += { src, dst -> drawColor(src, dst, f) }
         if (f.reshape && points != null) passes += { src, dst -> drawReshape(src, dst, w, h, f, points) }
-        if (f.makeup && points != null) passes += { src, dst -> drawMakeup(src, dst, f, points) }
+        // Помада гаснет частично, пока рот движется: точки отстают от губ (`LipFade`).
+        val lips = faces?.lipFade() ?: 1f
+        if (f.makeup && points != null) passes += { src, dst -> drawMakeup(src, dst, f, points, lips) }
         if (passes.isEmpty()) passes += { src, dst -> drawCopy(src, dst) }
         var src = bufA
         passes.forEachIndexed { i, pass ->
@@ -267,7 +269,7 @@ internal class FrameStudio(private val assets: AssetManager) {
         drawStrip(shader, quad, quadTex)
     }
 
-    private fun drawMakeup(src: GlTextureFrameBuffer, dst: GlTextureFrameBuffer, f: CallFilters, points: FloatArray) {
+    private fun drawMakeup(src: GlTextureFrameBuffer, dst: GlTextureFrameBuffer, f: CallFilters, points: FloatArray, lips: Float) {
         drawCopy(src, dst)
         val shader = shader(::makeup, FS_MAKEUP, VS_MAKEUP)
         shader.useProgram()
@@ -277,7 +279,7 @@ internal class FrameStudio(private val assets: AssetManager) {
         val indices = ShortBuffer.wrap(FACE_TRIANGLES).let { short ->
             ByteBuffer.allocateDirect(FACE_TRIANGLES.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().put(short).also { it.position(0) }
         }
-        if (f.lipstick > 0) drawMesh(shader, pos, "mouth.png", LIPSTICK_BOUNDS, f.lipstick / 100f, indices, LIPSTICK_SOFT)
+        if (f.lipstick > 0) drawMesh(shader, pos, "mouth.png", LIPSTICK_BOUNDS, f.lipstick / 100f * lips, indices, LIPSTICK_SOFT)
         if (f.blush > 0) drawMesh(shader, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, indices, 0f)
     }
 
