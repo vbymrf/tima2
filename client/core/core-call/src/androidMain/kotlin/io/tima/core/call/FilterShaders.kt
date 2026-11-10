@@ -266,8 +266,16 @@ varying highp vec2 vScreen;
 uniform sampler2D uTex;
 uniform sampler2D uMakeup;
 uniform float uIntensity;
+// Мягкий край (заказчик 2026-11-10): картинка размывается 3×3 на uSoft (доли картинки) — ошибка точек в несколько
+// пикселей не видна на большой силе. Ноль — без размытия (румяна и так мягкие).
+uniform vec2 uSoft;
 void main() {
-    vec4 fg = texture2D(uMakeup, vTex) * uIntensity;
+    vec2 sx = vec2(uSoft.x, 0.0);
+    vec2 sy = vec2(0.0, uSoft.y);
+    vec4 fg = (texture2D(uMakeup, vTex) * 4.0
+        + (texture2D(uMakeup, vTex - sx) + texture2D(uMakeup, vTex + sx) + texture2D(uMakeup, vTex - sy) + texture2D(uMakeup, vTex + sy)) * 2.0
+        + texture2D(uMakeup, vTex - sx - sy) + texture2D(uMakeup, vTex + sx - sy) + texture2D(uMakeup, vTex - sx + sy) + texture2D(uMakeup, vTex + sx + sy)
+    ) / 16.0 * uIntensity;
     if (fg.a <= 0.0) discard;
     vec4 bg = texture2D(uTex, vScreen);
     // Умножение, как в gpupixel (`blendMode` 15): картинки губ и румян непрозрачные, на белом фоне, и белое при

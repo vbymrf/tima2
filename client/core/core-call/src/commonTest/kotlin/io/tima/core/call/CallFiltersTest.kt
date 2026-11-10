@@ -20,9 +20,9 @@ class CallFiltersTest {
 
     @Test
     fun тоньше_до_012() {
-        // Заказчик 2026-11-10: предел 0,12; первая половина хода — как у gpupixel (0,025 на 50).
+        // Заказчик 2026-11-10: предел 0,12, сила растёт ровно по ползунку.
         assertEquals(0f, CallFilters(thin = 0).thinDelta)
-        assertEquals(0.025f, CallFilters(thin = 50).thinDelta, 1e-6f)
+        assertEquals(0.06f, CallFilters(thin = 50).thinDelta, 1e-6f)
         assertEquals(0.12f, CallFilters(thin = 100).thinDelta, 1e-6f)
     }
 
@@ -61,6 +61,19 @@ class CallFiltersTest {
         assertEquals(222, p.size)
         // 106 — середина 102 и 98, как в gpupixel.
         assertEquals((raw[204] + raw[196]) / 2, p[212], 1e-6f)
+    }
+
+    @Test
+    fun точки_стоят_не_дрожат_а_движутся_без_отставания() {
+        // Заказчик 2026-11-10: на большой силе помада «не поспевает за движением губ».
+        val was = floatArrayOf(0.5f, 0.5f, 0.5f, 0.6f)
+        val raw = floatArrayOf(0.502f, 0.5f, 0.55f, 0.6f)
+        val p = FacePoints.follow(was, raw)
+        // Дрожь в полпикселя — берётся меньше половины пути.
+        assertTrue(p[0] - 0.5f < 0.002f * 0.6f, "дрожь не гасится: ${p[0]}")
+        // Губы сдвинулись на 0,05 кадра — точка там же, где найдена.
+        assertEquals(0.55f, p[2], 1e-6f)
+        assertEquals(0.6f, p[3], 1e-6f)
     }
 
     @Test

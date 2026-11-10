@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Кадр для поиска маленький и прямой ([WIDTH]×[HEIGHT], как видит человек) — его отдаёт `FrameStudio`, когда
  * [offer] свободен; поиск идёт на своём потоке, через кадр-два, и не держит камеру. Точки между поисками
- * сглаживаются, чтобы лицо не дрожало; старше [STALE_MS] — лица нет.
+ * сглаживаются по скорости (`FacePoints.follow`): стоят — не дрожат, движутся — не отстают; старше [STALE_MS] — лица нет.
  */
 internal class FaceWatch(private val context: Context) {
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "tima-faces").apply { isDaemon = true } }
@@ -148,7 +148,7 @@ internal class FaceWatch(private val context: Context) {
         }
         if (raw == null) return
         val was = upright
-        upright = if (was == null || jumped(was, raw)) raw else FloatArray(raw.size) { i -> was[i] + (raw[i] - was[i]) * SMOOTH }
+        upright = if (was == null || jumped(was, raw)) raw else FacePoints.follow(was, raw)
         seenAt = SystemClock.uptimeMillis()
     }
 
@@ -188,9 +188,6 @@ internal class FaceWatch(private val context: Context) {
 
         /** Искать лицо раз в столько кадров. */
         private const val EVERY = 3L
-
-        /** Сглаживание точек: доля нового положения. */
-        private const val SMOOTH = 0.6f
 
         /** Точки старше — лица нет: фильтры лица не рисуются на пустом месте. */
         private const val STALE_MS = 600L

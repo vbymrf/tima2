@@ -59,6 +59,7 @@ internal class FrameStudio(private val assets: AssetManager) {
 
     private val outs = mutableListOf<Out>()
     private val textures = mutableMapOf<String, Int>()
+    private val textureSizes = mutableMapOf<String, Pair<Int, Int>>()
 
     // ── Замер (ФЗ0) ──
     private var frames = 0L
@@ -260,7 +261,7 @@ internal class FrameStudio(private val assets: AssetManager) {
         }
         GLES20.glUniform2fv(shader.getUniformLocation("uP"), RESHAPE_POINTS.size, p, 0)
         GLES20.glUniform1f(shader.getUniformLocation("uAspect"), w.toFloat() / h)
-        // «Тоньше» — до 0,12 (CallFilters.thinDelta), глаза — до 0,2, как у gpupixel.
+        // «Тоньше» — ровно до 0,12 (CallFilters.thinDelta), глаза — до 0,2, как у gpupixel.
         GLES20.glUniform1f(shader.getUniformLocation("uThin"), f.thinDelta)
         GLES20.glUniform1f(shader.getUniformLocation("uEyes"), f.eyes / 100f * 0.2f)
         drawStrip(shader, quad, quadTex)
@@ -276,16 +277,18 @@ internal class FrameStudio(private val assets: AssetManager) {
         val indices = ShortBuffer.wrap(FACE_TRIANGLES).let { short ->
             ByteBuffer.allocateDirect(FACE_TRIANGLES.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().put(short).also { it.position(0) }
         }
-        if (f.lipstick > 0) drawMesh(shader, pos, "mouth.png", LIPSTICK_BOUNDS, f.lipstick / 100f, indices)
-        if (f.blush > 0) drawMesh(shader, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, indices)
+        if (f.lipstick > 0) drawMesh(shader, pos, "mouth.png", LIPSTICK_BOUNDS, f.lipstick / 100f, indices, LIPSTICK_SOFT)
+        if (f.blush > 0) drawMesh(shader, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, indices, 0f)
     }
 
-    private fun drawMesh(shader: GlShader, pos: FloatArray, image: String, bounds: FloatArray, intensity: Float, indices: ShortBuffer) {
+    private fun drawMesh(shader: GlShader, pos: FloatArray, image: String, bounds: FloatArray, intensity: Float, indices: ShortBuffer, soft: Float) {
         val tex = FloatArray(FACE_POINTS * 2) { i ->
             val v = FACE_TEMPLATE[i] * 1280f
             if (i % 2 == 0) (v - bounds[0]) / bounds[2] else (v - bounds[1]) / bounds[3]
         }
         bind(shader, "uMakeup", 1, texture(image))
+        val (w, h) = textureSizes[image] ?: (1 to 1)
+        GLES20.glUniform2f(shader.getUniformLocation("uSoft"), soft / w, soft / h)
         GLES20.glUniform1f(shader.getUniformLocation("uIntensity"), intensity)
         shader.setVertexAttribArray("aPos", 2, floats(*pos))
         shader.setVertexAttribArray("aTex", 2, floats(*tex))
@@ -349,6 +352,7 @@ internal class FrameStudio(private val assets: AssetManager) {
     /** Картинка из `assets/filters` — текстурой, один раз на контекст. */
     private fun texture(name: String): Int = textures.getOrPut(name) {
         val bitmap = assets.open("filters/$name").use { BitmapFactory.decodeStream(it) }
+        textureSizes[name] = bitmap.width to bitmap.height
         val id = GlUtil.generateTexture(GLES20.GL_TEXTURE_2D)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id)
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
@@ -394,6 +398,7 @@ internal class FrameStudio(private val assets: AssetManager) {
         a = null; b = null; q1 = null; q2 = null; small = null
         outs.clear()
         textures.clear()
+        textureSizes.clear()
     }
 
     companion object {
@@ -410,6 +415,9 @@ internal class FrameStudio(private val assets: AssetManager) {
         /** Где картинка помады и румян лежит на шаблоне лица 1280×1280 (gpupixel `LipstickFilter`, `BlusherFilter`). */
         private val LIPSTICK_BOUNDS = floatArrayOf(502.5f, 710f, 262.5f, 167.5f)
         private val BLUSH_BOUNDS = floatArrayOf(395f, 520f, 489f, 209f)
+
+        /** Мягкость края помады — пикселей картинки `mouth.png` (105×67, губы ~150 пикселей кадра: шаг ~4 пикселя кадра). */
+        private const val LIPSTICK_SOFT = 2.5f
 
         private fun floats(vararg v: Float): FloatBuffer = GlUtil.createFloatBuffer(v)
     }
