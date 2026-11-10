@@ -103,3 +103,59 @@ class CallFiltersTest {
         assertNotNull(z.axes)
     }
 }
+
+/** Поиск лица моделями MediaPipe без MediaPipe Tasks (ПЛАН-(ФЗ) §6.3, вариант «в»). */
+class FaceModelTest {
+
+    @Test
+    fun якорей_896_и_первый_в_углу() {
+        assertEquals(896 * 2, FaceModel.anchors.size)
+        assertEquals(0.5f / 16, FaceModel.anchors[0], 1e-6f)
+        // Последний — правая нижняя клетка сетки 8×8.
+        assertEquals(7.5f / 8, FaceModel.anchors[895 * 2], 1e-6f)
+    }
+
+    @Test
+    fun лицо_у_якоря_со_сдвигом() {
+        val boxes = FloatArray(896 * 16)
+        val scores = FloatArray(896) { -10f }
+        scores[100] = 5f
+        boxes[100 * 16] = 6.4f // +0,05 холста по x
+        boxes[100 * 16 + 2] = 64f // ширина — половина холста
+        boxes[100 * 16 + 3] = 64f
+        val d = assertNotNull(FaceModel.decode(boxes, scores))
+        assertEquals(FaceModel.anchors[200] + 0.05f, d.cx, 1e-5f)
+        assertEquals(0.5f, d.w, 1e-6f)
+        assertEquals(null, FaceModel.decode(FloatArray(896 * 16), FloatArray(896) { -10f }), "все ниже порога — лица нет")
+    }
+
+    @Test
+    fun кадр_вписан_в_холст_полями() {
+        // Прямой кадр 192×256 → холст 128: масштаб 0,5, поля по бокам по 16.
+        val box = FaceModel.letterbox(192, 256)
+        assertEquals(0.5f, box.scale, 1e-6f)
+        assertEquals(16f, box.offX, 1e-6f)
+        val (x, y) = box.toFrame(0.5f, 0.5f)
+        assertEquals(96f, x, 1e-4f)
+        assertEquals(128f, y, 1e-4f)
+    }
+
+    @Test
+    fun вырез_по_линии_глаз() {
+        // Лицо наклонено: правый глаз (33) ниже левого (263) — ось выреза идёт вдоль линии глаз.
+        val xs = FloatArray(478) { 100f }
+        val ys = FloatArray(478) { 100f }
+        xs[33] = 80f; ys[33] = 110f
+        xs[263] = 120f; ys[263] = 90f
+        xs[0] = 60f; xs[1] = 140f; ys[2] = 60f; ys[3] = 140f
+        val roi = FaceModel.roiFrom(xs, ys)
+        assertEquals(kotlin.math.atan2(-20f, 40f), roi.angle, 1e-5f)
+        assertEquals(120f, roi.size, 1e-4f, "рамка 80 × 1,5")
+        val (cx, cy) = roi.toFrame(0.5f, 0.5f)
+        assertEquals(roi.cx, cx, 1e-4f)
+        assertEquals(roi.cy, cy, 1e-4f)
+        // Точка правее середины выреза уходит вдоль линии глаз — вверх-вправо.
+        val (rx, ry) = roi.toFrame(1f, 0.5f)
+        assertTrue(rx > cx && ry < cy)
+    }
+}

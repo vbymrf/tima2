@@ -46,6 +46,7 @@ internal class FaceWatch(private val context: Context) {
     private var detectNs = 0L
 
     private var mediaPipeFailed = false
+    private var tflite: TfliteFaces? = null
     private var offered = 0L
 
     /** Отладка поиска лица: метка `files/filters/debug` — первый прямой кадр сохраняется картинкой рядом с ней. */
@@ -122,8 +123,26 @@ internal class FaceWatch(private val context: Context) {
         return result
     }
 
+    /**
+     * Отладка поиска лица: `files/filters/face.png` — искать на этой картинке вместо кадра камеры (проверить VNN и
+     * MediaPipe на телефоне, когда перед камерой нет человека). Нет файла — `null`.
+     */
+    private val debugFace: ByteArray? by lazy {
+        runCatching {
+            val file = File(context.filesDir, "filters/face.png")
+            if (!file.exists()) return@runCatching null
+            val decoded = android.graphics.BitmapFactory.decodeFile(file.absolutePath) ?: return@runCatching null
+            val scaled = android.graphics.Bitmap.createScaledBitmap(decoded, WIDTH, HEIGHT, true)
+            val out = ByteBuffer.allocate(WIDTH * HEIGHT * 4)
+            scaled.copyPixelsToBuffer(out)
+            Journal.note(LogCode.CALL, "фильтры: отладка — лицо ищется на картинке face.png")
+            out.array()
+        }.getOrNull()
+    }
+
     private fun detect(chosen: FaceSource) {
         val started = System.nanoTime()
+        debugFace?.let { pixels.rewind(); pixels.put(it) }
         pixels.rewind()
         val raw = when (chosen) {
             FaceSource.MediaPipe -> mediaPipe()
@@ -150,15 +169,20 @@ internal class FaceWatch(private val context: Context) {
     }
 
     /**
-     * MediaPipe Face Landmarker — **не подключена** (развилка ПЛАН-(ФЗ) §6.3): MediaPipe Tasks шлёт в Google статистику
-     * использования. Таблица точек под неё готова (`FacePoints.fromMediaPipe`); до решения точки ищет VNN.
+     * Модели MediaPipe Face Landmarker через TFLite (ПЛАН-(ФЗ) §6.3, вариант «в», заказчик 2026-11-10): без MediaPipe
+     * Tasks — та шлёт в Google статистику использования; TFLite сам ничего не отправляет.
      */
     private fun mediaPipe(): FloatArray? {
-        if (!mediaPipeFailed) {
+        if (mediaPipeFailed) return null
+        val engine = tflite ?: TfliteFaces.open(context)?.also {
+            tflite = it
+            Journal.note(LogCode.CALL, "фильтры: MediaPipe (TFLite) запущен")
+        } ?: run {
             mediaPipeFailed = true
-            Journal.note(LogCode.CALL, "фильтры: MediaPipe не подключена — точки ищет VNN")
+            return null
         }
-        return vnn()
+        val (xs, ys) = engine.detect(pixels, WIDTH, HEIGHT) ?: return null
+        return FacePoints.fromMediaPipe(xs, ys)
     }
 
     private fun vnn(): FloatArray? {
@@ -178,6 +202,8 @@ internal class FaceWatch(private val context: Context) {
         worker.execute {
             vnn?.close()
             vnn = null
+            tflite?.close()
+            tflite = null
             upright = null
             found = null
         }
