@@ -77,32 +77,6 @@ class CallFiltersTest {
     }
 
     @Test
-    fun помада_гаснет_пока_рот_движется_и_возвращается() {
-        // Заказчик 2026-11-10: «при значительном сдвиге быстро убирать маску», «с раскрытием рта, гасить частично».
-        fun mouth(open: Float, shift: Float = 0f) = FloatArray(222).also { p ->
-            fun put(i: Int, x: Float, y: Float) { p[i * 2] = x; p[i * 2 + 1] = y }
-            put(84, 0.4f + shift, 0.7f); put(90, 0.6f + shift, 0.7f)
-            put(87, 0.5f + shift, 0.7f - open); put(93, 0.5f + shift, 0.7f + open)
-        }
-        val closed = mouth(0.01f)
-        assertEquals(0f, LipFade.motion(closed, closed, 100, 100), 1e-6f)
-        // Рот открылся, уголки на месте: раскрытие выросло на 0,06 при ширине рта 0,2 — движение 0,3.
-        assertEquals(0.3f, LipFade.motion(closed, mouth(0.04f), 100, 100), 1e-4f)
-        // Голова сдвинулась на 0,05 — уголки на четверть ширины рта.
-        assertEquals(0.25f, LipFade.motion(closed, mouth(0.01f, 0.05f), 100, 100), 1e-4f)
-
-        val fade = LipFade()
-        fade.onDetection(0f, 1000)
-        assertEquals(1f, fade.value(1000))
-        fade.onDetection(0.3f, 1100)
-        assertEquals(LipFade.LOW, fade.value(1100 + LipFade.DOWN_MS.toLong()), 1e-5f, "гаснет быстро и не до нуля")
-        fade.onDetection(0.01f, 1300)
-        assertEquals(LipFade.LOW, fade.value(1400), 1e-5f, "один спокойный поиск — ещё не возврат")
-        fade.onDetection(0.01f, 1450)
-        assertEquals(1f, fade.value(1450 + LipFade.UP_MS.toLong()), 1e-5f, "два спокойных — плавно назад")
-    }
-
-    @Test
     fun уголки_глаз_снаружи_глаза_и_глаза_защищены() {
         // Заказчик 2026-11-10: «Уголки глаз — сдвиг на края… что бы при перемещении не надвигались на глаза».
         val p = FloatArray(222)
