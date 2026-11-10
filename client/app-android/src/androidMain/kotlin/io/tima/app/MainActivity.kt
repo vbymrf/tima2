@@ -297,6 +297,8 @@ class MainActivity : ComponentActivity() {
                     }
             }
 
+            // Поле ввода и клавиатура — в журнал (`KEYBOARD`, заказчик 2026-11-10): просили ли, показалась ли.
+            io.tima.shared.KeyboardWatch(soft = true) {
             Root(
                 entry = entry,
                 callEngine = callEngine,
@@ -343,6 +345,7 @@ class MainActivity : ComponentActivity() {
                     stream = BuildConfig.TIMA_STREAM,
                 ),
                 )
+            }
             }
         }
     }
