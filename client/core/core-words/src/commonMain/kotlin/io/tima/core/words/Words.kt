@@ -1325,6 +1325,38 @@ interface CallWords {
     val adaptTitle: String
     val adaptAbout: String
 
+    /** «Фильтры» в листе звонка (ПЛАН-(ФЗ) ФЗ7). */
+    val filtersTitle: String
+    val filtersOn: String
+    val filtersBeauty: String
+    val filtersColor: String
+    val filtersFace: String
+    val filtersWrinkles: String
+    val filtersSource: String
+    val filtersMediaPipeOff: String
+    val filtersReset: String
+    val filtersRowAbout: String
+    val filterSmooth: String
+    val filterWhiten: String
+    val filterSharpen: String
+    val filterBrightness: String
+    val filterContrast: String
+    val filterSaturation: String
+    val filterWarmth: String
+    val filterLookStrength: String
+    val lookNone: String
+    val lookLight: String
+    val lookCustom: String
+    val filterThin: String
+    val filterEyes: String
+    val filterLipstick: String
+    val filterBlush: String
+    val filterForehead: String
+    val filterBrows: String
+    val filterUnderEyes: String
+    val filterEyeCorners: String
+    val filterNasolabial: String
+
     /** «Звонки → Увеличение изображения» (ПЛАН-(ЗН) ЗН8). */
     val zoomTitle: String
     val zoomAbout: String
@@ -3817,6 +3849,36 @@ object RussianWords : Words {
         override val lookAbout = "Новый — кнопки одним рядом: свернуть, микрофон, ухо или динамик, камера, настройки звонка, завершить. Действует со следующего звонка. Групповой звонок — всегда в прежнем виде."
         override val adaptTitle = "Режим адаптации изображения"
         override fun adaptShift(x: String, y: String) = "сдвиг $x $y"
+        override val filtersTitle = "Фильтры"
+        override val filtersOn = "Включены"
+        override val filtersBeauty = "Красота"
+        override val filtersColor = "Цвет"
+        override val filtersFace = "Лицо"
+        override val filtersWrinkles = "Морщины"
+        override val filtersSource = "Точки лица"
+        override val filtersMediaPipeOff = "MediaPipe не подключена: она отправляет в Google статистику использования. Точки ищет VNN."
+        override val filtersReset = "Сбросить"
+        override val filtersRowAbout = "Сглаживание, цвет, лицо, морщины — собеседник видит так же"
+        override val filterSmooth = "Сглаживание"
+        override val filterWhiten = "Осветление"
+        override val filterSharpen = "Резкость"
+        override val filterBrightness = "Яркость"
+        override val filterContrast = "Контраст"
+        override val filterSaturation = "Насыщенность"
+        override val filterWarmth = "Тепло"
+        override val filterLookStrength = "Сила набора"
+        override val lookNone = "Без набора"
+        override val lookLight = "Светлый"
+        override val lookCustom = "Свой"
+        override val filterThin = "Тоньше лицо"
+        override val filterEyes = "Глаза больше"
+        override val filterLipstick = "Помада"
+        override val filterBlush = "Румяна"
+        override val filterForehead = "Лоб"
+        override val filterBrows = "Между бровями"
+        override val filterUnderEyes = "Под глазами"
+        override val filterEyeCorners = "Уголки глаз"
+        override val filterNasolabial = "Носогубные"
         override val zoomTitle = "Увеличение изображения"
         override val zoomAbout = "Своё изображение с начала звонка приближается и сдвигается к лицу: вниз и в сторону от руки, в которой телефон. Собеседник видит так же. Только передняя камера и звонок на двоих."
         override val handTitle = "Телефон в руке"

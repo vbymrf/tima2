@@ -592,16 +592,25 @@ class LiveKitCallEngine(
         )
     }
 
+    override val filterable: Boolean get() = true
+
+    /** Когда фильтры последний раз писались в журнал: ползунок двигают десятки раз в секунду. */
+    private var filtersNotedAt = 0L
+
     /** Фильтры своего видео (ПЛАН-(ФЗ)): тот же обработчик у источника, что и обрезка. */
     override suspend fun setFilters(filters: CallFilters) {
         val was = cropper.filters
         cropper.filters = filters
         faces.source = filters.source
         attachCropper()
-        Journal.note(
-            LogCode.CALL, "фильтры",
-            "стало" to filters.describe(), "было" to was.describe(), "обработчик стоит" to (croppedTrack != null),
-        )
+        val now = nowMs()
+        if (now - filtersNotedAt >= FILTERS_NOTE_MS || was.on != filters.on || was.source != filters.source) {
+            filtersNotedAt = now
+            Journal.note(
+                LogCode.CALL, "фильтры",
+                "стало" to filters.describe(), "было" to was.describe(), "обработчик стоит" to (croppedTrack != null),
+            )
+        }
     }
 
     private fun attachCropper() {
@@ -2349,3 +2358,6 @@ private fun hardware(name: String): Boolean? {
     if (lower.startsWith("omx.") || lower.startsWith("c2.") || lower.contains("mediacodec")) return true
     return null
 }
+
+/** Не чаще раза в столько записывать смену фильтров в журнал. */
+private const val FILTERS_NOTE_MS = 1_500L

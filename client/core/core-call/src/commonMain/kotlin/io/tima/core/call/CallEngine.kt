@@ -164,6 +164,9 @@ interface CallEngine {
      */
     suspend fun setFilters(filters: CallFilters) = Unit
 
+    /** Умеет ли движок фильтры (ПЛАН-(ФЗ)): нет — нет и строки «Фильтры» в листе звонка. Пока только телефон. */
+    val filterable: Boolean get() = false
+
     /** Умеет ли движок показывать экран устройства (ПЛАН-(ЗН) ЗН6): нет — нет и пункта в листе. */
     val screenShareable: Boolean get() = false
 

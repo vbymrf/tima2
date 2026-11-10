@@ -1005,6 +1005,10 @@ private fun App(
         }.distinctUntilChanged()
     }.collectAsState(CallLookSnap(fresh = true, adapt = false, preset = io.tima.core.call.CameraCrop.FULL))
     var callLook by remember { mutableStateOf<CallLookSnap?>(null) }
+    // Фильтры своего видео (ПЛАН-(ФЗ)): выбор помнится в настройках устройства (решение 6) и сразу уходит в движок.
+    val savedFilters by remember {
+        environment.settings.all().map { io.tima.core.call.CallFilterKeys.read(it) }.distinctUntilChanged()
+    }.collectAsState(null)
     // Настройка «Переходы» (ПЛАН-(МП) М5): куда ведёт вход в окно каждым способом.
     val arriveStored by remember {
         environment.settings.all().map { all -> all.filterKeys { it.startsWith(MainLayoutKeys.ARRIVE) } }.distinctUntilChanged()
@@ -3265,6 +3269,11 @@ private fun App(
             callHost.cropCamera(want)
         }
     }
+    // Сохранённые фильтры — в движок при запуске и при смене настройки извне (выбор пальцем уже там).
+    LaunchedEffect(savedFilters) {
+        val saved = savedFilters ?: return@LaunchedEffect
+        if (saved != callHost.filters) callHost.applyFilters(saved)
+    }
     LaunchedEffect(callHost.active) {
         callLook = if (callHost.active) {
             callLookNow.also { look ->
@@ -3622,6 +3631,16 @@ private fun App(
                             onScreenShare = if (callHost.screenShareable) callHost::screenShare else null,
                             crop = if (look.adapt) callHost.crop else null,
                             onCrop = callHost::cropCamera,
+                            filters = callHost.filters.takeIf { callHost.filterable },
+                            onFilters = { next, final ->
+                                callHost.applyFilters(next)
+                                if (final) {
+                                    Journal.note(LogCode.CALL, "фильтры выбраны", "что" to next.describe())
+                                    scope.launch {
+                                        runCatching { io.tima.core.call.CallFilterKeys.write(next).forEach { (k, v) -> environment.settings.put(k, v) } }
+                                    }
+                                }
+                            },
                         )
                     },
                     ownCrop = callHost.crop,

@@ -65,6 +65,16 @@ class FreshCallScreenTest {
         assertTrue(!off.has(TimaColors.light.navigation, tolerance = 0.04), "выключенные горят")
     }
 
+    @Test
+    fun лист_фильтров_рисует_ползунки() {
+        // ПЛАН-(ФЗ) ФЗ7: включённые фильтры и ненулевые ползунки — салатовые круги.
+        val on = io.tima.core.call.CallFilters(on = true, smooth = 60, whiten = 30, thin = 20)
+        val shot = capture("фильтры-лист", WIDTH, 380, dark = false) {
+            Stage(column = { FiltersPanel(filters = on, onChange = { _, _ -> }, onClose = {}) })
+        }
+        assertTrue(shot.has(TimaColors.light.navigation, tolerance = 0.04), "включённые фильтры не видны")
+    }
+
     private companion object {
         const val WIDTH = 380
         const val HEIGHT = 800

@@ -857,6 +857,17 @@ class CallHost(
         scope.launch { engine?.setCameraCrop(now) }
     }
 
+    /** Фильтры своего видео (ПЛАН-(ФЗ)): помнятся между звонками (решение 6), в движок — сразу. */
+    var filters by mutableStateOf(io.tima.core.call.CallFilters.OFF)
+        private set
+
+    val filterable: Boolean get() = engine?.filterable == true
+
+    fun applyFilters(next: io.tima.core.call.CallFilters) {
+        filters = next
+        scope.launch { engine?.setFilters(next) }
+    }
+
     /** Умеет ли движок показывать экран устройства (ЗН6): нет — нет и пункта в листе. */
     val screenShareable: Boolean get() = engine?.screenShareable == true
 

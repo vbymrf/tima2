@@ -59,6 +59,12 @@ class FreshCall(
     /** Режим адаптации изображения: текущее приближение; `null` — режим выключен в настройках. */
     val crop: CameraCrop?,
     val onCrop: (CameraCrop) -> Unit,
+    /** Фильтры своего видео (ПЛАН-(ФЗ)); `null` — движок их не умеет, строки в листе нет. */
+    val filters: io.tima.core.call.CallFilters? = null,
+    /** Сменить фильтры: `final` — палец отпущен, выбор пишется в настройки. */
+    val onFilters: (io.tima.core.call.CallFilters, Boolean) -> Unit = { _, _ -> },
+    /** Есть ли MediaPipe в сборке (развилка ПЛАН-(ФЗ) §6.3). */
+    val mediaPipe: Boolean = false,
 )
 
 @Composable
@@ -136,6 +142,9 @@ internal fun CallSheet(
     sharing: Boolean,
     onScreenShare: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
+    /** «Фильтры» (ФЗ7): включены ли и открыть их лист; `null` — строки нет. */
+    filtersOn: Boolean? = null,
+    onFilters: () -> Unit = {},
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -153,6 +162,9 @@ internal fun CallSheet(
         }
         SheetRow(if (saving) "🙈" else "👁", words.saveTraffic, words.saveTrafficAbout, saving, Modifier.testTag(SAVE_TRAFFIC_TAG)) {
             onSaveTraffic(!saving)
+        }
+        if (filtersOn != null) {
+            SheetRow("✨", words.filtersTitle, words.filtersRowAbout, filtersOn, Modifier.testTag(FILTERS_ROW_TAG), onClick = onFilters)
         }
     }
 }

@@ -175,6 +175,8 @@ fun CallScreen(
     var askHangUp by remember { mutableStateOf(false) }
     // Лист «Настройки звонка» нового вида (ЗН3): открыт ли.
     var sheetOpen by remember { mutableStateOf(false) }
+    // Лист «Фильтры» (ПЛАН-(ФЗ) ФЗ7): открыт ли.
+    var filtersOpen by remember { mutableStateOf(false) }
     val freshTalk = fresh != null && group == null && state.stage == CallStage.Connected
     var benchJournal by remember { mutableStateOf(false) }
     // Своё окошко: поменяно ли местами с собеседником, куда его перенесли, несут ли сейчас.
@@ -397,7 +399,7 @@ fun CallScreen(
             }
             // Режим адаптации (ЗН5) — выше ряда кнопок, пока своя камера в кадре.
             val crop = fresh?.crop
-            if (fresh != null && freshTalk && crop != null && state.cameraOn && !state.screenSharing && !sheetOpen) {
+            if (fresh != null && freshTalk && crop != null && state.cameraOn && !state.screenSharing && !sheetOpen && !filtersOpen) {
                 AdaptBar(crop, fresh.onCrop, Modifier.align(Alignment.BottomCenter).padding(bottom = TimaSpacing.about2), mirror = mirrorOwn)
             }
             if (fresh != null && freshTalk && sheetOpen) {
@@ -407,6 +409,21 @@ fun CallScreen(
                     sharing = state.screenSharing,
                     onScreenShare = fresh.onScreenShare,
                     modifier = Modifier.align(Alignment.BottomCenter),
+                    filtersOn = fresh.filters?.on,
+                    onFilters = {
+                        sheetOpen = false
+                        filtersOpen = true
+                    },
+                )
+            }
+            val filters = fresh?.filters
+            if (fresh != null && freshTalk && filtersOpen && filters != null) {
+                FiltersPanel(
+                    filters = filters,
+                    onChange = fresh.onFilters,
+                    onClose = { filtersOpen = false },
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    mediaPipe = fresh.mediaPipe,
                 )
             }
         }
