@@ -77,6 +77,9 @@ uniform float uAspect;
 uniform vec4 uZone[8];
 uniform vec2 uZoneAxis[8];
 uniform float uZoneK[8];
+// Глаза: там зоны не действуют (заказчик 2026-11-10) — эллипс, до него полная защита, к 1,5 его размера — сходит на нет.
+uniform vec4 uEye[2];
+uniform vec2 uEyeAxis;
 
 const float levelRangeInv = 1.02657;
 const float levelBlack = 0.0258820;
@@ -91,6 +94,14 @@ float zones(vec2 t) {
         vec2 r = vec2(dot(d, uZoneAxis[i]), dot(d, vec2(-uZoneAxis[i].y, uZoneAxis[i].x)));
         float e = length(r / uZone[i].zw);
         m = max(m, uZoneK[i] * (1.0 - smoothstep(0.55, 1.0, e)));
+    }
+    if (m <= 0.0) return 0.0;
+    for (int j = 0; j < 2; j++) {
+        if (uEye[j].z <= 0.0) continue;
+        vec2 d = t - uEye[j].xy;
+        d.x *= uAspect;
+        vec2 r = vec2(dot(d, uEyeAxis), dot(d, vec2(-uEyeAxis.y, uEyeAxis.x)));
+        m *= smoothstep(1.0, 1.5, length(r / uEye[j].zw));
     }
     return m;
 }

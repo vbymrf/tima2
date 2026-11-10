@@ -6,10 +6,26 @@ import kotlin.math.hypot
  * Зоны морщин (ФЗ6, решение 4): пять областей по точкам лица — лоб, между бровями, под глазами, уголки глаз,
  * носогубные складки. Эллипс на зону: середина (текстурные координаты), полуоси (доли высоты кадра), ось (вдоль
  * лица), сила (ползунок). Лба в точках нет — он достраивается вверх от бровей на долю расстояния между глазами.
+ *
+ * [eyes] — сами глаза (два эллипса: середина, полуоси) с осью [eyeAxis] вдоль линии глаз: там зоны не действуют, куда
+ * бы ни съехали при отставании точек (заказчик 2026-11-10: «что бы при перемещении не надвигались на глаза»).
  */
-internal class WrinkleZones(val zones: FloatArray, val axes: FloatArray, val strengths: FloatArray) {
+internal class WrinkleZones(
+    val zones: FloatArray,
+    val axes: FloatArray,
+    val strengths: FloatArray,
+    val eyes: FloatArray = FloatArray(8),
+    val eyeAxis: FloatArray = floatArrayOf(1f, 0f),
+) {
     companion object {
         val NONE = WrinkleZones(FloatArray(32), FloatArray(16), FloatArray(8))
+
+        /** Уголки глаз: середина зоны — наружу от угла на эту долю расстояния между глазами (было 0,16 — заходила на глаз). */
+        const val CORNER_OUT = 0.26f
+
+        /** Полуоси зоны уголков: вдоль линии глаз и поперёк — морщины расходятся веером вверх и вниз. */
+        const val CORNER_ALONG = 0.13f
+        const val CORNER_ACROSS = 0.2f
 
         fun of(p: FloatArray, w: Int, h: Int, f: CallFilters): WrinkleZones {
             val aspect = w.toFloat() / h
@@ -54,7 +70,10 @@ internal class WrinkleZones(val zones: FloatArray, val axes: FloatArray, val str
                 zone(x(bottom) - upX * 0.17f * eyeDist, y(bottom) - upY * 0.17f * eyeDist, 0.32f * eyeDist, 0.15f * eyeDist, ux, uy, f.underEyes)
             }
             for ((corner, side) in listOf(52 to -1f, 61 to 1f)) {
-                zone(x(corner) + side * ux * 0.16f * eyeDist, y(corner) + side * uy * 0.16f * eyeDist, 0.17f * eyeDist, 0.17f * eyeDist, ux, uy, f.eyeCorners)
+                zone(
+                    x(corner) + side * ux * CORNER_OUT * eyeDist, y(corner) + side * uy * CORNER_OUT * eyeDist,
+                    CORNER_ALONG * eyeDist, CORNER_ACROSS * eyeDist, ux, uy, f.eyeCorners,
+                )
             }
             for ((wing, corner) in listOf(82 to 84, 83 to 90)) {
                 val ax = x(corner) - x(wing)
@@ -62,7 +81,18 @@ internal class WrinkleZones(val zones: FloatArray, val axes: FloatArray, val str
                 val len = hypot(ax, ay).coerceAtLeast(1e-4f)
                 zone((x(wing) + x(corner)) / 2, (y(wing) + y(corner)) / 2, len * 0.6f, 0.08f * eyeDist, ax / len, ay / len, f.nasolabial)
             }
-            return WrinkleZones(zones, axes, strengths)
+            // Глаза: от угла до угла с запасом, высота — по верху и низу глаза (не меньше половины ширины).
+            val eyes = FloatArray(8)
+            for ((k, e) in listOf(intArrayOf(52, 55, 72, 73), intArrayOf(58, 61, 75, 76)).withIndex()) {
+                val (outer, inner, top, bottom) = e.toList()
+                val half = hypot(x(inner) - x(outer), y(inner) - y(outer)) / 2
+                val tall = hypot(x(top) - x(bottom), y(top) - y(bottom)) / 2
+                eyes[k * 4] = (x(outer) + x(inner)) / 2 / aspect
+                eyes[k * 4 + 1] = (y(outer) + y(inner)) / 2
+                eyes[k * 4 + 2] = half * 1.2f
+                eyes[k * 4 + 3] = maxOf(tall * 1.6f, half * 0.55f)
+            }
+            return WrinkleZones(zones, axes, strengths, eyes, floatArrayOf(ux, uy))
         }
     }
 }

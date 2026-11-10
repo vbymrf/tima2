@@ -227,6 +227,8 @@ internal class FrameStudio(private val assets: AssetManager) {
         GLES20.glUniform4fv(shader.getUniformLocation("uZone"), 8, z.zones, 0)
         GLES20.glUniform2fv(shader.getUniformLocation("uZoneAxis"), 8, z.axes, 0)
         GLES20.glUniform1fv(shader.getUniformLocation("uZoneK"), 8, z.strengths, 0)
+        GLES20.glUniform4fv(shader.getUniformLocation("uEye"), 2, z.eyes, 0)
+        GLES20.glUniform2f(shader.getUniformLocation("uEyeAxis"), z.eyeAxis[0], z.eyeAxis[1])
         drawStrip(shader, quad, quadTex)
     }
 

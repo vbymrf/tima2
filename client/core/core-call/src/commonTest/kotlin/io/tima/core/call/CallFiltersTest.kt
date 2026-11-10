@@ -103,6 +103,27 @@ class CallFiltersTest {
     }
 
     @Test
+    fun уголки_глаз_снаружи_глаза_и_глаза_защищены() {
+        // Заказчик 2026-11-10: «Уголки глаз — сдвиг на края… что бы при перемещении не надвигались на глаза».
+        val p = FloatArray(222)
+        fun put(i: Int, x: Float, y: Float) { p[i * 2] = x; p[i * 2 + 1] = y }
+        put(74, 0.41f, 0.6f); put(77, 0.59f, 0.6f)
+        put(52, 0.36f, 0.6f); put(55, 0.46f, 0.6f); put(72, 0.41f, 0.62f); put(73, 0.41f, 0.58f)
+        put(58, 0.54f, 0.6f); put(61, 0.64f, 0.6f); put(75, 0.59f, 0.62f); put(76, 0.59f, 0.58f)
+        put(84, 0.45f, 0.4f); put(90, 0.55f, 0.4f)
+        val z = WrinkleZones.of(p, 720, 720, CallFilters(on = true, eyeCorners = 100))
+        val eyeDist = 0.18f
+        // Зона левого уголка (пятая): внутренний край — снаружи угла глаза.
+        val innerEdge = z.zones[4 * 4] + WrinkleZones.CORNER_ALONG * eyeDist
+        assertTrue(innerEdge < 0.36f, "зона заходит на глаз: край $innerEdge")
+        assertTrue(z.zones[5 * 4] - WrinkleZones.CORNER_ALONG * eyeDist > 0.64f, "правая зона заходит на глаз")
+        // Глаз: середина между углами, полуось не меньше половины ширины.
+        assertEquals(0.41f, z.eyes[0], 1e-5f)
+        assertTrue(z.eyes[2] >= 0.05f && z.eyes[3] > 0f)
+        assertEquals(0.59f, z.eyes[4], 1e-5f)
+    }
+
+    @Test
     fun лоб_над_бровями_а_под_глазами_ниже_глаз() {
         // Лицо прямо, в текстурных координатах (низ — ноль): глаза на 0,6, брови выше, рот ниже.
         val p = FloatArray(222)
