@@ -17,16 +17,14 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Точки лица для фильтров (ПЛАН-(ФЗ) ФЗ4): два источника — MediaPipe и VNN (решение 2), выбор в настройке.
+ * Точки лица для фильтров (ПЛАН-(ФЗ) ФЗ4): VNN. MediaPipe убран (заказчик 2026-11-10: медленнее вчетверо, +11 МБ,
+ * вид не устроил).
  *
  * Кадр для поиска маленький и прямой ([WIDTH]×[HEIGHT], как видит человек) — его отдаёт `FrameStudio`, когда
  * [offer] свободен; поиск идёт на своём потоке, через кадр-два, и не держит камеру. Точки между поисками
  * сглаживаются, чтобы лицо не дрожало; старше [STALE_MS] — лица нет.
  */
 internal class FaceWatch(private val context: Context) {
-    @Volatile
-    var source: FaceSource = FaceSource.MediaPipe
-
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "tima-faces").apply { isDaemon = true } }
     private val busy = AtomicBoolean(false)
     private val pixels: ByteBuffer = ByteBuffer.allocateDirect(WIDTH * HEIGHT * 4).order(ByteOrder.nativeOrder())
@@ -45,8 +43,6 @@ internal class FaceWatch(private val context: Context) {
     @Volatile
     private var detectNs = 0L
 
-    private var mediaPipeFailed = false
-    private var tflite: TfliteFaces? = null
     private var offered = 0L
 
     /** Отладка поиска лица: метка `files/filters/debug` — первый прямой кадр сохраняется картинкой рядом с ней. */
@@ -69,7 +65,6 @@ internal class FaceWatch(private val context: Context) {
             busy.set(false)
             throw e
         }
-        val chosen = source
         if (!dumped) {
             dumped = true
             val mark = File(context.filesDir, "filters/debug")
@@ -77,9 +72,9 @@ internal class FaceWatch(private val context: Context) {
         }
         worker.execute {
             try {
-                detect(chosen)
+                detect()
             } catch (e: Throwable) {
-                Journal.trouble(LogCode.CALL, "фильтры: поиск лица упал", "источник" to chosen.name, "причина" to (e.message ?: e::class.simpleName))
+                Journal.trouble(LogCode.CALL, "фильтры: поиск лица упал", "причина" to (e.message ?: e::class.simpleName))
             } finally {
                 busy.set(false)
             }
@@ -113,7 +108,6 @@ internal class FaceWatch(private val context: Context) {
     fun stats(): Array<Pair<String, Any?>> {
         val n = detections
         val result = arrayOf<Pair<String, Any?>>(
-            "точки" to source.name,
             "поисков лица" to n,
             "мс на поиск" to if (n > 0) (detectNs / n / 10_000) / 100.0 else 0.0,
             "лицо" to (upright != null && SystemClock.uptimeMillis() - seenAt <= STALE_MS),
@@ -124,8 +118,8 @@ internal class FaceWatch(private val context: Context) {
     }
 
     /**
-     * Отладка поиска лица: `files/filters/face.png` — искать на этой картинке вместо кадра камеры (проверить VNN и
-     * MediaPipe на телефоне, когда перед камерой нет человека). Нет файла — `null`.
+     * Отладка поиска лица: `files/filters/face.png` — искать на этой картинке вместо кадра камеры (проверить VNN на
+     * телефоне, когда перед камерой нет человека). Нет файла — `null`.
      */
     private val debugFace: ByteArray? by lazy {
         runCatching {
@@ -140,20 +134,17 @@ internal class FaceWatch(private val context: Context) {
         }.getOrNull()
     }
 
-    private fun detect(chosen: FaceSource) {
+    private fun detect() {
         val started = System.nanoTime()
         debugFace?.let { pixels.rewind(); pixels.put(it) }
         pixels.rewind()
-        val raw = when (chosen) {
-            FaceSource.MediaPipe -> mediaPipe()
-            FaceSource.Vnn -> vnn()
-        }
+        val raw = vnn()
         detections++
         detectNs += System.nanoTime() - started
         val now = raw != null
         if (now != found) {
             found = now
-            Journal.note(LogCode.CALL, if (now) "фильтры: лицо найдено" else "фильтры: лицо потеряно", "источник" to chosen.name)
+            Journal.note(LogCode.CALL, if (now) "фильтры: лицо найдено" else "фильтры: лицо потеряно")
         }
         if (raw == null) return
         val was = upright
@@ -168,23 +159,6 @@ internal class FaceWatch(private val context: Context) {
         return dx * dx + dy * dy > 0.01f
     }
 
-    /**
-     * Модели MediaPipe Face Landmarker через TFLite (ПЛАН-(ФЗ) §6.3, вариант «в», заказчик 2026-11-10): без MediaPipe
-     * Tasks — та шлёт в Google статистику использования; TFLite сам ничего не отправляет.
-     */
-    private fun mediaPipe(): FloatArray? {
-        if (mediaPipeFailed) return null
-        val engine = tflite ?: TfliteFaces.open(context)?.also {
-            tflite = it
-            Journal.note(LogCode.CALL, "фильтры: MediaPipe (TFLite) запущен")
-        } ?: run {
-            mediaPipeFailed = true
-            return null
-        }
-        val (xs, ys) = engine.detect(pixels, WIDTH, HEIGHT) ?: return null
-        return FacePoints.fromMediaPipe(xs, ys)
-    }
-
     private fun vnn(): FloatArray? {
         if (vnnFailed) return null
         val engine = vnn ?: Vnn.open(context)?.also {
@@ -192,7 +166,7 @@ internal class FaceWatch(private val context: Context) {
             Journal.note(LogCode.CALL, "фильтры: VNN запущен")
         } ?: run {
             vnnFailed = true
-            Journal.trouble(LogCode.CALL, "фильтры: VNN недоступен — точки ищет MediaPipe", "архитектура" to Build.SUPPORTED_ABIS.joinToString())
+            Journal.trouble(LogCode.CALL, "фильтры: VNN недоступен — фильтры лица не рисуются", "архитектура" to Build.SUPPORTED_ABIS.joinToString())
             return null
         }
         return engine.detect(pixels, WIDTH, HEIGHT)?.let { FacePoints.fromVnn(it) }
@@ -202,8 +176,6 @@ internal class FaceWatch(private val context: Context) {
         worker.execute {
             vnn?.close()
             vnn = null
-            tflite?.close()
-            tflite = null
             upright = null
             found = null
         }

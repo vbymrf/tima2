@@ -63,8 +63,6 @@ class FreshCall(
     val filters: io.tima.core.call.CallFilters? = null,
     /** Сменить фильтры: `final` — палец отпущен, выбор пишется в настройки. */
     val onFilters: (io.tima.core.call.CallFilters, Boolean) -> Unit = { _, _ -> },
-    /** Есть ли MediaPipe в сборке (развилка ПЛАН-(ФЗ) §6.3). */
-    val mediaPipe: Boolean = false,
 )
 
 @Composable

@@ -3632,8 +3632,6 @@ private fun App(
                             crop = if (look.adapt) callHost.crop else null,
                             onCrop = callHost::cropCamera,
                             filters = callHost.filters.takeIf { callHost.filterable },
-                            // Модели MediaPipe — через TFLite, без MediaPipe Tasks (ПЛАН-(ФЗ) §6.3 «в»).
-                            mediaPipe = true,
                             onFilters = { next, final ->
                                 callHost.applyFilters(next)
                                 if (final) {

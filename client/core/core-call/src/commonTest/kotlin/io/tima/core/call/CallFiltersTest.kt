@@ -11,21 +11,19 @@ class CallFiltersTest {
 
     @Test
     fun настройки_помнятся_и_читаются_обратно() {
-        val f = CallFilters(on = true, smooth = 40, whiten = 20, brightness = -15, look = ColorLook.Light, lookStrength = 60, thin = 30, blush = 50, underEyes = 70, source = FaceSource.Vnn)
+        val f = CallFilters(on = true, smooth = 40, whiten = 20, brightness = -15, look = ColorLook.Light, lookStrength = 60, thin = 30, blush = 50, underEyes = 70)
         assertEquals(f, CallFilterKeys.read(CallFilterKeys.write(f)))
-        assertEquals(CallFilters.OFF.copy(source = FaceSource.Vnn), CallFilterKeys.read(emptyMap()))
+        assertEquals(CallFilters.OFF, CallFilterKeys.read(emptyMap()))
         // Мусор в настройках — в пределы, а не падение.
         assertEquals(100, CallFilterKeys.read(mapOf(CallFilterKeys.PREFIX + "smooth" to "500")).smooth)
     }
 
     @Test
-    fun тоньше_до_012_и_цвета_помнятся() {
+    fun тоньше_до_012() {
         // Заказчик 2026-11-10: предел 0,12; первая половина хода — как у gpupixel (0,025 на 50).
         assertEquals(0f, CallFilters(thin = 0).thinDelta)
         assertEquals(0.025f, CallFilters(thin = 50).thinDelta, 1e-6f)
         assertEquals(0.12f, CallFilters(thin = 100).thinDelta, 1e-6f)
-        val f = CallFilters(on = true, lipstick = 40, lipColor = LipColor.Cherry, blush = 30, blushColor = BlushColor.Peach)
-        assertEquals(f, CallFilterKeys.read(CallFilterKeys.write(f)))
     }
 
     @Test
@@ -66,24 +64,6 @@ class CallFiltersTest {
     }
 
     @Test
-    fun из_mediapipe_контур_через_подбородок() {
-        // Лицо-образец: дуга нижней челюсти — полуокружность, остальные точки — по середине.
-        val xs = FloatArray(478) { 0.5f }
-        val ys = FloatArray(478) { 0.5f }
-        val jaw = intArrayOf(234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152, 377, 400, 378, 379, 365, 397, 288, 361, 323, 454)
-        jaw.forEachIndexed { i, mp ->
-            val a = kotlin.math.PI * i / (jaw.size - 1)
-            xs[mp] = 0.5f - 0.3f * kotlin.math.cos(a).toFloat()
-            ys[mp] = 0.4f + 0.3f * kotlin.math.sin(a).toFloat()
-        }
-        val p = FacePoints.fromMediaPipe(xs, ys)
-        assertEquals(0.2f, p[0], 1e-3f, "точка 0 — ухо слева в кадре")
-        assertEquals(0.5f, p[16 * 2], 2e-3f, "точка 16 — подбородок посередине")
-        assertEquals(0.7f, p[16 * 2 + 1], 2e-3f)
-        assertEquals(0.8f, p[32 * 2], 1e-3f, "точка 32 — ухо справа")
-    }
-
-    @Test
     fun лоб_над_бровями_а_под_глазами_ниже_глаз() {
         // Лицо прямо, в текстурных координатах (низ — ноль): глаза на 0,6, брови выше, рот ниже.
         val p = FloatArray(222)
@@ -101,61 +81,5 @@ class CallFiltersTest {
         assertEquals(0.5f * CallFilters.WRINKLE_MAX, z.strengths[2], 1e-6f)
         assertEquals(0f, z.strengths[1], "между бровями выключено")
         assertNotNull(z.axes)
-    }
-}
-
-/** Поиск лица моделями MediaPipe без MediaPipe Tasks (ПЛАН-(ФЗ) §6.3, вариант «в»). */
-class FaceModelTest {
-
-    @Test
-    fun якорей_896_и_первый_в_углу() {
-        assertEquals(896 * 2, FaceModel.anchors.size)
-        assertEquals(0.5f / 16, FaceModel.anchors[0], 1e-6f)
-        // Последний — правая нижняя клетка сетки 8×8.
-        assertEquals(7.5f / 8, FaceModel.anchors[895 * 2], 1e-6f)
-    }
-
-    @Test
-    fun лицо_у_якоря_со_сдвигом() {
-        val boxes = FloatArray(896 * 16)
-        val scores = FloatArray(896) { -10f }
-        scores[100] = 5f
-        boxes[100 * 16] = 6.4f // +0,05 холста по x
-        boxes[100 * 16 + 2] = 64f // ширина — половина холста
-        boxes[100 * 16 + 3] = 64f
-        val d = assertNotNull(FaceModel.decode(boxes, scores))
-        assertEquals(FaceModel.anchors[200] + 0.05f, d.cx, 1e-5f)
-        assertEquals(0.5f, d.w, 1e-6f)
-        assertEquals(null, FaceModel.decode(FloatArray(896 * 16), FloatArray(896) { -10f }), "все ниже порога — лица нет")
-    }
-
-    @Test
-    fun кадр_вписан_в_холст_полями() {
-        // Прямой кадр 192×256 → холст 128: масштаб 0,5, поля по бокам по 16.
-        val box = FaceModel.letterbox(192, 256)
-        assertEquals(0.5f, box.scale, 1e-6f)
-        assertEquals(16f, box.offX, 1e-6f)
-        val (x, y) = box.toFrame(0.5f, 0.5f)
-        assertEquals(96f, x, 1e-4f)
-        assertEquals(128f, y, 1e-4f)
-    }
-
-    @Test
-    fun вырез_по_линии_глаз() {
-        // Лицо наклонено: правый глаз (33) ниже левого (263) — ось выреза идёт вдоль линии глаз.
-        val xs = FloatArray(478) { 100f }
-        val ys = FloatArray(478) { 100f }
-        xs[33] = 80f; ys[33] = 110f
-        xs[263] = 120f; ys[263] = 90f
-        xs[0] = 60f; xs[1] = 140f; ys[2] = 60f; ys[3] = 140f
-        val roi = FaceModel.roiFrom(xs, ys)
-        assertEquals(kotlin.math.atan2(-20f, 40f), roi.angle, 1e-5f)
-        assertEquals(120f, roi.size, 1e-4f, "рамка 80 × 1,5")
-        val (cx, cy) = roi.toFrame(0.5f, 0.5f)
-        assertEquals(roi.cx, cx, 1e-4f)
-        assertEquals(roi.cy, cy, 1e-4f)
-        // Точка правее середины выреза уходит вдоль линии глаз — вверх-вправо.
-        val (rx, ry) = roi.toFrame(1f, 0.5f)
-        assertTrue(rx > cx && ry < cy)
     }
 }

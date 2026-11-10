@@ -423,7 +423,6 @@ fun CallScreen(
                     onChange = fresh.onFilters,
                     onClose = { filtersOpen = false },
                     modifier = Modifier.align(Alignment.BottomCenter),
-                    mediaPipe = fresh.mediaPipe,
                 )
             }
         }

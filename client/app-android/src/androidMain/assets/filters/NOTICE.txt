@@ -1,4 +1,4 @@
-Фильтры звонка TIMA (ПЛАН-(ФЗ)) используют чужие части по лицензиям MIT и Apache 2.0.
+Фильтры звонка TIMA (ПЛАН-(ФЗ)) используют чужие части по лицензии MIT.
 
 1. gpupixel 1.2.4 (https://github.com/pixpark/gpupixel) — шейдеры «красоты», изменения лица и макияжа (перенесены в FilterShaders.kt), сетка лица (FaceMesh.kt), картинки blusher.png, mouth.png, lookup_*.png.
    Copyright (c) 2023 PixPark
@@ -6,10 +6,7 @@
 2. VNN (JOYY) — распознавание точек лица: libvnn_core.so, libvnn_kit.so, libvnn_face.so, face_mobile.vnnmodel.
    Copyright (c) 2021 Guangzhou Joyy Information Technology Co., Ltd. Licensed under the MIT license (заголовки vnn_*.h).
 
-3. MediaPipe Face Landmarker (Google) — модели mp_face_detector.tflite и mp_face_landmarks.tflite из face_landmarker.task,
-   Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0). Запускаются TFLite (Apache 2.0), без MediaPipe Tasks.
-
-MIT License (к пунктам 1 и 2)
+MIT License
 
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

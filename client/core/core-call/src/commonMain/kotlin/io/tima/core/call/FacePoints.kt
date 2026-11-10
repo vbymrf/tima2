@@ -1,7 +1,5 @@
 package io.tima.core.call
 
-import kotlin.math.hypot
-
 /**
  * Точки лица в раскладке шейдеров (ПЛАН-(ФЗ) ФЗ4): 106 точек VNN и 5 досчитанных, как в gpupixel. Раскладка по
  * шаблону лица (`FACE_TEMPLATE`), слева направо — как в кадре, не как у человека:
@@ -13,52 +11,6 @@ import kotlin.math.hypot
 internal object FacePoints {
     /** Точек лица у шейдеров: 106 и 5 досчитанных (как в gpupixel). */
     const val FACE_POINTS = 111
-
-    /**
-     * MediaPipe Face Landmarker (478 точек с радужкой) → раскладка 106. Сопоставлено по смыслу точки: у MediaPipe
-     * «правый глаз» — правый у человека, то есть **левый в кадре** камеры (кадр не зеркальный). Контур — отдельно,
-     * пересэмплированием дуги [MP_JAW] в 33 точки.
-     */
-    private val MP_MAP: Map<Int, Int> = buildMap {
-        // брови: верх (снаружи внутрь слева, изнутри наружу справа), низ — так же
-        listOf(70, 63, 105, 66, 107).forEachIndexed { i, mp -> put(33 + i, mp) }
-        listOf(336, 296, 334, 293, 300).forEachIndexed { i, mp -> put(38 + i, mp) }
-        listOf(53, 52, 65, 55).forEachIndexed { i, mp -> put(64 + i, mp) }
-        listOf(285, 295, 282, 283).forEachIndexed { i, mp -> put(68 + i, mp) }
-        // нос: спинка сверху вниз, низ слева направо
-        listOf(168, 6, 197, 195).forEachIndexed { i, mp -> put(43 + i, mp) }
-        listOf(98, 97, 2, 326, 327).forEachIndexed { i, mp -> put(47 + i, mp) }
-        // глаза
-        listOf(33, 160, 158, 133, 153, 144).forEachIndexed { i, mp -> put(52 + i, mp) }
-        listOf(362, 385, 387, 263, 373, 380).forEachIndexed { i, mp -> put(58 + i, mp) }
-        put(72, 159); put(73, 145); put(74, 468)
-        put(75, 386); put(76, 374); put(77, 473)
-        // крылья носа
-        put(78, 122); put(79, 351); put(80, 49); put(81, 279); put(82, 64); put(83, 294)
-        // губы снаружи: левый уголок, верх слева направо, правый уголок, низ справа налево
-        listOf(61, 40, 37, 0, 267, 270, 291, 321, 314, 17, 84, 91).forEachIndexed { i, mp -> put(84 + i, mp) }
-        // губы внутри
-        listOf(78, 81, 13, 311, 308, 402, 14, 178).forEachIndexed { i, mp -> put(96 + i, mp) }
-        put(104, 468); put(105, 473)
-    }
-
-    /** Нижняя дуга лица MediaPipe: от уха слева в кадре через подбородок (152) к уху справа. */
-    private val MP_JAW = intArrayOf(234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152, 377, 400, 378, 379, 365, 397, 288, 361, 323, 454)
-
-    /** 478 точек MediaPipe (x, y — доли кадра, y вниз) → 111 в той же системе координат. */
-    fun fromMediaPipe(xs: FloatArray, ys: FloatArray): FloatArray {
-        val out = FloatArray(FACE_POINTS * 2)
-        jaw(xs, ys).forEachIndexed { i, (x, y) ->
-            out[i * 2] = x
-            out[i * 2 + 1] = y
-        }
-        for ((i, mp) in MP_MAP) {
-            out[i * 2] = xs[mp]
-            out[i * 2 + 1] = ys[mp]
-        }
-        extras(out)
-        return out
-    }
 
     /** 106 точек VNN (доли кадра, y вниз) → 111. */
     fun fromVnn(points106: FloatArray): FloatArray {
@@ -79,23 +31,6 @@ internal object FacePoints {
         mid(108, 70, 40)
         mid(109, 5, 80)
         mid(110, 81, 27)
-    }
-
-    /** Дуга [MP_JAW] → 33 точки поровну по длине. */
-    private fun jaw(xs: FloatArray, ys: FloatArray): List<Pair<Float, Float>> {
-        val px = MP_JAW.map { xs[it] }
-        val py = MP_JAW.map { ys[it] }
-        val seg = FloatArray(MP_JAW.size)
-        for (i in 1 until MP_JAW.size) seg[i] = seg[i - 1] + hypot(px[i] - px[i - 1], py[i] - py[i - 1])
-        val total = seg.last().coerceAtLeast(1e-6f)
-        return (0 until 33).map { k ->
-            val at = total * k / 32f
-            var i = 1
-            while (i < seg.lastIndex && seg[i] < at) i++
-            val span = (seg[i] - seg[i - 1]).coerceAtLeast(1e-6f)
-            val t = ((at - seg[i - 1]) / span).coerceIn(0f, 1f)
-            (px[i - 1] + (px[i] - px[i - 1]) * t) to (py[i - 1] + (py[i] - py[i - 1]) * t)
-        }
     }
 
     /**

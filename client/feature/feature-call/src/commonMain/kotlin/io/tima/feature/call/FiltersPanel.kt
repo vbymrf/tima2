@@ -35,15 +35,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import io.tima.core.call.CallFilters
-import io.tima.core.call.BlushColor
 import io.tima.core.call.ColorLook
-import io.tima.core.call.LipColor
-import io.tima.core.call.FaceSource
 import io.tima.core.ui.Caption
 import io.tima.core.ui.CheckMark
 import io.tima.core.ui.Chip
 import io.tima.core.ui.ChipKind
-import io.tima.core.ui.Secondary
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
@@ -53,9 +49,8 @@ import kotlin.math.roundToInt
 /**
  * «Фильтры» (ПЛАН-(ФЗ) ФЗ7): лист поверх изображения, своё изображение видно над ним — фильтр собирается до отправки,
  * и окошко показывает то же, что уходит. [onChange] зовётся на каждом движении ползунка (кадр меняется сразу),
- * `final` — когда палец отпущен: тогда выбор пишется в настройки (решение 6: помнится).
- *
- * @param mediaPipe есть ли MediaPipe в сборке: нет (развилка §6.3) — выбор источника показывает её недоступной.
+ * `final` — когда палец отпущен: тогда выбор пишется в настройки (решение 6: помнится). Точки лица ищет VNN;
+ * выбора цвета помады и румян пока нет — цвет картинок gpupixel (заказчик 2026-11-10).
  */
 @Composable
 internal fun FiltersPanel(
@@ -63,7 +58,6 @@ internal fun FiltersPanel(
     onChange: (CallFilters, Boolean) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
-    mediaPipe: Boolean = false,
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -110,17 +104,7 @@ internal fun FiltersPanel(
             Level("thin", words.filterThin, f.thin, 0) { v, done -> set(f.copy(thin = v), done) }
             Level("eyes", words.filterEyes, f.eyes, 0) { v, done -> set(f.copy(eyes = v), done) }
             Level("lipstick", words.filterLipstick, f.lipstick, 0) { v, done -> set(f.copy(lipstick = v), done) }
-            Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                for ((c, name) in listOf(LipColor.Red to words.lipRed, LipColor.Pink to words.lipPink, LipColor.Coral to words.lipCoral, LipColor.Cherry to words.lipCherry)) {
-                    Chip(label = name, kind = if (f.lipColor == c) ChipKind.Selected else ChipKind.Quiet, onClick = { set(f.copy(lipColor = c)) })
-                }
-            }
             Level("blush", words.filterBlush, f.blush, 0) { v, done -> set(f.copy(blush = v), done) }
-            Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                for ((c, name) in listOf(BlushColor.Pink to words.blushPink, BlushColor.Peach to words.blushPeach, BlushColor.Coral to words.blushCoral, BlushColor.Berry to words.blushBerry)) {
-                    Chip(label = name, kind = if (f.blushColor == c) ChipKind.Selected else ChipKind.Quiet, onClick = { set(f.copy(blushColor = c)) })
-                }
-            }
 
             Section(words.filtersWrinkles)
             Level("forehead", words.filterForehead, f.forehead, 0) { v, done -> set(f.copy(forehead = v), done) }
@@ -129,17 +113,7 @@ internal fun FiltersPanel(
             Level("eyeCorners", words.filterEyeCorners, f.eyeCorners, 0) { v, done -> set(f.copy(eyeCorners = v), done) }
             Level("nasolabial", words.filterNasolabial, f.nasolabial, 0) { v, done -> set(f.copy(nasolabial = v), done) }
 
-            Section(words.filtersSource)
-            Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                Chip(label = "VNN", kind = if (f.source == FaceSource.Vnn) ChipKind.Selected else ChipKind.Quiet, onClick = { set(f.copy(source = FaceSource.Vnn)) })
-                Chip(
-                    label = "MediaPipe",
-                    kind = if (f.source == FaceSource.MediaPipe) ChipKind.Selected else ChipKind.Quiet,
-                    onClick = { if (mediaPipe) set(f.copy(source = FaceSource.MediaPipe)) },
-                )
-            }
-            if (!mediaPipe) Secondary(words.filtersMediaPipeOff)
-            Chip(label = words.filtersReset, kind = ChipKind.Quiet, onClick = { set(CallFilters.OFF.copy(on = f.on, source = f.source)) })
+            Chip(label = words.filtersReset, kind = ChipKind.Quiet, onClick = { set(CallFilters.OFF.copy(on = f.on)) })
         }
     }
 }

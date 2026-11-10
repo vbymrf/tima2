@@ -266,15 +266,15 @@ varying highp vec2 vScreen;
 uniform sampler2D uTex;
 uniform sampler2D uMakeup;
 uniform float uIntensity;
-uniform vec3 uTint;
-float overlay(float b, float t) { return b < 0.5 ? 2.0 * b * t : 1.0 - 2.0 * (1.0 - b) * (1.0 - t); }
 void main() {
     vec4 fg = texture2D(uMakeup, vTex) * uIntensity;
     if (fg.a <= 0.0) discard;
     vec4 bg = texture2D(uTex, vScreen);
-    // Свой цвет (заказчик 2026-11-10): форма и прозрачность — из картинки gpupixel, цвет — выбранный; наложение
-    // «перекрытием» держит светотень губ и щёк, а не красит их плоско.
-    vec3 color = vec3(overlay(bg.r, uTint.r), overlay(bg.g, uTint.g), overlay(bg.b, uTint.b));
+    // Умножение, как в gpupixel (`blendMode` 15): картинки губ и румян непрозрачные, на белом фоне, и белое при
+    // умножении кадр не меняет — окрашиваются только губы и щёки. Свой цвет поверх «перекрытия» с весом по
+    // прозрачности красил всю сетку, то есть всё лицо (заказчик 2026-11-10) — убран до новой версии.
+    vec3 blend = clamp(fg.rgb * (1.0 / fg.a), 0.0, 1.0);
+    vec3 color = bg.rgb * blend;
     gl_FragColor = vec4(bg.rgb * (1.0 - fg.a) + color * fg.a, 1.0);
 }
 """

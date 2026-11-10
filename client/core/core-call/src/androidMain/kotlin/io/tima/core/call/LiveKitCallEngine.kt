@@ -601,10 +601,9 @@ class LiveKitCallEngine(
     override suspend fun setFilters(filters: CallFilters) {
         val was = cropper.filters
         cropper.filters = filters
-        faces.source = filters.source
         attachCropper()
         val now = nowMs()
-        if (now - filtersNotedAt >= FILTERS_NOTE_MS || was.on != filters.on || was.source != filters.source) {
+        if (now - filtersNotedAt >= FILTERS_NOTE_MS || was.on != filters.on) {
             filtersNotedAt = now
             Journal.note(
                 LogCode.CALL, "фильтры",

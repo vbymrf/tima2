@@ -276,18 +276,17 @@ internal class FrameStudio(private val assets: AssetManager) {
         val indices = ShortBuffer.wrap(FACE_TRIANGLES).let { short ->
             ByteBuffer.allocateDirect(FACE_TRIANGLES.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().put(short).also { it.position(0) }
         }
-        if (f.lipstick > 0) drawMesh(shader, pos, "mouth.png", LIPSTICK_BOUNDS, f.lipstick / 100f, indices, f.lipColor.rgb)
-        if (f.blush > 0) drawMesh(shader, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, indices, f.blushColor.rgb)
+        if (f.lipstick > 0) drawMesh(shader, pos, "mouth.png", LIPSTICK_BOUNDS, f.lipstick / 100f, indices)
+        if (f.blush > 0) drawMesh(shader, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, indices)
     }
 
-    private fun drawMesh(shader: GlShader, pos: FloatArray, image: String, bounds: FloatArray, intensity: Float, indices: ShortBuffer, rgb: Int) {
+    private fun drawMesh(shader: GlShader, pos: FloatArray, image: String, bounds: FloatArray, intensity: Float, indices: ShortBuffer) {
         val tex = FloatArray(FACE_POINTS * 2) { i ->
             val v = FACE_TEMPLATE[i] * 1280f
             if (i % 2 == 0) (v - bounds[0]) / bounds[2] else (v - bounds[1]) / bounds[3]
         }
         bind(shader, "uMakeup", 1, texture(image))
         GLES20.glUniform1f(shader.getUniformLocation("uIntensity"), intensity)
-        GLES20.glUniform3f(shader.getUniformLocation("uTint"), (rgb shr 16 and 0xFF) / 255f, (rgb shr 8 and 0xFF) / 255f, (rgb and 0xFF) / 255f)
         shader.setVertexAttribArray("aPos", 2, floats(*pos))
         shader.setVertexAttribArray("aTex", 2, floats(*tex))
         indices.position(0)
