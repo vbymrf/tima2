@@ -35,7 +35,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import io.tima.core.call.CallFilters
+import io.tima.core.call.BlushColor
 import io.tima.core.call.ColorLook
+import io.tima.core.call.LipColor
 import io.tima.core.call.FaceSource
 import io.tima.core.ui.Caption
 import io.tima.core.ui.CheckMark
@@ -108,7 +110,17 @@ internal fun FiltersPanel(
             Level("thin", words.filterThin, f.thin, 0) { v, done -> set(f.copy(thin = v), done) }
             Level("eyes", words.filterEyes, f.eyes, 0) { v, done -> set(f.copy(eyes = v), done) }
             Level("lipstick", words.filterLipstick, f.lipstick, 0) { v, done -> set(f.copy(lipstick = v), done) }
+            Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                for ((c, name) in listOf(LipColor.Red to words.lipRed, LipColor.Pink to words.lipPink, LipColor.Coral to words.lipCoral, LipColor.Cherry to words.lipCherry)) {
+                    Chip(label = name, kind = if (f.lipColor == c) ChipKind.Selected else ChipKind.Quiet, onClick = { set(f.copy(lipColor = c)) })
+                }
+            }
             Level("blush", words.filterBlush, f.blush, 0) { v, done -> set(f.copy(blush = v), done) }
+            Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                for ((c, name) in listOf(BlushColor.Pink to words.blushPink, BlushColor.Peach to words.blushPeach, BlushColor.Coral to words.blushCoral, BlushColor.Berry to words.blushBerry)) {
+                    Chip(label = name, kind = if (f.blushColor == c) ChipKind.Selected else ChipKind.Quiet, onClick = { set(f.copy(blushColor = c)) })
+                }
+            }
 
             Section(words.filtersWrinkles)
             Level("forehead", words.filterForehead, f.forehead, 0) { v, done -> set(f.copy(forehead = v), done) }

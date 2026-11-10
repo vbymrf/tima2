@@ -43,7 +43,7 @@ internal class WrinkleZones(val zones: FloatArray, val axes: FloatArray, val str
                 zones[n * 4 + 3] = ry
                 axes[n * 2] = ax
                 axes[n * 2 + 1] = ay
-                strengths[n] = k / 100f
+                strengths[n] = k / 100f * CallFilters.WRINKLE_MAX
                 n++
             }
             val browsX = (x(35) + x(40)) / 2

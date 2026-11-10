@@ -1356,6 +1356,14 @@ interface CallWords {
     val filterUnderEyes: String
     val filterEyeCorners: String
     val filterNasolabial: String
+    val lipRed: String
+    val lipPink: String
+    val lipCoral: String
+    val lipCherry: String
+    val blushPink: String
+    val blushPeach: String
+    val blushCoral: String
+    val blushBerry: String
 
     /** «Звонки → Увеличение изображения» (ПЛАН-(ЗН) ЗН8). */
     val zoomTitle: String
@@ -3879,6 +3887,14 @@ object RussianWords : Words {
         override val filterUnderEyes = "Под глазами"
         override val filterEyeCorners = "Уголки глаз"
         override val filterNasolabial = "Носогубные"
+        override val lipRed = "Красный"
+        override val lipPink = "Розовый"
+        override val lipCoral = "Коралловый"
+        override val lipCherry = "Вишнёвый"
+        override val blushPink = "Розовые"
+        override val blushPeach = "Персиковые"
+        override val blushCoral = "Коралловые"
+        override val blushBerry = "Ягодные"
         override val zoomTitle = "Увеличение изображения"
         override val zoomAbout = "Своё изображение с начала звонка приближается и сдвигается к лицу: вниз и в сторону от руки, в которой телефон. Собеседник видит так же. Только передняя камера и звонок на двоих."
         override val handTitle = "Телефон в руке"

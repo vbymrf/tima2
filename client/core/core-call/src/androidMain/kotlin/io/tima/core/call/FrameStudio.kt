@@ -260,8 +260,8 @@ internal class FrameStudio(private val assets: AssetManager) {
         }
         GLES20.glUniform2fv(shader.getUniformLocation("uP"), RESHAPE_POINTS.size, p, 0)
         GLES20.glUniform1f(shader.getUniformLocation("uAspect"), w.toFloat() / h)
-        // Силы — как у gpupixel: тоньше до 0,05, глаза до 0,2 на всём ползунке.
-        GLES20.glUniform1f(shader.getUniformLocation("uThin"), f.thin / 100f * 0.05f)
+        // «Тоньше» — до 0,12 (CallFilters.thinDelta), глаза — до 0,2, как у gpupixel.
+        GLES20.glUniform1f(shader.getUniformLocation("uThin"), f.thinDelta)
         GLES20.glUniform1f(shader.getUniformLocation("uEyes"), f.eyes / 100f * 0.2f)
         drawStrip(shader, quad, quadTex)
     }
@@ -276,17 +276,18 @@ internal class FrameStudio(private val assets: AssetManager) {
         val indices = ShortBuffer.wrap(FACE_TRIANGLES).let { short ->
             ByteBuffer.allocateDirect(FACE_TRIANGLES.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().put(short).also { it.position(0) }
         }
-        if (f.lipstick > 0) drawMesh(shader, pos, "mouth.png", LIPSTICK_BOUNDS, f.lipstick / 100f, indices)
-        if (f.blush > 0) drawMesh(shader, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, indices)
+        if (f.lipstick > 0) drawMesh(shader, pos, "mouth.png", LIPSTICK_BOUNDS, f.lipstick / 100f, indices, f.lipColor.rgb)
+        if (f.blush > 0) drawMesh(shader, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, indices, f.blushColor.rgb)
     }
 
-    private fun drawMesh(shader: GlShader, pos: FloatArray, image: String, bounds: FloatArray, intensity: Float, indices: ShortBuffer) {
+    private fun drawMesh(shader: GlShader, pos: FloatArray, image: String, bounds: FloatArray, intensity: Float, indices: ShortBuffer, rgb: Int) {
         val tex = FloatArray(FACE_POINTS * 2) { i ->
             val v = FACE_TEMPLATE[i] * 1280f
             if (i % 2 == 0) (v - bounds[0]) / bounds[2] else (v - bounds[1]) / bounds[3]
         }
         bind(shader, "uMakeup", 1, texture(image))
         GLES20.glUniform1f(shader.getUniformLocation("uIntensity"), intensity)
+        GLES20.glUniform3f(shader.getUniformLocation("uTint"), (rgb shr 16 and 0xFF) / 255f, (rgb shr 8 and 0xFF) / 255f, (rgb and 0xFF) / 255f)
         shader.setVertexAttribArray("aPos", 2, floats(*pos))
         shader.setVertexAttribArray("aTex", 2, floats(*tex))
         indices.position(0)

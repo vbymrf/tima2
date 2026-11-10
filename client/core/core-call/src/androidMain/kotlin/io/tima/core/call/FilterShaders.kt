@@ -127,7 +127,8 @@ void main() {
         float p = clamp((min(iColor.r, meanColor.r - 0.1) - 0.2) * 4.0, 0.0, 1.0);
         float meanVar = (varColor.r + varColor.g + varColor.b) / 3.0;
         float k = (1.0 - meanVar / (meanVar + theta)) * p * uSmooth;
-        float kz = zone * clamp(p * 1.5, 0.0, 1.0) * (1.0 - meanVar / (meanVar + 0.6));
+        // Порог разброса в зонах мягче общего (1,5 против 0,1): глубокая складка контрастна и иначе осталась бы.
+        float kz = zone * clamp(p * 1.5, 0.0, 1.0) * (1.0 - meanVar / (meanVar + 1.5));
         k = clamp(max(k, kz), 0.0, 1.0);
         color = mix(iColor, meanColor, k);
     }
@@ -265,12 +266,15 @@ varying highp vec2 vScreen;
 uniform sampler2D uTex;
 uniform sampler2D uMakeup;
 uniform float uIntensity;
+uniform vec3 uTint;
+float overlay(float b, float t) { return b < 0.5 ? 2.0 * b * t : 1.0 - 2.0 * (1.0 - b) * (1.0 - t); }
 void main() {
     vec4 fg = texture2D(uMakeup, vTex) * uIntensity;
     if (fg.a <= 0.0) discard;
     vec4 bg = texture2D(uTex, vScreen);
-    vec3 blend = clamp(fg.rgb * (1.0 / fg.a), 0.0, 1.0);
-    vec3 color = bg.rgb * blend;
+    // Свой цвет (заказчик 2026-11-10): форма и прозрачность — из картинки gpupixel, цвет — выбранный; наложение
+    // «перекрытием» держит светотень губ и щёк, а не красит их плоско.
+    vec3 color = vec3(overlay(bg.r, uTint.r), overlay(bg.g, uTint.g), overlay(bg.b, uTint.b));
     gl_FragColor = vec4(bg.rgb * (1.0 - fg.a) + color * fg.a, 1.0);
 }
 """

@@ -19,6 +19,16 @@ class CallFiltersTest {
     }
 
     @Test
+    fun тоньше_до_012_и_цвета_помнятся() {
+        // Заказчик 2026-11-10: предел 0,12; первая половина хода — как у gpupixel (0,025 на 50).
+        assertEquals(0f, CallFilters(thin = 0).thinDelta)
+        assertEquals(0.025f, CallFilters(thin = 50).thinDelta, 1e-6f)
+        assertEquals(0.12f, CallFilters(thin = 100).thinDelta, 1e-6f)
+        val f = CallFilters(on = true, lipstick = 40, lipColor = LipColor.Cherry, blush = 30, blushColor = BlushColor.Peach)
+        assertEquals(f, CallFilterKeys.read(CallFilterKeys.write(f)))
+    }
+
+    @Test
     fun выключено_значит_кадр_как_снят() {
         val f = CallFilters(on = false, smooth = 80, thin = 50)
         assertFalse(f.active)
@@ -86,8 +96,9 @@ class CallFiltersTest {
         val z = WrinkleZones.of(p, 720, 720, CallFilters(on = true, forehead = 100, underEyes = 50))
         assertTrue(z.zones[1] > 0.66f, "лоб не выше бровей: ${z.zones[1]}")
         assertTrue(z.zones[2 * 4 + 1] < 0.58f, "«под глазами» не ниже глаз: ${z.zones[2 * 4 + 1]}")
-        assertEquals(1f, z.strengths[0])
-        assertEquals(0.5f, z.strengths[2])
+        // Предел морщин поднят (заказчик 2026-11-10): ползунок 100 — сила 1,6.
+        assertEquals(CallFilters.WRINKLE_MAX, z.strengths[0], 1e-6f)
+        assertEquals(0.5f * CallFilters.WRINKLE_MAX, z.strengths[2], 1e-6f)
         assertEquals(0f, z.strengths[1], "между бровями выключено")
         assertNotNull(z.axes)
     }

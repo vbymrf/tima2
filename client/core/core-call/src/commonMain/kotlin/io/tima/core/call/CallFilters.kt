@@ -3,6 +3,12 @@ package io.tima.core.call
 /** Откуда берутся точки лица для лицевых фильтров (ПЛАН-(ФЗ) решение 2: оба, выбор — сравнивать и отлаживать). */
 enum class FaceSource { MediaPipe, Vnn }
 
+/** Цвет помады (заказчик 2026-11-10): красный, розовый, коралловый, вишнёвый. Цвет — 0xRRGGBB. */
+enum class LipColor(val rgb: Int) { Red(0xC8102E), Pink(0xE75480), Coral(0xFF6F61), Cherry(0x7B1E3A) }
+
+/** Цвет румян (заказчик 2026-11-10: «румяна тоже с выбором цветов»): розовый, персиковый, коралловый, ягодный. */
+enum class BlushColor(val rgb: Int) { Pink(0xF4A6B7), Peach(0xFFB38A), Coral(0xFF7F6E), Berry(0xC0506E) }
+
 /** Готовые цветовые наборы gpupixel (таблицы 512×512): нет, «светлый», «свой». */
 enum class ColorLook { None, Light, Custom }
 
@@ -29,6 +35,8 @@ data class CallFilters(
     val eyes: Int = 0,
     val lipstick: Int = 0,
     val blush: Int = 0,
+    val lipColor: LipColor = LipColor.Red,
+    val blushColor: BlushColor = BlushColor.Pink,
     // ── Морщины по областям (ФЗ6, решение 4) ──
     val forehead: Int = 0,
     val brows: Int = 0,
@@ -62,12 +70,29 @@ data class CallFilters(
             "носогубные" to nasolabial,
         ).filter { it.second != 0 }.joinToString(" ") { "${it.first}=${it.second}" }
             .let { if (look != ColorLook.None) "$it набор=${look.name}:$lookStrength" else it }
+            .let { if (lipstick > 0) "$it цвет помады=${lipColor.name}" else it }
+            .let { if (blush > 0) "$it цвет румян=${blushColor.name}" else it }
             .let { if (needsFace) "$it точки=${source.name}" else it }
             .ifEmpty { "вкл, всё по нулям" }
     }
 
+    /**
+     * «Тоньше лицо» — доля пути точек контура к носу. Первая половина ползунка — как у gpupixel (до 0,025), вторая —
+     * быстрее до 0,12 (заказчик 2026-11-10: «предел 0,12»; было 0,05 на всём ходе).
+     */
+    val thinDelta: Float
+        get() {
+            val s = thin / 100f
+            return if (s <= 0.5f) s * 0.05f else 0.025f + (s - 0.5f) / 0.5f * (THIN_MAX - 0.025f)
+        }
+
     companion object {
         val OFF = CallFilters()
+
+        const val THIN_MAX = 0.12f
+
+        /** Морщины: ползунок 100 — сила зоны 1,6 (заказчик 2026-11-10: «поднять предел»; было 1). */
+        const val WRINKLE_MAX = 1.6f
     }
 }
 
@@ -85,6 +110,8 @@ object CallFilterKeys {
             look = ColorLook.entries.firstOrNull { it.name == all[PREFIX + "look"] } ?: ColorLook.None,
             lookStrength = all[PREFIX + "lookStrength"]?.toIntOrNull()?.coerceIn(0, 100) ?: 100,
             thin = int("thin"), eyes = int("eyes"), lipstick = int("lipstick"), blush = int("blush"),
+            lipColor = LipColor.entries.firstOrNull { it.name == all[PREFIX + "lipColor"] } ?: LipColor.Red,
+            blushColor = BlushColor.entries.firstOrNull { it.name == all[PREFIX + "blushColor"] } ?: BlushColor.Pink,
             forehead = int("forehead"), brows = int("brows"), underEyes = int("underEyes"),
             eyeCorners = int("eyeCorners"), nasolabial = int("nasolabial"),
             source = FaceSource.entries.firstOrNull { it.name == all[PREFIX + "source"] } ?: FaceSource.Vnn,
@@ -97,6 +124,7 @@ object CallFilterKeys {
         "brightness" to f.brightness, "contrast" to f.contrast, "saturation" to f.saturation, "warmth" to f.warmth,
         "look" to f.look.name, "lookStrength" to f.lookStrength,
         "thin" to f.thin, "eyes" to f.eyes, "lipstick" to f.lipstick, "blush" to f.blush,
+        "lipColor" to f.lipColor.name, "blushColor" to f.blushColor.name,
         "forehead" to f.forehead, "brows" to f.brows, "underEyes" to f.underEyes,
         "eyeCorners" to f.eyeCorners, "nasolabial" to f.nasolabial,
         "source" to f.source.name,
