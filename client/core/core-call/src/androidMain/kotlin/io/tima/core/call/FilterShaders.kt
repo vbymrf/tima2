@@ -60,7 +60,7 @@ void main() {
  * сильнее и порог разброса мягче — складка контрастнее кожи, и общий порог её бы оставил.
  */
 internal const val FS_BEAUTY = """
-precision highp float;
+precision mediump float;
 varying vec2 vTex;
 uniform sampler2D uTex;
 uniform sampler2D uMean;
@@ -122,14 +122,16 @@ void main() {
     vec3 varColor = min(diff * diff, 1.0);
     vec3 color = iColor;
     float zone = zones(vTex);
-    if (uSmooth > 0.0 || zone > 0.0 || uSharpen > 0.0) {
+    if (uSmooth > 0.0 || zone > 0.0) {
         float theta = 0.1;
         float p = clamp((min(iColor.r, meanColor.r - 0.1) - 0.2) * 4.0, 0.0, 1.0);
         float meanVar = (varColor.r + varColor.g + varColor.b) / 3.0;
         float k = (1.0 - meanVar / (meanVar + theta)) * p * uSmooth;
         float kz = zone * clamp(p * 1.5, 0.0, 1.0) * (1.0 - meanVar / (meanVar + 0.6));
         k = clamp(max(k, kz), 0.0, 1.0);
-        vec3 resultColor = mix(iColor, meanColor, k);
+        color = mix(iColor, meanColor, k);
+    }
+    if (uSharpen > 0.0) {
         vec3 sum = 0.25 * iColor;
         sum += 0.125 * texture2D(uTex, vTex + vec2(-uTexel.x, 0.0)).rgb;
         sum += 0.125 * texture2D(uTex, vTex + vec2(uTexel.x, 0.0)).rgb;
@@ -140,7 +142,7 @@ void main() {
         sum += 0.0625 * texture2D(uTex, vTex + vec2(-uTexel.x, uTexel.y)).rgb;
         sum += 0.0625 * texture2D(uTex, vTex + vec2(uTexel.x, -uTexel.y)).rgb;
         vec3 hPass = iColor - sum;
-        color = resultColor + uSharpen * hPass * 2.0;
+        color = color + uSharpen * hPass * 2.0;
     }
     if (uWhiten > 0.0) {
         vec3 colorEPM = color;

@@ -64,6 +64,7 @@ internal class FrameStudio(private val assets: AssetManager) {
     private var frames = 0L
     private var gpuNs = 0L
     private var skipped = 0L
+    private var finishNs = 0L
     private var since = System.nanoTime()
     private var lastReport = 0L
 
@@ -136,7 +137,9 @@ internal class FrameStudio(private val assets: AssetManager) {
         }
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
         // Кодер и своё окошко читают текстуру из других потоков (общий контекст) — она должна быть готова к их чтению.
+        val waitFrom = System.nanoTime()
         GLES20.glFinish()
+        finishNs += System.nanoTime() - waitFrom
         val buffer = TextureBufferImpl(
             w, h, VideoFrame.TextureBuffer.Type.RGB, out.fb.textureId, Matrix(),
             input.toI420Handler, input.yuvConverter,
@@ -372,6 +375,7 @@ internal class FrameStudio(private val assets: AssetManager) {
             LogCode.CALL, "фильтры: замер",
             "к/с" to if (seconds > 0) ((frames / seconds) * 10).toLong() / 10.0 else 0.0,
             "мс на кадр" to if (frames > 0) (gpuNs / frames / 10_000) / 100.0 else 0.0,
+            "из них ждали видеокарту мс" to if (frames > 0) (finishNs / frames / 10_000) / 100.0 else 0.0,
             "кадр" to "${w}×$h",
             "без фильтра" to skipped,
             "что" to f.describe(),
@@ -379,6 +383,7 @@ internal class FrameStudio(private val assets: AssetManager) {
         )
         frames = 0
         gpuNs = 0
+        finishNs = 0
         skipped = 0
         since = now
     }

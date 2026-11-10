@@ -46,6 +46,10 @@ internal class FaceWatch(private val context: Context) {
     private var detectNs = 0L
 
     private var mediaPipeFailed = false
+    private var offered = 0L
+
+    /** Отладка поиска лица: метка `files/filters/debug` — первый прямой кадр сохраняется картинкой рядом с ней. */
+    private var dumped = false
     private var vnn: Vnn? = null
     private var vnnFailed = false
 
@@ -54,6 +58,9 @@ internal class FaceWatch(private val context: Context) {
      * поиск уходит на свой поток.
      */
     fun offer(read: (width: Int, height: Int, sink: ByteBuffer) -> Unit) {
+        // Не чаще раза в [EVERY] кадров: чтение кадра с видеокарты останавливает её конвейер (замер Samsung A40:
+        // поиск почти на каждом кадре — 17 к/с и 28 мс на кадр 1280×720).
+        if (++offered % EVERY != 0L) return
         if (!busy.compareAndSet(false, true)) return
         try {
             read(WIDTH, HEIGHT, pixels)
@@ -62,6 +69,11 @@ internal class FaceWatch(private val context: Context) {
             throw e
         }
         val chosen = source
+        if (!dumped) {
+            dumped = true
+            val mark = File(context.filesDir, "filters/debug")
+            if (mark.exists()) runCatching { dump(File(mark.parentFile, "upright.png")) }
+        }
         worker.execute {
             try {
                 detect(chosen)
@@ -71,6 +83,16 @@ internal class FaceWatch(private val context: Context) {
                 busy.set(false)
             }
         }
+    }
+
+    private fun dump(file: File) {
+        val bitmap = android.graphics.Bitmap.createBitmap(WIDTH, HEIGHT, android.graphics.Bitmap.Config.ARGB_8888)
+        pixels.rewind()
+        bitmap.copyPixelsFromBuffer(pixels)
+        pixels.rewind()
+        file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+        Journal.note(LogCode.CALL, "фильтры: отладка — прямой кадр сохранён", "файл" to file.name)
     }
 
     /** Точки для шейдеров: текстурные координаты буфера (низ — ноль), 111 × 2. `null` — лица нет. */
@@ -165,6 +187,9 @@ internal class FaceWatch(private val context: Context) {
         /** Прямой кадр для поиска: портрет, как держат телефон. */
         const val WIDTH = 192
         const val HEIGHT = 256
+
+        /** Искать лицо раз в столько кадров. */
+        private const val EVERY = 3L
 
         /** Сглаживание точек: доля нового положения. */
         private const val SMOOTH = 0.6f
