@@ -26,9 +26,18 @@ import kotlin.coroutines.resume
  * Кадр режется и растягивается до прежнего размера: у собеседника не меняется размер картинки,
  * а кодер не перестраивается на каждом нажатии «+».
  */
-internal class CameraCropper : VideoProcessor {
+internal class CameraCropper(
+    /** Сборка кадра на видеокарте (ПЛАН-(ФЗ)): фильтры и поле за краем. `null` — только обрезка, как прежде. */
+    private val studio: FrameStudio? = null,
+    /** Поиск точек лица для лицевых фильтров. */
+    private val faces: FaceWatch? = null,
+) : VideoProcessor {
     @Volatile
     var crop: CameraCrop = CameraCrop.FULL
+
+    /** Фильтры своего видео (ПЛАН-(ФЗ)): кадр собирается до отправки. */
+    @Volatile
+    var filters: CallFilters = CallFilters.OFF
 
     @Volatile
     private var sink: VideoSink? = null
@@ -50,6 +59,21 @@ internal class CameraCropper : VideoProcessor {
         val out = sink ?: return
         frames++
         val c = crop
+        val f = filters
+        // Фильтры и поле за краем — на видеокарте (ФЗ1): не вышло — прежним путём, без фильтров.
+        if (studio != null && (f.active || c.beyond)) {
+            val started = System.nanoTime()
+            val made = studio.process(frame, c, f, faces)
+            if (made != null) {
+                cropNs += System.nanoTime() - started
+                try {
+                    out.onFrame(made)
+                } finally {
+                    made.release()
+                }
+                return
+            }
+        }
         if (c.full) {
             out.onFrame(frame)
             return

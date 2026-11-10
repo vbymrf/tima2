@@ -158,6 +158,12 @@ interface CallEngine {
      */
     suspend fun setCameraCrop(crop: CameraCrop) = Unit
 
+    /**
+     * Фильтры своего видео (ПЛАН-(ФЗ)): кадр собирается до отправки, своё окошко показывает то же. Движок без
+     * фильтров — без изменений.
+     */
+    suspend fun setFilters(filters: CallFilters) = Unit
+
     /** Умеет ли движок показывать экран устройства (ПЛАН-(ЗН) ЗН6): нет — нет и пункта в листе. */
     val screenShareable: Boolean get() = false
 

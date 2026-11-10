@@ -44,6 +44,10 @@ kotlin {
             // Тянет за собой com.github.davidliu:audioswitch с JitPack — репозиторий
             // добавлен в settings.gradle.kts, и там же сказано зачем.
             implementation(libs.livekit.android)
+            // Фильтры звонка (ПЛАН-(ФЗ)): точки лица VNN — родные библиотеки с C-интерфейсом, зовутся через JNA (сборка
+            // Android — `@aar` с libjnidispatch), без своей NDK-сборки. MediaPipe Tasks не подключена: она шлёт в Google
+            // статистику использования (DataTransport) — развилка ПЛАН-(ФЗ) §6.3, ждёт решения заказчика.
+            implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
         }
         jvmMain.dependencies {
             // Доступ к микрофону и камере на ПК решает Windows переключателями в реестре

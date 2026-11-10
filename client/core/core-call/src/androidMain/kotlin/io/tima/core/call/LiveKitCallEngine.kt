@@ -575,7 +575,8 @@ class LiveKitCallEngine(
     }
 
     /** Обрезка кадра (ЗН5) — одна на движок; на дорожку ставится при первом приближении. */
-    private val cropper = CameraCropper()
+    private val faces = FaceWatch(context)
+    private val cropper = CameraCropper(FrameStudio(context.assets), faces)
 
     /** Дорожка, у источника которой стоит [cropper]: перевыпуск камеры даёт новую — ставим снова. */
     private var croppedTrack: LocalVideoTrack? = null
@@ -591,8 +592,20 @@ class LiveKitCallEngine(
         )
     }
 
+    /** Фильтры своего видео (ПЛАН-(ФЗ)): тот же обработчик у источника, что и обрезка. */
+    override suspend fun setFilters(filters: CallFilters) {
+        val was = cropper.filters
+        cropper.filters = filters
+        faces.source = filters.source
+        attachCropper()
+        Journal.note(
+            LogCode.CALL, "фильтры",
+            "стало" to filters.describe(), "было" to was.describe(), "обработчик стоит" to (croppedTrack != null),
+        )
+    }
+
     private fun attachCropper() {
-        if (cropper.crop.full && croppedTrack == null) return
+        if (cropper.crop.full && !cropper.filters.active && croppedTrack == null) return
         val track = room?.localParticipant?.videoTrackPublications
             ?.firstOrNull { it.first.source != Track.Source.SCREEN_SHARE }?.second as? LocalVideoTrack ?: return
         if (track === croppedTrack) return

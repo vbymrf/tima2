@@ -43,11 +43,20 @@ class LiveKitVideoHandle internal constructor(
     internal val track: VideoTrack,
 ) : VideoHandle {
 
+    /**
+     * Своя дорожка — показ из **обработанных** кадров (ПЛАН-(ФЗ) ФЗ1): LiveKit рисует свою камеру до обработчика
+     * источника, и окошко не видело бы ни обрезки, ни фильтров. Дорожка WebRTC отдаёт кадры после источника — то же,
+     * что уходит собеседнику.
+     */
+    private val local = track is io.livekit.android.room.track.LocalVideoTrack
+
+    override val cropped: Boolean get() = local
+
     /** Создать поверхность и начать в неё рисовать. */
     fun open(context: Context): View {
         val view = WakingRenderer(context)
         room.initVideoRenderer(view)
-        track.addRenderer(view)
+        if (local) track.rtcTrack.addSink(view) else track.addRenderer(view)
         return view
     }
 
@@ -63,7 +72,7 @@ class LiveKitVideoHandle internal constructor(
         if (view !is TextureViewRenderer) return
         // Снять дорожку ДО release: отпущенная поверхность, в которую ещё рисуют, роняет
         // отрисовщик. Порядок здесь важнее, чем выглядит.
-        track.removeRenderer(view)
+        if (local) track.rtcTrack.removeSink(view) else track.removeRenderer(view)
         view.release()
     }
 }
