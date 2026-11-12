@@ -22,6 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.graphics.ImageBitmap
@@ -251,6 +253,10 @@ fun CallScreen(
                     }
                 }
             }
+            // Открыто меню — нажатие на сетку его закрывает (заказчик 2026-11-12).
+            if (sheetOpen || filtersOpen || zoomOpen) {
+                MenuCloser { sheetOpen = false; filtersOpen = false; zoomOpen = false }
+            }
             // Групповой в одном виде с разговором на двоих (ЗН9): своего окошка нет — смена камеры справа внизу.
             onSwitchCamera?.takeIf { state.cameraOn && state.cameraSwitchable && !state.screenSharing && !sheetOpen && !filtersOpen && !zoomOpen }?.let {
                 CameraFlip(it, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3))
@@ -376,6 +382,12 @@ fun CallScreen(
                         Caption(it, fontSize = TimaType.sz5, color = TimaFixed.onVideo.copy(alpha = 0.85f), lineOne = true)
                     }
                 }
+            }
+
+            // Открыто меню — нажатие на изображение его закрывает (заказчик 2026-11-12). Слой — под своим окошком:
+            // нажатие на окошко по-прежнему меняет его местами с собеседником, меню при этом остаётся.
+            if (sheetOpen || filtersOpen || zoomOpen) {
+                MenuCloser { sheetOpen = false; filtersOpen = false; zoomOpen = false }
             }
 
             // Своё изображение — плашкой в углу, как в макете (`[[ Вы (PIP) ]]`).
@@ -523,6 +535,20 @@ fun CallScreen(
         }
     }
 }
+
+/** Прозрачный слой над изображением, пока открыто меню: нажатие закрывает меню и дальше не идёт. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.MenuCloser(onClose: () -> Unit) {
+    val close by androidx.compose.runtime.rememberUpdatedState(onClose)
+    Box(
+        Modifier.matchParentSize()
+            .pointerInput(Unit) { detectTapGestures { close() } }
+            .testTag(CALL_MENU_CLOSER_TAG),
+    )
+}
+
+/** Слой «нажми на изображение — меню закроется». */
+const val CALL_MENU_CLOSER_TAG: String = "call:menu:closer"
 
 /**
  * Лист «Настройки звонка», «Фильтры» и «Увеличение изображения» поверх изображения — одни и те же на двоих и в

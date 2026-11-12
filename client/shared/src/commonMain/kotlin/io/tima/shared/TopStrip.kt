@@ -160,33 +160,34 @@ internal fun stripStatus(
 }
 
 /**
- * Положенная трубка: дуга с двумя «ушами» вниз, по середине своего места — и по ширине, и по высоте (её рамка
- * считается и сдвигается к середине).
+ * Положенная трубка «Завершить» (заказчик 2026-11-12: «трубка развернулась и не похожа на трубку»): залитое тело — дуга
+ * от края до края, на концах — широкие накладки вниз, как привычный значок конца звонка. Рисуется в поле 24 × 24 и
+ * ставится по середине своего места: рамка фигуры — 7,5…16,5 по высоте, середина 12.
  */
 @Composable
 internal fun HangUpIcon(color: Color, modifier: Modifier) = androidx.compose.foundation.Canvas(modifier) {
-    val s = size.minDimension
-    // Пологая дуга (100°) и короткие толстые «уши» наружу — трубка, а не наушники.
-    val r = s * 0.46f
-    val arc = s * 0.17f
-    val ear = s * 0.26f
-    val drop = s * 0.1f
-    val out = s * 0.07f
-    val endY = -r * 0.643f // sin 220° — концы дуги выше центра
-    val endX = r * 0.766f // |cos 220°|
-    // Высота фигуры: от верха дуги до низа ушей; центр дуги сдвигается так, чтобы фигура стояла по середине.
-    val top = -r - arc / 2
-    val bottom = endY + drop + ear / 2
-    val c = Offset(size.width / 2, size.height / 2 - (top + bottom) / 2)
-    drawArc(
-        color, startAngle = 220f, sweepAngle = 100f, useCenter = false,
-        topLeft = Offset(c.x - r, c.y - r), size = Size(r * 2, r * 2),
-        style = Stroke(width = arc, cap = androidx.compose.ui.graphics.StrokeCap.Round),
-    )
-    for (side in listOf(-1f, 1f)) {
-        val from = Offset(c.x + side * endX, c.y + endY)
-        drawLine(color, from, Offset(from.x + side * out, from.y + drop), strokeWidth = ear, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+    val k = size.minDimension / 24f
+    val dx = size.width / 2 - 12f * k
+    val dy = size.height / 2 - 12f * k
+    fun p(x: Float, y: Float) = Offset(dx + x * k, dy + y * k)
+    val path = androidx.compose.ui.graphics.Path().apply {
+        p(1f, 12f).let { moveTo(it.x, it.y) }
+        // Верх тела — пологая дуга от края до края.
+        p(12f, 3f).let { c -> p(23f, 12f).let { e -> quadraticTo(c.x, c.y, e.x, e.y) } }
+        // Правая накладка — вниз и чуть наружу.
+        p(21.6f, 16.5f).let { lineTo(it.x, it.y) }
+        p(17.4f, 15.6f).let { lineTo(it.x, it.y) }
+        p(17.4f, 12.4f).let { lineTo(it.x, it.y) }
+        // Низ тела — та же дуга ниже: тело уже посередине, чем у накладок.
+        p(12f, 8.4f).let { c -> p(6.6f, 12.4f).let { e -> quadraticTo(c.x, c.y, e.x, e.y) } }
+        // Левая накладка.
+        p(6.6f, 15.6f).let { lineTo(it.x, it.y) }
+        p(2.4f, 16.5f).let { lineTo(it.x, it.y) }
+        close()
     }
+    drawPath(path, color)
+    // Скруглить углы накладок: тот же контур тонкой линией с круглыми стыками.
+    drawPath(path, color, style = Stroke(width = 1.4f * k, join = androidx.compose.ui.graphics.StrokeJoin.Round))
 }
 
 /** Узор рамки: 24 луча по 9° с пропусками по 6°, повёрнутый на [turn] оборота; жёсткие края — парами точек. */

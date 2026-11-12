@@ -132,12 +132,16 @@ internal fun FreshTalkPanel(
                 modifier = Modifier.testTag(CAMERA_TAG),
             )
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
+        if (onParticipants == null) {
             AtButton(SMALL_SLOT) {
                 SmallRound(onClick = onSheet, live = sheetOpen, modifier = Modifier.testTag(CALL_SHEET_TAG)) { ink -> Bars(ink) }
             }
-            if (onParticipants != null) {
-                SmallRound(onClick = onParticipants, modifier = Modifier.testTag(CALL_GROUP_TAG)) { Caption("👥", fontSize = TimaType.sz5) }
+        } else {
+            // Групповой (заказчик 2026-11-12: «опустить как при видео звонке, а кнопки оставить в два ряда Настройки и
+            // Группа»): «≡» и «👥» столбиком, но столбик не выше крупной кнопки с подписью — ряд не растёт.
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(PAIR_GAP)) {
+                SmallRound(onClick = onSheet, live = sheetOpen, side = PAIR, modifier = Modifier.testTag(CALL_SHEET_TAG)) { ink -> Bars(ink) }
+                SmallRound(onClick = onParticipants, side = PAIR, modifier = Modifier.testTag(CALL_GROUP_TAG)) { Caption("👥", fontSize = TimaType.sz5) }
             }
         }
         Labeled(words.hangUp) {
@@ -444,10 +448,16 @@ internal fun CameraFlip(onClick: () -> Unit, modifier: Modifier = Modifier) = Bo
 
 /** Маленькая круглая кнопка ряда: серая, горит салатовым, пока её лист открыт. */
 @Composable
-private fun SmallRound(onClick: () -> Unit, modifier: Modifier = Modifier, live: Boolean = false, icon: @Composable (Color) -> Unit) {
+private fun SmallRound(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    live: Boolean = false,
+    side: androidx.compose.ui.unit.Dp = SMALL,
+    icon: @Composable (Color) -> Unit,
+) {
     val colors = Tima.colors
     Box(
-        modifier.size(SMALL)
+        modifier.size(side)
             .background(if (live) colors.navigation else colors.line, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -481,6 +491,10 @@ private fun Bars(ink: Color) = Canvas(Modifier.size(ICON)) {
 /** Маленькая кнопка ряда и её место. */
 private val SMALL = 38.dp
 private val SMALL_SLOT = 40.dp
+
+/** «≡» и «👥» столбиком в групповом: 34 + 4 + 34 — не выше крупной кнопки (54) с подписью. */
+private val PAIR = 34.dp
+private val PAIR_GAP = 4.dp
 private val SHEET_RADIUS = 16.dp
 private val ADAPT_KEY = 32.dp
 private val FLIP = 30.dp

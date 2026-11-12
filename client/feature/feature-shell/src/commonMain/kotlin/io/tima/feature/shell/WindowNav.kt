@@ -67,13 +67,15 @@ fun WindowNavBar(nav: WindowNav, modifier: Modifier = Modifier) {
                     ) { Caption(window.glyph, fontSize = TimaType.sz4) }
                     val count = nav.counters[window] ?: 0
                     if (count > 0) {
+                        // Число — в полтора раза крупнее и ниже (заказчик 2026-11-12: «увеличить в два раза, сместить левее
+                        // ниже»; вдвое закрывало значок и подпись — снимки при ширине 360). Растёт влево от угла кнопки.
                         Box(
-                            Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-6).dp).widthIn(min = 18.dp)
-                                .background(colors.activity, RoundedCornerShape(9.dp))
-                                .border(2.dp, colors.functional, RoundedCornerShape(9.dp))
-                                .padding(horizontal = 5.dp),
+                            Modifier.align(Alignment.TopEnd).offset(x = 14.dp, y = (-4).dp).widthIn(min = 27.dp)
+                                .background(colors.activity, RoundedCornerShape(14.dp))
+                                .border(2.dp, colors.functional, RoundedCornerShape(14.dp))
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
                             contentAlignment = Alignment.Center,
-                        ) { Caption(if (count > 99) "99+" else count.toString(), fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, color = colors.text) }
+                        ) { Caption(if (count > 99) "99+" else count.toString(), fontSize = TimaType.sz4, weight = FontWeight.ExtraBold, color = colors.text) }
                     }
                 }
                 Caption(
@@ -153,10 +155,11 @@ val HEADER_NOTICE_WINDOWS = listOf(Window.Phone, Window.Social)
 @Composable
 fun HeaderNoticeBubble(notice: HeaderNotice) {
     val colors = Tima.colors
-    Box(Modifier.padding(top = 6.dp, end = 8.dp)) {
+    Box(Modifier.padding(top = 6.dp, end = 4.dp)) {
         Box(
+            // Поля по бокам — 6 (было 9): два «99+» при ширине 360 не режут имя окна (заказчик 2026-11-12, снимки).
             Modifier.widthIn(min = 30.dp).background(colors.activity, RoundedCornerShape(14.dp))
-                .clickable(onClick = notice.onOpen).padding(horizontal = 9.dp, vertical = 4.dp)
+                .clickable(onClick = notice.onOpen).padding(horizontal = 6.dp, vertical = 4.dp)
                 .testTag(headerNoticeTag(notice.window)),
             contentAlignment = Alignment.Center,
         ) {
