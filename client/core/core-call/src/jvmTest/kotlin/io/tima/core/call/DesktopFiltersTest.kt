@@ -133,6 +133,54 @@ class DesktopFiltersTest {
         studio.close()
     }
 
+    @Test
+    fun румяна_стили_и_цвета_образцы() {
+        // Заказчик 2026-11-12: «яркий центрированный, аниме румянец, разные цвета». Образцы — по снимку лица (`TIMA_FACE`):
+        // четыре стиля розовым и пять цветов «Ярких», лист — `build/снимки/румяна-образцы.png`. Без лица — пропуск.
+        val face = System.getenv("TIMA_FACE")?.let { ImageIO.read(File(it)) } ?: return println("пропуск: нет TIMA_FACE")
+        val natives = System.getenv("TIMA_NATIVES")?.let(::File)
+            ?: File("../core-call-desktop/build/livekit-ffi/windows").takeIf { it.isDirectory }
+        val studio = DesktopFilters(natives)
+        if (!studio.available) return println("пропуск: нет OpenGL")
+        val w = 640
+        val h = 480
+        val picture = scaled(face, w, h)
+        val rgb = ByteBuffer.allocateDirect(w * h * 3)
+        for (y in 0 until h) for (x in 0 until w) {
+            val px = picture.getRGB(x, y)
+            rgb.put((px shr 16).toByte()).put((px shr 8).toByte()).put(px.toByte())
+        }
+        rgb.flip()
+        val sets = BlushStyle.entries.map { it to BlushColor.Pink } + BlushColor.entries.filter { it != BlushColor.Pink }.map { BlushStyle.Bright to it }
+        // Вырез — лицо по середине кадра (на снимке оно внизу посередине).
+        val cx = 230
+        val cy = 250
+        val cw = 180
+        val ch = 150
+        val sheet = BufferedImage(cw * sets.size, ch, BufferedImage.TYPE_INT_RGB)
+        sets.forEachIndexed { n, (style, color) ->
+            val f = CallFilters(on = true, blush = 80, blushStyle = style, blushColor = color)
+            var out: ByteBuffer? = null
+            repeat(14) { rgb.rewind(); out = studio.process(rgb, w, h, w, f); Thread.sleep(40) }
+            val made = assertNotNull(out)
+            for (y in 0 until ch) for (x in 0 until cw) {
+                val i = ((cy + y) * w + cx + x) * 3
+                sheet.setRGB(n * cw + x, y, (made.get(i).toInt() and 255 shl 16) or (made.get(i + 1).toInt() and 255 shl 8) or (made.get(i + 2).toInt() and 255))
+            }
+        }
+        File("build/снимки").mkdirs()
+        // Вдвое крупнее — разглядеть штрихи и блик.
+        val big = BufferedImage(sheet.width * 2, sheet.height * 2, BufferedImage.TYPE_INT_RGB)
+        big.createGraphics().apply {
+            setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+            drawImage(sheet, 0, 0, big.width, big.height, null)
+            dispose()
+        }
+        ImageIO.write(big, "png", File("build/снимки/румяна-образцы.png"))
+        assertTrue(studio.faceFound(), "лицо не нашлось — румяна не легли")
+        studio.close()
+    }
+
     private fun scaled(src: BufferedImage, w: Int, h: Int): BufferedImage {
         // По высоте, с полями по бокам: лицо не сплющивается.
         val out = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)

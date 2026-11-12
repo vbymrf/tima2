@@ -166,4 +166,32 @@ class CallFiltersTest {
         assertEquals("mouth.png", LipColor.Classic.image, "нынешний — та же картинка gpupixel")
         assertEquals(5, LipColor.entries.map { it.image }.toSet().size)
     }
+
+    @Test
+    fun румяна_стиль_и_цвет_помнятся_новые_по_умолчанию_яркие() {
+        // Заказчик 2026-11-12: «Все четыре», «5 да», «3. да» — по умолчанию «Яркие».
+        assertEquals(BlushStyle.Bright, CallFilterKeys.read(emptyMap()).blushStyle)
+        val f = CallFilters(on = true, blush = 70, blushStyle = BlushStyle.AnimeStrokes, blushColor = BlushColor.Lilac)
+        val back = CallFilterKeys.read(CallFilterKeys.write(f))
+        assertEquals(BlushStyle.AnimeStrokes, back.blushStyle)
+        assertEquals(BlushColor.Lilac, back.blushColor)
+        assertTrue(f.cheeks && !f.meshMakeup, "новые стили — проходом щёк, не сеткой")
+        assertTrue(f.copy(blushStyle = BlushStyle.Soft).meshMakeup, "«Мягкие» — сеткой gpupixel")
+    }
+
+    @Test
+    fun щёки_под_глазами_снаружи_и_зеркально() {
+        val p = FloatArray(222)
+        fun put(i: Int, x: Float, y: Float) { p[i * 2] = x; p[i * 2 + 1] = y }
+        // Текстурные координаты, низ — ноль: глаза на 0,6, рот на 0,35, нос 0,45, края лица 0,3 и 0,7.
+        put(74, 0.4f, 0.6f); put(77, 0.6f, 0.6f)
+        put(84, 0.45f, 0.35f); put(90, 0.55f, 0.35f)
+        put(46, 0.5f, 0.45f); put(4, 0.3f, 0.4f); put(28, 0.7f, 0.4f)
+        val z = CheekZones.of(p, 720, 720, BlushStyle.Bright)
+        assertTrue(z.centers[1] < 0.6f && z.centers[3] < 0.6f, "щёки не ниже глаз")
+        assertTrue(z.centers[0] < 0.4f + 0.01f && z.centers[2] > 0.6f - 0.01f, "не снаружи от зрачков")
+        assertEquals(-1f, z.axes[0], 1e-4f, "ось левой — наружу, влево")
+        assertEquals(1f, z.axes[2], 1e-4f, "ось правой — наружу, вправо")
+        assertEquals(z.halves[0], z.halves[2], 1e-4f, "лицо прямо — щёки одной ширины")
+    }
 }

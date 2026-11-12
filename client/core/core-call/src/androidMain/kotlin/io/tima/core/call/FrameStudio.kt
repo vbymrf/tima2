@@ -48,6 +48,7 @@ internal class FrameStudio(private val assets: AssetManager) {
     private var color: GlShader? = null
     private var reshape: GlShader? = null
     private var makeup: GlShader? = null
+    private var cheek: GlShader? = null
 
     private var a: GlTextureFrameBuffer? = null
     private var b: GlTextureFrameBuffer? = null
@@ -128,7 +129,8 @@ internal class FrameStudio(private val assets: AssetManager) {
         if (f.beauty) passes += { src, dst -> drawBeauty(src, dst, w, h, f, points) }
         if (f.colour) passes += { src, dst -> drawColor(src, dst, f) }
         if (f.reshape && points != null) passes += { src, dst -> drawReshape(src, dst, w, h, f, points) }
-        if (f.makeup && points != null) passes += { src, dst -> drawMakeup(src, dst, f, points) }
+        if (f.meshMakeup && points != null) passes += { src, dst -> drawMakeup(src, dst, f, points) }
+        if (f.cheeks && points != null) passes += { src, dst -> drawCheeks(src, dst, w, h, f, points) }
         if (passes.isEmpty()) passes += { src, dst -> drawCopy(src, dst) }
         var src = bufA
         passes.forEachIndexed { i, pass ->
@@ -280,11 +282,32 @@ internal class FrameStudio(private val assets: AssetManager) {
             ByteBuffer.allocateDirect(FACE_TRIANGLES.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().put(short).also { it.position(0) }
         }
         // Цвет помады — своя картинка той же формы (ФЗ14).
-        if (f.lipstick > 0) drawMesh(shader, pos, f.lipColor.image, LIPSTICK_BOUNDS, f.lipstick / 100f, indices, LIPSTICK_SOFT)
-        if (f.blush > 0) drawMesh(shader, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, indices, 0f)
+        if (f.lipstick > 0) drawMesh(shader, pos, f.lipColor.image, LIPSTICK_BOUNDS, f.lipstick / 100f, indices, LIPSTICK_SOFT, null)
+        if (f.blush > 0 && f.blushStyle == BlushStyle.Soft) {
+            drawMesh(shader, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, indices, 0f, f.blushColor)
+        }
     }
 
-    private fun drawMesh(shader: GlShader, pos: FloatArray, image: String, bounds: FloatArray, intensity: Float, indices: ShortBuffer, soft: Float) {
+    /** Румяна новых стилей (заказчик 2026-11-12): овал на каждой щеке поверх кадра — `CheekZones`, `FS_CHEEK`. */
+    private fun drawCheeks(src: GlTextureFrameBuffer, dst: GlTextureFrameBuffer, w: Int, h: Int, f: CallFilters, points: FloatArray) {
+        val shader = shader(::cheek, FS_CHEEK)
+        target(dst)
+        shader.useProgram()
+        bind(shader, "uTex", 0, src.textureId)
+        bind(shader, "uCheek", 1, texture(f.blushStyle.image ?: return))
+        GLES20.glUniformMatrix4fv(shader.getUniformLocation("uTexMatrix"), 1, false, identity, 0)
+        val z = CheekZones.of(points, w, h, f.blushStyle)
+        GLES20.glUniform1f(shader.getUniformLocation("uAspect"), w.toFloat() / h)
+        GLES20.glUniform2fv(shader.getUniformLocation("uCenter"), 2, z.centers, 0)
+        GLES20.glUniform2fv(shader.getUniformLocation("uAxis"), 2, z.axes, 0)
+        GLES20.glUniform2fv(shader.getUniformLocation("uUp"), 2, z.ups, 0)
+        GLES20.glUniform2fv(shader.getUniformLocation("uHalf"), 2, z.halves, 0)
+        GLES20.glUniform3f(shader.getUniformLocation("uColor"), f.blushColor.r, f.blushColor.g, f.blushColor.b)
+        GLES20.glUniform1f(shader.getUniformLocation("uIntensity"), f.blush / 100f)
+        drawStrip(shader, quad, quadTex)
+    }
+
+    private fun drawMesh(shader: GlShader, pos: FloatArray, image: String, bounds: FloatArray, intensity: Float, indices: ShortBuffer, soft: Float, tint: BlushColor?) {
         val tex = FloatArray(FACE_POINTS * 2) { i ->
             val v = FACE_TEMPLATE[i] * 1280f
             if (i % 2 == 0) (v - bounds[0]) / bounds[2] else (v - bounds[1]) / bounds[3]
@@ -293,6 +316,11 @@ internal class FrameStudio(private val assets: AssetManager) {
         val (w, h) = textureSizes[image] ?: (1 to 1)
         GLES20.glUniform2f(shader.getUniformLocation("uSoft"), soft / w, soft / h)
         GLES20.glUniform1f(shader.getUniformLocation("uIntensity"), intensity)
+        if (tint != null) {
+            GLES20.glUniform4f(shader.getUniformLocation("uTint"), tint.r, tint.g, tint.b, BLUSH_TINT_SPAN)
+        } else {
+            GLES20.glUniform4f(shader.getUniformLocation("uTint"), 0f, 0f, 0f, 0f)
+        }
         shader.setVertexAttribArray("aPos", 2, floats(*pos))
         shader.setVertexAttribArray("aTex", 2, floats(*tex))
         indices.position(0)
@@ -397,7 +425,7 @@ internal class FrameStudio(private val assets: AssetManager) {
 
     /** Всё, что принадлежало прежнему контексту, — забыть (удалять нечем: контекста уже нет). */
     private fun forget() {
-        copyOes = null; copy = null; blur = null; beauty = null; color = null; reshape = null; makeup = null
+        copyOes = null; copy = null; blur = null; beauty = null; color = null; reshape = null; makeup = null; cheek = null
         a = null; b = null; q1 = null; q2 = null; small = null
         outs.clear()
         textures.clear()
@@ -421,6 +449,8 @@ internal class FrameStudio(private val assets: AssetManager) {
 
         /** Мягкость края помады — пикселей картинки `mouth.png` (105×67, губы ~150 пикселей кадра: шаг ~4 пикселя кадра). */
         private const val LIPSTICK_SOFT = 2.5f
+        /** «Мягкие» румяна gpupixel: наибольший сдвиг зелёного от белого у `blusher.png` (221 из 255) — вес цвета. */
+        private const val BLUSH_TINT_SPAN = 34f / 255f
 
         private fun floats(vararg v: Float): FloatBuffer = GlUtil.createFloatBuffer(v)
     }

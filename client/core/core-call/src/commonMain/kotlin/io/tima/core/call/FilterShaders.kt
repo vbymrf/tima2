@@ -280,6 +280,9 @@ uniform float uIntensity;
 // Мягкий край (заказчик 2026-11-10): картинка размывается 3×3 на uSoft (доли картинки) — ошибка точек в несколько
 // пикселей не видна на большой силе. Ноль — без размытия (румяна и так мягкие).
 uniform vec2 uSoft;
+// Цвет «Мягких» румян (заказчик 2026-11-12): a > 0 — перекрасить картинку gpupixel. Вес — «насколько не белый» по
+// зелёному каналу (a — его наибольший сдвиг от белого у картинки), умножение остаётся: белое кадр не меняет.
+uniform vec4 uTint;
 void main() {
     vec2 sx = vec2(uSoft.x, 0.0);
     vec2 sy = vec2(0.0, uSoft.y);
@@ -293,7 +296,44 @@ void main() {
     // умножении кадр не меняет — окрашиваются только губы и щёки. Свой цвет поверх «перекрытия» с весом по
     // прозрачности красил всю сетку, то есть всё лицо (заказчик 2026-11-10) — убран до новой версии.
     vec3 blend = clamp(fg.rgb * (1.0 / fg.a), 0.0, 1.0);
+    if (uTint.a > 0.0) {
+        float w = clamp((1.0 - blend.g) / uTint.a, 0.0, 1.0);
+        blend = vec3(1.0) - w * 0.45 * (vec3(1.0) - uTint.rgb);
+    }
     vec3 color = bg.rgb * blend;
     gl_FragColor = vec4(bg.rgb * (1.0 - fg.a) + color * fg.a, 1.0);
+}
+"""
+
+/**
+ * Румяна новых стилей (заказчик 2026-11-12): на каждой щеке — овал с картинкой стиля поверх кадра. Картинка — маски:
+ * красный — свечение цветом [uColor], зелёный — штрихи тем же цветом темнее, синий — белый блик. Положение — `CheekZones`:
+ * центр (текстурный), ось наружу и «вверх» в единицах высоты, полуоси в долях высоты.
+ */
+internal const val FS_CHEEK = """
+precision mediump float;
+varying highp vec2 vTex;
+uniform sampler2D uTex;
+uniform sampler2D uCheek;
+uniform float uAspect;
+uniform highp vec2 uCenter[2];
+uniform highp vec2 uAxis[2];
+uniform highp vec2 uUp[2];
+uniform highp vec2 uHalf[2];
+uniform vec3 uColor;
+uniform float uIntensity;
+void main() {
+    vec3 c = texture2D(uTex, vTex).rgb;
+    for (int j = 0; j < 2; j++) {
+        highp vec2 d = vTex - uCenter[j];
+        d.x *= uAspect;
+        highp vec2 l = vec2(dot(d, uAxis[j]) / uHalf[j].x, dot(d, uUp[j]) / uHalf[j].y);
+        if (abs(l.x) >= 1.0 || abs(l.y) >= 1.0) continue;
+        vec4 m = texture2D(uCheek, vec2(l.x * 0.5 + 0.5, 0.5 - l.y * 0.5));
+        c = mix(c, uColor, m.r * uIntensity);
+        c = mix(c, uColor * 0.6, m.g * uIntensity);
+        c = mix(c, vec3(1.0), m.b * uIntensity);
+    }
+    gl_FragColor = vec4(c, 1.0);
 }
 """

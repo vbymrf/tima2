@@ -1345,6 +1345,16 @@ interface CallWords {
     val lipCoral: String
     val lipBerry: String
     val lipCherry: String
+    /** Румяна — четыре стиля и пять цветов (заказчик 2026-11-12). */
+    val blushSoft: String
+    val blushBright: String
+    val blushAnime: String
+    val blushStrokes: String
+    val blushPink: String
+    val blushCoral: String
+    val blushRed: String
+    val blushPeach: String
+    val blushLilac: String
     /** «Увеличение изображения» в листе звонка (ФЗ11, ФЗ17): выключено. */
     val zoomOff: String
     /** Ступень и рука: «1.3×, обеими». */
@@ -3883,6 +3893,15 @@ object RussianWords : Words {
         override val lipCoral = "Коралловый"
         override val lipBerry = "Ягодный"
         override val lipCherry = "Вишнёвый"
+        override val blushSoft = "Мягкие"
+        override val blushBright = "Яркие"
+        override val blushAnime = "Аниме"
+        override val blushStrokes = "Аниме-штрихи"
+        override val blushPink = "Розовые"
+        override val blushCoral = "Коралловые"
+        override val blushRed = "Красные"
+        override val blushPeach = "Персиковые"
+        override val blushLilac = "Сиреневые"
         override val zoomOff = "выключено"
         override fun zoomNow(step: String, hand: String) = "$step, ${hand.lowercase()}"
         override fun zoomShiftNow(step: String, x: String, y: String) = "$step, сдвиг $x / $y"

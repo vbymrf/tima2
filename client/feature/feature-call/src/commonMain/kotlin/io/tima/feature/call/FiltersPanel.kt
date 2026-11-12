@@ -37,6 +37,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import io.tima.core.call.BlushColor
+import io.tima.core.call.BlushStyle
 import io.tima.core.call.CallFilters
 import io.tima.core.call.ColorLook
 import io.tima.core.call.FilterSection
@@ -181,6 +183,39 @@ internal fun FiltersPanel(
                         }
                     }
                     Level("blush", words.filterBlush, f.blush, 0) { v, done -> set(f.copy(blush = v), done) }
+                    // Стиль и цвет румян (заказчик 2026-11-12: «яркий центрированный, аниме румянец, разные цвета»).
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()).testTag(BLUSH_STYLES_TAG),
+                        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                    ) {
+                        for ((style, name) in listOf(
+                            BlushStyle.Soft to words.blushSoft, BlushStyle.Bright to words.blushBright,
+                            BlushStyle.Anime to words.blushAnime, BlushStyle.AnimeStrokes to words.blushStrokes,
+                        )) {
+                            Chip(
+                                label = name,
+                                kind = if (f.blushStyle == style) ChipKind.Selected else ChipKind.Quiet,
+                                onClick = { set(f.copy(blushStyle = style)) },
+                                modifier = Modifier.testTag(BLUSH_STYLE_TAG_PREFIX + style.name.lowercase()),
+                            )
+                        }
+                    }
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()).testTag(BLUSH_COLORS_TAG),
+                        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                    ) {
+                        for ((color, name) in listOf(
+                            BlushColor.Pink to words.blushPink, BlushColor.Coral to words.blushCoral, BlushColor.Red to words.blushRed,
+                            BlushColor.Peach to words.blushPeach, BlushColor.Lilac to words.blushLilac,
+                        )) {
+                            Chip(
+                                label = name,
+                                kind = if (f.blushColor == color) ChipKind.Selected else ChipKind.Quiet,
+                                onClick = { set(f.copy(blushColor = color)) },
+                                modifier = Modifier.testTag(BLUSH_COLOR_TAG_PREFIX + color.name.lowercase()),
+                            )
+                        }
+                    }
                 }
                 FilterSection.Wrinkles -> {
                     Level("forehead", words.filterForehead, f.forehead, 0) { v, done -> set(f.copy(forehead = v), done) }
@@ -259,3 +294,7 @@ const val FILTERS_RESET_TAG: String = "call:filters:reset"
 const val FILTERS_TAB_TAG_PREFIX: String = "call:filters:tab:"
 const val LIP_COLORS_TAG: String = "call:filter:lipColor"
 const val LIP_COLOR_TAG_PREFIX: String = "call:filter:lipColor:"
+const val BLUSH_STYLES_TAG: String = "call:filter:blushStyle"
+const val BLUSH_STYLE_TAG_PREFIX: String = "call:filter:blushStyle:"
+const val BLUSH_COLORS_TAG: String = "call:filter:blushColor"
+const val BLUSH_COLOR_TAG_PREFIX: String = "call:filter:blushColor:"

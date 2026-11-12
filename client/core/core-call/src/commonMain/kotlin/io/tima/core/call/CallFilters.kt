@@ -14,6 +14,25 @@ enum class LipColor(val code: String) {
     val image: String get() = "mouth$code.png"
 }
 
+/**
+ * Стиль румян (заказчик 2026-11-12: «Сделать яркий центрированный, аниме румянец, разные цвета», «Все четыре»):
+ * «Мягкие» — картинка gpupixel по сетке лица, умножением; остальные — овал на каждой щеке поверх кадра (`CheekZones`,
+ * шейдер `FS_CHEEK`), картинка — маски: красный канал — свечение, зелёный — штрихи, синий — блик.
+ */
+enum class BlushStyle(val image: String?) {
+    Soft(null), Bright("blush_bright.png"), Anime("blush_anime.png"), AnimeStrokes("blush_strokes.png");
+
+    companion object {
+        /** По умолчанию — «Яркие» (заказчик 2026-11-12: «3. да»). */
+        val DEFAULT = Bright
+    }
+}
+
+/** Цвет румян (заказчик 2026-11-12: «5 да»): цвет свечения; штрихи — он же темнее, блик — белый. */
+enum class BlushColor(val r: Float, val g: Float, val b: Float) {
+    Pink(1f, 0.36f, 0.62f), Coral(1f, 0.45f, 0.36f), Red(0.93f, 0.16f, 0.22f), Peach(1f, 0.62f, 0.46f), Lilac(0.78f, 0.45f, 0.92f),
+}
+
 /** Разделы листа «Фильтры» (ФЗ9): ряд сверху, под ним — ползунки выбранного. */
 enum class FilterSection(val key: String) {
     Beauty("beauty"), Color("color"), Face("face"), Wrinkles("wrinkles");
@@ -49,6 +68,8 @@ data class CallFilters(
     val eyes: Int = 0,
     val lipstick: Int = 0,
     val blush: Int = 0,
+    val blushStyle: BlushStyle = BlushStyle.DEFAULT,
+    val blushColor: BlushColor = BlushColor.Pink,
     val lipColor: LipColor = LipColor.Classic,
     // ── Морщины по областям (ФЗ6, решение 4) ──
     val forehead: Int = 0,
@@ -62,6 +83,12 @@ data class CallFilters(
     val wrinkles: Boolean get() = forehead > 0 || brows > 0 || underEyes > 0 || eyeCorners > 0 || nasolabial > 0
     val reshape: Boolean get() = thin > 0 || eyes > 0
     val makeup: Boolean get() = lipstick > 0 || blush > 0
+
+    /** Проход по сетке лица: помада и «Мягкие» румяна (картинки gpupixel). */
+    val meshMakeup: Boolean get() = lipstick > 0 || (blush > 0 && blushStyle == BlushStyle.Soft)
+
+    /** Проход щёк: румяна новых стилей (`CheekZones`). */
+    val cheeks: Boolean get() = blush > 0 && blushStyle != BlushStyle.Soft
 
     /** Нужны ли точки лица: лицевые фильтры и морщины по областям. */
     val needsFace: Boolean get() = on && (reshape || makeup || wrinkles)
@@ -104,6 +131,7 @@ data class CallFilters(
         ).filter { it.second != 0 }.joinToString(" ") { "${it.first}=${it.second}" }
             .let { if (look != ColorLook.None) "$it набор=${look.name}:$lookStrength" else it }
             .let { if (lipstick != 0 && lipColor != LipColor.Classic) "$it цвет_помады=${lipColor.name}" else it }
+            .let { if (blush != 0) "$it румяна_стиль=${blushStyle.name} румяна_цвет=${blushColor.name}" else it }
             .ifEmpty { "вкл, всё по нулям" }
     }
 
@@ -141,6 +169,8 @@ object CallFilterKeys {
             lookStrength = all[PREFIX + "lookStrength"]?.toIntOrNull()?.coerceIn(0, 100) ?: 100,
             thin = int("thin"), eyes = int("eyes"), lipstick = int("lipstick"), blush = int("blush"),
             lipColor = LipColor.entries.firstOrNull { it.name == all[PREFIX + "lipColor"] } ?: LipColor.Classic,
+            blushStyle = BlushStyle.entries.firstOrNull { it.name == all[PREFIX + "blushStyle"] } ?: BlushStyle.DEFAULT,
+            blushColor = BlushColor.entries.firstOrNull { it.name == all[PREFIX + "blushColor"] } ?: BlushColor.Pink,
             forehead = int("forehead"), brows = int("brows"), underEyes = int("underEyes"),
             eyeCorners = int("eyeCorners"), nasolabial = int("nasolabial"),
         )
@@ -152,6 +182,7 @@ object CallFilterKeys {
         "brightness" to f.brightness, "contrast" to f.contrast, "saturation" to f.saturation, "warmth" to f.warmth,
         "look" to f.look.name, "lookStrength" to f.lookStrength,
         "thin" to f.thin, "eyes" to f.eyes, "lipstick" to f.lipstick, "blush" to f.blush, "lipColor" to f.lipColor.name,
+        "blushStyle" to f.blushStyle.name, "blushColor" to f.blushColor.name,
         "forehead" to f.forehead, "brows" to f.brows, "underEyes" to f.underEyes,
         "eyeCorners" to f.eyeCorners, "nasolabial" to f.nasolabial,
     ).mapKeys { PREFIX + it.key }.mapValues { it.value.toString() }

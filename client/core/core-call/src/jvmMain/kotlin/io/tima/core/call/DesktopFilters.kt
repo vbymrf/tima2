@@ -172,7 +172,8 @@ class DesktopFilters(dir: File?) {
         if (f.beauty) passes += { s, d -> drawBeauty(s, d, w, h, f, points) }
         if (f.colour) passes += { s, d -> drawColor(s, d, f) }
         if (f.reshape && points != null) passes += { s, d -> drawReshape(s, d, w, h, f, points) }
-        if (f.makeup && points != null) passes += { s, d -> drawMakeup(s, d, f, points) }
+        if (f.meshMakeup && points != null) passes += { s, d -> drawMakeup(s, d, f, points) }
+        if (f.cheeks && points != null) passes += { s, d -> drawCheeks(s, d, w, h, f, points) }
         if (passes.isEmpty()) passes += { s, d -> drawCopy(s.texture, d) }
         var s = a
         passes.forEachIndexed { i, pass ->
@@ -285,11 +286,30 @@ class DesktopFilters(dir: File?) {
         GL20.glUseProgram(p.id)
         bind(p, "uTex", 0, src.texture)
         val pos = FloatArray(FacePoints.FACE_POINTS * 2) { i -> points[i] * 2f - 1f }
-        if (f.lipstick > 0) mesh(p, pos, f.lipColor.image, LIPSTICK_BOUNDS, f.lipstick / 100f, LIPSTICK_SOFT)
-        if (f.blush > 0) mesh(p, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, 0f)
+        if (f.lipstick > 0) mesh(p, pos, f.lipColor.image, LIPSTICK_BOUNDS, f.lipstick / 100f, LIPSTICK_SOFT, null)
+        if (f.blush > 0 && f.blushStyle == BlushStyle.Soft) mesh(p, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, 0f, f.blushColor)
     }
 
-    private fun mesh(p: Program, pos: FloatArray, image: String, bounds: FloatArray, intensity: Float, soft: Float) {
+    /** Румяна новых стилей — тот же проход, что на телефоне (`FrameStudio.drawCheeks`). */
+    private fun drawCheeks(src: Fb, dst: Fb, w: Int, h: Int, f: CallFilters, points: FloatArray) {
+        val p = program("cheek", FS_CHEEK)
+        target(dst)
+        GL20.glUseProgram(p.id)
+        bind(p, "uTex", 0, src.texture)
+        bind(p, "uCheek", 1, image(f.blushStyle.image ?: return))
+        GL20.glUniformMatrix4fv(p.u("uTexMatrix"), false, identity)
+        val z = CheekZones.of(points, w, h, f.blushStyle)
+        GL20.glUniform1f(p.u("uAspect"), w.toFloat() / h)
+        GL20.glUniform2fv(p.u("uCenter"), z.centers)
+        GL20.glUniform2fv(p.u("uAxis"), z.axes)
+        GL20.glUniform2fv(p.u("uUp"), z.ups)
+        GL20.glUniform2fv(p.u("uHalf"), z.halves)
+        GL20.glUniform3f(p.u("uColor"), f.blushColor.r, f.blushColor.g, f.blushColor.b)
+        GL20.glUniform1f(p.u("uIntensity"), f.blush / 100f)
+        strip(p, quad, quadTex)
+    }
+
+    private fun mesh(p: Program, pos: FloatArray, image: String, bounds: FloatArray, intensity: Float, soft: Float, tint: BlushColor?) {
         val tex = FloatArray(FacePoints.FACE_POINTS * 2) { i ->
             val v = FACE_TEMPLATE[i] * 1280f
             if (i % 2 == 0) (v - bounds[0]) / bounds[2] else (v - bounds[1]) / bounds[3]
@@ -298,6 +318,7 @@ class DesktopFilters(dir: File?) {
         val (iw, ih) = textureSizes[image] ?: (1 to 1)
         GL20.glUniform2f(p.u("uSoft"), soft / iw, soft / ih)
         GL20.glUniform1f(p.u("uIntensity"), intensity)
+        if (tint != null) GL20.glUniform4f(p.u("uTint"), tint.r, tint.g, tint.b, BLUSH_TINT_SPAN) else GL20.glUniform4f(p.u("uTint"), 0f, 0f, 0f, 0f)
         attribute(p, "aPos", floats(*pos))
         attribute(p, "aTex", floats(*tex))
         triangles.position(0)
@@ -429,6 +450,7 @@ class DesktopFilters(dir: File?) {
         val LIPSTICK_BOUNDS = floatArrayOf(502.5f, 710f, 262.5f, 167.5f)
         val BLUSH_BOUNDS = floatArrayOf(395f, 520f, 489f, 209f)
         const val LIPSTICK_SOFT = 2.5f
+        const val BLUSH_TINT_SPAN = 34f / 255f
 
         fun floats(vararg v: Float): FloatBuffer =
             ByteBuffer.allocateDirect(v.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().put(v).also { it.position(0) }
