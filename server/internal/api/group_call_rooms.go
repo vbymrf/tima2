@@ -89,7 +89,11 @@ func (r GroupCallRules) orDefault() GroupCallRules {
 	return r
 }
 
-// startRoomCall — POST /api/v1/groups/{groupID}/call {ring, video, invited}.
+// startRoomCall — POST /api/v1/groups/{groupID}/call {ring, video, invited, repeat}.
+//
+// `repeat` (2026-11-12) — «Повторить звонок»: «звонить» и отмеченные берутся из прошлого звонка этой группы, а не из
+// запроса — с какого бы устройства и кем бы он ни был начат. Прошлого нет — как прислали. Старые клиенты поля не
+// шлют, для них всё по-прежнему.
 func startRoomCall(deps callsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if deps.issuer() == nil {
@@ -100,6 +104,7 @@ func startRoomCall(deps callsDeps) http.HandlerFunc {
 			Ring    bool     `json:"ring"`
 			Video   *bool    `json:"video"`
 			Invited []string `json:"invited"`
+			Repeat  bool     `json:"repeat"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -114,7 +119,7 @@ func startRoomCall(deps callsDeps) http.HandlerFunc {
 		rules := deps.groupRules()
 
 		// Звонок в группе уже идёт — входим в него, нового не заводим (решение 1).
-		if live, err := deps.store.LiveGroupCall(r.Context(), groupID); err == nil {
+		if live, err := deps.store.LatestGroupCall(r.Context(), groupID, true); err == nil {
 			enterRoomCall(deps, w, r, live, id, http.StatusOK)
 			return
 		} else if !errors.Is(err, store.ErrCallNotFound) {
@@ -136,6 +141,33 @@ func startRoomCall(deps callsDeps) http.HandlerFunc {
 		inGroup := map[string]bool{}
 		for _, m := range members {
 			inGroup[m.UserID] = true
+		}
+		// Повтор — с теми же «звонить» и отмеченными, что в прошлый раз (заказчик 2026-11-12: «Если был сразу звонок —
+		// те же настройки. С другими настройками — через меню настроек»). Создатель прошлого звонка, если повторяет
+		// другой, — тоже позван: в прошлый раз он звонил сам и отмеченным не записан.
+		if req.Repeat {
+			if last, err := deps.store.LatestGroupCall(r.Context(), groupID, false); err == nil {
+				ring, rerr := deps.store.CallRings(r.Context(), last.CallID)
+				parts, perr := deps.store.GroupCallParticipants(r.Context(), last.CallID)
+				if rerr == nil && perr == nil {
+					var invited []string
+					for _, p := range parts {
+						if p.Invited && !p.Removed {
+							invited = append(invited, p.UserID)
+						}
+					}
+					if last.InitiatorID != id.UserID {
+						invited = append(invited, last.InitiatorID)
+					}
+					req.Ring, req.Invited = ring, invited
+					log.Printf("групповой звонок в группе %s: повтор прошлого %s — звонить=%v, отмечено %d",
+						short(groupID), short(last.CallID), ring, len(invited))
+				} else {
+					log.Printf("startRoomCall repeat: %v %v", rerr, perr)
+				}
+			} else if !errors.Is(err, store.ErrCallNotFound) {
+				log.Printf("startRoomCall last: %v", err)
+			}
 		}
 		// Отмеченные — только из участников группы и без самого создателя. Пустой список —
 		// все участники: так звонят во временной группе, где все и есть позванные.
@@ -349,7 +381,7 @@ func roomCallState(deps callsDeps) http.HandlerFunc {
 		if g.CallTTLUntil != nil {
 			out["call_ttl_until"] = g.CallTTLUntil.UTC().Format(time.RFC3339)
 		}
-		live, err := deps.store.LiveGroupCall(r.Context(), groupID)
+		live, err := deps.store.LatestGroupCall(r.Context(), groupID, true)
 		if err == nil {
 			parts, _ := deps.store.GroupCallParticipants(r.Context(), live.CallID)
 			list := make([]map[string]any, 0, len(parts))

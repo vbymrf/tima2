@@ -1212,7 +1212,9 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             val own = publications.entries.filter { it.value.identity == identity }
             val mic = own.any { (sid, p) -> p.kind == TrackKind.KIND_AUDIO && sid !in mutedSids }
             val cam = own.any { (sid, p) -> p.kind == TrackKind.KIND_VIDEO && sid !in mutedSids }
-            val picture = groupRemotes.values.firstOrNull { it.identity == identity && it.sid !in mutedSids }
+            // Показ экрана в групповом (2026-11-12): у участника две картинки — экран и камера; экран — вместо камеры.
+            val pictures = groupRemotes.values.filter { it.identity == identity && it.sid !in mutedSids }
+            val picture = pictures.firstOrNull { publications[it.sid]?.screen == true } ?: pictures.firstOrNull()
             CallPeer(
                 identity = identity,
                 userId = userOfIdentity(identity),

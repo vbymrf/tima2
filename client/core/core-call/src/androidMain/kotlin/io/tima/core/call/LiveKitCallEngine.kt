@@ -2060,11 +2060,19 @@ class LiveKitCallEngine(
                 val list = room.remoteParticipants.values.map { who ->
                     val identity = who.identity?.value.orEmpty()
                     val camera = who.videoTrackPublications.firstOrNull { (pub, _) -> pub.source == Track.Source.CAMERA }
+                    // Показ экрана (ЗН6) — в групповом тоже (заказчик 2026-11-12: «не работает показать экран в групповом»):
+                    // экран идёт своей дорожкой, и сетка брала только камеру — у остальных на плитке был аватар. Есть
+                    // экран — он вместо камеры, как в звонке на двоих.
+                    val screen = who.videoTrackPublications.firstOrNull { (pub, _) -> pub.source == Track.Source.SCREEN_SHARE }
+                    val shown = screen?.takeIf { !it.first.muted } ?: camera
                     // Принимаем видео только видимых на странице (2а) и не при «скрыть видео»;
                     // подписка — только перемена, опрос идёт дважды в секунду.
                     val want = takeRemote && (visiblePeers?.contains(identity) != false)
-                    (camera?.first as? RemoteTrackPublication)?.let { pub -> if (pub.subscribed != want) pub.setSubscribed(want) }
-                    val track = (camera?.second as? VideoTrack)?.takeIf { want && !camera.first.muted }
+                    for (pair in listOfNotNull(camera, screen)) {
+                        val keep = want && pair === shown
+                        (pair.first as? RemoteTrackPublication)?.let { pub -> if (pub.subscribed != keep) pub.setSubscribed(keep) }
+                    }
+                    val track = (shown?.second as? VideoTrack)?.takeIf { want && !shown.first.muted }
                     val handle = track?.let { t ->
                         peerHandles[identity]?.takeIf { it.track === t } ?: LiveKitVideoHandle(room, t).also { peerHandles[identity] = it }
                     }
@@ -2073,7 +2081,7 @@ class LiveKitCallEngine(
                         identity = identity,
                         userId = userOfIdentity(identity),
                         microphoneOn = who.isMicrophoneEnabled,
-                        cameraOn = who.isCameraEnabled,
+                        cameraOn = who.isCameraEnabled || screen != null,
                         speaking = who.isSpeaking,
                         paused = who.attributes[VideoPause.ATTRIBUTE] == VideoPause.PAUSED,
                         video = handle,

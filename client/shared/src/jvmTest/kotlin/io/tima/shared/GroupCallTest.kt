@@ -298,6 +298,18 @@ class GroupCallTest {
         assertEquals(1, calls.started.size, "«Перезвонить» не заводит групповой")
         host.createAgain()
         assertEquals(listOf(true to listOf("u-1")), calls.started.drop(1), "«Создать звонок» — с прежними галочками")
+        assertEquals(listOf("группа"), calls.repeats, "«Создать звонок» — повтор: сервер берёт прошлые настройки группы")
+    }
+
+    @Test
+    fun повтор_после_перезапуска_просит_сервер_прошлые_настройки() = runTest {
+        // Заказчик 2026-11-12: «Нужно хранить тех, кому звонили последний раз, привязывать к сущности». Новый CallHost —
+        // как перезапуск: памяти прошлого запуска нет, «звонить» не знаем, но сервер знает — повтор просит его.
+        val calls = GroupCalls(creator = я)
+        val host = host(calls, GroupEngine())
+        host.repeatGroup("группа", "Планёрка", video = false)
+        assertEquals(listOf("группа"), calls.repeats)
+        assertEquals(listOf(false to emptyList<String>()), calls.started, "своих галочек нет — запасное «как прислали»")
     }
 
     @Test
@@ -350,6 +362,8 @@ class GroupCallTest {
         val answered = mutableListOf<String>()
         val joined = mutableListOf<String>()
         val started = mutableListOf<Pair<Boolean, List<String>>>()
+        /** Группы, где звонок начат повтором: «звонить» и отмеченных берёт сервер (2026-11-12). */
+        val repeats = mutableListOf<String>()
         override suspend fun start(peerId: String, video: Boolean): CallStep = CallStep.Refused("не здесь")
         override suspend fun answer(callId: String): CallStep {
             answered += callId
@@ -359,8 +373,9 @@ class GroupCallTest {
             joined += callId
             return door(callId)
         }
-        override suspend fun startGroup(groupId: String, ring: Boolean, video: Boolean, invited: List<String>): CallStep {
+        override suspend fun startGroup(groupId: String, ring: Boolean, video: Boolean, invited: List<String>, repeat: Boolean): CallStep {
             started += ring to invited
+            if (repeat) repeats += groupId
             return door("g1")
         }
         override suspend fun control(callId: String, action: GroupControl, userId: String): Boolean {

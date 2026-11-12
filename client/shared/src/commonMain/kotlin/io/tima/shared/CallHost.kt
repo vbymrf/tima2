@@ -592,7 +592,7 @@ class CallHost(
         val last = lastStart?.takeIf { it.groupId == g.groupId }
         val kind = video
         close()
-        startGroup(g.groupId, g.title, last?.ring ?: false, kind, last?.invited.orEmpty())
+        startGroup(g.groupId, g.title, last?.ring ?: false, kind, last?.invited.orEmpty(), repeat = true)
     }
 
     /**
@@ -604,7 +604,7 @@ class CallHost(
     fun repeatGroup(groupId: String, title: String, video: Boolean) {
         val last = lastStart?.takeIf { it.groupId == groupId }
         if (active && state.stage == CallStage.Ended) close()
-        startGroup(groupId, title, last?.ring ?: false, video, last?.invited.orEmpty())
+        startGroup(groupId, title, last?.ring ?: false, video, last?.invited.orEmpty(), repeat = true)
     }
 
     /**
@@ -1251,7 +1251,7 @@ class CallHost(
      * [video], позвать — [invited] (пусто — всех участников группы). Идёт уже — сервер
      * впускает в него же.
      */
-    fun startGroup(groupId: String, title: String, ring: Boolean, video: Boolean, invited: List<String>) {
+    fun startGroup(groupId: String, title: String, ring: Boolean, video: Boolean, invited: List<String>, repeat: Boolean = false) {
         val live = engine ?: return
         if (busy) {
             Journal.note(LogCode.CALL, "звонок уже идёт — групповой не начат", "группа" to groupId.take(8))
@@ -1262,7 +1262,10 @@ class CallHost(
         pendingInvites = invited
         withAccess(video) {
             scope.launch {
-                when (val step = calls.startGroup(groupId, ring, video, invited)) {
+                // Повтор (2026-11-12): «звонить» и отмеченных сервер берёт из прошлого звонка группы — память при
+                // группе, а не в этом приложении (её теряли перезапуск и любой личный звонок, и повтор не звал).
+                if (repeat) Journal.note(LogCode.CALL, "групповой: повтор прошлого звонка", "группа" to groupId.take(8))
+                when (val step = calls.startGroup(groupId, ring, video, invited, repeat)) {
                     is CallStep.Door -> enter(live, step.door, video)
                     else -> refuse(step)
                 }

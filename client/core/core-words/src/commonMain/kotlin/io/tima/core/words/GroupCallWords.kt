@@ -99,9 +99,10 @@ interface GroupCallWords {
     val benchNothing: String
 
     // Строки звонка в переписке группы — рисует телефон сам (заказчик 2026-10-01, 8б).
-    fun lineStarted(who: String): String
+    /** «Звонок начат в 14:32: кто» — с временем (заказчик 2026-11-12: «нужно добавить время»). */
+    fun lineStarted(who: String, time: String): String
     fun lineParticipants(who: String): String
-    val lineEnded: String
+    fun lineEnded(time: String): String
     val linePaused: String
     val lineResumed: String
     val lineRemoved: String
@@ -246,9 +247,9 @@ object RussianGroupCall : GroupCallWords {
     override val benchFreezes = "Замирания"
     override val benchUnknown = "не сказал — версия старее"
     override val benchNothing = "видео от него не приходит"
-    override fun lineStarted(who: String) = "Звонок начат: $who"
+    override fun lineStarted(who: String, time: String) = "Звонок начат в $time: $who"
     override fun lineParticipants(who: String) = "Участники: $who"
-    override val lineEnded = "Звонок завершён"
+    override fun lineEnded(time: String) = "Звонок завершён в $time"
     override val linePaused = "Пауза звонка"
     override val lineResumed = "Звонок продолжается"
     override val lineRemoved = "Вас удалили из звонка"
@@ -382,9 +383,9 @@ object EnglishGroupCall : GroupCallWords {
     override val benchFreezes = "Freezes"
     override val benchUnknown = "did not say — older version"
     override val benchNothing = "no video arriving from them"
-    override fun lineStarted(who: String) = "Call started: $who"
+    override fun lineStarted(who: String, time: String) = "Call started at $time: $who"
     override fun lineParticipants(who: String) = "Participants: $who"
-    override val lineEnded = "Call ended"
+    override fun lineEnded(time: String) = "Call ended at $time"
     override val linePaused = "Call paused"
     override val lineResumed = "Call continues"
     override val lineRemoved = "You were removed from the call"
@@ -518,9 +519,9 @@ object SpanishGroupCall : GroupCallWords {
     override val benchFreezes = "Congelaciones"
     override val benchUnknown = "no lo dijo — versión antigua"
     override val benchNothing = "no llega vídeo suyo"
-    override fun lineStarted(who: String) = "Llamada iniciada: $who"
+    override fun lineStarted(who: String, time: String) = "Llamada iniciada a las $time: $who"
     override fun lineParticipants(who: String) = "Participantes: $who"
-    override val lineEnded = "Llamada terminada"
+    override fun lineEnded(time: String) = "Llamada terminada a las $time"
     override val linePaused = "Llamada en pausa"
     override val lineResumed = "La llamada continúa"
     override val lineRemoved = "Le quitaron de la llamada"

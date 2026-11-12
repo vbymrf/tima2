@@ -44,7 +44,7 @@ type CallStore interface {
 	GroupRole(ctx context.Context, groupID, userID string) (string, error)
 	CreateRoomCall(ctx context.Context, room, kind, groupID, creatorID string, invited []string, ring bool) (string, error)
 	CallRings(ctx context.Context, callID string) (bool, error)
-	LiveGroupCall(ctx context.Context, groupID string) (store.Call, error)
+	LatestGroupCall(ctx context.Context, groupID string, live bool) (store.Call, error)
 	GroupCallParticipants(ctx context.Context, callID string) ([]store.CallParticipant, error)
 	JoinGroupCall(ctx context.Context, callID, userID string, max int) error
 	RemoveFromCall(ctx context.Context, callID, userID string) error

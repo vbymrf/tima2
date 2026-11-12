@@ -1,5 +1,6 @@
 package io.tima.shared
 
+import kotlinx.datetime.toLocalDateTime
 import io.tima.core.network.HistoryApi
 import io.tima.core.network.GroupMessagesApi
 import io.tima.core.network.GroupsResult
@@ -853,6 +854,12 @@ class Receiver(
     private suspend fun callLine(d: EventStreamProtocol.Decision.GroupCall) {
         if (d.callId.isEmpty()) return
         val w = words().groupCall
+        // Время строки — местное, по часам телефона, когда событие пришло (заказчик 2026-11-12: «Звонок начат. Звонок
+        // завершён — нужно добавить время»).
+        val at = msNow()
+        val time = kotlinx.datetime.Instant.fromEpochMilliseconds(at)
+            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+            .let { it.hour.toString().padStart(2, '0') + ":" + it.minute.toString().padStart(2, '0') }
         val text = when (d.state) {
             // Одно сообщение (заказчик 2026-10-02): «Звонок начат: имя, ник» и следующей
             // строкой «Участники: …; …» — кого позвали, без меня, все. Кого позвали, говорит
@@ -868,13 +875,13 @@ class Receiver(
                     ?.members.orEmpty()
                     .filter { it.invited && it.userId != session.userId && it.userId != d.by }
                     .map { notices?.nameOf(it.userId) ?: words().chat.nameless }
-                val first = w.lineStarted(who ?: words().chat.nameless)
+                val first = w.lineStarted(who ?: words().chat.nameless, time)
                 if (called.isEmpty()) first else first + "\n" + w.lineParticipants(called.joinToString("; "))
             }
-            "ended" -> w.lineEnded
+            "ended" -> w.lineEnded(time)
             else -> return
         }
-        runCatching { environment.journal.note(d.groupId, "call:" + d.callId + ":" + d.state, text, msNow()) }
+        runCatching { environment.journal.note(d.groupId, "call:" + d.callId + ":" + d.state, text, at) }
     }
 
     /** Сверка групп с сервером — и сроки временных групп звонка наружу (решение 11). */

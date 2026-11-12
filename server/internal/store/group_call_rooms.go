@@ -63,16 +63,29 @@ func (s *Store) CallRings(ctx context.Context, callID string) (bool, error) {
 	return ring, err
 }
 
-// LiveGroupCall — идущий звонок группы. ErrCallNotFound — звонка нет.
-func (s *Store) LiveGroupCall(ctx context.Context, groupID string) (Call, error) {
+// LatestGroupCall — последний звонок группы: [live] — только идущий; иначе любой, и закончившийся (заказчик
+// 2026-11-12: «Нужно хранить тех, кому звонили последний раз, привязывать к сущности — группе» — повтор берёт
+// отмеченных и «звонить» прошлого звонка). ErrCallNotFound — звонка нет.
+func (s *Store) LatestGroupCall(ctx context.Context, groupID string, live bool) (Call, error) {
 	var c Call
 	var paused *time.Time
-	err := s.pool.QueryRow(ctx, `
+	// Идущий — прежним запросом: он ложится на частичный индекс `idx_calls_group_live`; условие с параметром
+	// планировщик к нему не примерил бы.
+	query := `
 		SELECT call_id, room, kind, initiator_id, state, created_at, paused_at
 		  FROM calls
 		 WHERE group_id = $1 AND type = 'group' AND state IN ('ringing', 'answered')
 		 ORDER BY created_at DESC
-		 LIMIT 1`, groupID).
+		 LIMIT 1`
+	if !live {
+		query = `
+		SELECT call_id, room, kind, initiator_id, state, created_at, paused_at
+		  FROM calls
+		 WHERE group_id = $1 AND type = 'group'
+		 ORDER BY created_at DESC
+		 LIMIT 1`
+	}
+	err := s.pool.QueryRow(ctx, query, groupID).
 		Scan(&c.CallID, &c.Room, &c.Kind, &c.InitiatorID, &c.State, &c.CreatedAt, &paused)
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return c, ErrCallNotFound

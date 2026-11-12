@@ -152,6 +152,57 @@ func TestRoomCallRingsOnlyInvited(t *testing.T) {
 	}
 }
 
+// «Повторить звонок» (2026-11-12): звонить и отмеченные — как в прошлый раз, что бы ни прислал клиент; с другого
+// устройства и после перезапуска — тоже: память на сервере, при группе.
+func TestRoomCallRepeatTakesLastSetup(t *testing.T) {
+	ts, srv := setup(t)
+	withCalls(srv)
+	owner := registerDevice(t, ts, "+79990071101")
+	marked := registerDevice(t, ts, "+79990071102")
+	other := registerDevice(t, ts, "+79990071103")
+	groupID := createGroupWith(t, ts, owner, marked, other)
+
+	// Без прошлого звонка повтор — как прислали.
+	first, code := startRoomCallAs(t, ts, owner, groupID, map[string]any{
+		"ring": true, "invited": []string{marked.userID}, "repeat": true,
+	})
+	if code != http.StatusCreated {
+		t.Fatalf("первый звонок: %d", code)
+	}
+	if got := roomChanges(t, ts, marked, first.CallID); len(got) != 1 || got[0] != "ringing" {
+		t.Fatalf("первый: отмеченному %v", got)
+	}
+	if code := jsonAuth(t, ts, "POST", "/api/v1/calls/"+first.CallID+"/control", owner.token,
+		map[string]any{"action": "stop"}, nil); code != 200 {
+		t.Fatalf("остановка: %d", code)
+	}
+
+	// Повтор с пустым запросом (так шлёт телефон, забывший прошлый раз) — звонит тем же.
+	again, code := startRoomCallAs(t, ts, owner, groupID, map[string]any{"repeat": true})
+	if code != http.StatusCreated || again.CallID == first.CallID {
+		t.Fatalf("повтор: %d, звонок %s", code, again.CallID)
+	}
+	if got := roomChanges(t, ts, marked, again.CallID); len(got) != 1 || got[0] != "ringing" {
+		t.Fatalf("повтор: отмеченному %v, ожидали ringing", got)
+	}
+	if got := roomChanges(t, ts, other, again.CallID); len(got) != 0 {
+		t.Fatalf("повтор позвал неотмеченного: %v", got)
+	}
+	if ring, _ := srv.Store.CallRings(t.Context(), again.CallID); !ring {
+		t.Fatal("повтор без «звонить», хотя в прошлый раз звонили")
+	}
+	if code := jsonAuth(t, ts, "POST", "/api/v1/calls/"+again.CallID+"/control", owner.token,
+		map[string]any{"action": "stop"}, nil); code != 200 {
+		t.Fatalf("остановка повтора: %d", code)
+	}
+
+	// Без «repeat» — как прислали: тихий звонок никому не звонит.
+	quiet, _ := startRoomCallAs(t, ts, owner, groupID, map[string]any{"invited": []string{marked.userID}})
+	if got := roomChanges(t, ts, marked, quiet.CallID); len(got) != 0 {
+		t.Fatalf("без «Звонить» звонили: %v", got)
+	}
+}
+
 // Команды — только создателю; «удалить» — из звонка, не из группы (решения 6, 17).
 func TestRoomCallControlByCreatorOnly(t *testing.T) {
 	ts, srv := setup(t)
@@ -281,7 +332,7 @@ func TestRoomCallDeclineLeavesCallRunning(t *testing.T) {
 	if got := roomChanges(t, ts, a, door.CallID); len(got) != 2 || got[1] != "declined" {
 		t.Fatalf("лента отказавшегося: %v", got)
 	}
-	if live, err := srv.Store.LiveGroupCall(t.Context(), groupID); err != nil || live.CallID != door.CallID {
+	if live, err := srv.Store.LatestGroupCall(t.Context(), groupID, true); err != nil || live.CallID != door.CallID {
 		t.Fatalf("отказ одного кончил звонок: %v", err)
 	}
 	// Остановка после отказа пропущенного не даёт: он не «не ответил», он отказался.

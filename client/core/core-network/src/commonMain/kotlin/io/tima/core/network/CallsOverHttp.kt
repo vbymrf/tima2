@@ -244,7 +244,7 @@ class CallsOverHttp(
         )
     }
 
-    override suspend fun startGroup(groupId: String, ring: Boolean, video: Boolean, invited: List<String>): CallStep {
+    override suspend fun startGroup(groupId: String, ring: Boolean, video: Boolean, invited: List<String>, repeat: Boolean): CallStep {
         val response = try {
             client.post(route.api("/api/v1/groups/$groupId/call")) {
                 header("Authorization", "Bearer ${token()}")
@@ -254,6 +254,7 @@ class CallsOverHttp(
                         put("ring", JsonPrimitive(ring))
                         put("video", JsonPrimitive(video))
                         put("invited", kotlinx.serialization.json.JsonArray(invited.map { JsonPrimitive(it) }))
+                        if (repeat) put("repeat", JsonPrimitive(true))
                     }.toString(),
                 )
             }

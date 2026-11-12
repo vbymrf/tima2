@@ -82,8 +82,10 @@ interface Calls {
      *
      * @param ring «Звонить»: отмеченным — вызов (решение 3).
      * @param invited кого позвать; пусто — всех участников группы.
+     * @param repeat «Повторить звонок» (2026-11-12): «звонить» и отмеченных сервер берёт из прошлого звонка этой группы;
+     *   [ring] и [invited] — на случай, если прошлого нет или сервер поля ещё не знает.
      */
-    suspend fun startGroup(groupId: String, ring: Boolean, video: Boolean, invited: List<String>): CallStep =
+    suspend fun startGroup(groupId: String, ring: Boolean, video: Boolean, invited: List<String>, repeat: Boolean = false): CallStep =
         CallStep.Refused("no_group_calls")
 
     /** Звонок группы прямо сейчас — `GET /groups/{id}/call`. `null` — до сервера не дошли. */
