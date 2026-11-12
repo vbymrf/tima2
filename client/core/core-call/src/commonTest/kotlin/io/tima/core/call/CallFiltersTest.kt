@@ -116,4 +116,54 @@ class CallFiltersTest {
         assertEquals(0f, z.strengths[1], "между бровями выключено")
         assertNotNull(z.axes)
     }
+
+    @Test
+    fun счётчики_разделов_считают_изменённое_от_стандарта() {
+        // Заказчик 2026-11-12: «добавлено сглаживание — Красота 1, добавлено Морщины Лоб, Уголки глаз, Носогубные = Морщины 3».
+        val f = CallFilters(on = false, smooth = 40, forehead = 10, eyeCorners = 20, nasolabial = 30, look = ColorLook.Light, lookStrength = 50)
+        assertEquals(1, f.changed(FilterSection.Beauty))
+        assertEquals(1, f.changed(FilterSection.Color), "образ — одно изменение, его сила не считается")
+        assertEquals(0, f.changed(FilterSection.Face))
+        assertEquals(3, f.changed(FilterSection.Wrinkles))
+        assertEquals(5, f.changedTotal, "сумма — и при снятой галочке")
+        assertEquals(0, CallFilters.OFF.copy(lipColor = LipColor.Cherry).changedTotal, "цвет помады отдельно не считается")
+    }
+
+    @Test
+    fun задняя_камера_без_лица_и_морщин_общие_остаются() {
+        // Заказчик 2026-11-12: «убираем принудительно настройки только Фильтры: Лицо, Морщины. Общие фильтры работают».
+        val f = CallFilters(on = true, smooth = 50, brightness = 10, thin = 30, lipstick = 40, forehead = 20)
+        val rear = f.forCamera(front = false)
+        assertEquals(50, rear.smooth)
+        assertEquals(10, rear.brightness)
+        assertEquals(0, rear.thin + rear.lipstick + rear.forehead)
+        assertFalse(rear.needsFace, "на задней точки лица не ищутся")
+        assertEquals(f, f.forCamera(front = true))
+    }
+
+    @Test
+    fun стандарт_при_обновлении_пишется_один_раз() {
+        // Заказчик 2026-11-12: вариант «б» — 1.3× обеими, «Красота», «Сглаживание» 50; на ПК — только фильтры.
+        val phone = CallDefaults.writes(emptyMap(), phone = true)
+        assertEquals("1.3", phone[CallLookKeys.ZOOM])
+        assertEquals("both", phone[CallLookKeys.HAND])
+        assertEquals("1", phone[CallFilterKeys.PREFIX + "on"])
+        assertEquals("50", phone[CallFilterKeys.PREFIX + "smooth"])
+        val after = CallFilterKeys.read(phone)
+        assertTrue(after.on && after.smooth == 50)
+        assertEquals(CameraCrop(1.3f, 0f, 0.11f), CallLookKeys.preset(phone), "1.3 обеими — вниз на 11, по середине")
+        assertTrue(CallDefaults.writes(phone, phone = true).isEmpty(), "второй раз — ничего")
+        val pc = CallDefaults.writes(mapOf(CallLookKeys.ZOOM to "1.6"), phone = false)
+        assertFalse(CallLookKeys.ZOOM in pc, "на ПК увеличение не трогается")
+        assertEquals("50", pc[CallFilterKeys.PREFIX + "smooth"])
+    }
+
+    @Test
+    fun цвет_помады_помнится_и_ведёт_к_своей_картинке() {
+        val f = CallFilters(on = true, lipstick = 60, lipColor = LipColor.Berry)
+        assertEquals(LipColor.Berry, CallFilterKeys.read(CallFilterKeys.write(f)).lipColor)
+        assertEquals(LipColor.Classic, CallFilterKeys.read(emptyMap()).lipColor)
+        assertEquals("mouth.png", LipColor.Classic.image, "нынешний — та же картинка gpupixel")
+        assertEquals(5, LipColor.entries.map { it.image }.toSet().size)
+    }
 }

@@ -175,6 +175,8 @@ fun CallScreen(
     var sheetOpen by remember { mutableStateOf(false) }
     // Лист «Фильтры» (ПЛАН-(ФЗ) ФЗ7): открыт ли.
     var filtersOpen by remember { mutableStateOf(false) }
+    // Лист «Увеличение изображения» (ФЗ11, ФЗ17): открыт ли.
+    var zoomOpen by remember { mutableStateOf(false) }
     val call = fresh ?: FreshCall.Plain
     val talkingNow = state.stage == CallStage.Connected
     var benchJournal by remember { mutableStateOf(false) }
@@ -250,10 +252,13 @@ fun CallScreen(
                 }
             }
             // Групповой в одном виде с разговором на двоих (ЗН9): своего окошка нет — смена камеры справа внизу.
-            onSwitchCamera?.takeIf { state.cameraOn && state.cameraSwitchable && !state.screenSharing && !sheetOpen && !filtersOpen }?.let {
+            onSwitchCamera?.takeIf { state.cameraOn && state.cameraSwitchable && !state.screenSharing && !sheetOpen && !filtersOpen && !zoomOpen }?.let {
                 CameraFlip(it, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3))
             }
-            CallSheets(state, call, sheetOpen, filtersOpen, onSheet = { sheetOpen = it }, onFiltersOpen = { filtersOpen = it }, group = true)
+            CallSheets(
+                state, call, sheetOpen, filtersOpen, zoomOpen,
+                onSheet = { sheetOpen = it }, onFiltersOpen = { filtersOpen = it }, onZoomOpen = { zoomOpen = it }, group = true,
+            )
             }
         } else
         Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { area = it }.then(swipeArea)) {
@@ -405,11 +410,14 @@ fun CallScreen(
             }
             // Режим адаптации (ЗН5) — выше ряда кнопок, пока своя камера в кадре.
             val crop = call.crop
-            if (talkingNow && group == null && crop != null && state.cameraOn && !state.screenSharing && !sheetOpen && !filtersOpen) {
+            if (talkingNow && group == null && crop != null && state.cameraOn && !state.screenSharing && !sheetOpen && !filtersOpen && !zoomOpen) {
                 AdaptBar(crop, call.onCrop, Modifier.align(Alignment.BottomCenter).padding(bottom = TimaSpacing.about2), mirror = mirrorOwn)
             }
             if (talkingNow) {
-                CallSheets(state, call, sheetOpen, filtersOpen, onSheet = { sheetOpen = it }, onFiltersOpen = { filtersOpen = it }, group = group != null)
+                CallSheets(
+                    state, call, sheetOpen, filtersOpen, zoomOpen,
+                    onSheet = { sheetOpen = it }, onFiltersOpen = { filtersOpen = it }, onZoomOpen = { zoomOpen = it }, group = group != null,
+                )
             }
         }
 
@@ -436,7 +444,10 @@ fun CallScreen(
                 sheetOpen = sheetOpen,
                 onSheet = {
                     sheetOpen = !sheetOpen
-                    if (sheetOpen) filtersOpen = false
+                    if (sheetOpen) {
+                        filtersOpen = false
+                        zoomOpen = false
+                    }
                 },
                 onMinimize = call.onMinimize,
                 // Создатель группового кладёт трубку — выйти или завершить для всех (решение 6 ГЗ).
@@ -514,7 +525,9 @@ fun CallScreen(
 }
 
 /**
- * Лист «Настройки звонка» и лист «Фильтры» поверх изображения — одни и те же на двоих и в групповом (ЗН9).
+ * Лист «Настройки звонка», «Фильтры» и «Увеличение изображения» поверх изображения — одни и те же на двоих и в
+ * групповом (ЗН9). Увеличение на телефоне — только на двоих и с передней камерой, на ПК — только на двоих: иначе
+ * строка серая с пояснением (ФЗ11, ФЗ17).
  */
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.CallSheets(
@@ -522,10 +535,20 @@ private fun androidx.compose.foundation.layout.BoxScope.CallSheets(
     call: FreshCall,
     sheetOpen: Boolean,
     filtersOpen: Boolean,
+    zoomOpen: Boolean,
     onSheet: (Boolean) -> Unit,
     onFiltersOpen: (Boolean) -> Unit,
+    onZoomOpen: (Boolean) -> Unit,
     group: Boolean,
 ) {
+    val words = Tima.words.call
+    val zoom = call.zoom
+    val zoomBlocked = when {
+        zoom == null -> null
+        group -> words.zoomPairOnly
+        zoom.phone && !state.cameraFront -> words.zoomFrontOnly
+        else -> null
+    }
     if (sheetOpen) {
         CallSheet(
             saving = !state.remoteVideoTaken,
@@ -538,6 +561,13 @@ private fun androidx.compose.foundation.layout.BoxScope.CallSheets(
                 onSheet(false)
                 onFiltersOpen(true)
             },
+            filtersCount = call.filters?.changedTotal ?: 0,
+            zoom = zoom,
+            zoomBlocked = zoomBlocked,
+            onZoom = {
+                onSheet(false)
+                onZoomOpen(true)
+            },
         )
     }
     val filters = call.filters
@@ -547,7 +577,13 @@ private fun androidx.compose.foundation.layout.BoxScope.CallSheets(
             onChange = call.onFilters,
             onClose = { onFiltersOpen(false) },
             modifier = Modifier.align(Alignment.BottomCenter),
+            section = call.filterSection,
+            onSection = call.onFilterSection,
+            rearCamera = !state.cameraFront,
         )
+    }
+    if (zoomOpen && zoom != null && zoomBlocked == null) {
+        ZoomPanel(zoom, onClose = { onZoomOpen(false) }, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 

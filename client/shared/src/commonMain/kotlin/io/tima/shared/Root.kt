@@ -998,11 +998,36 @@ private fun App(
     val layoutOrder by remember { environment.settings.all().map { io.tima.feature.shell.layoutOf(it[MainLayoutKeys.ORDER]) }.distinctUntilChanged() }
         .collectAsState(io.tima.feature.shell.DEFAULT_LAYOUT)
     // Режим адаптации и увеличение (ПЛАН-(ЗН) ЗН5, ЗН8). Снимок берётся при начале звонка. Вид окна один (ЗН9).
-    val callLookNow by remember {
+    // ПК (движок с выбором устройств) — своя обрезка кнопками (ФЗ17, решение 10): ступень и сдвиг, без руки.
+    val pcZoom = callEngine is io.tima.core.call.CallDevices
+    val callLookNow by remember(pcZoom) {
         environment.settings.all().map {
-            CallLookSnap(io.tima.core.call.CallLookKeys.adapt(it), io.tima.core.call.CallLookKeys.preset(it))
+            CallLookSnap(
+                io.tima.core.call.CallLookKeys.adapt(it),
+                if (pcZoom) io.tima.core.call.CallLookKeys.pcCrop(it) else io.tima.core.call.CallLookKeys.preset(it),
+            )
         }.distinctUntilChanged()
     }.collectAsState(CallLookSnap(adapt = false, preset = io.tima.core.call.CameraCrop.FULL))
+    // Выбор увеличения — для строки в листе звонка (ФЗ11).
+    val zoomSaved by remember {
+        environment.settings.all().map { io.tima.core.call.CallLookKeys.zoom(it) to io.tima.core.call.CallLookKeys.hand(it) }.distinctUntilChanged()
+    }.collectAsState(1f to io.tima.core.call.CallHand.Right)
+    // Последний открытый раздел листа «Фильтры» (ФЗ9).
+    val filterSection by remember {
+        environment.settings.all().map { io.tima.core.call.FilterSection.of(it[io.tima.core.call.CallFilterKeys.SECTION]) }.distinctUntilChanged()
+    }.collectAsState(io.tima.core.call.FilterSection.Beauty)
+    // Стандарт при обновлении (ФЗ13, заказчик 2026-11-12, вариант «б»): один раз — увеличение 1.3× обеими (телефон),
+    // фильтры включены, «Сглаживание» 50; дальше выбор человека не трогается.
+    LaunchedEffect(pcZoom) {
+        runCatching {
+            val all = environment.settings.all().first()
+            val writes = io.tima.core.call.CallDefaults.writes(all, phone = !pcZoom)
+            if (writes.isNotEmpty()) {
+                writes.forEach { (k, v) -> environment.settings.put(k, v) }
+                Journal.note(LogCode.CALL, "стандарт звонка при обновлении", "что" to writes.keys.joinToString(" "))
+            }
+        }
+    }
     var callLook by remember { mutableStateOf<CallLookSnap?>(null) }
     // Фильтры своего видео (ПЛАН-(ФЗ)): выбор помнится в настройках устройства (решение 6) и сразу уходит в движок.
     val savedFilters by remember {
@@ -3273,6 +3298,16 @@ private fun App(
         val saved = savedFilters ?: return@LaunchedEffect
         if (saved != callHost.filters) callHost.applyFilters(saved)
     }
+    // Сменили камеру — «Лицо» и «Морщины» на задней не рисуются (ФЗ10).
+    LaunchedEffect(callHost.state.cameraFront) { callHost.refilter() }
+    // Увеличение выбрано в звонке (ФЗ11, ФЗ17): сразу в движок — с передней камеры, на двоих; уходит собеседнику.
+    fun zoomNow(preset: io.tima.core.call.CameraCrop) {
+        callLook = callLook?.copy(preset = preset)
+        if (!talkingNow || callHost.group != null) return
+        val want = if (pcZoom || callHost.state.cameraFront) preset else io.tima.core.call.CameraCrop.FULL
+        Journal.note(LogCode.CALL, "увеличение изображения в звонке", "стало" to want.describe())
+        callHost.cropCamera(want)
+    }
     LaunchedEffect(callHost.active) {
         callLook = if (callHost.active) {
             callLookNow.also { look ->
@@ -3630,6 +3665,30 @@ private fun App(
                             crop = if (look?.adapt == true) callHost.crop else null,
                             onCrop = callHost::cropCamera,
                             filters = callHost.filters.takeIf { callHost.filterable },
+                            filterSection = filterSection,
+                            onFilterSection = { section ->
+                                scope.launch { runCatching { environment.settings.put(io.tima.core.call.CallFilterKeys.SECTION, section.key) } }
+                            },
+                            zoom = io.tima.feature.call.CallZoom(
+                                phone = !pcZoom,
+                                step = zoomSaved.first,
+                                hand = zoomSaved.second,
+                                crop = callHost.crop,
+                                onStep = { z ->
+                                    Journal.note(LogCode.CALL, "увеличение изображения выбрано", "ступень" to z, "где" to "звонок")
+                                    scope.launch { environment.settings.put(io.tima.core.call.CallLookKeys.ZOOM, io.tima.core.call.CameraCrop.label(z)) }
+                                    zoomNow(io.tima.core.call.CallLookKeys.preset(z, zoomSaved.second))
+                                },
+                                onHand = { h ->
+                                    Journal.note(LogCode.CALL, "рука для увеличения выбрана", "рука" to io.tima.core.call.CallLookKeys.code(h), "где" to "звонок")
+                                    scope.launch { environment.settings.put(io.tima.core.call.CallLookKeys.HAND, io.tima.core.call.CallLookKeys.code(h)) }
+                                    zoomNow(io.tima.core.call.CallLookKeys.preset(zoomSaved.first, h))
+                                },
+                                onCrop = { c ->
+                                    scope.launch { environment.settings.put(io.tima.core.call.CallLookKeys.PC_CROP, io.tima.core.call.CallLookKeys.pcCropCode(c)) }
+                                    zoomNow(c)
+                                },
+                            ),
                             onFilters = { next, final ->
                                 callHost.applyFilters(next)
                                 if (final) {

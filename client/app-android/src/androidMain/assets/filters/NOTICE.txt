@@ -1,6 +1,6 @@
 Фильтры звонка TIMA (ПЛАН-(ФЗ)) используют чужие части по лицензии MIT.
 
-1. gpupixel 1.2.4 (https://github.com/pixpark/gpupixel) — шейдеры «красоты», изменения лица и макияжа (перенесены в FilterShaders.kt), сетка лица (FaceMesh.kt), картинки blusher.png, mouth.png, lookup_*.png.
+1. gpupixel, ветка 1.2.x (https://github.com/pixpark/gpupixel) — шейдеры «красоты», изменения лица и макияжа (перенесены в FilterShaders.kt), сетка лица (FaceMesh.kt), картинки blusher.png, mouth.png, lookup_*.png. Картинки mouth_pink.png, mouth_coral.png, mouth_berry.png, mouth_cherry.png — оттенки mouth.png, пересчитаны TIMA (та же форма, другой цвет).
    Copyright (c) 2023 PixPark
 
 2. VNN (JOYY) — распознавание точек лица: libvnn_core.so, libvnn_kit.so, libvnn_face.so, face_mobile.vnnmodel.

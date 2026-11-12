@@ -121,4 +121,22 @@ class CameraCropTest {
         assertFalse(CallLookKeys.adapt(emptyMap()))
         assertTrue(CallLookKeys.adapt(mapOf(CallLookKeys.ADAPT to "1")))
     }
+
+    @Test
+    fun пк_увеличение_до_двух_и_не_за_край() {
+        // Заказчик 2026-11-12: на ПК — кнопки тестера, «Не пускать» за край, ступени 1×–2×; выбор помнится.
+        var c = CameraCrop.FULL
+        repeat(15) { c = c.closerInside() }
+        assertEquals(2f, c.zoom, 1e-4f)
+        assertFalse(c.canCloserInside)
+        repeat(100) { c = c.movedInside(1, -1) }
+        assertFalse(c.beyond, "ушло за край кадра")
+        assertFalse(c.canMoveInside(1, 0))
+        assertTrue(c.canMoveInside(-1, 0))
+        assertEquals(0.25f, c.x, 1e-4f)
+        val saved = mapOf(CallLookKeys.PC_CROP to CallLookKeys.pcCropCode(c))
+        assertEquals(c, CallLookKeys.pcCrop(saved))
+        assertEquals(CameraCrop.FULL, CallLookKeys.pcCrop(emptyMap()))
+        assertEquals(CameraCrop(2f, 0.25f, 0.25f), CallLookKeys.pcCrop(mapOf(CallLookKeys.PC_CROP to "3;0.9;0.9")), "чужое — в пределы")
+    }
 }

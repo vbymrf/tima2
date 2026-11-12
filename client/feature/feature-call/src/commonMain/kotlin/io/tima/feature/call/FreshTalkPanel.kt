@@ -63,6 +63,11 @@ class FreshCall(
     val filters: io.tima.core.call.CallFilters? = null,
     /** Сменить фильтры: `final` — палец отпущен, выбор пишется в настройки. */
     val onFilters: (io.tima.core.call.CallFilters, Boolean) -> Unit = { _, _ -> },
+    /** Последний открытый раздел листа «Фильтры» (ФЗ9) и его запоминание. */
+    val filterSection: io.tima.core.call.FilterSection = io.tima.core.call.FilterSection.Beauty,
+    val onFilterSection: (io.tima.core.call.FilterSection) -> Unit = {},
+    /** «Увеличение изображения» в листе звонка (ФЗ11 — телефон, ФЗ17 — ПК); `null` — строки нет. */
+    val zoom: CallZoom? = null,
 ) {
     companion object {
         /** Без свёртывания и без листов — снимки экрана в проверках. */
@@ -142,6 +147,46 @@ internal fun FreshTalkPanel(
 }
 
 /**
+ * «Увеличение изображения» в звонке (ФЗ11, ФЗ17, заказчик 2026-11-12). Та же настройка, что в «Настройки → Звонки»:
+ * выбор действует сразу, уходит собеседнику и запоминается.
+ *
+ * Телефон ([phone]) — ступени [CallLookKeys.ZOOMS] и рука, только передняя камера и звонок на двоих. ПК — своё
+ * (решение 10): кнопки тестера по [crop], до 2× и не дальше края кадра; руки нет.
+ */
+class CallZoom(
+    val phone: Boolean,
+    val step: Float,
+    val hand: io.tima.core.call.CallHand,
+    val crop: CameraCrop,
+    val onStep: (Float) -> Unit,
+    val onHand: (io.tima.core.call.CallHand) -> Unit,
+    val onCrop: (CameraCrop) -> Unit,
+)
+
+/** Что написать в строке увеличения: «1.3×, обеими», «1.4×, сдвиг +5 / −8» или «выключено». */
+@Composable
+internal fun zoomText(zoom: CallZoom): String {
+    val words = Tima.words.call
+    return if (zoom.phone) {
+        if (zoom.step <= 1f) {
+            words.zoomOff
+        } else {
+            val hand = when (zoom.hand) {
+                io.tima.core.call.CallHand.Right -> words.handRight
+                io.tima.core.call.CallHand.Left -> words.handLeft
+                io.tima.core.call.CallHand.Both -> words.handBoth
+            }
+            words.zoomNow(CameraCrop.label(zoom.step) + "×", hand)
+        }
+    } else if (zoom.crop.full) {
+        words.zoomOff
+    } else {
+        val (x, y) = zoom.crop.shiftPercent
+        words.zoomShiftNow(CameraCrop.label(zoom.crop.zoom) + "×", CameraCrop.signed(x), CameraCrop.signed(y))
+    }
+}
+
+/**
  * Лист «Настройки звонка» (ЗН3, ЗН6) — снизу поверх изображения. Выключатели — квадратом:
  * оба могут стоять вместе.
  */
@@ -155,6 +200,13 @@ internal fun CallSheet(
     /** «Фильтры» (ФЗ7): включены ли и открыть их лист; `null` — строки нет. */
     filtersOn: Boolean? = null,
     onFilters: () -> Unit = {},
+    /** Сколько изменено от стандарта — янтарное число перед галочкой (ФЗ9). */
+    filtersCount: Int = 0,
+    /** «Увеличение изображения» (ФЗ11, ФЗ17): `null` — строки нет. */
+    zoom: CallZoom? = null,
+    /** Почему увеличение сейчас недоступно (групповой, задняя камера); `null` — доступно. */
+    zoomBlocked: String? = null,
+    onZoom: () -> Unit = {},
 ) {
     val colors = Tima.colors
     val words = Tima.words.call
@@ -174,14 +226,34 @@ internal fun CallSheet(
             onSaveTraffic(!saving)
         }
         if (filtersOn != null) {
-            SheetRow("✨", words.filtersTitle, words.filtersRowAbout, filtersOn, Modifier.testTag(FILTERS_ROW_TAG), onClick = onFilters)
+            SheetRow(
+                "✨", words.filtersTitle, words.filtersRowAbout, filtersOn, Modifier.testTag(FILTERS_ROW_TAG), count = filtersCount,
+                onClick = onFilters,
+            )
+        }
+        if (zoom != null) {
+            val active = if (zoom.phone) zoom.step > 1f else !zoom.crop.full
+            SheetRow(
+                "🔍", words.zoomTitle, zoomBlocked ?: zoomText(zoom), active && zoomBlocked == null, Modifier.testTag(ZOOM_ROW_TAG),
+                enabled = zoomBlocked == null, onClick = onZoom,
+            )
         }
     }
 }
 
 @Composable
-private fun SheetRow(glyph: String, title: String, about: String, on: Boolean, modifier: Modifier, onClick: () -> Unit) = Row(
-    modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = TimaSpacing.about1),
+private fun SheetRow(
+    glyph: String,
+    title: String,
+    about: String,
+    on: Boolean,
+    modifier: Modifier,
+    count: Int = 0,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) = Row(
+    modifier.fillMaxWidth().then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+        .alpha(if (enabled) 1f else DIM).padding(vertical = TimaSpacing.about1),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
 ) {
@@ -190,7 +262,79 @@ private fun SheetRow(glyph: String, title: String, about: String, on: Boolean, m
         Caption(title, fontSize = TimaType.sz5, weight = FontWeight.Bold)
         Secondary(about)
     }
+    // Сколько изменено — янтарным, как непрочитанное (ФЗ9); видно и при снятой галочке.
+    if (count > 0) io.tima.core.ui.Counter(count, Modifier.testTag(FILTERS_COUNT_TAG))
     CheckMark(on)
+}
+
+/**
+ * Лист «Увеличение изображения» поверх изображения (ФЗ11, ФЗ17). Телефон — ступени и рука; ПК — кнопки тестера с
+ * цифрами сдвига, до 2× и не дальше края кадра.
+ */
+@Composable
+internal fun ZoomPanel(zoom: CallZoom, onClose: () -> Unit, modifier: Modifier = Modifier, mirror: Boolean = false) {
+    val colors = Tima.colors
+    val words = Tima.words.call
+    Column(
+        modifier.fillMaxWidth()
+            .background(colors.surface, RoundedCornerShape(topStart = SHEET_RADIUS, topEnd = SHEET_RADIUS))
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)
+            .testTag(ZOOM_TAG),
+        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Caption(words.zoomTitle, modifier = Modifier.weight(1f), fontSize = TimaType.sz3, weight = FontWeight.Bold)
+            SheetClose(onClose, Modifier.testTag(ZOOM_CLOSE_TAG))
+        }
+        if (zoom.phone) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                for (step in io.tima.core.call.CallLookKeys.ZOOMS) {
+                    io.tima.core.ui.Chip(
+                        label = CameraCrop.label(step) + "×",
+                        kind = if (kotlin.math.abs(step - zoom.step) < 0.01f) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Quiet,
+                        onClick = { zoom.onStep(step) },
+                        modifier = Modifier.testTag(ZOOM_STEP_TAG_PREFIX + CameraCrop.label(step)),
+                    )
+                }
+            }
+            if (zoom.step > 1f) {
+                Caption(words.handTitle, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                    for ((hand, name) in listOf(
+                        io.tima.core.call.CallHand.Right to words.handRight,
+                        io.tima.core.call.CallHand.Left to words.handLeft,
+                        io.tima.core.call.CallHand.Both to words.handBoth,
+                    )) {
+                        io.tima.core.ui.Chip(
+                            label = name,
+                            kind = if (zoom.hand == hand) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Quiet,
+                            onClick = { zoom.onHand(hand) },
+                        )
+                    }
+                }
+            }
+            Secondary(words.zoomAbout)
+        } else {
+            val seen = zoom.crop.mirrored(mirror)
+            val (sx, sy) = seen.shiftPercent
+            Caption(words.adaptShift(CameraCrop.signed(sx), CameraCrop.signed(sy)), fontSize = TimaType.sz5, weight = FontWeight.Bold)
+            Box(Modifier.align(Alignment.CenterHorizontally)) {
+                AdaptKeys(seen, inside = true) { next -> zoom.onCrop(next.mirrored(mirror)) }
+            }
+            Secondary(words.zoomPcAbout)
+        }
+    }
+}
+
+/** «✕» листа — крупнее и с чётким кругом (ФЗ9, заказчик 2026-11-12: «фон пузыря четче и крупнее кнопку»). */
+@Composable
+internal fun SheetClose(onClose: () -> Unit, modifier: Modifier = Modifier) = Box(
+    modifier.size(CLOSE)
+        .background(Tima.colors.text.copy(alpha = 0.16f), CircleShape)
+        .clickable(onClick = onClose),
+    contentAlignment = Alignment.Center,
+) {
+    Caption("✕", fontSize = TimaType.sz4, weight = FontWeight.Bold)
 }
 
 /**
@@ -227,8 +371,9 @@ internal fun AdaptBar(crop: CameraCrop, onCrop: (CameraCrop) -> Unit, modifier: 
     AdaptKeys(seen) { next -> onCrop(next.mirrored(mirror)) }
 }
 
+/** Кнопки сдвига и приближения. [inside] — ПК (ФЗ17): до 2× и не дальше края кадра. */
 @Composable
-private fun AdaptKeys(crop: CameraCrop, onCrop: (CameraCrop) -> Unit) {
+private fun AdaptKeys(crop: CameraCrop, inside: Boolean = false, onCrop: (CameraCrop) -> Unit) {
     Row(
         Modifier
             .background(TimaFixed.videoShade.copy(alpha = 0.45f), RoundedCornerShape(50))
@@ -237,14 +382,16 @@ private fun AdaptKeys(crop: CameraCrop, onCrop: (CameraCrop) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AdaptKey("−", crop.canFarther, ADAPT_OUT_TAG) { onCrop(crop.farther()) }
-        AdaptKey("+", crop.canCloser, ADAPT_IN_TAG) { onCrop(crop.closer()) }
+        fun can(dx: Int, dy: Int) = if (inside) crop.canMoveInside(dx, dy) else crop.canMove(dx, dy)
+        fun move(dx: Int, dy: Int) = if (inside) crop.movedInside(dx, dy) else crop.moved(dx, dy)
+        AdaptKey("−", crop.canFarther, ADAPT_OUT_TAG) { onCrop(if (inside) crop.fartherInside() else crop.farther()) }
+        AdaptKey("+", if (inside) crop.canCloserInside else crop.canCloser, ADAPT_IN_TAG) { onCrop(if (inside) crop.closerInside() else crop.closer()) }
         // Знак текстового начертания (U+FE0E): без него Samsung рисует ◀ и ▶ цветными значками,
         // а ▲ и ▼ — текстом (живая проверка 2026-11-10).
-        AdaptKey("◀\uFE0E", crop.canMove(-1, 0), ADAPT_LEFT_TAG) { onCrop(crop.moved(-1, 0)) }
-        AdaptKey("▲\uFE0E", crop.canMove(0, -1), ADAPT_UP_TAG) { onCrop(crop.moved(0, -1)) }
-        AdaptKey("▼\uFE0E", crop.canMove(0, 1), ADAPT_DOWN_TAG) { onCrop(crop.moved(0, 1)) }
-        AdaptKey("▶\uFE0E", crop.canMove(1, 0), ADAPT_RIGHT_TAG) { onCrop(crop.moved(1, 0)) }
+        AdaptKey("◀\uFE0E", can(-1, 0), ADAPT_LEFT_TAG) { onCrop(move(-1, 0)) }
+        AdaptKey("▲\uFE0E", can(0, -1), ADAPT_UP_TAG) { onCrop(move(0, -1)) }
+        AdaptKey("▼\uFE0E", can(0, 1), ADAPT_DOWN_TAG) { onCrop(move(0, 1)) }
+        AdaptKey("▶\uFE0E", can(1, 0), ADAPT_RIGHT_TAG) { onCrop(move(1, 0)) }
         // Ступень сейчас — на «1×» не тратится отдельное место: «1×» и есть сброс, а пока не
         // приблизили, на нём стоит то, что сейчас.
         AdaptKey(CameraCrop.label(crop.zoom) + "×", !crop.full, ADAPT_RESET_TAG) { onCrop(CameraCrop.FULL) }
@@ -338,6 +485,9 @@ private val SHEET_RADIUS = 16.dp
 private val ADAPT_KEY = 32.dp
 private val FLIP = 30.dp
 
+/** «✕» листов — крупнее прежнего значка (ФЗ9). */
+internal val CLOSE = 40.dp
+
 const val FRESH_PANEL_TAG: String = "call:fresh"
 const val MINIMIZE_TAG: String = "call:minimize"
 const val MICROPHONE_TAG: String = "call:microphone"
@@ -358,3 +508,12 @@ const val ADAPT_UP_TAG: String = "call:adapt:up"
 const val ADAPT_DOWN_TAG: String = "call:adapt:down"
 const val ADAPT_RESET_TAG: String = "call:adapt:reset"
 const val ADAPT_NUMBERS_TAG: String = "call:adapt:numbers"
+
+/** «Увеличение изображения» в листе звонка и его лист (ФЗ11, ФЗ17). */
+const val ZOOM_ROW_TAG: String = "call:zoom:open"
+const val ZOOM_TAG: String = "call:zoom"
+const val ZOOM_CLOSE_TAG: String = "call:zoom:close"
+const val ZOOM_STEP_TAG_PREFIX: String = "call:zoom:"
+
+/** Янтарное число изменённых фильтров в строке «Фильтры» (ФЗ9). */
+const val FILTERS_COUNT_TAG: String = "call:filters:count"

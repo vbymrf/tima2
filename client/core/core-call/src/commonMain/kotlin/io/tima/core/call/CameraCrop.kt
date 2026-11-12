@@ -40,6 +40,23 @@ data class CameraCrop(val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f
 
     private val step: Float get() = 1f / zoom / PAN_PARTS
 
+    // ── ПК (ФЗ17, заказчик 2026-11-12: «увеличение с кнопками сдвига как у нас у тестера», «Не пускать», «до 2×») ──
+    // Те же кнопки, но ступень — до [PC_MAX] и сдвиг — не дальше края кадра: поля за краем не бывает.
+
+    fun insideClamped(): CameraCrop {
+        val z = zoom.coerceIn(1f, PC_MAX)
+        val r = (1f - 1f / z) / 2f
+        val c = copy(zoom = z, x = x.coerceIn(-r, r), y = y.coerceIn(-r, r))
+        return if (c.full) FULL else c
+    }
+
+    fun closerInside(): CameraCrop = copy(zoom = STEPS.firstOrNull { it > zoom + EPS && it <= PC_MAX + EPS } ?: zoom).insideClamped()
+    fun fartherInside(): CameraCrop = copy(zoom = STEPS.lastOrNull { it < zoom - EPS } ?: 1f).insideClamped()
+    fun movedInside(dx: Int, dy: Int): CameraCrop = copy(x = x + dx * step, y = y + dy * step).insideClamped()
+    val canCloserInside: Boolean get() = zoom < PC_MAX - EPS
+    fun canMoveInside(dx: Int, dy: Int): Boolean =
+        (dx < 0 && x > -reach + EPS) || (dx > 0 && x < reach - EPS) || (dy < 0 && y > -reach + EPS) || (dy > 0 && y < reach - EPS)
+
     val canCloser: Boolean get() = STEPS.any { it > zoom + EPS }
     val canFarther: Boolean get() = zoom > 1f + EPS
     fun canMove(dx: Int, dy: Int): Boolean =
@@ -139,6 +156,9 @@ data class CameraCrop(val zoom: Float = 1f, val x: Float = 0f, val y: Float = 0f
          */
         val STEPS = (10..30).map { it / 10f }
 
+        /** ПК: дальше 2× не приближает (веб-камера 720p при 3× даёт ~240 строк). */
+        const val PC_MAX = 2f
+
         /** На сколько частей делится видимая часть при сдвиге: было 4. */
         private const val PAN_PARTS = 20f
 
@@ -219,4 +239,15 @@ object CallLookKeys {
     }
 
     fun preset(all: Map<String, String>): CameraCrop = preset(zoom(all), hand(all))
+
+    /** ПК (ФЗ17): своя обрезка — ступень и сдвиг кнопками, «1.4;0.05;-0.08»; нет ключа — весь кадр. */
+    const val PC_CROP = "call.pcCrop"
+
+    fun pcCrop(all: Map<String, String>): CameraCrop {
+        val parts = all[PC_CROP]?.split(';')?.mapNotNull { it.toFloatOrNull() } ?: return CameraCrop.FULL
+        if (parts.size != 3) return CameraCrop.FULL
+        return CameraCrop(parts[0], parts[1], parts[2]).insideClamped()
+    }
+
+    fun pcCropCode(c: CameraCrop): String = "${c.zoom};${c.x};${c.y}"
 }

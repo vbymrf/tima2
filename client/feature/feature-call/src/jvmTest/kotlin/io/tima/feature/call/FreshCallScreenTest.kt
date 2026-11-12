@@ -85,6 +85,47 @@ class FreshCallScreenTest {
         assertTrue(shot.has(TimaColors.light.navigation, tolerance = 0.04), "включённые фильтры не видны")
     }
 
+    @Test
+    fun фильтры_по_разделам_со_счётчиком_и_серыми_на_задней() {
+        // ФЗ9, ФЗ10 (заказчик 2026-11-12): ряд разделов, янтарное число изменённого, на задней камере «Лицо» и
+        // «Морщины» серые с пояснением.
+        val f = io.tima.core.call.CallFilters(on = true, smooth = 50, forehead = 10, eyeCorners = 20, nasolabial = 30)
+        val front = capture("фильтры-морщины-передняя", WIDTH, 420, dark = false) {
+            Stage(column = { FiltersPanel(filters = f, onChange = { _, _ -> }, onClose = {}, section = io.tima.core.call.FilterSection.Wrinkles) })
+        }
+        val rear = capture("фильтры-морщины-задняя", WIDTH, 420, dark = false) {
+            Stage(column = { FiltersPanel(filters = f, onChange = { _, _ -> }, onClose = {}, section = io.tima.core.call.FilterSection.Wrinkles, rearCamera = true) })
+        }
+        assertTrue(front.has(TimaColors.light.activity, tolerance = 0.06), "нет янтарного числа у раздела")
+        assertTrue(rear.difference(front) > 0.01, "на задней камере раздел не серый")
+        val face = capture("фильтры-лицо-цвет-помады", WIDTH, 420, dark = false) {
+            Stage(column = { FiltersPanel(filters = f.copy(lipstick = 60, lipColor = io.tima.core.call.LipColor.Berry), onChange = { _, _ -> }, onClose = {}, section = io.tima.core.call.FilterSection.Face) })
+        }
+        assertTrue(face.difference(front) > 0.01, "раздел «Лицо» не открылся")
+    }
+
+    @Test
+    fun лист_звонка_со_счётчиком_и_увеличением() {
+        val zoom = CallZoom(phone = true, step = 1.3f, hand = io.tima.core.call.CallHand.Both, crop = CameraCrop.FULL, onStep = {}, onHand = {}, onCrop = {})
+        val with = capture("лист-звонка-фильтры-3-увеличение", WIDTH, 360, dark = false) {
+            Stage(column = {
+                CallSheet(saving = false, onSaveTraffic = {}, sharing = false, onScreenShare = {}, filtersOn = true, filtersCount = 3, zoom = zoom)
+            })
+        }
+        val group = capture("лист-звонка-увеличение-серое", WIDTH, 360, dark = false) {
+            Stage(column = {
+                CallSheet(saving = false, onSaveTraffic = {}, sharing = false, onScreenShare = {}, filtersOn = true, filtersCount = 3, zoom = zoom, zoomBlocked = "Только в звонке на двоих")
+            })
+        }
+        assertTrue(with.has(TimaColors.light.activity, tolerance = 0.06), "нет янтарного числа у «Фильтров»")
+        assertTrue(with.difference(group) > 0.0, "недоступное увеличение не отличается")
+        val phone = capture("увеличение-телефон", WIDTH, 300, dark = false) { Stage(column = { ZoomPanel(zoom, onClose = {}) }) }
+        val pc = capture("увеличение-пк", WIDTH, 300, dark = false) {
+            Stage(column = { ZoomPanel(CallZoom(phone = false, step = 1f, hand = io.tima.core.call.CallHand.Right, crop = CameraCrop(1.4f, 0.05f, -0.08f), onStep = {}, onHand = {}, onCrop = {}), onClose = {}) })
+        }
+        assertTrue(phone.difference(pc) > 0.01, "на ПК те же ступени, а не кнопки")
+    }
+
     private companion object {
         const val WIDTH = 380
         const val HEIGHT = 800

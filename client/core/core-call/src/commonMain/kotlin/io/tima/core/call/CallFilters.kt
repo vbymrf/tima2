@@ -4,6 +4,29 @@ package io.tima.core.call
 enum class ColorLook { None, Light, Custom }
 
 /**
+ * Цвет помады (ФЗ14, заказчик 2026-11-12: «5 цветов поддерживаю»): картинка `mouth<код>.png` в ресурсах фильтров —
+ * та же форма и тот же мягкий край, другой оттенок; накладывается умножением, как в gpupixel.
+ */
+enum class LipColor(val code: String) {
+    Classic(""), Pink("_pink"), Coral("_coral"), Berry("_berry"), Cherry("_cherry");
+
+    /** Имя картинки в `assets/filters` (телефон) и в ресурсах ПК. */
+    val image: String get() = "mouth$code.png"
+}
+
+/** Разделы листа «Фильтры» (ФЗ9): ряд сверху, под ним — ползунки выбранного. */
+enum class FilterSection(val key: String) {
+    Beauty("beauty"), Color("color"), Face("face"), Wrinkles("wrinkles");
+
+    /** «Лицо» и «Морщины» нужны точки лица — на задней камере не рисуются (ФЗ10). */
+    val frontOnly: Boolean get() = this == Face || this == Wrinkles
+
+    companion object {
+        fun of(key: String?): FilterSection = entries.firstOrNull { it.key == key } ?: Beauty
+    }
+}
+
+/**
  * Фильтры своего видео (ПЛАН-(ФЗ)). Кадр собирается **до отправки** — собеседник видит то же, что своё окошко
  * (решение 5). Все силы — 0…100, кроме яркости, контраста, насыщенности и тепла: −100…100, 0 — как есть.
  */
@@ -26,6 +49,7 @@ data class CallFilters(
     val eyes: Int = 0,
     val lipstick: Int = 0,
     val blush: Int = 0,
+    val lipColor: LipColor = LipColor.Classic,
     // ── Морщины по областям (ФЗ6, решение 4) ──
     val forehead: Int = 0,
     val brows: Int = 0,
@@ -42,6 +66,28 @@ data class CallFilters(
     /** Нужны ли точки лица: лицевые фильтры и морщины по областям. */
     val needsFace: Boolean get() = on && (reshape || makeup || wrinkles)
 
+    /**
+     * Сколько изменено от стандарта в разделе (ФЗ9, заказчик 2026-11-12: «добавлено Морщины Лоб, Уголки глаз,
+     * Носогубные = Морщины 3»): ползунки не на нуле; образ в «Цвете» не «нет» — одно, его сила отдельно не
+     * считается; цвет помады — часть помады, отдельно не считается. Выключатель на счёт не влияет — это настройки.
+     */
+    fun changed(section: FilterSection): Int = when (section) {
+        FilterSection.Beauty -> listOf(smooth, whiten, sharpen).count { it != 0 }
+        FilterSection.Color -> listOf(brightness, contrast, saturation, warmth).count { it != 0 } + if (look != ColorLook.None) 1 else 0
+        FilterSection.Face -> listOf(thin, eyes, lipstick, blush).count { it != 0 }
+        FilterSection.Wrinkles -> listOf(forehead, brows, underEyes, eyeCorners, nasolabial).count { it != 0 }
+    }
+
+    /** Сумма по разделам — в строке «Фильтры» листа звонка. */
+    val changedTotal: Int get() = FilterSection.entries.sumOf { changed(it) }
+
+    /** Задняя камера (ФЗ10): «Лицо» и «Морщины» не рисуются, сами настройки не меняются. */
+    fun forCamera(front: Boolean): CallFilters = if (front) {
+        this
+    } else {
+        copy(thin = 0, eyes = 0, lipstick = 0, blush = 0, forehead = 0, brows = 0, underEyes = 0, eyeCorners = 0, nasolabial = 0)
+    }
+
     /** Есть ли что делать с кадром. */
     val active: Boolean get() = on && (beauty || colour || reshape || makeup)
 
@@ -57,6 +103,7 @@ data class CallFilters(
             "носогубные" to nasolabial,
         ).filter { it.second != 0 }.joinToString(" ") { "${it.first}=${it.second}" }
             .let { if (look != ColorLook.None) "$it набор=${look.name}:$lookStrength" else it }
+            .let { if (lipstick != 0 && lipColor != LipColor.Classic) "$it цвет_помады=${lipColor.name}" else it }
             .ifEmpty { "вкл, всё по нулям" }
     }
 
@@ -80,6 +127,9 @@ data class CallFilters(
 object CallFilterKeys {
     const val PREFIX = "call.filter."
 
+    /** Последний открытый раздел листа «Фильтры» (ФЗ9): открывается он. */
+    const val SECTION = "call.filters.section"
+
     fun read(all: Map<String, String>): CallFilters {
         fun int(name: String, min: Int = 0) = all[PREFIX + name]?.toIntOrNull()?.coerceIn(min, 100) ?: 0
         return CallFilters(
@@ -90,6 +140,7 @@ object CallFilterKeys {
             look = ColorLook.entries.firstOrNull { it.name == all[PREFIX + "look"] } ?: ColorLook.None,
             lookStrength = all[PREFIX + "lookStrength"]?.toIntOrNull()?.coerceIn(0, 100) ?: 100,
             thin = int("thin"), eyes = int("eyes"), lipstick = int("lipstick"), blush = int("blush"),
+            lipColor = LipColor.entries.firstOrNull { it.name == all[PREFIX + "lipColor"] } ?: LipColor.Classic,
             forehead = int("forehead"), brows = int("brows"), underEyes = int("underEyes"),
             eyeCorners = int("eyeCorners"), nasolabial = int("nasolabial"),
         )
@@ -100,8 +151,34 @@ object CallFilterKeys {
         "smooth" to f.smooth, "whiten" to f.whiten, "sharpen" to f.sharpen,
         "brightness" to f.brightness, "contrast" to f.contrast, "saturation" to f.saturation, "warmth" to f.warmth,
         "look" to f.look.name, "lookStrength" to f.lookStrength,
-        "thin" to f.thin, "eyes" to f.eyes, "lipstick" to f.lipstick, "blush" to f.blush,
+        "thin" to f.thin, "eyes" to f.eyes, "lipstick" to f.lipstick, "blush" to f.blush, "lipColor" to f.lipColor.name,
         "forehead" to f.forehead, "brows" to f.brows, "underEyes" to f.underEyes,
         "eyeCorners" to f.eyeCorners, "nasolabial" to f.nasolabial,
     ).mapKeys { PREFIX + it.key }.mapValues { it.value.toString() }
+}
+
+/**
+ * Стандарт звонка при обновлении (ФЗ13, заказчик 2026-11-12: «По умолчанию для обновления выстави Увеличение 1.3х
+ * Обеими», «б», «Делаем по умолчанию с обновлением включить Красота, Сглаживание = 50»). Вариант «б»: новая версия при
+ * первом запуске **один раз** пишет стандарт — и тем, кто выбирал раньше; дальше выбор человека не трогается. На ПК —
+ * только фильтры: увеличение там своё и остаётся 1× (решение 10); сглаживание включится само, когда на ПК появятся
+ * фильтры (ФЗ15, «2. да»).
+ */
+object CallDefaults {
+    /** Метка «стандарт уже записан». */
+    const val DONE = "call.defaults.v1"
+
+    /** Что записать; пусто — уже записано. */
+    fun writes(all: Map<String, String>, phone: Boolean): Map<String, String> {
+        if (all[DONE] == "1") return emptyMap()
+        val out = linkedMapOf<String, String>()
+        if (phone) {
+            out[CallLookKeys.ZOOM] = "1.3"
+            out[CallLookKeys.HAND] = CallLookKeys.code(CallHand.Both)
+        }
+        out[CallFilterKeys.PREFIX + "on"] = "1"
+        out[CallFilterKeys.PREFIX + "smooth"] = "50"
+        out[DONE] = "1"
+        return out
+    }
 }

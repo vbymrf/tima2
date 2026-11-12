@@ -279,7 +279,8 @@ internal class FrameStudio(private val assets: AssetManager) {
         val indices = ShortBuffer.wrap(FACE_TRIANGLES).let { short ->
             ByteBuffer.allocateDirect(FACE_TRIANGLES.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().put(short).also { it.position(0) }
         }
-        if (f.lipstick > 0) drawMesh(shader, pos, "mouth.png", LIPSTICK_BOUNDS, f.lipstick / 100f, indices, LIPSTICK_SOFT)
+        // Цвет помады — своя картинка той же формы (ФЗ14).
+        if (f.lipstick > 0) drawMesh(shader, pos, f.lipColor.image, LIPSTICK_BOUNDS, f.lipstick / 100f, indices, LIPSTICK_SOFT)
         if (f.blush > 0) drawMesh(shader, pos, "blusher.png", BLUSH_BOUNDS, f.blush / 100f, indices, 0f)
     }
 

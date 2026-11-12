@@ -865,7 +865,18 @@ class CallHost(
 
     fun applyFilters(next: io.tima.core.call.CallFilters) {
         filters = next
-        scope.launch { engine?.setFilters(next) }
+        scope.launch { engine?.setFilters(next.forCamera(state.cameraFront)) }
+    }
+
+    /**
+     * Сменили камеру (ФЗ10, заказчик 2026-11-12: «убираем принудительно настройки только Фильтры: Лицо, Морщины. Общие
+     * фильтры работают»): на задней «Лицо» и «Морщины» не рисуются и точки лица не ищутся; сами настройки не меняются.
+     */
+    fun refilter() {
+        if (!filters.on) return
+        val front = state.cameraFront
+        Journal.note(LogCode.CALL, "фильтры по камере", "камера" to if (front) "передняя" else "задняя", "лицо и морщины" to if (front) "рисуются" else "нет")
+        scope.launch { engine?.setFilters(filters.forCamera(front)) }
     }
 
     /** Умеет ли движок показывать экран устройства (ЗН6): нет — нет и пункта в листе. */

@@ -1330,6 +1330,32 @@ interface CallWords {
     val filtersWrinkles: String
     val filtersReset: String
     val filtersRowAbout: String
+    /** «Лицо» и «Морщины» на задней камере не рисуются (ФЗ10) — пояснение в листе. */
+    val filtersRearOnly: String
+    /** «Настройки → Звонки → Фильтры» (ФЗ12): что это и про камеры. */
+    val filtersSettingsAbout: String
+    /** Своё изображение для настройки фильтров не открылось. */
+    val filtersPreviewTrouble: String
+    /** ПК без OpenGL (ФЗ15): фильтры недоступны, звонок идёт без них. */
+    val filtersNoGl: String
+    /** Помада — пять цветов (ФЗ14). */
+    val lipColorTitle: String
+    val lipClassic: String
+    val lipPink: String
+    val lipCoral: String
+    val lipBerry: String
+    val lipCherry: String
+    /** «Увеличение изображения» в листе звонка (ФЗ11, ФЗ17): выключено. */
+    val zoomOff: String
+    /** Ступень и рука: «1.3×, обеими». */
+    fun zoomNow(step: String, hand: String): String
+    /** ПК: ступень и сдвиг в процентах кадра. */
+    fun zoomShiftNow(step: String, x: String, y: String): String
+    /** Почему строка серая. */
+    val zoomPairOnly: String
+    val zoomFrontOnly: String
+    /** ПК: увеличение кнопками (ФЗ17). */
+    val zoomPcAbout: String
     val filterSmooth: String
     val filterWhiten: String
     val filterSharpen: String
@@ -3847,6 +3873,22 @@ object RussianWords : Words {
         override val filtersWrinkles = "Морщины"
         override val filtersReset = "Сбросить"
         override val filtersRowAbout = "Сглаживание, цвет, лицо, морщины — собеседник видит так же"
+        override val filtersRearOnly = "«Лицо» и «Морщины» — только с передней камерой"
+        override val filtersSettingsAbout = "Настроить без звонка: своё изображение и те же ползунки. «Лицо» и «Морщины» действуют только с передней камерой; «Красота» и «Цвет» — с обеими. Собеседник видит так же."
+        override val filtersPreviewTrouble = "Камера не открылась — фильтры можно настроить, но не видно, как они выглядят"
+        override val filtersNoGl = "Фильтры недоступны: видеокарта не даёт OpenGL. Звонок идёт без них"
+        override val lipColorTitle = "Цвет помады"
+        override val lipClassic = "Классический"
+        override val lipPink = "Розовый"
+        override val lipCoral = "Коралловый"
+        override val lipBerry = "Ягодный"
+        override val lipCherry = "Вишнёвый"
+        override val zoomOff = "выключено"
+        override fun zoomNow(step: String, hand: String) = "$step, ${hand.lowercase()}"
+        override fun zoomShiftNow(step: String, x: String, y: String) = "$step, сдвиг $x / $y"
+        override val zoomPairOnly = "Только в звонке на двоих"
+        override val zoomFrontOnly = "Только с передней камерой"
+        override val zoomPcAbout = "Своё изображение с начала звонка приближается и сдвигается кнопками — что видно в окошке, то видит собеседник. Не дальше края кадра, до 2×. В звонке меняется из «Настроек звонка» и запоминается."
         override val filterSmooth = "Сглаживание"
         override val filterWhiten = "Осветление"
         override val filterSharpen = "Резкость"
