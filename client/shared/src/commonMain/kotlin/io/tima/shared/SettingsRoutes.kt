@@ -548,7 +548,7 @@ internal fun Settings(
                     onCameraInBackground = { keep ->
                         scope.launch { deviceSettings.put(io.tima.core.call.HardwareCodingKeys.CAMERA_BACKGROUND, if (keep) "1" else "0") }
                     },
-                    // Увеличение изображения и вид окна звонка (ПЛАН-(ЗН) ЗН8, ЗН1): читаются при начале звонка.
+                    // Увеличение изображения (ПЛАН-(ЗН) ЗН8): читается при начале звонка.
                     zoom = io.tima.core.call.CallLookKeys.zoom(saved),
                     onZoom = { z ->
                         Journal.note(LogCode.CALL, "увеличение изображения выбрано", "ступень" to z)
@@ -558,11 +558,6 @@ internal fun Settings(
                     onHand = { h ->
                         Journal.note(LogCode.CALL, "рука для увеличения выбрана", "рука" to io.tima.core.call.CallLookKeys.code(h))
                         scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.HAND, io.tima.core.call.CallLookKeys.code(h)) }
-                    },
-                    fresh = io.tima.core.call.CallLookKeys.fresh(saved),
-                    onFresh = { on ->
-                        Journal.note(LogCode.CALL, "вид окна звонка выбран", "вид" to if (on) "новый" else "прежний")
-                        scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.LOOK, if (on) "new" else "old") }
                     },
                 )
             }

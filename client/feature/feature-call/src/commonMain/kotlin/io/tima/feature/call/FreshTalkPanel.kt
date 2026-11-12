@@ -46,7 +46,7 @@ import io.tima.core.ui.words
 // Камера (большая) · Настройки звонка ≡ (маленькая) · Завершить (большая, красная). Подписи —
 // только у больших (ответ 9). Цвета — прежней панели: салатовая — включено, серая — выключено,
 // красная — конец. Смена камеры — кругом на своём изображении, «глаз» — в листе настроек
-// пунктом «Экономить трафик». Групповой звонок этот вид не получает (ответ 4).
+// пунктом «Экономить трафик». С ЗН9 (заказчик 2026-11-12) вид один — и в групповом; там под «≡» — «👥 Группа».
 
 /** Что нужно новому виду сверх прежнего окна. Есть — окно разговора на двоих рисуется по-новому. */
 class FreshCall(
@@ -63,7 +63,12 @@ class FreshCall(
     val filters: io.tima.core.call.CallFilters? = null,
     /** Сменить фильтры: `final` — палец отпущен, выбор пишется в настройки. */
     val onFilters: (io.tima.core.call.CallFilters, Boolean) -> Unit = { _, _ -> },
-)
+) {
+    companion object {
+        /** Без свёртывания и без листов — снимки экрана в проверках. */
+        val Plain = FreshCall(onMinimize = {}, onSaveTraffic = {}, onScreenShare = null, crop = null, onCrop = {})
+    }
+}
 
 @Composable
 internal fun FreshTalkPanel(
@@ -75,6 +80,8 @@ internal fun FreshTalkPanel(
     onSheet: () -> Unit,
     onMinimize: () -> Unit,
     onHangUp: () -> Unit,
+    /** Групповой: «👥 Группа» — кто в звонке (журнал звонка ГЗ6) — под «≡»; `null` — звонок на двоих. */
+    onParticipants: (() -> Unit)? = null,
 ) {
     val words = Tima.words.call
     // Экономия трафика гасит камеру и запрещает её, как закрытый глаз; показ экрана — тоже:
@@ -120,8 +127,13 @@ internal fun FreshTalkPanel(
                 modifier = Modifier.testTag(CAMERA_TAG),
             )
         }
-        AtButton(SMALL_SLOT) {
-            SmallRound(onClick = onSheet, live = sheetOpen, modifier = Modifier.testTag(CALL_SHEET_TAG)) { ink -> Bars(ink) }
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
+            AtButton(SMALL_SLOT) {
+                SmallRound(onClick = onSheet, live = sheetOpen, modifier = Modifier.testTag(CALL_SHEET_TAG)) { ink -> Bars(ink) }
+            }
+            if (onParticipants != null) {
+                SmallRound(onClick = onParticipants, modifier = Modifier.testTag(CALL_GROUP_TAG)) { Caption("👥", fontSize = TimaType.sz5) }
+            }
         }
         Labeled(words.hangUp) {
             BigButton(glyph = "📞", on = false, danger = true, onClick = onHangUp, modifier = Modifier.testTag(HANG_UP_TAG))
@@ -330,6 +342,9 @@ const val FRESH_PANEL_TAG: String = "call:fresh"
 const val MINIMIZE_TAG: String = "call:minimize"
 const val MICROPHONE_TAG: String = "call:microphone"
 const val CALL_SHEET_TAG: String = "call:sheet"
+
+/** «👥 Группа» — кто в групповом звонке, под «≡» (ЗН9). */
+const val CALL_GROUP_TAG: String = "call:group"
 const val CALL_SHEET_BODY_TAG: String = "call:sheet:body"
 const val SCREEN_SHARE_TAG: String = "call:screen"
 const val SAVE_TRAFFIC_TAG: String = "call:save"

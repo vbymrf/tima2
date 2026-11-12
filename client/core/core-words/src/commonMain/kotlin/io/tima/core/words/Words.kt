@@ -1318,10 +1318,6 @@ interface CallWords {
     val saveTrafficAbout: String
 
     /** Пункт настроек «Звонок · Вид» (ПЛАН-(ЗН) ЗН1). */
-    val lookTitle: String
-    val lookNew: String
-    val lookOld: String
-    val lookAbout: String
     val adaptTitle: String
     val adaptAbout: String
 
@@ -3841,10 +3837,6 @@ object RussianWords : Words {
         override val shareScreenAbout = "Собеседник видит ваш экран вместо камеры"
         override val saveTraffic = "Экономить трафик"
         override val saveTrafficAbout = "Видео собеседника не принимается, ваша камера гаснет; выключили — камера возвращается как была"
-        override val lookTitle = "Вид окна звонка"
-        override val lookNew = "Новый"
-        override val lookOld = "Прежний"
-        override val lookAbout = "Новый — кнопки одним рядом: свернуть, микрофон, ухо или динамик, камера, настройки звонка, завершить. Действует со следующего звонка. Групповой звонок — всегда в прежнем виде."
         override val adaptTitle = "Режим адаптации изображения"
         override fun adaptShift(x: String, y: String) = "сдвиг $x $y"
         override val filtersTitle = "Фильтры"

@@ -997,13 +997,12 @@ private fun App(
     // Раскладка главного окна (ПЛАН-(ВО) ВО4): где вкладки, разделы и панель перехода относительно списка.
     val layoutOrder by remember { environment.settings.all().map { io.tima.feature.shell.layoutOf(it[MainLayoutKeys.ORDER]) }.distinctUntilChanged() }
         .collectAsState(io.tima.feature.shell.DEFAULT_LAYOUT)
-    // «Звонок · Вид» (ПЛАН-(ЗН) ЗН1): новый вид окна звонка и режим адаптации. Снимок берётся при
-    // начале звонка — идущий звонок вид не меняет; к следующему — новый снимок.
+    // Режим адаптации и увеличение (ПЛАН-(ЗН) ЗН5, ЗН8). Снимок берётся при начале звонка. Вид окна один (ЗН9).
     val callLookNow by remember {
         environment.settings.all().map {
-            CallLookSnap(io.tima.core.call.CallLookKeys.fresh(it), io.tima.core.call.CallLookKeys.adapt(it), io.tima.core.call.CallLookKeys.preset(it))
+            CallLookSnap(io.tima.core.call.CallLookKeys.adapt(it), io.tima.core.call.CallLookKeys.preset(it))
         }.distinctUntilChanged()
-    }.collectAsState(CallLookSnap(fresh = true, adapt = false, preset = io.tima.core.call.CameraCrop.FULL))
+    }.collectAsState(CallLookSnap(adapt = false, preset = io.tima.core.call.CameraCrop.FULL))
     var callLook by remember { mutableStateOf<CallLookSnap?>(null) }
     // Фильтры своего видео (ПЛАН-(ФЗ)): выбор помнится в настройках устройства (решение 6) и сразу уходит в движок.
     val savedFilters by remember {
@@ -3278,7 +3277,7 @@ private fun App(
         callLook = if (callHost.active) {
             callLookNow.also { look ->
                 Journal.note(
-                    LogCode.CALL, "вид окна звонка", "вид" to if (look.fresh) "новый" else "прежний", "адаптация" to look.adapt,
+                    LogCode.CALL, "вид окна звонка", "адаптация" to look.adapt,
                     "увеличение" to look.preset.describe(),
                 )
             }
@@ -3562,7 +3561,6 @@ private fun App(
                     // окошко (заказчик 2026-09-26). На телефоне области 3 нет — всё здесь.
                     remoteHere = LayoutLocal.current.phone,
                     localVideo = callHost.localVideo.collectAsState().value,
-                    onRemoteVideo = callHost::remoteVideo,
                     // «Пожаловаться» (ПЛАН-(В)-ВИДЕО.md В7, В8): кадр собеседника — в момент
                     // нажатия, отчёт — о звонках, текст пишет человек.
                     onEventAction = { action ->
@@ -3619,8 +3617,8 @@ private fun App(
                         callHost.close()
                         navigator.leaveCall()
                     },
-                    // Новый вид окна разговора (ПЛАН-(ЗН)): по снимку настройки на этот звонок.
-                    fresh = callLook?.takeIf { it.fresh }?.let { look ->
+                    // Окно разговора (ПЛАН-(ЗН)): вид один — на двоих и в групповом (ЗН9).
+                    fresh = callLook.let { look ->
                         io.tima.feature.call.FreshCall(
                             onMinimize = {
                                 Journal.note(LogCode.CALL, "окно звонка свёрнуто")
@@ -3629,7 +3627,7 @@ private fun App(
                             },
                             onSaveTraffic = callHost::saveTraffic,
                             onScreenShare = if (callHost.screenShareable) callHost::screenShare else null,
-                            crop = if (look.adapt) callHost.crop else null,
+                            crop = if (look?.adapt == true) callHost.crop else null,
                             onCrop = callHost::cropCamera,
                             filters = callHost.filters.takeIf { callHost.filterable },
                             onFilters = { next, final ->
@@ -5199,4 +5197,4 @@ internal suspend fun probeStream(cards: io.tima.core.network.LinkCardsOverHttp, 
 }
 
 /** Снимок «как показывать звонок» на время одного звонка (ПЛАН-(ЗН)): вид, режим адаптации, увеличение с начала. */
-private data class CallLookSnap(val fresh: Boolean, val adapt: Boolean, val preset: io.tima.core.call.CameraCrop)
+private data class CallLookSnap(val adapt: Boolean, val preset: io.tima.core.call.CameraCrop)

@@ -117,9 +117,7 @@ class CameraCropTest {
     }
 
     @Test
-    fun вид_по_умолчанию_новый_адаптация_выключена() {
-        assertTrue(CallLookKeys.fresh(emptyMap()), "ответ заказчика 5: по умолчанию новый")
-        assertFalse(CallLookKeys.fresh(mapOf(CallLookKeys.LOOK to "old")))
+    fun адаптация_по_умолчанию_выключена() {
         assertFalse(CallLookKeys.adapt(emptyMap()))
         assertTrue(CallLookKeys.adapt(mapOf(CallLookKeys.ADAPT to "1")))
     }

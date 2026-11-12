@@ -40,9 +40,6 @@ fun CallCodingScreen(
     onZoom: (Float) -> Unit = {},
     hand: CallHand = CallHand.Right,
     onHand: (CallHand) -> Unit = {},
-    /** Вид окна звонка: новый — `true` (ЗН1, с 2026-11-10 здесь). `null` — не показывать. */
-    fresh: Boolean? = null,
-    onFresh: (Boolean) -> Unit = {},
 ) {
     val words = Tima.words.call
     val onOff = listOf(true to words.codingOn, false to words.codingOff)
@@ -54,7 +51,7 @@ fun CallCodingScreen(
             .padding(TimaSpacing.about3),
         verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
-        // Первым — увеличение своего изображения, вторым — вид окна (заказчик 2026-11-10).
+        // Первым — увеличение своего изображения (заказчик 2026-11-10). Выбора вида окна нет — прежний убран (ЗН9).
         if (zoom != null) {
             Caption(words.zoomTitle, fontSize = TimaType.sz3, weight = FontWeight.Bold)
             Pick(words.zoomTitle, CallLookKeys.ZOOMS.map { it to CameraCrop.label(it) + "×" }, zoom, onZoom)
@@ -67,11 +64,6 @@ fun CallCodingScreen(
                 )
             }
             Secondary(words.zoomAbout)
-        }
-        if (fresh != null) {
-            Caption(words.lookTitle, fontSize = TimaType.sz3, weight = FontWeight.Bold)
-            Pick(words.lookTitle, listOf(true to words.lookNew, false to words.lookOld), fresh, onFresh)
-            Secondary(words.lookAbout)
         }
         Caption(words.codingTitle, fontSize = TimaType.sz3, weight = FontWeight.Bold)
         Secondary(words.codingAbout)

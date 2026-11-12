@@ -182,13 +182,12 @@ class CallScreenTest {
         // от этого перестраивался, а с видео «Завершить» уезжала за нижний край — и
         // положить трубку было нечем.
         val silent = capture("звонок-без-чужого-видео", WIDTH, HEIGHT, dark = false) {
-            screen(CallState(stage = CallStage.Connected), incoming = false, onRemoteVideo = {})
+            screen(CallState(stage = CallStage.Connected), incoming = false)
         }
         val showing = capture("звонок-чужое-видео-идёт", WIDTH, HEIGHT, dark = false) {
             screen(
                 CallState(stage = CallStage.Connected, remoteVideoShown = true),
                 incoming = false,
-                onRemoteVideo = {},
             )
         }
         assertTrue(
@@ -202,13 +201,12 @@ class CallScreenTest {
         // Состояние несёт значок и цвет: словами про него говорит полоса событий, а
         // кнопка обязана отличаться, иначе нажатие выглядит как ничего не сделавшее.
         val taken = capture("звонок-чужое-видео-принимаем", WIDTH, HEIGHT, dark = false) {
-            screen(CallState(stage = CallStage.Connected), incoming = false, onRemoteVideo = {})
+            screen(CallState(stage = CallStage.Connected), incoming = false)
         }
         val hidden = capture("звонок-чужое-видео-скрыто", WIDTH, HEIGHT, dark = false) {
             screen(
                 CallState(stage = CallStage.Connected, remoteVideoTaken = false),
                 incoming = false,
-                onRemoteVideo = {},
             )
         }
         assertTrue(taken.difference(hidden) > 0.0, "отказ принимать чужое видео не виден на кнопке")
@@ -253,7 +251,6 @@ class CallScreenTest {
             screen(
                 CallState(stage = CallStage.Connected, microphoneOn = true, cameraOn = true, remoteVideoShown = true),
                 incoming = false,
-                onRemoteVideo = {},
             )
         }
         val plain = capture("звонок-две-кнопки", WIDTH, HEIGHT, dark = false) {
@@ -277,16 +274,16 @@ class CallScreenTest {
     }
 
     @Test
-    fun глаз_гасит_камеру_в_панели() {
-        // Проба «а» (заказчик 2026-10-08): глаз закрывает видео в обе стороны, и «Камера» под
-        // ним неактивна — панель с закрытым глазом выглядит иначе, чем с открытым.
+    fun экономия_трафика_гасит_камеру_в_панели() {
+        // «Экономить трафик» (бывший глаз) закрывает видео в обе стороны, и «Камера» неактивна —
+        // ряд выглядит иначе. С ЗН9 ряд один — нового вида (заказчик 2026-11-12).
         val open = capture("звонок-панель-глаз-открыт", WIDTH, HEIGHT, dark = false) {
-            screen(CallState(stage = CallStage.Connected, cameraOn = true, remoteVideoTaken = true), incoming = false, onRemoteVideo = {})
+            screen(CallState(stage = CallStage.Connected, cameraOn = true, remoteVideoTaken = true), incoming = false)
         }
         val shut = capture("звонок-панель-глаз-закрыт", WIDTH, HEIGHT, dark = false) {
-            screen(CallState(stage = CallStage.Connected, cameraOn = false, remoteVideoTaken = false), incoming = false, onRemoteVideo = {})
+            screen(CallState(stage = CallStage.Connected, cameraOn = false, remoteVideoTaken = false), incoming = false)
         }
-        assertTrue(open.difference(shut) > 0.001, "закрытый глаз панель не изменил")
+        assertTrue(open.difference(shut) > 0.001, "экономия трафика ряд не изменила")
     }
 
     @Test
@@ -315,7 +312,6 @@ class CallScreenTest {
             onCallAgain: (() -> Unit)? = null,
             onClose: (() -> Unit)? = null,
             events: List<CallEvent> = emptyList(),
-            onRemoteVideo: ((Boolean) -> Unit)? = null,
             canAccept: Boolean = true,
             stranger: Boolean = false,
             peerPhone: String? = null,
@@ -335,7 +331,6 @@ class CallScreenTest {
                     onCallAgain = onCallAgain,
                     onClose = onClose,
                     events = events,
-                    onRemoteVideo = onRemoteVideo,
                     stranger = stranger,
                     peerPhone = peerPhone,
                     onRedialKind = onRedialKind,

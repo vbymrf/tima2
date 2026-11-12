@@ -161,9 +161,6 @@ enum class CallHand { Right, Left, Both }
  * выбор. С 2026-11-10 вид и увеличение — в «Настройки → Звонки», режим адаптации — в «Испытательном режиме звонков».
  */
 object CallLookKeys {
-    /** `old` — прежний вид окна звонка; нет ключа или иное — новый (ответ заказчика 5: по умолчанию новый). */
-    const val LOOK = "call.look"
-
     /** `1` — режим адаптации изображения включён; по умолчанию выключен. */
     const val ADAPT = "call.adapt"
 
@@ -183,7 +180,6 @@ object CallLookKeys {
      */
     private val SHIFTS = mapOf(1.3f to 12, 1.4f to 14, 1.5f to 15, 1.6f to 18)
 
-    fun fresh(all: Map<String, String>): Boolean = all[LOOK] != "old"
     fun adapt(all: Map<String, String>): Boolean = all[ADAPT] == "1"
 
     fun zoom(all: Map<String, String>): Float = all[ZOOM]?.toFloatOrNull()?.takeIf { it in ZOOMS } ?: 1f

@@ -1,5 +1,6 @@
 package io.tima.feature.call
 
+import androidx.compose.ui.graphics.compositeOver
 import io.tima.core.call.CallStage
 import io.tima.core.call.CallState
 import io.tima.core.call.CameraCrop
@@ -11,8 +12,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Новый вид окна звонка (ПЛАН-(ЗН), заказчик 2026-11-10) в снимках: ряд по макету, цвета прежней
- * панели, лист настроек, кнопки приближения; групповой — без изменений.
+ * Окно звонка (ПЛАН-(ЗН), заказчик 2026-11-10) в снимках: ряд по макету, цвета прежней панели, лист
+ * настроек, кнопки приближения. С ЗН9 (заказчик 2026-11-12) вид один — и в групповом, с «👥» под «≡».
  */
 class FreshCallScreenTest {
 
@@ -23,22 +24,31 @@ class FreshCallScreenTest {
     )
 
     @Test
-    fun новый_вид_отличается_от_прежнего_и_красит_как_прежний() {
-        val old = capture("звонок-прежний-вид", WIDTH, HEIGHT, dark = false) { screen(talking, null) }
+    fun ряд_красит_как_прежняя_панель() {
         val new = capture("звонок-новый-вид", WIDTH, HEIGHT, dark = false) { screen(talking, fresh()) }
-        assertTrue(new.difference(old) > 0.0, "новый вид нарисовался прежним")
         // Цвета кнопок скопированы со старой панели (заказчик 2026-11-10): салатовая и красная.
         assertTrue(new.has(TimaColors.light.navigation, tolerance = 0.04), "нет салатовой кнопки")
         assertTrue(new.has(TimaColors.light.alarm, tolerance = 0.04), "нет красной «Завершить»")
     }
 
     @Test
-    fun групповой_остаётся_прежним() {
+    fun групповой_в_том_же_виде_с_группой_под_настройками() {
+        // Заказчик 2026-11-12: «Прежний убираем совсем… переделать и для групповых звонков кнопки… кнопка Группа кто
+        // в звонке ниже настроек». Ряд тот же, что на двоих: внизу слева «Свернуть»; под «≡» — ещё кнопка, ряд выше.
         val tiles = listOf(GroupTile("me", "Вы", "В", null, true, false, false, true, userId = "me"))
         val stage = GroupStage("Планёрка", tiles, 1, 25, false, true, {}, {}, GroupView())
-        val old = capture("групповой-без-нового", WIDTH, HEIGHT, dark = false) { screen(talking, null, stage) }
-        val new = capture("групповой-с-новым", WIDTH, HEIGHT, dark = false) { screen(talking, fresh(), stage) }
-        assertEquals(0.0, new.difference(old), "групповой звонок получил новый вид (ответ заказчика 4)")
+        val group = capture("групповой-новый-вид", WIDTH, HEIGHT, dark = false) { screen(talking, fresh(), stage) }
+        val pair = capture("звонок-новый-вид-для-группы", WIDTH, HEIGHT, dark = false) { screen(talking, fresh()) }
+        // Серый кружок — полупрозрачная «линия» поверх белого фона.
+        val grey = TimaColors.light.line.compositeOver(TimaColors.light.surface)
+        val left = 0 until 70
+        val bottom = HEIGHT - 170 until HEIGHT
+        assertTrue(group.patchHas(grey, x = left, y = bottom), "в групповом нет «Свернуть» нового ряда")
+        assertTrue(pair.patchHas(grey, x = left, y = bottom), "на двоих нет «Свернуть»")
+        // «👥» под «≡» — серый круг там, где на двоих его нет.
+        val underSheet = 230 until 330
+        val low = HEIGHT - 60 until HEIGHT
+        assertTrue(group.patchHas(grey, x = underSheet, y = low, side = 6), "нет «👥 Группа» под «≡»")
     }
 
     @Test
@@ -93,7 +103,6 @@ class FreshCallScreenTest {
                     onMicrophone = {},
                     onCamera = {},
                     onSpeaker = {},
-                    onRemoteVideo = {},
                     group = group,
                     fresh = fresh,
                 )

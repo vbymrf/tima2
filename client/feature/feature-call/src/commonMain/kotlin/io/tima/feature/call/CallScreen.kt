@@ -66,7 +66,7 @@ import io.tima.core.ui.words
  * |---|---|
  * | **входящий** — нам звонят, мы ещё не ответили | Принять · Отклонить |
  * | **исходящий** — звоним мы, там ещё не сняли | Отменить |
- * | **разговор** | динамик · микрофон · камера · переключение камеры · скрыть видео · Завершить |
+ * | **разговор** | свернуть · микрофон · ухо или динамик · камера · настройки звонка · Завершить (один вид, ЗН9) |
  * | **завершён** | Перезвонить · Закрыть |
  *
  * Первые два различает не состояние SFU, а то, **кто начал**: у SFU оба выглядят как
@@ -126,8 +126,6 @@ fun CallScreen(
     remoteHere: Boolean = true,
     /** Своя картинка — плашкой в углу. `null` — камера выключена. */
     localVideo: VideoHandle? = null,
-    /** Принимать ли чужое видео (ЗВ11). `null` — кнопки нет: показывать нечего. */
-    onRemoteVideo: ((Boolean) -> Unit)? = null,
     /** Сделать то, что предлагает событие: уйти в настройки телефона. */
     onEventAction: ((CallAction) -> Unit)? = null,
     /**
@@ -160,8 +158,8 @@ fun CallScreen(
     /** Цвет имени собеседника: заблокирован — красный, незнакомый «цветом» — оранжевый; `null` — обычный. */
     peerTint: Color? = null,
     /**
-     * Новый вид окна разговора (ПЛАН-(ЗН), «Настройки → Звонок · Вид»); `null` — прежний.
-     * Групповой звонок остаётся прежним и с ним (ответ заказчика 4).
+     * Окно разговора (ПЛАН-(ЗН)). С ЗН9 (заказчик 2026-11-12: «Прежний убираем совсем») вид один — и на двоих, и в
+     * групповом; `null` — без свёртывания и листа настроек (снимки экрана в проверках).
      */
     fresh: FreshCall? = null,
     /**
@@ -177,7 +175,8 @@ fun CallScreen(
     var sheetOpen by remember { mutableStateOf(false) }
     // Лист «Фильтры» (ПЛАН-(ФЗ) ФЗ7): открыт ли.
     var filtersOpen by remember { mutableStateOf(false) }
-    val freshTalk = fresh != null && group == null && state.stage == CallStage.Connected
+    val call = fresh ?: FreshCall.Plain
+    val talkingNow = state.stage == CallStage.Connected
     var benchJournal by remember { mutableStateOf(false) }
     // Своё окошко: поменяно ли местами с собеседником, куда его перенесли, несут ли сейчас.
     var swapped by remember { mutableStateOf(false) }
@@ -218,7 +217,8 @@ fun CallScreen(
 
         // Групповой в разговоре — сетка участников, своя картинка — одной из клеток.
         if (group != null && state.stage == CallStage.Connected) {
-            Column(Modifier.weight(1f).fillMaxWidth().then(swipeArea)) {
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.fillMaxSize().then(swipeArea)) {
                 GroupTopBar(group, group.view, groupPages(gridTiles(group.tiles, group.view), group.view.perPage).size, words.duration(seconds), events.lastOrNull())
                 if (group.paused) {
                     Caption(
@@ -248,6 +248,12 @@ fun CallScreen(
                         Box(Modifier.weight(1f))
                     }
                 }
+            }
+            // Групповой в одном виде с разговором на двоих (ЗН9): своего окошка нет — смена камеры справа внизу.
+            onSwitchCamera?.takeIf { state.cameraOn && state.cameraSwitchable && !state.screenSharing && !sheetOpen && !filtersOpen }?.let {
+                CameraFlip(it, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3))
+            }
+            CallSheets(state, call, sheetOpen, filtersOpen, onSheet = { sheetOpen = it }, onFiltersOpen = { filtersOpen = it }, group = true)
             }
         } else
         Box(Modifier.weight(1f).fillMaxWidth().onSizeChanged { area = it }.then(swipeArea)) {
@@ -373,7 +379,7 @@ fun CallScreen(
             // толстая зелёная рамка, и окошко переносится пальцем (заказчик 2026-10-08).
             val small = if (swap) remoteShown else mine
             // Смена камеры нового вида — кругом на своём изображении (ЗН4), где бы оно ни было.
-            val flip = onSwitchCamera?.takeIf { freshTalk && mine != null && state.cameraSwitchable && !state.screenSharing }
+            val flip = onSwitchCamera?.takeIf { talkingNow && mine != null && state.cameraSwitchable && !state.screenSharing }
             // Поменялись, а у собеседника видео нет — в окошке его аватар.
             if (small != null || swap) {
                 Pip(
@@ -398,32 +404,12 @@ fun CallScreen(
                 CameraFlip(flip, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3))
             }
             // Режим адаптации (ЗН5) — выше ряда кнопок, пока своя камера в кадре.
-            val crop = fresh?.crop
-            if (fresh != null && freshTalk && crop != null && state.cameraOn && !state.screenSharing && !sheetOpen && !filtersOpen) {
-                AdaptBar(crop, fresh.onCrop, Modifier.align(Alignment.BottomCenter).padding(bottom = TimaSpacing.about2), mirror = mirrorOwn)
+            val crop = call.crop
+            if (talkingNow && group == null && crop != null && state.cameraOn && !state.screenSharing && !sheetOpen && !filtersOpen) {
+                AdaptBar(crop, call.onCrop, Modifier.align(Alignment.BottomCenter).padding(bottom = TimaSpacing.about2), mirror = mirrorOwn)
             }
-            if (fresh != null && freshTalk && sheetOpen) {
-                CallSheet(
-                    saving = !state.remoteVideoTaken,
-                    onSaveTraffic = fresh.onSaveTraffic,
-                    sharing = state.screenSharing,
-                    onScreenShare = fresh.onScreenShare,
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                    filtersOn = fresh.filters?.on,
-                    onFilters = {
-                        sheetOpen = false
-                        filtersOpen = true
-                    },
-                )
-            }
-            val filters = fresh?.filters
-            if (fresh != null && freshTalk && filtersOpen && filters != null) {
-                FiltersPanel(
-                    filters = filters,
-                    onChange = fresh.onFilters,
-                    onClose = { filtersOpen = false },
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                )
+            if (talkingNow) {
+                CallSheets(state, call, sheetOpen, filtersOpen, onSheet = { sheetOpen = it }, onFiltersOpen = { filtersOpen = it }, group = group != null)
             }
         }
 
@@ -441,29 +427,22 @@ fun CallScreen(
         // (проба «а», заказчик 2026-10-08). Кнопки стоят на своих местах при любом
         // состоянии — прежнее правило ряда значков осталось в силе.
         val talking = state.stage == CallStage.Connected && !(askHangUp && group != null)
-        if (talking && fresh != null && freshTalk) {
+        if (talking) {
             FreshTalkPanel(
                 state = state,
                 onMicrophone = onMicrophone,
                 onCamera = onCamera,
                 onSpeaker = onSpeaker,
                 sheetOpen = sheetOpen,
-                onSheet = { sheetOpen = !sheetOpen },
-                onMinimize = fresh.onMinimize,
-                onHangUp = onHangUp,
-            )
-            return@Column
-        }
-        if (talking) {
-            TalkPanel(
-                state = state,
-                onMicrophone = onMicrophone,
-                onCamera = onCamera,
-                onSpeaker = onSpeaker,
-                onSwitchCamera = onSwitchCamera,
-                onRemoteVideo = onRemoteVideo,
-                onParticipants = group?.onParticipants,
+                onSheet = {
+                    sheetOpen = !sheetOpen
+                    if (sheetOpen) filtersOpen = false
+                },
+                onMinimize = call.onMinimize,
+                // Создатель группового кладёт трубку — выйти или завершить для всех (решение 6 ГЗ).
                 onHangUp = { if (group?.mine == true) askHangUp = true else onHangUp() },
+                // «👥 Группа» — кто в звонке, под «≡» (заказчик 2026-11-12, ЗН9).
+                onParticipants = group?.onParticipants,
             )
             return@Column
         }
@@ -531,6 +510,44 @@ fun CallScreen(
                 else -> Unit
             }
         }
+    }
+}
+
+/**
+ * Лист «Настройки звонка» и лист «Фильтры» поверх изображения — одни и те же на двоих и в групповом (ЗН9).
+ */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.CallSheets(
+    state: CallState,
+    call: FreshCall,
+    sheetOpen: Boolean,
+    filtersOpen: Boolean,
+    onSheet: (Boolean) -> Unit,
+    onFiltersOpen: (Boolean) -> Unit,
+    group: Boolean,
+) {
+    if (sheetOpen) {
+        CallSheet(
+            saving = !state.remoteVideoTaken,
+            onSaveTraffic = call.onSaveTraffic,
+            sharing = state.screenSharing,
+            onScreenShare = call.onScreenShare,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            filtersOn = call.filters?.on,
+            onFilters = {
+                onSheet(false)
+                onFiltersOpen(true)
+            },
+        )
+    }
+    val filters = call.filters
+    if (filtersOpen && filters != null) {
+        FiltersPanel(
+            filters = filters,
+            onChange = call.onFilters,
+            onClose = { onFiltersOpen(false) },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }
 
