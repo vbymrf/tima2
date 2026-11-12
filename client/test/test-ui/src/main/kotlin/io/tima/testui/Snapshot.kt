@@ -144,20 +144,22 @@ fun capture(
      * экран.
      */
     backdrop: Color? = null,
+    /** Свой набор цветов вместо светлой или тёмной темы — пробы палитр (заказчик 2026-11-12). `null` — по [dark]. */
+    colors: TimaColors? = null,
     content: @Composable () -> Unit,
 ): Snapshot {
     val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
         // Шрифт эталонный, а не системный: иначе снимок мерит машину, а не интерфейс.
         // Подробности и найденный случай — [ReferenceFont].
         CompositionLocalProvider(LocalFontFamily provides ReferenceFont.family) {
-            TimaTheme(dark = dark) {
+            TimaTheme(colors = colors ?: if (dark) TimaColors.dark else TimaColors.light) {
                 Box(Modifier.fillMaxSize().background(backdrop ?: Tima.colors.surface)) { content() }
             }
         }
     }
     try {
         val image = scene.render()
-        val fullName = "$name-${if (dark) "dark" else "light"}"
+        val fullName = if (colors != null) name else "$name-${if (dark) "dark" else "light"}"
         save(image, fullName)
         return Snapshot(Bitmap.makeFromImage(image), fullName)
     } finally {
