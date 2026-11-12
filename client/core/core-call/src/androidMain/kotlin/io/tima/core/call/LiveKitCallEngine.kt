@@ -60,7 +60,7 @@ import kotlinx.coroutines.launch
 class LiveKitCallEngine(
     private val context: Context,
     private val scope: CoroutineScope,
-) : CallEngine {
+) : CallEngine, FilterPreview {
 
     private val _state = MutableStateFlow(CallState())
     override val state: StateFlow<CallState> = _state.asStateFlow()
@@ -625,6 +625,94 @@ class LiveKitCallEngine(
         runCatching { source.setVideoProcessor(cropper) }
             .onSuccess { croppedTrack = track }
             .onFailure { Journal.trouble(LogCode.CALL, "адаптация изображения: обработчик не встал", "причина" to (it.message ?: it::class.simpleName)) }
+    }
+
+    // ── Своё изображение без звонка (ФЗ12) ───────────────────────────────────────────────────────────────────────────
+    //
+    // Комната LiveKit не подключается — она нужна ради фабрики WebRTC и общего контекста EGL для показа. Дорожка камеры
+    // создаётся с отдельным обработчиком кадров ([previewCropper]: своя сборка на видеокарте, поиск точек — общий):
+    // видно то, что уйдёт собеседнику. Пока идёт звонок, камера его — показ не открывается.
+
+    private val previewCropper = CameraCropper(FrameStudio(context.assets), faces)
+    private var previewRoom: Room? = null
+    private var previewTrack: LocalVideoTrack? = null
+    private var previewWanted = CallFilters.OFF
+
+    private val _previewVideo = MutableStateFlow<VideoHandle?>(null)
+    override val previewVideo: StateFlow<VideoHandle?> = _previewVideo.asStateFlow()
+    private val _previewFront = MutableStateFlow(true)
+    override val previewFront: StateFlow<Boolean> = _previewFront.asStateFlow()
+    private val _previewTrouble = MutableStateFlow<String?>(null)
+    override val previewTrouble: StateFlow<String?> = _previewTrouble.asStateFlow()
+    override val previewSwitchable: Boolean get() = cameras > 1
+
+    override suspend fun startPreview(filters: CallFilters) {
+        previewWanted = filters
+        if (previewTrack != null) return previewFilters(filters)
+        if (room != null) {
+            _previewTrouble.value = "Идёт звонок — камера занята"
+            Journal.note(LogCode.CALL, "фильтры без звонка: идёт звонок, показ не открыт")
+            return
+        }
+        val allowed = kotlinx.coroutines.suspendCancellableCoroutine { done -> askCallAccess(video = true) { done.resumeWith(Result.success(it)) } }
+        val camera = context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!allowed || !camera) {
+            _previewTrouble.value = "Нет разрешения на камеру"
+            Journal.trouble(LogCode.CALL, "фильтры без звонка: камеру не разрешили")
+            return
+        }
+        val opened = runCatching {
+            val created = LiveKit.create(appContext = context)
+            val position = if (_previewFront.value) CameraPosition.FRONT else CameraPosition.BACK
+            val track = created.localParticipant.createVideoTrack(
+                name = "filters-preview",
+                options = LocalVideoTrackOptions(position = position, captureParams = VideoCaptureParameter(width = 960, height = 720, maxFps = 24)),
+                videoProcessor = previewCropper,
+            )
+            previewCropper.filters = filters.forCamera(_previewFront.value)
+            track.startCapture()
+            previewRoom = created
+            previewTrack = track
+            _previewVideo.value = LiveKitVideoHandle(created, track)
+        }
+        opened.onSuccess {
+            _previewTrouble.value = null
+            Journal.note(LogCode.CALL, "фильтры без звонка: камера открыта", "камера" to if (_previewFront.value) "передняя" else "задняя", "фильтры" to filters.describe())
+        }.onFailure {
+            _previewTrouble.value = "Камера не открылась"
+            Journal.trouble(LogCode.CALL, "фильтры без звонка: камера не открылась", "причина" to (it.message ?: it::class.simpleName))
+            stopPreview()
+        }
+    }
+
+    override fun previewFilters(filters: CallFilters) {
+        previewWanted = filters
+        previewCropper.filters = filters.forCamera(_previewFront.value)
+    }
+
+    override suspend fun switchPreviewCamera() {
+        val track = previewTrack ?: return
+        val front = !_previewFront.value
+        runCatching { track.switchCamera(position = if (front) CameraPosition.FRONT else CameraPosition.BACK) }
+            .onSuccess {
+                _previewFront.value = front
+                previewCropper.filters = previewWanted.forCamera(front)
+                Journal.note(LogCode.CALL, "фильтры без звонка: камера сменена", "стала" to if (front) "передняя" else "задняя")
+            }
+            .onFailure { Journal.trouble(LogCode.CALL, "фильтры без звонка: камера не сменилась", "причина" to (it.message ?: it::class.simpleName)) }
+    }
+
+    override suspend fun stopPreview() {
+        val track = previewTrack
+        val created = previewRoom
+        previewTrack = null
+        previewRoom = null
+        _previewVideo.value = null
+        if (track == null && created == null) return
+        runCatching { track?.stopCapture() }
+        runCatching { track?.dispose() }
+        runCatching { created?.release() }
+        Journal.note(LogCode.CALL, "фильтры без звонка: камера отпущена")
     }
 
     override val screenShareable: Boolean get() = true

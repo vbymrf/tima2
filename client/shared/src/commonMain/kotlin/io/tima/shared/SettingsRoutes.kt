@@ -392,6 +392,8 @@ internal fun Settings(
     postman: PostmanFiles? = null,
     /** Микрофон, колонки, камера — есть только у ПК; `null` — пункта нет. */
     callDevices: io.tima.core.call.CallDevices? = null,
+    /** Своё изображение с фильтрами без звонка (ФЗ12); `null` — движок фильтров не умеет. */
+    filterPreview: io.tima.core.call.FilterPreview? = null,
     /** Запуск вместе с системой — есть только у ПК; `null` — раздела в «Разрешениях» нет. */
     loginStart: LoginStart? = null,
     /** Пин-код этого аккаунта (ПЛАН-(ПН)) — значок «Пин» у текущего в «Аккаунтах» (2026-10-07). */
@@ -414,9 +416,9 @@ internal fun Settings(
     SettingsScreen(
         opened = opened,
         onOpen = { onOpen(it) },
-        // Выбирать устройства есть смысл только там, где их выбирает человек, — на ПК.
-        // Аппаратное кодирование — только на телефоне: на ПК кодеры программные.
-        hidden = if (callDevices == null) setOf(SettingsItem.MEDIA) else setOf(SettingsItem.CALLS),
+        // Выбирать устройства есть смысл только там, где их выбирает человек, — на ПК. «Звонки» — и на ПК (ФЗ17:
+        // увеличение кнопками, фильтры); аппаратное кодирование там скрыто — кодеры программные.
+        hidden = if (callDevices == null) setOf(SettingsItem.MEDIA) else emptySet(),
         // Из пункта — к списку, из списка — из настроек. Одно «назад» на оба шага
         // выкидывало бы наружу из глубины, то есть теряло бы место, куда человек шёл.
         //
@@ -536,6 +538,43 @@ internal fun Settings(
 
             SettingsItem.CALLS -> {
                 val saved by deviceSettings.all().collectAsState(emptyMap())
+                val savedFilters = io.tima.core.call.CallFilterKeys.read(saved)
+                // «Фильтры» без звонка (ФЗ12): свой экран поверх пункта; назад — к «Звонкам».
+                var filtersHere by remember { mutableStateOf(false) }
+                val preview = filterPreview
+                if (filtersHere && preview != null) {
+                    var shown by remember { mutableStateOf(savedFilters) }
+                    LaunchedEffect(preview) { preview.startPreview(shown) }
+                    DisposableEffect(preview) { onDispose { scope.launch { preview.stopPreview() } } }
+                    val video by preview.previewVideo.collectAsState()
+                    val front by preview.previewFront.collectAsState()
+                    val trouble by preview.previewTrouble.collectAsState()
+                    io.tima.feature.call.FiltersSettingsScreen(
+                        filters = shown,
+                        onChange = { next, final ->
+                            shown = next
+                            preview.previewFilters(next)
+                            if (final) {
+                                Journal.note(LogCode.CALL, "фильтры выбраны", "что" to next.describe(), "где" to "настройки")
+                                scope.launch { io.tima.core.call.CallFilterKeys.write(next).forEach { (k, v) -> deviceSettings.put(k, v) } }
+                            }
+                        },
+                        section = io.tima.core.call.FilterSection.of(saved[io.tima.core.call.CallFilterKeys.SECTION]),
+                        onSection = { section -> scope.launch { deviceSettings.put(io.tima.core.call.CallFilterKeys.SECTION, section.key) } },
+                        video = video,
+                        front = front,
+                        trouble = trouble,
+                        onSwitchCamera = if (preview.previewSwitchable) ({ scope.launch { preview.switchPreviewCamera() } }) else null,
+                        onBack = { filtersHere = false },
+                    )
+                } else {
+                // ПК (ФЗ17): увеличение кнопками со своим изображением — камера открыта, пока открыт пункт.
+                val pc = callDevices
+                if (pc != null) {
+                    LaunchedEffect(pc) { pc.startCheck() }
+                    DisposableEffect(pc) { onDispose { scope.launch { pc.stopCheck() } } }
+                }
+                val pcPreview = pc?.preview?.collectAsState()?.value
                 io.tima.feature.call.CallCodingScreen(
                     coding = io.tima.core.call.HardwareCodingKeys.read(saved),
                     onChange = { chosen ->
@@ -549,7 +588,7 @@ internal fun Settings(
                         scope.launch { deviceSettings.put(io.tima.core.call.HardwareCodingKeys.CAMERA_BACKGROUND, if (keep) "1" else "0") }
                     },
                     // Увеличение изображения (ПЛАН-(ЗН) ЗН8): читается при начале звонка.
-                    zoom = io.tima.core.call.CallLookKeys.zoom(saved),
+                    zoom = if (callDevices == null) io.tima.core.call.CallLookKeys.zoom(saved) else null,
                     onZoom = { z ->
                         Journal.note(LogCode.CALL, "увеличение изображения выбрано", "ступень" to z)
                         scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.ZOOM, io.tima.core.call.CameraCrop.label(z)) }
@@ -559,7 +598,21 @@ internal fun Settings(
                         Journal.note(LogCode.CALL, "рука для увеличения выбрана", "рука" to io.tima.core.call.CallLookKeys.code(h))
                         scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.HAND, io.tima.core.call.CallLookKeys.code(h)) }
                     },
+                    phone = pc == null,
+                    pcZoom = pc?.let {
+                        io.tima.feature.call.PcZoomSetup(
+                            crop = io.tima.core.call.CallLookKeys.pcCrop(saved),
+                            onCrop = { c ->
+                                Journal.note(LogCode.CALL, "увеличение изображения выбрано", "обрезка" to c.describe(), "где" to "настройки ПК")
+                                scope.launch { deviceSettings.put(io.tima.core.call.CallLookKeys.PC_CROP, io.tima.core.call.CallLookKeys.pcCropCode(c)) }
+                            },
+                            preview = pcPreview?.let { handle -> { modifier -> io.tima.feature.call.CallVideo(handle, modifier) } },
+                        )
+                    },
+                    onFilters = filterPreview?.let { { filtersHere = true } },
+                    filtersCount = savedFilters.changedTotal,
                 )
+                }
             }
 
             SettingsItem.PERMISSIONS -> {

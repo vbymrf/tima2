@@ -2,7 +2,12 @@ package io.tima.feature.call
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -40,6 +45,14 @@ fun CallCodingScreen(
     onZoom: (Float) -> Unit = {},
     hand: CallHand = CallHand.Right,
     onHand: (CallHand) -> Unit = {},
+    /** Телефон: кодирование и видео при сворачивании; на ПК их нет (кодеры программные). */
+    phone: Boolean = true,
+    /** ПК (ФЗ17): увеличение кнопками со своим изображением; `null` — телефон или камеры нет. */
+    pcZoom: PcZoomSetup? = null,
+    /** «Фильтры» без звонка (ФЗ12); `null` — движок их не умеет. */
+    onFilters: (() -> Unit)? = null,
+    /** Сколько фильтров изменено от стандарта — янтарным числом (ФЗ9). */
+    filtersCount: Int = 0,
 ) {
     val words = Tima.words.call
     val onOff = listOf(true to words.codingOn, false to words.codingOff)
@@ -65,6 +78,23 @@ fun CallCodingScreen(
             }
             Secondary(words.zoomAbout)
         }
+        if (pcZoom != null) PcZoomSection(pcZoom)
+        // «Фильтры» без звонка (ФЗ12, заказчик 2026-11-12): своё изображение и тот же лист.
+        if (onFilters != null) {
+            Row(
+                Modifier.fillMaxWidth().clickable(onClick = onFilters).testTag(SETTINGS_FILTERS_TAG),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Caption(words.filtersTitle, fontSize = TimaType.sz3, weight = FontWeight.Bold)
+                    Secondary(words.filtersSettingsAbout)
+                }
+                io.tima.core.ui.Counter(filtersCount)
+                Caption("›", fontSize = TimaType.sz3, weight = FontWeight.Bold)
+            }
+        }
+        if (!phone) return@Column
         Caption(words.codingTitle, fontSize = TimaType.sz3, weight = FontWeight.Bold)
         Secondary(words.codingAbout)
         Pick(words.codingEncode, onOff, coding.encode) { onChange(coding.copy(encode = it)) }

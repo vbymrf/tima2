@@ -373,7 +373,7 @@ internal fun AdaptBar(crop: CameraCrop, onCrop: (CameraCrop) -> Unit, modifier: 
 
 /** Кнопки сдвига и приближения. [inside] — ПК (ФЗ17): до 2× и не дальше края кадра. */
 @Composable
-private fun AdaptKeys(crop: CameraCrop, inside: Boolean = false, onCrop: (CameraCrop) -> Unit) {
+internal fun AdaptKeys(crop: CameraCrop, inside: Boolean = false, onCrop: (CameraCrop) -> Unit) {
     Row(
         Modifier
             .background(TimaFixed.videoShade.copy(alpha = 0.45f), RoundedCornerShape(50))

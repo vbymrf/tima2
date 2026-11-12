@@ -4412,6 +4412,7 @@ private fun App(
                         mediaFolder = environment.media,
                         postman = assembled.receiver.postman,
                         callDevices = callEngine as? io.tima.core.call.CallDevices,
+                        filterPreview = callEngine as? io.tima.core.call.FilterPreview,
                         loginStart = loginStart,
                         // Снимок считается ЗДЕСЬ и в момент открытия экрана: человек
                         // жалуется тогда, когда у него не работает, — это и есть нужный
