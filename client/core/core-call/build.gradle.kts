@@ -54,6 +54,13 @@ kotlin {
             // (ПЛАН-(ПК)-ЗВОНКОВ-ПК, ПК3); читать его — Advapi32Util из jna-platform, который
             // проект уже держит ради DPAPI.
             implementation(libs.jna.platform)
+            // Фильтры звонка на ПК (ФЗ15): OpenGL без окна. Нативные — только Windows x64, как и всё звонковое на ПК.
+            implementation(libs.lwjgl)
+            implementation(libs.lwjgl.opengl)
+            implementation(libs.lwjgl.glfw)
+            runtimeOnly("org.lwjgl:lwjgl:${libs.versions.lwjgl.get()}:natives-windows")
+            runtimeOnly("org.lwjgl:lwjgl-opengl:${libs.versions.lwjgl.get()}:natives-windows")
+            runtimeOnly("org.lwjgl:lwjgl-glfw:${libs.versions.lwjgl.get()}:natives-windows")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
@@ -79,3 +86,12 @@ android {
 
 tasks.matching { it.name.startsWith("lint") }.configureEach { enabled = false }
 tasks.matching { it.name.endsWith("UnitTest") }.configureEach { enabled = false }
+
+// Картинки фильтров на ПК (ФЗ15): те же, что в `assets/filters` телефона, — ресурсом jvm-сборки, без копии в git.
+// Модель телефона (`face_mobile.vnnmodel`, 2,9 МБ) на ПК не нужна — у ПК своя, `face_pc` (задача `callNatives`).
+kotlin.sourceSets.named("jvmMain") {
+    resources.srcDir(rootProject.file("app-android/src/androidMain/assets"))
+}
+tasks.matching { it.name == "jvmProcessResources" }.configureEach {
+    (this as org.gradle.api.tasks.Copy).exclude("**/*.vnnmodel")
+}

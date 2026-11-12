@@ -78,6 +78,14 @@ val nativeLibs = listOf(
         zipEntry = null,
         saveAs = "openpnp-capture.dll",
     ),
+    // Точки лица для фильтров на ПК (ПЛАН-(ФЗ) ФЗ15): VNN (JOYY, MIT) под Windows x64 и модель `face_pc` — из
+    // pixpark/gpupixel, ветка 1.2.x, коммит fd64c0f (2026-01-24; решение заказчика 2026-11-12 «Берём pixpark 1.2.x»).
+    // Проверены по таблице импорта: только KERNEL32 и C-рантайм Visual C++ (MSVCP140, VCRUNTIME140 — их несёт JDK
+    // приложения), сетевых библиотек и адресов нет.
+    NativeLib(url = "https://raw.githubusercontent.com/pixpark/gpupixel/fd64c0fc5de6ee13ba5cb57ee2c02fe51c534cc8/src/third_party/vnn/libs/windows/x64/vnn_core.dll", sha256 = "2968d5a04821f21b78b4f0282a78b0ee8bcabf536e155cd074c19868256e15f4", zipEntry = null, saveAs = "vnn_core.dll"),
+    NativeLib(url = "https://raw.githubusercontent.com/pixpark/gpupixel/fd64c0fc5de6ee13ba5cb57ee2c02fe51c534cc8/src/third_party/vnn/libs/windows/x64/vnn_kit.dll", sha256 = "2acee4feaea07c8210355c03e4a3db3244a72e2f3ae10e135dd52268bc90ac17", zipEntry = null, saveAs = "vnn_kit.dll"),
+    NativeLib(url = "https://raw.githubusercontent.com/pixpark/gpupixel/fd64c0fc5de6ee13ba5cb57ee2c02fe51c534cc8/src/third_party/vnn/libs/windows/x64/vnn_face.dll", sha256 = "c38369c167e0dc4870ae6e95e4a51760845609bfd384b69796152fce7f5ed396", zipEntry = null, saveAs = "vnn_face.dll"),
+    NativeLib(url = "https://raw.githubusercontent.com/pixpark/gpupixel/fd64c0fc5de6ee13ba5cb57ee2c02fe51c534cc8/src/third_party/vnn/models/vnn_face278_data/face_pc%5B1.0.0%5D.vnnmodel", sha256 = "b9eebc3acab8d63c0dd7c1b02052af2d5e3f7fa59d274dae5c5f640c3f837c26", zipEntry = null, saveAs = "face_pc.vnnmodel"),
 )
 
 // Раскладка — та, что ждёт `appResourcesRootDir` у Compose Desktop: подкаталог по ОС.

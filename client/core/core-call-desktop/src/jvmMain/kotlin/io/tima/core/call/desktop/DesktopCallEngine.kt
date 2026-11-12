@@ -117,7 +117,7 @@ import livekit.proto.VideoStreamType
  * одно — кадры видео: они разбираются прямо в потоке библиотеки, потому что их тридцать в
  * секунду и очередь им только мешает.
  */
-class DesktopCallEngine private constructor(private val scope: CoroutineScope) : CallEngine, CallDevices {
+class DesktopCallEngine private constructor(private val scope: CoroutineScope) : CallEngine, CallDevices, io.tima.core.call.FilterPreview {
 
     companion object {
         /**
@@ -1718,6 +1718,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                     opened.frame.read(((y + cut.src.top + line).toLong() * opened.width + x + cut.src.left) * 3, row, 0, n)
                     buf.write(((cut.dst.top + line).toLong() * ow + cut.dst.left) * 3, row, 0, n)
                 }
+                // Фильтры ПК (ФЗ15) — после обрезки, до отправки: собеседник и окошко видят одно и то же.
+                val madeBeyond = filtered(Pointer.nativeValue(buf), ow, oh, ow * 3)
                 runCatching {
                     Ffi.request(
                         FfiRequest(
@@ -1727,7 +1729,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                                     type = VideoBufferType.RGB24,
                                     width = ow,
                                     height = oh,
-                                    data_ptr = Pointer.nativeValue(buf),
+                                    data_ptr = madeBeyond?.let { Pointer.nativeValue(com.sun.jna.Native.getDirectBufferPointer(it)) } ?: Pointer.nativeValue(buf),
                                     stride = ow * 3,
                                 ),
                                 timestamp_us = System.nanoTime() / 1000,
@@ -1737,7 +1739,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                     )
                 }
                 cropFrames++
-                if (shown++ % 2 == 0) preview.pictures.value = rgbToPicture(ow, oh, buf.getByteArray(0, size))
+                if (shown++ % 2 == 0) preview.pictures.value = rgbToPicture(ow, oh, madeBeyond?.let { bytesOf(it) } ?: buf.getByteArray(0, size))
                 continue
             }
             val part = if (c.full) null else c.region(w, h).let { r ->
@@ -1748,6 +1750,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             val sentW = part?.width ?: w
             val sentH = part?.height ?: h
             val sentOffset = part?.let { (it.top.toLong() * opened.width + it.left) * 3 } ?: offset
+            val made = filtered(Pointer.nativeValue(opened.frame) + sentOffset, sentW, sentH, opened.width * 3)
             runCatching {
                 Ffi.request(
                     FfiRequest(
@@ -1757,8 +1760,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
                                 type = VideoBufferType.RGB24,
                                 width = sentW,
                                 height = sentH,
-                                data_ptr = Pointer.nativeValue(opened.frame) + sentOffset,
-                                stride = opened.width * 3,
+                                data_ptr = made?.let { Pointer.nativeValue(com.sun.jna.Native.getDirectBufferPointer(it)) } ?: (Pointer.nativeValue(opened.frame) + sentOffset),
+                                stride = if (made != null) sentW * 3 else opened.width * 3,
                             ),
                             timestamp_us = System.nanoTime() / 1000,
                             rotation = VideoRotation.VIDEO_ROTATION_0,
@@ -1770,7 +1773,11 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             // Себе — через кадр: это проверка «я в кадре», а не второй видеопоток. Приближено —
             // себе то же, что уходит.
             if (shown++ % 2 == 0) {
-                preview.pictures.value = if (part == null) rgbToPicture(opened) else rgbToPicture(opened, part)
+                preview.pictures.value = when {
+                    made != null -> rgbToPicture(sentW, sentH, bytesOf(made))
+                    part == null -> rgbToPicture(opened)
+                    else -> rgbToPicture(opened, part)
+                }
             }
         }
     }
@@ -2014,6 +2021,108 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
 
     /** Была ли камера включена до показа экрана: кончили — возвращается как была. */
     private var screenCamera = false
+
+    // ── Фильтры ПК (ПЛАН-(ФЗ) ФЗ15) ─────────────────────────────────────────────────────────────────────────────
+    //
+    // Тот же набор, что на телефоне, на видеокарте через OpenGL без окна (`DesktopFilters`). Камера на ПК одна и
+    // смотрит на человека — «Лицо» и «Морщины» рисуются всегда. Нет OpenGL — строки «Фильтры» нет, звонок без них.
+
+    private val studio by lazy { io.tima.core.call.DesktopFilters(Ffi.libraryFile()?.parentFile) }
+
+    /** Поднялся ли OpenGL: спрашивается один раз в фоне — первый вопрос создаёт контекст. */
+    @Volatile
+    private var glReady = false
+
+    init {
+        scope.launch(Dispatchers.IO) { glReady = studio.available }
+    }
+
+    /** Читается насосом камеры на каждом кадре. */
+    @Volatile
+    private var filters: io.tima.core.call.CallFilters = io.tima.core.call.CallFilters.OFF
+
+    override val filterable: Boolean get() = glReady
+
+    override suspend fun setFilters(filters: io.tima.core.call.CallFilters) {
+        val was = this.filters
+        this.filters = filters
+        if (was.on != filters.on) Journal.note(LogCode.CALL, "фильтры ПК", "стало" to filters.describe(), "OpenGL" to glReady)
+    }
+
+    /** Кадр RGB24 по адресу [ptr] — через видеокарту; `null` — фильтров нет или не вышло: уйти как есть. */
+    private fun filtered(ptr: Long, w: Int, h: Int, stride: Int, f: io.tima.core.call.CallFilters = filters): java.nio.ByteBuffer? {
+        if (!f.active || !glReady) return null
+        val len = stride.toLong() * (h - 1) + w * 3L
+        return studio.process(Pointer(ptr).getByteBuffer(0, len), w, h, stride / 3, f)
+    }
+
+    private fun bytesOf(buffer: java.nio.ByteBuffer): ByteArray = ByteArray(buffer.remaining()).also { buffer.duplicate().get(it) }
+
+    // ── Своё изображение с фильтрами без звонка (ФЗ12) ──
+
+    private val _previewVideo = MutableStateFlow<VideoHandle?>(null)
+    override val previewVideo: StateFlow<VideoHandle?> = _previewVideo.asStateFlow()
+    private val _previewFront = MutableStateFlow(true)
+    override val previewFront: StateFlow<Boolean> = _previewFront.asStateFlow()
+    private val _previewTrouble = MutableStateFlow<String?>(null)
+    override val previewTrouble: StateFlow<String?> = _previewTrouble.asStateFlow()
+    override val previewSwitchable: Boolean get() = false
+
+    @Volatile
+    private var previewWanted: io.tima.core.call.CallFilters = io.tima.core.call.CallFilters.OFF
+    private var previewJob: Job? = null
+
+    override suspend fun startPreview(filters: io.tima.core.call.CallFilters) {
+        previewWanted = filters
+        if (previewJob != null) return
+        if (_state.value.stage != CallStage.Idle && _state.value.stage != CallStage.Ended) {
+            _previewTrouble.value = "Идёт звонок — камера занята"
+            return
+        }
+        val cameraId = setup.camera
+        previewJob = scope.launch(Dispatchers.IO) {
+            when (val opened = Camera.open(1280, 720, 30, cameraId)) {
+                is Camera.Companion.Opened.Ready -> {
+                    val camera = opened.camera
+                    try {
+                        val frames = Frames()
+                        _previewVideo.value = frames
+                        _previewTrouble.value = null
+                        Journal.note(LogCode.CALL, "фильтры ПК без звонка: камера открыта", "кадр" to "${camera.width}×${camera.height}")
+                        val wait = (500L / camera.fps).coerceIn(5L, 50L)
+                        while (currentCoroutineContext().isActive) {
+                            if (!camera.grab()) {
+                                delay(wait)
+                                continue
+                            }
+                            val made = filtered(Pointer.nativeValue(camera.frame), camera.width, camera.height, camera.width * 3, previewWanted)
+                            frames.pictures.value = if (made != null) rgbToPicture(camera.width, camera.height, bytesOf(made)) else rgbToPicture(camera)
+                        }
+                    } finally {
+                        camera.close()
+                        _previewVideo.value = null
+                    }
+                }
+                is Camera.Companion.Opened.Failed -> {
+                    _previewTrouble.value = opened.why
+                    Journal.trouble(LogCode.CALL, "фильтры ПК без звонка: камера не открылась", "причина" to opened.why)
+                }
+            }
+        }
+    }
+
+    override fun previewFilters(filters: io.tima.core.call.CallFilters) {
+        previewWanted = filters
+    }
+
+    override suspend fun switchPreviewCamera() = Unit
+
+    override suspend fun stopPreview() {
+        previewJob?.cancel()
+        previewJob?.join()
+        previewJob = null
+        Journal.note(LogCode.CALL, "фильтры ПК без звонка: камера отпущена")
+    }
 
     override val screenShareable: Boolean get() = !java.awt.GraphicsEnvironment.isHeadless()
 

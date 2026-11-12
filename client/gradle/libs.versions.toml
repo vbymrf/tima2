@@ -54,6 +54,10 @@ media3 = "1.9.4"
 # 2026-10-23), 13.0.0 подставляет адрес приложения. Тянет lifecycle 2.9.4 — как у нас; compileSdk не требует.
 androidYoutubePlayer = "13.0.0"
 composemediaplayer = "0.11.4"
+# Фильтры звонка на ПК (ПЛАН-(ФЗ) ФЗ15, заказчик 2026-11-12: «для ПК — LWJGL»): OpenGL без окна, те же шейдеры,
+# что на телефоне. LWJGL 3.3.4 (2024-07), BSD-3. Модули lwjgl, lwjgl-opengl, lwjgl-glfw (скрытое окно — только ради
+# контекста OpenGL) и их нативные под Windows x64; транзитивных нет, сети нет.
+lwjgl = "3.3.4"
 
 [plugins]
 kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
@@ -91,6 +95,9 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 # MockEngine: проверка транспорта без сети и без сервера.
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+lwjgl = { module = "org.lwjgl:lwjgl", version.ref = "lwjgl" }
+lwjgl-opengl = { module = "org.lwjgl:lwjgl-opengl", version.ref = "lwjgl" }
+lwjgl-glfw = { module = "org.lwjgl:lwjgl-glfw", version.ref = "lwjgl" }
 concentus = { module = "io.github.jaredmdobson:concentus", version.ref = "concentus" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls", version.ref = "media3" }

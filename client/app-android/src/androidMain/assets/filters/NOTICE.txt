@@ -5,6 +5,10 @@
 
 2. VNN (JOYY) — распознавание точек лица: libvnn_core.so, libvnn_kit.so, libvnn_face.so, face_mobile.vnnmodel.
    Copyright (c) 2021 Guangzhou Joyy Information Technology Co., Ltd. Licensed under the MIT license (заголовки vnn_*.h).
+   На ПК — vnn_core.dll, vnn_kit.dll, vnn_face.dll (Windows x64) и face_pc.vnnmodel из pixpark/gpupixel, ветка 1.2.x.
+
+3. LWJGL 3.3.4 (https://www.lwjgl.org) — OpenGL и GLFW для фильтров на ПК. BSD 3-Clause License,
+   Copyright (c) 2012-present Lightweight Java Game Library. All rights reserved.
 
 MIT License
 
