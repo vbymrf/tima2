@@ -1215,6 +1215,7 @@ object EnglishWords : Words {
         override val blushBright = "Bright"
         override val blushAnime = "Anime"
         override val blushStrokes = "Anime strokes"
+        override val blushHeart = "Heart"
         override val blushPink = "Pink"
         override val blushCoral = "Coral"
         override val blushRed = "Red"

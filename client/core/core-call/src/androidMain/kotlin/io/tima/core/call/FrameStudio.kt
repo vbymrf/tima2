@@ -303,6 +303,7 @@ internal class FrameStudio(private val assets: AssetManager) {
         GLES20.glUniform2fv(shader.getUniformLocation("uUp"), 2, z.ups, 0)
         GLES20.glUniform2fv(shader.getUniformLocation("uHalf"), 2, z.halves, 0)
         GLES20.glUniform3f(shader.getUniformLocation("uColor"), f.blushColor.r, f.blushColor.g, f.blushColor.b)
+        GLES20.glUniform3fv(shader.getUniformLocation("uStroke"), 1, f.blushColor.stroke(f.blushStyle), 0)
         GLES20.glUniform1f(shader.getUniformLocation("uIntensity"), f.blush / 100f)
         drawStrip(shader, quad, quadTex)
     }

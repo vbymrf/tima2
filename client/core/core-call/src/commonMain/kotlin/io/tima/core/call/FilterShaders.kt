@@ -321,6 +321,7 @@ uniform highp vec2 uAxis[2];
 uniform highp vec2 uUp[2];
 uniform highp vec2 uHalf[2];
 uniform vec3 uColor;
+uniform vec3 uStroke;
 uniform float uIntensity;
 void main() {
     vec3 c = texture2D(uTex, vTex).rgb;
@@ -331,7 +332,7 @@ void main() {
         if (abs(l.x) >= 1.0 || abs(l.y) >= 1.0) continue;
         vec4 m = texture2D(uCheek, vec2(l.x * 0.5 + 0.5, 0.5 - l.y * 0.5));
         c = mix(c, uColor, m.r * uIntensity);
-        c = mix(c, uColor * 0.6, m.g * uIntensity);
+        c = mix(c, uStroke, m.g * uIntensity);
         c = mix(c, vec3(1.0), m.b * uIntensity);
     }
     gl_FragColor = vec4(c, 1.0);

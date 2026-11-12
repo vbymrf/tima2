@@ -151,7 +151,8 @@ class DesktopFiltersTest {
             rgb.put((px shr 16).toByte()).put((px shr 8).toByte()).put(px.toByte())
         }
         rgb.flip()
-        val sets = BlushStyle.entries.map { it to BlushColor.Pink } + BlushColor.entries.filter { it != BlushColor.Pink }.map { BlushStyle.Bright to it }
+        val sets = BlushStyle.entries.map { it to BlushColor.Pink } + BlushColor.entries.filter { it != BlushColor.Pink }.map { BlushStyle.Bright to it } +
+            BlushColor.entries.filter { it != BlushColor.Pink }.map { BlushStyle.Anime to it }
         // Вырез — лицо по середине кадра (на снимке оно внизу посередине).
         val cx = 230
         val cy = 250

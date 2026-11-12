@@ -20,7 +20,10 @@ enum class LipColor(val code: String) {
  * шейдер `FS_CHEEK`), картинка — маски: красный канал — свечение, зелёный — штрихи, синий — блик.
  */
 enum class BlushStyle(val image: String?) {
-    Soft(null), Bright("blush_bright.png"), Anime("blush_anime.png"), AnimeStrokes("blush_strokes.png");
+    Soft(null), Bright("blush_bright.png"), Anime("blush_anime.png"), AnimeStrokes("blush_strokes.png"),
+
+    /** По примеру заказчика 2026-11-12 («повтори»): широкий мягкий овал, белое сердечко снаружи, белые штрихи. */
+    Heart("blush_heart.png");
 
     companion object {
         /** По умолчанию — «Яркие» (заказчик 2026-11-12: «3. да»). */
@@ -28,9 +31,25 @@ enum class BlushStyle(val image: String?) {
     }
 }
 
-/** Цвет румян (заказчик 2026-11-12: «5 да»): цвет свечения; штрихи — он же темнее, блик — белый. */
+/**
+ * Цвет румян (заказчик 2026-11-12: «5 да», затем «Цвета сделай более кремовые, пудровые»): цвет свечения — пастельный;
+ * блик и сердечко — белые; штрихи — [stroke].
+ */
 enum class BlushColor(val r: Float, val g: Float, val b: Float) {
-    Pink(1f, 0.36f, 0.62f), Coral(1f, 0.45f, 0.36f), Red(0.93f, 0.16f, 0.22f), Peach(1f, 0.62f, 0.46f), Lilac(0.78f, 0.45f, 0.92f),
+    Pink(0.97f, 0.62f, 0.70f), Coral(0.98f, 0.66f, 0.58f), Red(0.92f, 0.45f, 0.48f), Peach(0.99f, 0.76f, 0.63f), Lilac(0.84f, 0.67f, 0.89f);
+
+    /**
+     * Цвет штрихов стиля: «Аниме» — реснички тем же цветом, но ярче и насыщеннее («тем же цветом, что румянец, но более
+     * ярким»); «Аниме-штрихи» — темнее, как штриховка. Возвращает r, g, b.
+     */
+    fun stroke(style: BlushStyle): FloatArray {
+        val grey = (r + g + b) / 3f
+        return if (style == BlushStyle.Anime) {
+            floatArrayOf(r, g, b).map { (it + (it - grey) * 1.4f).coerceIn(0f, 1f) }.toFloatArray()
+        } else {
+            floatArrayOf(r * 0.62f, g * 0.5f, b * 0.55f)
+        }
+    }
 }
 
 /** Разделы листа «Фильтры» (ФЗ9): ряд сверху, под ним — ползунки выбранного. */

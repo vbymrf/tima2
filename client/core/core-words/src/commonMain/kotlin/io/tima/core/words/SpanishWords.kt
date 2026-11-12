@@ -1215,6 +1215,7 @@ object SpanishWords : Words {
         override val blushBright = "Intenso"
         override val blushAnime = "Anime"
         override val blushStrokes = "Anime con trazos"
+        override val blushHeart = "Corazón"
         override val blushPink = "Rosa"
         override val blushCoral = "Coral"
         override val blushRed = "Rojo"

@@ -23,6 +23,7 @@ internal class CheekZones(val centers: FloatArray, val axes: FloatArray, val ups
             BlushStyle.Bright to (0.46f to 0.40f),
             BlushStyle.Anime to (0.50f to 0.42f),
             BlushStyle.AnimeStrokes to (0.52f to 0.36f),
+            BlushStyle.Heart to (0.64f to 0.34f),
         )
 
         fun of(p: FloatArray, w: Int, h: Int, style: BlushStyle): CheekZones {

@@ -1350,6 +1350,7 @@ interface CallWords {
     val blushBright: String
     val blushAnime: String
     val blushStrokes: String
+    val blushHeart: String
     val blushPink: String
     val blushCoral: String
     val blushRed: String
@@ -3897,6 +3898,7 @@ object RussianWords : Words {
         override val blushBright = "Яркие"
         override val blushAnime = "Аниме"
         override val blushStrokes = "Аниме-штрихи"
+        override val blushHeart = "Сердечко"
         override val blushPink = "Розовые"
         override val blushCoral = "Коралловые"
         override val blushRed = "Красные"

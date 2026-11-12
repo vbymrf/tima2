@@ -305,6 +305,7 @@ class DesktopFilters(dir: File?) {
         GL20.glUniform2fv(p.u("uUp"), z.ups)
         GL20.glUniform2fv(p.u("uHalf"), z.halves)
         GL20.glUniform3f(p.u("uColor"), f.blushColor.r, f.blushColor.g, f.blushColor.b)
+        GL20.glUniform3fv(p.u("uStroke"), f.blushColor.stroke(f.blushStyle))
         GL20.glUniform1f(p.u("uIntensity"), f.blush / 100f)
         strip(p, quad, quadTex)
     }

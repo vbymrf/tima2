@@ -191,6 +191,7 @@ internal fun FiltersPanel(
                         for ((style, name) in listOf(
                             BlushStyle.Soft to words.blushSoft, BlushStyle.Bright to words.blushBright,
                             BlushStyle.Anime to words.blushAnime, BlushStyle.AnimeStrokes to words.blushStrokes,
+                            BlushStyle.Heart to words.blushHeart,
                         )) {
                             Chip(
                                 label = name,
