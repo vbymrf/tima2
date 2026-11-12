@@ -95,6 +95,44 @@ class DesktopFiltersTest {
         studio.close()
     }
 
+    @Test
+    fun фильтры_пк_замер_времени_на_кадр() {
+        // Замер, а не проверка: печатает мс на кадр 1280×720 (как камера ПК в звонке) — только сглаживание и тяжёлый
+        // набор (морщины, лицо, глаза, помада). Лицо — `TIMA_FACE`, иначе лицевые проходы не рисуются.
+        val natives = System.getenv("TIMA_NATIVES")?.let(::File)
+            ?: File("../core-call-desktop/build/livekit-ffi/windows").takeIf { it.isDirectory }
+        val studio = DesktopFilters(natives)
+        if (!studio.available) {
+            println("пропуск: на этой машине нет OpenGL 3.0")
+            return
+        }
+        val w = 1280
+        val h = 720
+        val picture = System.getenv("TIMA_FACE")?.let { scaled(ImageIO.read(File(it)), w, h) } ?: gradient(w, h)
+        val rgb = ByteBuffer.allocateDirect(w * h * 3)
+        for (y in 0 until h) for (x in 0 until w) {
+            val px = picture.getRGB(x, y)
+            rgb.put((px shr 16).toByte()).put((px shr 8).toByte()).put(px.toByte())
+        }
+        rgb.flip()
+        fun measure(name: String, f: CallFilters) {
+            repeat(20) { rgb.rewind(); studio.process(rgb, w, h, w, f); Thread.sleep(5) }
+            val times = (0 until 100).map {
+                rgb.rewind()
+                val t = System.nanoTime()
+                studio.process(rgb, w, h, w, f)
+                ((System.nanoTime() - t) / 10_000) / 100.0
+            }.sorted()
+            println("замер ПК $name: кадр ${w}×$h, мс на кадр — середина ${times[50]}, 90 % ${times[90]}, лицо ${studio.faceFound()}")
+        }
+        measure("сглаживание 50", CallFilters(on = true, smooth = 50))
+        measure(
+            "тяжёлый набор",
+            CallFilters(on = true, smooth = 50, forehead = 80, underEyes = 80, eyeCorners = 80, nasolabial = 80, thin = 50, eyes = 40, lipstick = 80),
+        )
+        studio.close()
+    }
+
     private fun scaled(src: BufferedImage, w: Int, h: Int): BufferedImage {
         // По высоте, с полями по бокам: лицо не сплющивается.
         val out = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
