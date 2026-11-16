@@ -49,10 +49,11 @@ class TokensTest {
     fun в_тёмной_теме_заливка_тёмно_зелёная_и_белый_на_ней_читается() {
         // Проверка перевёрнута 2026-09-03 вместе с цветом: заказчик назначил тёмной теме
         // `#024408` вместо салатового. Раньше здесь стояло «цена принята, 2,08 : 1»;
-        // теперь белый по этой заливке даёт 11,46 — то есть заливка в тёмной теме
-        // перестала быть местом, где решение стоит денег.
+        // белый по той заливке давал 11,46 — заливка в тёмной теме перестала быть местом,
+        // где решение стоит денег. 2026-11-16 цвет сменён на `#245043` (решение заказчика):
+        // белый по нему — 9,11, порог по-прежнему с запасом.
         val ratio = TimaContrast.ratio(TimaColors.dark.onAccent, TimaColors.dark.navigation)
-        close(11.46, ratio, tolerance = 0.05)
+        close(9.11, ratio, tolerance = 0.05)
         assertTrue(
             ratio >= TimaContrast.TEXT_THRESHOLD,
             "белый по тёмно-зелёной заливке обязан проходить порог, а даёт $ratio : 1",
@@ -68,7 +69,7 @@ class TokensTest {
      *
      * **Первое число теперь объясняет запрет, а не цену.** Обводка выбранного режима
      * снята 2026-09-03 и в светлой теме — переключатель везде залит; в тёмной заливка
-     * стояла и до того, ровно из-за этих 1,36. Число остаётся здесь как довод против
+     * стояла и до того, ровно из-за этих 1,36 (у `#245043` с 2026-11-16 — 1,70). Число остаётся здесь как довод против
      * возврата обводки: вернуть её значило бы сделать выбор в тёмной теме невидимым.
      *
      * Ждёт продолжения одна полоса автора.
@@ -76,8 +77,8 @@ class TokensTest {
     @Test
     fun в_тёмной_теме_навигация_чертой_не_видна_и_цена_названа() {
         val capsule = TimaContrast.overlay(TimaColors.dark.quiet, TimaColors.dark.surface)
-        close(1.36, TimaContrast.ratio(TimaColors.dark.navigation, capsule), tolerance = 0.05)
-        close(1.06, TimaContrast.ratio(TimaColors.dark.navigation, TimaColors.dark.author), tolerance = 0.05)
+        close(1.70, TimaContrast.ratio(TimaColors.dark.navigation, capsule), tolerance = 0.05)
+        close(1.19, TimaContrast.ratio(TimaColors.dark.navigation, TimaColors.dark.author), tolerance = 0.05)
     }
 
     @Test
@@ -108,9 +109,10 @@ class TokensTest {
         // До 2026-09-03 здесь стояло обратное: салатовый по тёмной подложке давал
         // 8,99 : 1, и правило «зелёным нельзя» относилось только к светлой теме.
         // Тёмно-зелёный убрал асимметрию — теперь цвет навигации нечитаем текстом в
-        // обеих темах, и правило стало общим. Это упрощение, а не потеря.
+        // обеих темах, и правило стало общим. Это упрощение, а не потеря. У `#245043`
+        // (2026-11-16) — 2,05 : 1, то же «нечитаемо».
         val background = TimaContrast.overlay(TimaColors.dark.functional, TimaColors.dark.surface)
-        close(1.64, TimaContrast.ratio(TimaColors.dark.navigation, background), tolerance = 0.05)
+        close(2.05, TimaContrast.ratio(TimaColors.dark.navigation, background), tolerance = 0.05)
     }
 
     @Test
@@ -227,7 +229,7 @@ class TokensTest {
         assertEquals(TimaColors.light.inPlate, TimaColors.dark.inPlate)
         close(2.08, TimaContrast.ratio(TimaColors.light.inPlate, TimaColors.light.navigation))
         // В тёмной теме белое на плашке читается заметно лучше — заливка там тёмная.
-        close(11.46, TimaContrast.ratio(TimaColors.dark.inPlate, TimaColors.dark.navigation), tolerance = 0.05)
+        close(9.11, TimaContrast.ratio(TimaColors.dark.inPlate, TimaColors.dark.navigation), tolerance = 0.05)
     }
 
     // ── два цвета вне темы ───────────────────────────────────────────────────
