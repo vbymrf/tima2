@@ -55,11 +55,17 @@ func (s *Store) SetReceipt(ctx context.Context, r Receipt) (int64, error) {
 }
 
 // AckedDeliveries — что устройство только что забрало: личные сообщения из событий журнала
-// после прежнего курсора и до upTo, по чату и отправителю — позднейшее время написания.
+// после прежнего курсора и до upTo, по чату и отправителю — позднейшее время ПРИЁМА сервером.
 // Свои сообщения (копии с других устройств аккаунта) не в счёт.
+//
+// Время приёма, а не написания (2026-11-16): с беды 2026-10-29 приложение ставит сообщению время
+// приёма сервером, и «прочитано» шлёт по нему же. Время написания — часы отправителя: отстают они
+// от сервера — «доставлено до» оказывалось раньше самого сообщения, и вторая галочка не загоралась
+// до прочтения (realme, переписка 32d46f86: написано 08:50:12.720, принято 08:50:14.202). Выражение
+// то же, каким время приёма отдаётся в истории (`Messages`), — иначе разойдутся миллисекунды.
 func (s *Store) AckedDeliveries(ctx context.Context, deviceID, userID string, upTo int64) ([]Receipt, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT pm.sender_id::text, pm.chat_id::text, MAX(pm.created_at_unix_ms)
+		SELECT pm.sender_id::text, pm.chat_id::text, MAX((extract(epoch from pm.received_at) * 1000)::bigint)
 		  FROM device_events e
 		  JOIN personal_messages pm
 		    ON pm.chat_id = (e.payload->>'chat_id')::uuid

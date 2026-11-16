@@ -78,6 +78,10 @@ func TestДоставленоИПрочитаноУОтправителя(t *tes
 	conn := dialWS(t, ts, recipient.token)
 	env := sealEnvelope(t, sender, []*device{recipient}, 3401, []byte("привет"))
 	resp := post(t, ts, env, sender.token, "eeeeeeee-0000-0000-0000-000000003401")
+	var sent struct {
+		ReceivedAt int64 `json:"received_at_unix_ms"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&sent)
 	resp.Body.Close()
 	frame := readByPoke(t, conn, "message.new")
 	var eventID int64
@@ -93,6 +97,11 @@ func TestДоставленоИПрочитаноУОтправителя(t *tes
 	})
 	if got.PeerID != recipient.userID || got.ReadMs != 0 {
 		t.Fatalf("доставлено не то: %+v", got)
+	}
+	// «Доставлено до» — время приёма сервером, то самое, что отправитель получил в ответ и по
+	// которому стоит его сообщение (2026-11-16): по часам отправителя вторая галочка не загоралась.
+	if sent.ReceivedAt == 0 || got.DeliveredMs != sent.ReceivedAt {
+		t.Fatalf("доставлено до %d, а сообщение принято в %d", got.DeliveredMs, sent.ReceivedAt)
 	}
 
 	// Прочитал: отметка только вверх и только в своей переписке.
