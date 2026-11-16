@@ -53,6 +53,9 @@ func startCall(deps callsDeps) http.HandlerFunc {
 		//
 		// Ошибка запроса в сторону «свободен» дешевле: лишний вызов виден, а отнятый —
 		// нет. Поэтому беду хранилища здесь не превращаем в «занят», а пропускаем.
+		// Звонок, где ждут возврата одного из этих двоих (или самого звонящего), закрывается сразу: человек
+		// явно не в нём, и «занят» на всё ожидание было бы неправдой (беда 2026-11-15, `call_away.go`).
+		settleAway(deps, r.Context(), id.UserID, req.PeerID)
 		if busy, err := deps.store.HasLiveCall(r.Context(), req.PeerID); err == nil && busy {
 			writeErr(w, http.StatusConflict, "busy", "собеседник занят другим звонком")
 			return
@@ -322,6 +325,8 @@ func endCall(deps callsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "not_participant", "завершить может участник звонка")
 			return
 		}
+		// Положили трубку — ждать ушедшего больше незачем (беда 2026-11-15).
+		deps.away.take(callID)
 		// Уже закрытый звонок не переписывается: `/end` зовут обе стороны, и второй
 		// получает в ответ то, что решил первый (Ж4).
 		open := call.State == "ringing" || call.State == "answered"

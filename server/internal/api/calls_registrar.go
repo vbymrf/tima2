@@ -24,7 +24,7 @@ type CallStore interface {
 	CallForJoinByID(ctx context.Context, callID, userID string) (store.CallForJoin, error)
 	CallIDByRoom(ctx context.Context, room string) (string, string, error)
 	CallParticipants(ctx context.Context, callID string) (map[string]store.ParticipantState, error)
-	SetCallState(ctx context.Context, callID, state, endedBy string) error
+	SetCallState(ctx context.Context, callID, state, endedBy string, at ...time.Time) error
 	// Журнал звонков: страница прошлого, новые → старые. Ж1.
 	ListCalls(ctx context.Context, userID string, before time.Time, limit int, groups bool) ([]store.CallRow, error)
 	SetParticipantState(ctx context.Context, callID, userID string, state store.ParticipantState, at time.Time) error
@@ -82,6 +82,8 @@ type callsDeps struct {
 	store    CallStore
 	livekit  func() LiveKitSettings
 	notifier *Notifier
+	// Личные звонки, где ждут возврата ушедшего (беда 2026-11-15, `call_away.go`).
+	away *awayCalls
 }
 
 func (deps callsDeps) issuer() *calls.Issuer    { return deps.livekit().Issuer }
@@ -104,7 +106,7 @@ func RegisterCalls(
 	n *Notifier,
 	requireDevice Middleware,
 ) {
-	deps := callsDeps{store: st, livekit: livekit, notifier: n}
+	deps := callsDeps{store: st, livekit: livekit, notifier: n, away: newAwayCalls()}
 
 	mux.HandleFunc("POST /api/v1/calls", requireDevice(startCall(deps)))
 	mux.HandleFunc("GET /api/v1/calls", requireDevice(listCalls(deps)))

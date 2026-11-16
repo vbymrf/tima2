@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -214,13 +215,19 @@ func (s *Store) GetCall(ctx context.Context, callID string) (Call, error) {
 // **Записывается только первый.** `POST /end` зовут обе стороны, и вторая приходит
 // через секунды после первой; перезапись стёрла бы ровно то, ради чего поле заведено, —
 // кто нажал раньше. Отсюда COALESCE(ended_by, $3), а не наоборот.
-func (s *Store) SetCallState(ctx context.Context, callID, state, endedBy string) error {
+// [at] — когда кончился, если не сейчас (личный звонок, ушедший не вернулся: конец — момент ухода, беда
+// 2026-11-15); нулевое или нет — сейчас.
+func (s *Store) SetCallState(ctx context.Context, callID, state, endedBy string, at ...time.Time) error {
 	col := ""
+	var when any
+	if len(at) > 0 && !at[0].IsZero() {
+		when = at[0]
+	}
 	switch state {
 	case "answered":
 		col = ", answered_at = now()"
 	case "ended", "missed", "busy", "lost":
-		col = ", ended_at = now()"
+		col = ", ended_at = COALESCE($4::timestamptz, now())"
 	}
 	var by any
 	if endedBy != "" {
@@ -229,10 +236,14 @@ func (s *Store) SetCallState(ctx context.Context, callID, state, endedBy string)
 	// Закрытый звонок окончателен: `/end` зовут обе стороны, и второй, пришедший на уже
 	// закрытый звонок, переписывал «пропущен» на «завершён» — отклонённый звонок выглядел в
 	// журнале разговором. Условие в самом запросе закрывает и гонку двух одновременных `/end`.
+	args := []any{callID, state, by}
+	if strings.Contains(col, "$4") {
+		args = append(args, when)
+	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE calls SET state = $2`+col+`, ended_by = COALESCE(ended_by, $3::uuid)
 		 WHERE call_id = $1 AND state IN ('ringing', 'answered')`,
-		callID, state, by)
+		args...)
 	return err
 }
 
@@ -250,12 +261,12 @@ type CallRow struct {
 	PeerID      string
 	// Type — `direct` · `group`; GroupID — группа группового звонка. Новые поля строки:
 	// клиент, не знающий их, видит прежнюю строку.
-	Type        string
-	GroupID     string
-	EndedBy     string // кто положил трубку; пусто — некому было, звонок бросили
-	CreatedAt   time.Time
-	AnsweredAt  time.Time // нулевое — трубку не брали
-	EndedAt     time.Time // нулевое — звонок ещё числится идущим
+	Type       string
+	GroupID    string
+	EndedBy    string // кто положил трубку; пусто — некому было, звонок бросили
+	CreatedAt  time.Time
+	AnsweredAt time.Time // нулевое — трубку не брали
+	EndedAt    time.Time // нулевое — звонок ещё числится идущим
 }
 
 // ListCalls — страница журнала звонков человека, новые → старые.

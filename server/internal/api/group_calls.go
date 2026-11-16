@@ -213,6 +213,8 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 			} `json:"room"`
 			Participant struct {
 				Identity string `json:"identity"`
+				// Причина ухода (беда 2026-11-15): имя перечисления LiveKit `DisconnectReason`.
+				DisconnectReason json.RawMessage `json:"disconnectReason"`
 			} `json:"participant"`
 			CreatedAt flexInt `json:"createdAt"`
 		}
@@ -239,6 +241,9 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 
 		switch ev.Event {
 		case "participant_joined":
+			if userID != "" && callType == "direct" {
+				deps.away.back(callID, userID)
+			}
 			if userID != "" {
 				_ = deps.store.SetParticipantState(r.Context(), callID, userID, store.PartJoined, at)
 				// ── ЗВОНЯЩИЙ ВХОДИТ В КОМНАТУ СРАЗУ ───────────────────────────
@@ -258,13 +263,30 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 			if userID != "" {
 				_ = deps.store.SetParticipantState(r.Context(), callID, userID, store.PartLeft, at)
 			}
-			// Один на один: уход любой стороны завершает звонок для обоих — держать
-			// второго в пустой комнате незачем. В группе остальные продолжают.
+			// Один на один: уход стороны завершает звонок для обоих — держать второго в пустой
+			// комнате незачем. Но только ушедшего насовсем (беда 2026-11-15, `call_away.go`): замена
+			// подключения тем же устройством — не уход, обрыв сети — ждём возврата. В группе остальные
+			// продолжают.
 			if callType == "direct" {
 				// Ушедший и есть тот, кто положил трубку, — лучшего сведения об этом
 				// у нас нет. Запишется он только если `/end` не успел раньше: поле
 				// хранит первого (Ж4).
-				endDirectByRoom(deps, r.Context(), callID, userID)
+				switch reason := disconnectReason(ev.Participant.DisconnectReason); reason {
+				case "DUPLICATE_IDENTITY":
+					log.Printf("личный звонок %s: %s переподключился (замена подключения) — звонок идёт", short(callID), short(userID))
+				case "CLIENT_INITIATED":
+					endDirectByRoom(deps, r.Context(), callID, userID)
+				default:
+					room := ev.Room.Name
+					deps.away.left(callID, userID, at, func(when time.Time) {
+						// «Вошёл заново» мог прийти раньше «вышел» — тогда возврата мы не увидели; спросить комнату.
+						if inRoom(deps, room, userID) {
+							log.Printf("личный звонок %s: %s в комнате — звонок идёт", short(callID), short(userID))
+							return
+						}
+						endDirectAt(deps, context.Background(), callID, userID, when)
+					})
+				}
 			} else {
 				notifyParticipants(deps, r, callID, "call.participant_left", map[string]any{
 					"call_id": callID, "user_id": userID,
@@ -325,6 +347,12 @@ func (f *flexInt) UnmarshalJSON(b []byte) error {
 // «кончился» обеим сторонам было бы шумом. Звонивший, так и не дождавшийся ответа, —
 // `cancelled`, а не `ended`: у собеседника это пропущенный.
 func endDirectByRoom(deps callsDeps, ctx context.Context, callID, userID string) {
+	endDirectAt(deps, ctx, callID, userID, time.Time{})
+}
+
+// endDirectAt — то же, с моментом конца [at] (ушедший не вернулся — конец там, где ушёл); нулевое — сейчас.
+func endDirectAt(deps callsDeps, ctx context.Context, callID, userID string, at time.Time) {
+	deps.away.take(callID)
 	call, err := deps.store.GetCall(ctx, callID)
 	if err != nil || (call.State != "ringing" && call.State != "answered") {
 		return
@@ -333,7 +361,7 @@ func endDirectByRoom(deps callsDeps, ctx context.Context, callID, userID string)
 	if call.State == "ringing" {
 		state = "missed"
 	}
-	_ = deps.store.SetCallState(ctx, callID, state, userID)
+	_ = deps.store.SetCallState(ctx, callID, state, userID, at)
 	change := endChange(call, userID, state)
 	deps.notifier.CallChange(ctx, call.InitiatorID, callID, change, "")
 	if call.PeerID != "" {
