@@ -397,4 +397,20 @@ class AppearanceTest {
 
         assertEquals(listOf("a=b.c"), after2.saved.map { it.name })
     }
+
+    @Test
+    fun олива_и_изумруд_готовые_светлые_и_помнятся() {
+        // Заказчик 2026-11-16: «Берём 1 и 7, добавь в Оформление» — пробы «Олива · белый» и «Изумруд · белый».
+        for ((choice, colors) in listOf(ThemeChoice.Olive to TimaColors.olive, ThemeChoice.Emerald to TimaColors.emerald)) {
+            val picked = Appearance.byDefault(systemDark = false).copy(choice = choice)
+            val back = Appearance.read(picked.write(), systemDark = true)
+            assertEquals(choice, back.choice, "выбор не сохранился")
+            assertEquals(colors, back.colors)
+            assertTrue(!back.dark, "готовая тема — светлая")
+            assertTrue(back.colors.contrastOf(VitalPair.PLATE) >= 4.5, "белое на акценте не читается: ${back.colors.contrastOf(VitalPair.PLATE)}")
+            assertTrue(back.colors.contrastOf(VitalPair.CONTENT) >= 7.0, "текст на фоне не читается")
+        }
+        assertEquals("Олива", RussianWords.appearance.theme(ThemeChoice.Olive))
+        assertEquals("Изумруд", RussianWords.appearance.theme(ThemeChoice.Emerald))
+    }
 }

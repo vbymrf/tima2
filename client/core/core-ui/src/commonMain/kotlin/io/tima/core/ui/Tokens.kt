@@ -156,6 +156,40 @@ data class TimaColors(
 ) {
     companion object {
 
+        /**
+         * «Олива» и «Изумруд» — готовые светлые темы из проб палитр (заказчик 2026-11-16: «Берём 1 и 7, добавь в
+         * Оформление»; пробы — `PaletteProbesTest`, 1 «Олива · белый», 7 «Изумруд · белый»). Основа — светлая: белый
+         * фон, шапка и вкладки — белый с оттенком светло-зелёного, акцент — зелёный пробы, текст — тёмно-зелёный;
+         * приглушённый текст, рамки и линии — из текста, как в светлой; янтарь и синие ссылки — прежние по смыслу.
+         */
+        val olive: TimaColors by lazy {
+            greenOn(nav = 0xFF675F3B, functional = 0xFFF3F2EA, text = 0xFF181200, my = 0x99CAC7A6, confirmed = 0xFF1A6254)
+        }
+        val emerald: TimaColors by lazy {
+            greenOn(nav = 0xFF1A6254, functional = 0xFFF1F2EA, text = 0xFF001F1B, my = 0x99CAC7A6, confirmed = 0xFF054C3E)
+        }
+
+        private fun greenOn(nav: Long, functional: Long, text: Long, my: Long, confirmed: Long): TimaColors {
+            val t = Color(text)
+            return light.copy(
+                navigation = Color(nav),
+                confirmed = Color(confirmed),
+                surface = Color(0xFFFFFFFF),
+                functional = Color(functional),
+                text = t,
+                text2 = t.copy(alpha = 0xB3 / 255f),
+                text3 = t.copy(alpha = 0x9E / 255f),
+                my = Color(my),
+                author = Color(0xFFFFFFFF),
+                border = t.copy(alpha = 0x47 / 255f),
+                line = t.copy(alpha = 0x24 / 255f),
+                onAccent = Color(0xFFFFFFFF),
+                softAccent = Color(nav).copy(alpha = 0x33 / 255f),
+                quiet = t.copy(alpha = 0x0F / 255f),
+                alarm = Color(0xFFE0544E),
+            )
+        }
+
         /** Светлая тема: `doc/Layout-UI-light/стиль.css`. */
         val light = TimaColors(
             navigation = Color(0xFF8AC44A),

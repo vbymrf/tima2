@@ -25,6 +25,10 @@ enum class ThemeChoice {
     Light,
     Dark,
 
+    /** Готовые светлые темы из проб палитр (заказчик 2026-11-16: «Берём 1 и 7, добавь в Оформление»). */
+    Olive,
+    Emerald,
+
     /**
      * Своя тема. Начинается копией светлой или тёмной — той, что стояла в момент
      * первого захода: пустая палитра из чёрного по чёрному никому не нужна.
@@ -274,13 +278,15 @@ data class Appearance(
         get() = when (choice) {
             ThemeChoice.Light -> TimaColors.light
             ThemeChoice.Dark -> TimaColors.dark
+            ThemeChoice.Olive -> TimaColors.olive
+            ThemeChoice.Emerald -> TimaColors.emerald
             ThemeChoice.Custom -> custom
         }
 
     /** Тёмная ли тема на деле: у готовых — по выбору, у своей — по типу. */
     val dark: Boolean
         get() = when (choice) {
-            ThemeChoice.Light -> false
+            ThemeChoice.Light, ThemeChoice.Olive, ThemeChoice.Emerald -> false
             ThemeChoice.Dark -> true
             ThemeChoice.Custom -> kind == ThemeKind.Dark
         }

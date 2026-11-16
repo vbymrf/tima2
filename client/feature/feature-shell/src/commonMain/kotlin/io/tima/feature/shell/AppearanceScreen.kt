@@ -553,6 +553,8 @@ private val TimaZonesAvatar = 32.dp
 private fun sampleOf(choice: ThemeChoice, appearance: Appearance) = when (choice) {
     ThemeChoice.Light -> TimaColors.light.navigation
     ThemeChoice.Dark -> TimaColors.dark.surface
+    ThemeChoice.Olive -> TimaColors.olive.navigation
+    ThemeChoice.Emerald -> TimaColors.emerald.navigation
     ThemeChoice.Custom -> appearance.custom.navigation
 }
 

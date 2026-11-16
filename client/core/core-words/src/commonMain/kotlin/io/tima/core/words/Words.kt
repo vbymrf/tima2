@@ -2528,6 +2528,9 @@ interface AppearanceWords {
     val themeLight: String
     val themeDark: String
     val themeCustom: String
+    /** Готовые светлые темы из проб палитр (2026-11-16). */
+    val themeOlive: String
+    val themeEmerald: String
 
     val slotNavigation: ColorSlotWords
     val slotActivity: ColorSlotWords
@@ -2731,6 +2734,8 @@ object RussianWords : Words {
         override val themeLight = "Светлая"
         override val themeDark = "Тёмная"
         override val themeCustom = "Пользовательская"
+        override val themeOlive = "Олива"
+        override val themeEmerald = "Изумруд"
 
         override val slotNavigation = ColorSlotWords(
             name = "Навигация и действие",

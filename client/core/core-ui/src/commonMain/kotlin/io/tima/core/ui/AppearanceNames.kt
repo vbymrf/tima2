@@ -19,6 +19,8 @@ import io.tima.core.words.AppearanceWords
 fun AppearanceWords.theme(choice: ThemeChoice): String = when (choice) {
     ThemeChoice.Light -> themeLight
     ThemeChoice.Dark -> themeDark
+    ThemeChoice.Olive -> themeOlive
+    ThemeChoice.Emerald -> themeEmerald
     ThemeChoice.Custom -> themeCustom
 }
 

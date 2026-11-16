@@ -84,6 +84,8 @@ object EnglishWords : Words {
         override val themeLight = "Light"
         override val themeDark = "Dark"
         override val themeCustom = "Custom"
+        override val themeOlive = "Olive"
+        override val themeEmerald = "Emerald"
 
         override val slotNavigation = ColorSlotWords(
             name = "Navigation and action",
