@@ -479,17 +479,21 @@ internal fun Chat(
     //
     // Отметка — только когда переписку **увидели** ([rememberSeen], 2026-10-20): открыли кнопкой
     // звонка, стоит замок, свёрнуто — не увидели, и «прочитано» отправителю было бы неправдой.
+    //
+    // Здесь — только тишина. Снять уведомления, отдать отметку своим устройствам и «прочитано»
+    // собеседнику — одно последствие одного события, [readEffects] ниже (2026-11-16).
     DisposableEffect(chatId, notices, seen) {
-        if (seen) {
-            notices?.watching(chatId)
-            seenUpTo(environment, chatId)
-        }
-        onDispose {
-            if (seen) {
-                notices?.watching(null)
-                // И на уходе: пока переписку видели, в ней могло прийти новое — его тоже видели.
-                seenUpTo(environment, chatId)
-            }
+        if (seen) notices?.watching(chatId)
+        onDispose { if (seen) notices?.watching(null) }
+    }
+    // Всё, что следует из «прочитано», — разом и в одном месте; решает `ChatStore` по признаку
+    // «переписку видят». Раньше «прочитано» собеседнику уходило отсюда при первом показе входящего,
+    // а уведомления снимались через 3 секунды: у отправителя зелёные галочки, у получателя — уведомление.
+    val readEffects = remember(chatId, notices, live) {
+        io.tima.domain.chat.ReadEffects { id, upTo ->
+            notices?.viewed(id, "просмотрена")
+            seenUpTo(environment, id)
+            live?.read(id, upTo)
         }
     }
     // Store живёт столько, сколько открыта переписка: ключ по chatId, чтобы при переходе в
@@ -501,6 +505,7 @@ internal fun Chat(
             reopenUnreadable = reopenUnreadable, heal = heal, people = people, postman = postman,
             openByPhrase = openByPhrase, fromPhoneMay = fromPhoneMay,
             pins = pins, pinMay = pinMay, setSuper = setSuper, finder = finder,
+            readEffects = readEffects,
         )
     }
     // Вид группы — первым: от него зависит, нужен ли ей ключ (заказчик 2026-10-21).
@@ -733,9 +738,6 @@ internal fun Chat(
             store.copyLog = null
         }
     }
-    // «Прочитано» — то новое, что сейчас на экране (ПЛАН-(ОП)): время написания позднейшего входящего.
-    val newestIncoming = state.lines.filter { !it.outgoing }.maxOfOrNull { it.atMs }
-    LaunchedEffect(newestIncoming, live) { if (live != null && newestIncoming != null) live.read(chatId, newestIncoming) }
     val receipts by (live?.receipts ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, io.tima.feature.chat.ChatReceipt>()) }).collectAsState()
     val typingNow by (live?.typing ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, Long>()) }).collectAsState()
     val presenceNow by (live?.presence ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, LiveStates.Seen>()) }).collectAsState()
@@ -2105,6 +2107,7 @@ internal object ChatAssembly {
         pinMay: Boolean,
         setSuper: (suspend (Long) -> Boolean)?,
         finder: io.tima.domain.chat.MessageFinder?,
+        readEffects: io.tima.domain.chat.ReadEffects? = null,
     ): ChatStore =
         ChatStore(
             chatId = chatId,
@@ -2113,7 +2116,7 @@ internal object ChatAssembly {
             scope = scope,
             // Где остановились — у каждой переписки своё (ПЛАН-(МП) М2).
             places = ChatPlacesInSettings(environment.settings),
-            markRead = environment.reading,
+            markRead = readEffects?.let { environment.reading.with(it) } ?: environment.reading,
             seenAtStart = false,
             // Запрос недостающего ключа и имена авторов — только у группы: у личной
             // переписки просить не у кого, а собеседник назван в шапке.

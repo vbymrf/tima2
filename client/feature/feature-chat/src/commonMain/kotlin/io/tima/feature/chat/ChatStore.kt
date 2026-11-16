@@ -452,7 +452,7 @@ class ChatStore(
                 // `SqlInboxStore.markChatRead`: он не трогает базу, когда отмечать нечего.
                 // Сторожить это в экране было бы вторым местом для одной правды — и
                 // ушедшим бы первым, потому что отметку зовут не только отсюда.
-                if (seenNow) withContext(io) { markRead?.chat(chatId) }
+                if (seenNow) withContext(io) { markRead?.chat(chatId, newestIncoming()) }
             }
         // С чего открыть (ПЛАН-(МП) М2): первое непрочитанное — оно узнаётся до отметки «прочитано»; нет — где
         // остановились; нет и его — внизу. Лента сразу дорастает до него.
@@ -482,8 +482,11 @@ class ChatStore(
     fun seen(on: Boolean) {
         if (seenNow == on) return
         seenNow = on
-        if (on) scope.launch { withContext(io) { markRead?.chat(chatId) } }
+        if (on) scope.launch { withContext(io) { markRead?.chat(chatId, newestIncoming()) } }
     }
+
+    /** Время позднейшего входящего в ленте — до него «прочитано» собеседнику; 0 — входящих нет. */
+    private fun newestIncoming(): Long = _state.value.lines.filter { !it.outgoing }.maxOfOrNull { it.atMs } ?: 0L
 
     /** Лечение запускалось: второй раз не надо — ответ придёт потоком из базы. */
     private var healed = false

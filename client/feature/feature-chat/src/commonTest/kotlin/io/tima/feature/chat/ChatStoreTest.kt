@@ -101,6 +101,49 @@ class ChatStoreTest {
     }
 
     /**
+     * **«Прочитано» собеседнику и снятие уведомлений — в тот же момент, что своя отметка** (2026-11-16,
+     * живая проверка: зашли в переписку на 2,1 с — у отправителя зелёные галочки, у получателя висит
+     * уведомление). Пока переписку не видят, последствий нет; увидели — одно событие с временем
+     * позднейшего входящего; новое входящее, пока видят, — снова, со своим временем.
+     */
+    @Test
+    fun прочитано_собеседнику_только_когда_переписку_увидели() = runTest {
+        val effects = mutableListOf<Pair<String, Long>>()
+        val store = ChatStore(
+            io = kotlinx.coroutines.Dispatchers.Unconfined,
+            chatId = "chat-1",
+            observe = ObserveChat(feed),
+            send = SendMessage(
+                queue = OutgoingQueue { _, _, _, _, _, _ -> true },
+                codec = object : MessageBodyCodec {
+                    override fun encodeText(text: String) = ByteArray(1)
+                    override fun decodeText(body: ByteArray): String? = null
+                },
+                keys = DedupKeys { "d-1" },
+            ),
+            scope = backgroundScope,
+            markRead = MarkRead(ReadMarks { 1 }, io.tima.domain.chat.ReadEffects { id, upTo -> effects += id to upTo }),
+            seenAtStart = false,
+        )
+        val mine = line("d-0", MessageDisplay.SENT).copy(atMs = 9_000)
+        val first = line("d-1", MessageDisplay.RECEIVED).copy(outgoing = false, atMs = 2_000)
+        stream.value = listOf(mine, first)
+        store.state.first { it.lines.size == 2 }
+        repeat(20) { kotlinx.coroutines.yield() }
+        assertTrue(effects.isEmpty(), "не видели — а «прочитано» ушло: $effects")
+
+        store.seen(true)
+        repeat(20) { kotlinx.coroutines.yield() }
+        assertEquals("chat-1" to 2_000L, effects.lastOrNull(), "увидели — до позднейшего входящего, своё не в счёт")
+
+        val second = line("d-2", MessageDisplay.RECEIVED).copy(outgoing = false, atMs = 3_000)
+        stream.value = listOf(mine, first, second)
+        store.state.first { it.lines.size == 3 }
+        repeat(20) { kotlinx.coroutines.yield() }
+        assertEquals("chat-1" to 3_000L, effects.lastOrNull(), "пришло, пока видят, — прочитано и оно")
+    }
+
+    /**
      * Не видна — не прочитана (заказчик 2026-10-20: «зашли в чат, свернули приложение — всё равно
      * прочитали, хотя человек не видел»). Открыта, но не видна: приходящее не отмечается; увидели —
      * отмечено; снова не видна — новое опять не отмечается.

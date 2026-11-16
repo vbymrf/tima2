@@ -325,11 +325,13 @@ class NoticesTest {
         уведомления.arrived("chat-1", "u-борис", ref = "chat-1/1")
         уведомления.arrived("chat-2", "u-борис", ref = "chat-2/1")
 
-        уведомления.watching("chat-1")
+        // Снимает просмотр (`viewed` — последствие «прочитано», ReadEffects), а не открытие: с 2026-11-16
+        // открытая переписка только глушит новое, снимать — дело одного события.
+        уведомления.viewed("chat-1", "просмотрена")
         advanceUntilIdle()
         assertEquals(1, показ.строки.last { it.key == "tab:chats" }.number)
 
-        уведомления.watching("chat-2")
+        уведомления.viewed("chat-2", "просмотрена")
         advanceUntilIdle()
         assertTrue("tab:chats" in показ.снято, "ноль — строки нет")
         assertEquals(0, показ.значок.last())
