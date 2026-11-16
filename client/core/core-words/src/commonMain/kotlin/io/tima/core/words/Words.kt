@@ -1433,6 +1433,8 @@ interface CallWords {
      * различия человек не знает, оборвалось ли у него самого.
      */
     val peerLeft: String
+    /** Собеседник пропал из комнаты, ждём его возврата (беда 2026-11-15). */
+    val peerAway: String
 
     /** Чужое видео мы не принимаем — по своей кнопке. */
     val remoteHidden: String
@@ -3866,6 +3868,7 @@ object RussianWords : Words {
         override val peerWeakVideo = "У собеседника слабая связь — видео выключено, звук идёт"
         override val ownWeakVideo = "Ваше видео выключено: слабая связь"
         override val peerLeft = "Собеседник положил трубку"
+        override val peerAway = "Собеседник переподключается…"
         override fun presetApplied(name: String) =
             "Набор «$name» применён — связь прервалась на пару секунд не сама"
         override val presetRefused =

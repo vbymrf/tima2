@@ -405,6 +405,8 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         closeRoom()
         preset = publish
         everAnswered = false
+        peerAway.reset()
+        peerAwayJob?.cancel()
         takeRemote = true
         group = door.group
         ceilingHeight = null
@@ -1423,15 +1425,33 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
      * Стадия — из состояния комнаты и участников вместе. Правило то же, что на Android:
      * «вошли» не значит «соединили», а пустая комната до ответа и после — разное.
      */
+    /** Собеседник пропал после ответа — ждём возврата (беда 2026-11-15), как на Android. */
+    private val peerAway = io.tima.core.call.PeerAway()
+    private var peerAwayJob: Job? = null
+
     private fun settle(callId: String) {
         if (others.isNotEmpty()) everAnswered = true
+        val alone = group == null && roomState == ConnectionState.CONN_CONNECTED && others.isEmpty() && everAnswered
+        val wasAway = peerAway.started
+        val waiting = peerAway.waiting(alone, System.currentTimeMillis())
+        if (alone && !wasAway) {
+            Journal.note(LogCode.CALL, "собеседник пропал из комнаты — ждём возврата", "сек" to io.tima.core.call.PeerAway.WAIT_MS / 1000)
+            peerAwayJob?.cancel()
+            peerAwayJob = scope.launch(worker) {
+                delay(io.tima.core.call.PeerAway.WAIT_MS + 100)
+                settle(callId)
+            }
+        } else if (!alone && wasAway) {
+            peerAwayJob?.cancel()
+            if (others.isNotEmpty()) Journal.note(LogCode.CALL, "собеседник вернулся — разговор идёт")
+        }
         val stage = when {
             roomState == ConnectionState.CONN_DISCONNECTED -> CallStage.Ended
             roomState == ConnectionState.CONN_RECONNECTING -> CallStage.Reconnecting
             // Групповой: в комнате — в звонке, пустая комната не конец (ГЗ3).
             group != null -> CallStage.Connected
             others.isNotEmpty() -> CallStage.Connected
-            everAnswered -> CallStage.Ended
+            everAnswered -> if (waiting) CallStage.Connected else CallStage.Ended
             else -> CallStage.Connecting
         }
         _state.value = _state.value.copy(
@@ -1439,6 +1459,7 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             others = others.toList(),
             inRoom = roomState == ConnectionState.CONN_CONNECTED,
             stage = stage,
+            peerAway = waiting,
             peerLeft = group == null && stage == CallStage.Ended && everAnswered && roomState == ConnectionState.CONN_CONNECTED,
         )
         if (group != null) publishPeers()

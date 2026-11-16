@@ -1180,6 +1180,7 @@ object SpanishWords : Words {
         override val peerWeakVideo = "La otra persona tiene una conexión débil — el vídeo está apagado, el audio sigue"
         override val ownWeakVideo = "Tu vídeo está apagado: conexión débil"
         override val peerLeft = "La otra persona colgó"
+        override val peerAway = "La otra persona se está reconectando…"
         override fun presetApplied(name: String) =
             "Conjunto «$name» aplicado: el corte de dos segundos no fue un fallo"
         override val presetRefused =

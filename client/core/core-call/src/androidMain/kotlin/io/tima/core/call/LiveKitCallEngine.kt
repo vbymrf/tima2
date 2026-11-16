@@ -128,6 +128,10 @@ class LiveKitCallEngine(
     /** Отвечал ли кто-нибудь. Отличает «ещё не ответили» от «собеседник ушёл». */
     private var everAnswered: Boolean = false
 
+    /** Собеседник пропал после ответа — ждём возврата (беда 2026-11-15). */
+    private val peerAway = PeerAway()
+    private var peerAwayJob: Job? = null
+
     // Прошлый отсчёт байтов и его время: мгновенного битрейта в WebRTC нет, он считается
     // разницей. -1 означает «ещё не считали», и это не то же самое, что ноль.
     private var lastSent: Long = -1
@@ -307,6 +311,8 @@ class LiveKitCallEngine(
         publish?.let { publishVideoAs(created, it.video, exact = it.exact) }
         room = created
         everAnswered = false
+        peerAway.reset()
+        peerAwayJob?.cancel()
         watch(created, door.callId)
         _state.value = CallState(
             stage = CallStage.Connecting,
@@ -2025,6 +2031,21 @@ class LiveKitCallEngine(
         val others = room.remoteParticipants.keys.map { it.value }
         if (others.isNotEmpty()) everAnswered = true
         val roomState = room.state
+        // Пустая комната после ответа — не сразу конец: собеседник мог переподключаться (`PeerAway`).
+        val alone = group == null && roomState == Room.State.CONNECTED && others.isEmpty() && everAnswered
+        val wasAway = peerAway.started
+        val waiting = peerAway.waiting(alone, System.currentTimeMillis())
+        if (alone && !wasAway) {
+            Journal.note(LogCode.CALL, "собеседник пропал из комнаты — ждём возврата", "сек" to PeerAway.WAIT_MS / 1000)
+            peerAwayJob?.cancel()
+            peerAwayJob = scope.launch {
+                delay(PeerAway.WAIT_MS + 100)
+                settle(room, callId)
+            }
+        } else if (!alone && wasAway) {
+            peerAwayJob?.cancel()
+            if (others.isNotEmpty()) Journal.note(LogCode.CALL, "собеседник вернулся — разговор идёт")
+        }
         val stage = when {
             roomState == Room.State.DISCONNECTED -> CallStage.Ended
             roomState == Room.State.RECONNECTING -> CallStage.Reconnecting
@@ -2033,8 +2054,8 @@ class LiveKitCallEngine(
             // комната здесь не конец: остальные входят и выходят, звонок идёт (ГЗ3).
             group != null -> CallStage.Connected
             others.isNotEmpty() -> CallStage.Connected
-            // В комнате одни. До ответа это набор, после — разговор кончился.
-            everAnswered -> CallStage.Ended
+            // В комнате одни. До ответа это набор, после — ждём возврата, не вернулся — разговор кончился.
+            everAnswered -> if (waiting) CallStage.Connected else CallStage.Ended
             else -> CallStage.Connecting
         }
         _state.value = _state.value.copy(
@@ -2042,6 +2063,7 @@ class LiveKitCallEngine(
             others = others,
             inRoom = roomState == Room.State.CONNECTED,
             stage = stage,
+            peerAway = waiting,
             peerLeft = group == null && stage == CallStage.Ended && everAnswered && roomState == Room.State.CONNECTED,
         )
     }

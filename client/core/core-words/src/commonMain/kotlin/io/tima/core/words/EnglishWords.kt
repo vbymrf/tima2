@@ -1180,6 +1180,7 @@ object EnglishWords : Words {
         override val peerWeakVideo = "The other side has a weak connection — video is off, audio continues"
         override val ownWeakVideo = "Your video is off: weak connection"
         override val peerLeft = "The other side hung up"
+        override val peerAway = "The other side is reconnecting…"
         override fun presetApplied(name: String) =
             "Preset \"$name\" applied — the two-second drop was not an accident"
         override val presetRefused =

@@ -742,7 +742,8 @@ private fun under(state: CallState, incoming: Boolean, seconds: Int, peerRinging
         }
         // Время идёт только в разговоре: до ответа считать нечего, и показанные там
         // секунды были бы выдумкой. Ровно это и случилось на первом живом звонке.
-        CallStage.Connected -> words.duration(seconds)
+        // Собеседник пропал из комнаты — ждём его возврата (беда 2026-11-15), время разговора на это время не важно.
+        CallStage.Connected -> if (state.peerAway) words.peerAway else words.duration(seconds)
         CallStage.Reconnecting -> words.reconnecting
         CallStage.Ended -> if (state.peerLeft) words.peerLeft else words.ended
     }
