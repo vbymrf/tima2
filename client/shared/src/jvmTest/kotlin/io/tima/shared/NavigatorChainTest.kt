@@ -53,6 +53,34 @@ class NavigatorChainTest {
         assertEquals(listOf<Where>(Where.Chat("g-1", "Группа"), Where.Members("g-1", "Группа")), nav.chain())
     }
 
+    /**
+     * Отчёт Q248 (2026-11-16): «Состав группы» открыт из события «заявка новой личности» — первым звеном, чата под
+     * ним нет. «Назад», который открывает чат по имени, кладёт его сверху; «назад» чата возвращает на «Состав» —
+     * круг. «Назад» подокна закрывает звено: из события — туда, где событие показали.
+     */
+    @Test
+    fun назад_из_состава_открытого_событием_не_кружит() {
+        nav.where = Where.Members("g-1", null)
+        nav.where = Where.Chat("g-1", null) // прежний «назад» состава — открыть чат
+        assertEquals(2, nav.chain().size, "открыть родителя по имени — новое звено, отсюда и круг")
+        nav.where = Where.Nothing
+        assertEquals(Where.Members("g-1", null), nav.where)
+
+        nav.where = Where.Nothing // нынешний «назад» состава — закрыть звено
+        assertEquals(Where.Nothing, nav.where, "из события — обратно туда, где его показали")
+    }
+
+    /**
+     * Сторож: «назад» подокна в `Root.kt` закрывает звено (`Where.Nothing`), а не открывает место по имени — иначе
+     * из подокна, открытого не из «родителя», он ведёт вперёд (беда 2026-11-18).
+     */
+    @Test
+    fun назад_подокон_закрывает_звено() {
+        val root = java.io.File("src/commonMain/kotlin/io/tima/shared/Root.kt").readText()
+        val named = Regex("""onBack = \{ where = Where\.(?!Nothing\b)\w+""").findAll(root).map { it.value }.toList()
+        assertTrue(named.isEmpty(), "«назад», открывающий место по имени: $named")
+    }
+
     @Test
     fun настройки_одно_звено() {
         nav.where = Where.Settings(SettingsItem.DEVICES)

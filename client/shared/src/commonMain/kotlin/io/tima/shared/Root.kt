@@ -4160,7 +4160,9 @@ private fun App(
                         onCode = transfer::changedCode,
                         onPhrase = transfer::changedPhrase,
                         onTake = transfer::take,
-                        onBack = { where = Where.Settings(SettingsItem.VIRTUALS) },
+                        // «Назад» — закрыть звено, а не открыть родителя по имени (беда 2026-11-18: из подокна,
+                        // открытого не из родителя, такой «назад» уводил вперёд и замыкал круг).
+                        onBack = { where = Where.Nothing },
                         onDone = {
                             where = Where.Nothing
                             transferState.taken?.let(onTransferTaken)
@@ -4855,7 +4857,10 @@ private fun App(
                         session = session,
                         groupId = current.groupId,
                         scope = scope,
-                        onBack = { where = Where.Chat(current.groupId, current.name) },
+                        // «Назад» — закрыть звено (беда 2026-11-18, отчёт Q248): «Состав» открывают и из события
+                        // «заявка новой личности», чата под ним тогда нет — «открыть чат» клал его сверху, а «назад»
+                        // чата возвращал сюда же, по кругу.
+                        onBack = { where = Where.Nothing },
                         onAccess = { where = Where.Access(current.groupId, current.name) },
                         groupKind = listState.chats.firstOrNull { it.chatId == current.groupId }?.groupKind,
                         people = people,
@@ -4886,7 +4891,8 @@ private fun App(
                         onAsk = store::ask,
                         onDecide = store::decide,
                         onCloseTrouble = store::troubleDismissed,
-                        onBack = { where = Where.Members(current.groupId, current.name) },
+                        // «Назад» — закрыть звено (беда 2026-11-18), а не открыть «Состав» по имени.
+                        onBack = { where = Where.Nothing },
                     )
                 }
             }
