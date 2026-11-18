@@ -237,6 +237,14 @@ class LiveKitCallEngine(
     }
 
     override suspend fun connect(door: CallDoor, publish: PublishPreset?) {
+        // Комната одна. Новый вход при живой прежней — прежнюю отключить (беда 2026-11-18, отчёт CGER): иначе
+        // она оставалась в звонке без хозяина — с микрофоном и звуком собеседника, а окно считало звонок оконченным.
+        room?.let { old ->
+            Journal.note(LogCode.CALL, "новый вход при живой комнате — прежнюю отключаю", "звонок" to door.callId.take(8))
+            stopWatching()
+            room = null
+            runCatching { old.disconnect() }
+        }
         // Пресет применяется ПРИ СОЗДАНИИ комнаты, а не при публикации: кодек и слои
         // участвуют в согласовании, и менять их потом — пересогласование, а иногда разрыв
         // (С-В5 в плане стенда).
@@ -323,6 +331,12 @@ class LiveKitCallEngine(
         )
         try {
             created.connect(url = door.url, token = door.token)
+            // Пока входили, начался другой вход и занял место — этот устарел: отключить и не трогать звонок.
+            if (room !== created) {
+                Journal.note(LogCode.CALL, "вход устарел — его комнату отключаю", "звонок" to door.callId.take(8))
+                runCatching { created.disconnect() }
+                return
+            }
             // ── МИКРОФОН ВКЛЮЧАЕТСЯ ЗДЕСЬ, И БЕЗ ЭТОГО ЗВОНОК НЕМОЙ ─────────
             //
             // `connect` заводит комнату, но не публикует ничего: что отдавать наверх —
@@ -334,6 +348,11 @@ class LiveKitCallEngine(
             announceDecoding(created)
             publishMicrophone(created)
         } catch (e: Throwable) {
+            // Устаревший вход падает, потому что его комнату отключили, — звонок идёт другой комнатой.
+            if (room !== created) {
+                runCatching { created.disconnect() }
+                return
+            }
             // Причина словами и в состоянии: звонок, который «просто не начался», —
             // худшее из состояний, потому что человек видит пустоту и не знает, чего ждать.
             val why = e.message ?: e::class.simpleName ?: "не подключились"

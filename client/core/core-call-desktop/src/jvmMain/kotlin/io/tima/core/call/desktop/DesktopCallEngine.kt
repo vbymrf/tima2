@@ -402,6 +402,16 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             _state.value = CallState(stage = CallStage.Ended, callId = door.callId, trouble = why)
             return@withContext
         }
+        // Комната одна (беда 2026-11-18, отчёт CGER): новый вход при живой прежней — прежнюю отключить, а не бросить
+        // в звонке без хозяина. [connects] — номер входа: пока этот ждал ответа, мог начаться следующий.
+        val mine = ++connects
+        if (room != 0L) {
+            Journal.note(LogCode.CALL, "новый вход при живой комнате — прежнюю отключаю", "звонок" to door.callId.take(8))
+            val target = room
+            Ffi.call(DISCONNECT_TIMEOUT_MS) { id ->
+                FfiRequest(disconnect = DisconnectRequest(room_handle = target, request_async_id = id))
+            }
+        }
         closeRoom()
         preset = publish
         everAnswered = false
@@ -440,6 +450,19 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
             )
         }?.connect
         val result = answer?.result
+        if (mine != connects) {
+            // Пока ждали ответа, начался другой вход — этот устарел: его комнату отключить и звонок не трогать.
+            Journal.note(LogCode.CALL, "вход устарел — его комнату отключаю", "звонок" to door.callId.take(8))
+            result?.let { stale ->
+                val target = stale.room.handle.id
+                Ffi.call(DISCONNECT_TIMEOUT_MS) { id ->
+                    FfiRequest(disconnect = DisconnectRequest(room_handle = target, request_async_id = id))
+                }
+                Ffi.drop(stale.local_participant.handle.id)
+                Ffi.drop(target)
+            }
+            return@withContext
+        }
         if (result == null) {
             val why = answer?.error ?: "нет ответа за ${CONNECT_TIMEOUT_MS / 1000} с"
             // Причина словами и в состоянии: звонок, который «просто не начался», — худшее
@@ -1465,7 +1488,11 @@ class DesktopCallEngine private constructor(private val scope: CoroutineScope) :
         if (group != null) publishPeers()
     }
 
+    /** Номер входа в комнату: устаревший вход узнаёт, что его место занято (беда 2026-11-18). */
+    private var connects = 0
+
     override suspend fun disconnect() = withContext(worker) {
+        connects++
         if (room != 0L) {
             val target = room
             Ffi.call(DISCONNECT_TIMEOUT_MS) { id ->

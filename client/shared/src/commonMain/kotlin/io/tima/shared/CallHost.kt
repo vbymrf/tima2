@@ -456,12 +456,24 @@ class CallHost(
         if (engine == null) Journal.note(LogCode.CALL, "на этом устройстве звонков нет — показан без «Принять»")
     }
 
+    /**
+     * Какой звонок уже приняли — второй раз «Принять» не делает ничего (беда 2026-11-18, отчёт CGER: ответ шёл по
+     * медленной сети 3,5 с, кнопку нажали снова — второй `answer`, второй вход того же устройства; LiveKit выбросил
+     * одно подключение, окно решило «звонок кончился», а второе жило без хозяина — звук шёл, положить было нечем).
+     */
+    private var acceptedCall = ""
+
     /** Принять входящий: сервер выдаёт токен той же комнаты. */
     fun accept() {
         val live = engine ?: return
         // Тот же вопрос, что и при исходящем, и по той же причине: без микрофона комната
         // соединится, а звука не будет ни в одну сторону.
         withAccess(video) {
+            if (callId.isNotEmpty() && acceptedCall == callId) {
+                Journal.note(LogCode.CALL, "«Принять» повторно — пропущено", "звонок" to callId.take(8))
+                return@withAccess
+            }
+            acceptedCall = callId
             scope.launch {
                 // Групповой — вход в звонок группы, а не ответ: отвечать некому (ГЗ3).
                 val step = if (group != null) calls.join(callId) else calls.answer(callId)

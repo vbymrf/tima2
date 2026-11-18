@@ -532,6 +532,42 @@ class CallHostTest {
         assertTrue(ring.none { it }, "у входящего звучит гудок звонящего: $ring")
     }
 
+    /**
+     * Беда 2026-11-18 (отчёт CGER): ответ шёл по медленной сети, «Принять» нажали снова — второй `answer` и второй
+     * вход того же устройства; LiveKit выбросил одно подключение, окно закрылось, второе жило без хозяина со звуком.
+     * Второе «Принять» того же звонка не делает ничего; новый звонок принимается как обычно.
+     */
+    @Test
+    fun второе_принять_того_же_звонка_ничего_не_делает() = runTest {
+        val calls = CountingCalls()
+        val engine = FakeEngine()
+        var entered = 0
+        engine.onConnect = { entered++ }
+        val host = host(calls = calls, engine = engine)
+        host.ring(callId = "первый", fromId = "u-1", fromName = "Аня", video = false)
+        host.accept()
+        host.accept()
+        assertEquals(1, calls.answers, "второй ответ на тот же звонок")
+        assertEquals(1, entered, "второй вход в ту же комнату")
+
+        host.hangUp()
+        host.ring(callId = "второй", fromId = "u-1", fromName = "Аня", video = false)
+        host.accept()
+        assertEquals(2, calls.answers, "новый звонок не принялся")
+    }
+
+    /** Сигналинг, который считает ответы. */
+    private class CountingCalls : Calls {
+        var answers = 0
+        override suspend fun start(peerId: String, video: Boolean): CallStep =
+            CallStep.Door(CallDoor(callId = "дверь", room = "комната", url = "wss://х", token = "жетон"))
+        override suspend fun answer(callId: String): CallStep {
+            answers++
+            return CallStep.Door(CallDoor(callId = callId, room = "комната", url = "wss://х", token = "жетон"))
+        }
+        override suspend fun end(callId: String, busy: Boolean): Boolean = true
+    }
+
     private fun TestScope.host(
         calls: Calls = FakeCalls(),
         engine: FakeEngine = FakeEngine(),
