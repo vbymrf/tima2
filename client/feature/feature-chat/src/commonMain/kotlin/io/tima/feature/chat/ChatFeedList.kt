@@ -339,7 +339,7 @@ internal const val FLOATING_DAY_HOLD_MS = 1_000L
  * Дата при прокрутке (ПЛАН-(СЦ) СЦ8; заказчик 2026-11-18: «светло-зелёным пузырём вверху посередине во время
  * прокрутки; не прокручиваем — пропадает»). День — верхнего видимого сообщения; держится ещё
  * [FLOATING_DAY_HOLD_MS] после остановки. В светлых темах подложка светло-зелёная (`softAccent`), в тёмной —
- * светло-серая (§1.1, 8). Под то, что лежит поверх ленты сверху ([FeedJumps.topCover]), не заходит.
+ * светло-серая (§1.1, 8): цвет текста темы (`text2`), надпись — цветом фона. Под то, что лежит поверх ленты сверху ([FeedJumps.topCover]), не заходит.
  */
 @Composable
 internal fun FloatingDay(lines: List<ChatLine>, state: androidx.compose.foundation.lazy.LazyListState, cover: Int, modifier: Modifier = Modifier) {
@@ -364,18 +364,15 @@ internal fun FloatingDay(lines: List<ChatLine>, state: androidx.compose.foundati
         feedDay(atMs, Tima.words.chat),
         fontSize = TimaType.sz6,
         weight = FontWeight.Bold,
-        color = if (dark) Color(0xFF1E1E1E) else colors.text,
+        color = if (dark) colors.surface else colors.text,
         lineOne = true,
         modifier = modifier
             .padding(top = coverDp + TimaSpacing.about2)
-            .background(if (dark) FLOATING_DAY_DARK else colors.softAccent, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .background(if (dark) colors.text2 else colors.softAccent, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .testTag(FLOATING_DAY_TAG),
     )
 }
-
-/** Подложка пузыря даты в тёмной теме — светло-серая (заказчик 2026-11-18, §1.1, 8). */
-private val FLOATING_DAY_DARK = Color(0xFFD6D6D6)
 
 /** День над первым сообщением дня — посередине, тихо, как служебная строка. */
 @Composable

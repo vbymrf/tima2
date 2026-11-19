@@ -93,6 +93,7 @@ class GroupsApi(
                 myRole = objectValue.str("my_role").orEmpty(),
                 callTtlUntil = objectValue.str("call_ttl_until").orEmpty(),
                 communityId = objectValue.str("community_id").orEmpty(),
+                hidden = objectValue.bool("hidden") ?: false,
             )
         }
         return groups?.let { GroupsResult.Groups(it) }
@@ -302,6 +303,8 @@ class RemoteGroup(
     val callTtlUntil: String = "",
     /** Сообщество, в которое группа внесена; пусто — отдельная. */
     val communityId: String = "",
+    /** Секретная (ПЛАН-(СЦ) СЦ2). */
+    val hidden: Boolean = false,
 )
 
 /** Участник группы. */

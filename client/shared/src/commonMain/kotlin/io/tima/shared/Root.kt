@@ -3325,7 +3325,28 @@ private fun App(
     // не открыто. Отсюда «прочитано» и снятие уведомлений — [rememberSeen].
     val windowUp by assembled.notices.shown.collectAsState()
     val looking = windowUp && !(locked && pin != null && lockWho != null && !callHost.active) && window != Window.Call
+    // Свои ссылки (ПЛАН-(СЦ) СЦ2): карточка приглашения — подокно «Принять / Отказаться», ссылка на сущность — её
+    // страница: группа своя — переписка, чужая — «Описание»; сообщество — его страница.
+    val timaLink: (String) -> Boolean = { url ->
+        val invite = io.tima.domain.chat.EntityInvites.inviteIdOf(url)
+        val entity = io.tima.domain.chat.EntityInvites.entityOf(url)
+        when {
+            invite != null -> { where = Where.Invite(invite); true }
+            entity != null -> {
+                val (kind, id) = entity
+                where = when (kind) {
+                    io.tima.domain.chat.EntityKind.Community -> Where.Community(id)
+                    io.tima.domain.chat.EntityKind.Group ->
+                        if (socialState.mine.any { it.groupId == id }) Where.Chat(id, null) else Where.Showcase("group", id, "")
+                    else -> Where.Showcase(kind.wire, id, "")
+                }
+                true
+            }
+            else -> false
+        }
+    }
     CompositionLocalProvider(
+        io.tima.feature.chat.LocalTimaLink provides timaLink,
         LocalLooking provides looking,
         LocalActiveCall provides activeCall.takeIf { callHost.active && window != Window.Call },
         // Панель перехода (ПЛАН-(ВО) ВО2): показана по умолчанию (Р2); скрыта настройкой — пузыри в шапке (ВО3).
@@ -4168,6 +4189,27 @@ private fun App(
                             where = Where.Nothing
                             transferState.taken?.let(onTransferTaken)
                         },
+                    )
+                }
+            }
+
+            is Where.Invite -> {
+                {
+                    val store = remember(current) { io.tima.feature.group.InviteStore(network.invites, scope, current.inviteId) }
+                    val inviteState by store.state.collectAsState()
+                    LaunchedEffect(current) { store.refresh() }
+                    io.tima.feature.group.InviteScreen(
+                        state = inviteState,
+                        onAccept = { Journal.note(LogCode.NAV, "приглашение", "итог" to "accept"); store.answer(true) },
+                        onDecline = { Journal.note(LogCode.NAV, "приглашение", "итог" to "decline"); store.answer(false) },
+                        onOpen = { inv ->
+                            where = when (inv.kind) {
+                                io.tima.domain.chat.EntityKind.Community -> Where.Community(inv.entityId)
+                                io.tima.domain.chat.EntityKind.Group -> Where.Chat(inv.entityId, inv.title)
+                                else -> Where.Showcase(inv.kind.wire, inv.entityId, inv.title)
+                            }
+                        },
+                        onBack = { where = Where.Nothing },
                     )
                 }
             }

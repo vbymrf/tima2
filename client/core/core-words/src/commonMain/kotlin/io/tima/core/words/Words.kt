@@ -55,6 +55,7 @@ interface Words {
     val showcase: ShowcaseWords
     /** Вид группы — где аватар автора (2026-10-07). */
     val groupLook: GroupLookWords
+    val socium: SociumWords
     val suggest: SuggestWords
     val accountList: AccountListWords
     val chat: ChatWords
@@ -4451,6 +4452,7 @@ object RussianWords : Words {
     override val editor: EditorWords = RussianEditorWords
     override val showcase: ShowcaseWords = RussianShowcaseWords
     override val groupLook: GroupLookWords = RussianGroupLookWords
+    override val socium: SociumWords = RussianSociumWords
     override val suggest: SuggestWords = RussianSuggestWords
     override val accountList: AccountListWords = RussianAccountListWords
 

@@ -93,6 +93,8 @@ fun NewGroupScreen(
     onCatalogue: (Boolean) -> Unit = {},
     /** Канал: принимает ли обсуждения. */
     onComments: (Boolean) -> Unit = {},
+    /** «Секретная» (ПЛАН-(СЦ) СЦ2); `null` — галочки нет. */
+    onSecret: ((Boolean) -> Unit)? = null,
     /** Сообщество: отметить или снять элемент на шаге «что вносим». */
     onItem: (CommunityItem) -> Unit = {},
 ) {
@@ -120,10 +122,13 @@ fun NewGroupScreen(
                     Step.Joining -> JoiningStep(state, onJoining, onExplain)
                     Step.Catalogue -> CatalogueStep(state, onCatalogue, onExplain)
                     Step.Comments -> CommentsStep(state, onComments, onExplain)
-                    Step.Naming -> NamingStep(
-                        state, onTitle, onDescription, onNumber, onCountryCode, onAddNumber, onRemoveNumber,
-                        onShelf = onShelf, onNewShelf = onNewShelf, onCreateShelf = onCreateShelf,
-                    )
+                    Step.Naming -> {
+                        NamingStep(
+                            state, onTitle, onDescription, onNumber, onCountryCode, onAddNumber, onRemoveNumber,
+                            onShelf = onShelf, onNewShelf = onNewShelf, onCreateShelf = onCreateShelf,
+                        )
+                        if (onSecret != null) SecretLine(state.secret, onSecret)
+                    }
                     Step.Bringing -> BringingStep(state, onItem)
                 }
 
@@ -560,6 +565,23 @@ private fun stepTitle(step: Step): String = with(Tima.words.wizard) {
     }
 }
 
+/** «Секретная» (ПЛАН-(СЦ) СЦ2): галочка с пояснением на шаге имени — у группы, канала и сообщества. */
+@Composable
+private fun SecretLine(secret: Boolean, onSecret: (Boolean) -> Unit) {
+    val words = Tima.words.socium
+    Row(
+        Modifier.fillMaxWidth().clickable { onSecret(!secret) }.testTag(WizardTags.SECRET),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+    ) {
+        io.tima.core.ui.CheckMark(on = secret)
+        Column {
+            Caption(words.secret, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+            Secondary(words.secretAbout)
+        }
+    }
+}
+
 /** Приглушение недоступной строки. Отдельной функцией, чтобы не плодить магию в разметке. */
 private fun Modifier.alphaOfUnavailable(): Modifier = this.background(Color.Transparent)
 
@@ -580,6 +602,9 @@ object WizardTags {
     const val BY_LINK = "wizard:by-link"
     const val COMMENTS_ON = "wizard:comments-on"
     const val COMMENTS_OFF = "wizard:comments-off"
+
+    /** Галочка «Секретная» на шаге имени (ПЛАН-(СЦ) СЦ2). */
+    const val SECRET = "wizard:secret"
 
     /** Строка группы или канала, вносимых в сообщество; нужная — по названию внутри. */
     const val BRING = "wizard:bring"

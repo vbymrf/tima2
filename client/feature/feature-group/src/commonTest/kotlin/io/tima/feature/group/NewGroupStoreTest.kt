@@ -172,6 +172,27 @@ class NewGroupStoreTest {
 
     // ── подделки ────────────────────────────────────────────────────────────
 
+    @Test
+    fun секретная_ставится_сразу_после_создания_и_только_если_отмечена() = runTest {
+        // ПЛАН-(СЦ) СЦ2: «Секретная» — галочка на шаге имени; сервер получает признак сразу после рождения.
+        val asked = mutableListOf<Triple<io.tima.domain.chat.EntityKind, String, Boolean>>()
+        val secrecy = io.tima.domain.chat.EntitySecrecy { kind, id, secret -> asked += Triple(kind, id, secret); true }
+        val plain = NewGroupStore(CreateGroupChat(FakeGroups(), Directory, EntryMemorable()), scope = this, secrecy = secrecy)
+        plain.changedTitle("Явная")
+        plain.create()
+        runCurrent()
+        assertTrue(asked.isEmpty(), "без галочки признак не ставится")
+
+        val secret = NewGroupStore(CreateGroupChat(FakeGroups(), Directory, EntryMemorable()), scope = this, secrecy = secrecy)
+        assertTrue(secret.secretAllowed)
+        secret.changedTitle("Тайная")
+        secret.choseSecret(true)
+        secret.create()
+        runCurrent()
+        assertEquals(listOf(Triple(io.tima.domain.chat.EntityKind.Group, "gggggggg-0000-0000-0000-000000000001", true)), asked)
+        assertNotNull(secret.state.value.created, "группа создана")
+    }
+
     private fun store(scope: TestScope, network: FakeGroups = FakeGroups()) =
         NewGroupStore(CreateGroupChat(network, Directory, EntryMemorable()), scope = scope)
 

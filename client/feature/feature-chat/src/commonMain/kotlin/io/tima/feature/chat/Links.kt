@@ -121,18 +121,26 @@ val LocalGateBlocked = staticCompositionLocalOf { false }
  */
 val LocalLinkOpen = staticCompositionLocalOf<((String) -> Unit)?> { null }
 
-/** Как открыть ссылку здесь: через окно перехода, а нет его — сразу. */
+/**
+ * Свои ссылки приложения — `tima://invite/…`, `tima://entity/…` (ПЛАН-(СЦ) СЦ2): карточка приглашения и ссылка на
+ * сущность. Открываются внутри, без окна перехода: домена нет, уйти наружу некуда. `true` — ссылка своя и открыта.
+ */
+val LocalTimaLink = staticCompositionLocalOf<((String) -> Boolean)?> { null }
+
+/** Как открыть ссылку здесь: своя — внутри; иначе через окно перехода, а нет его — сразу. */
 @Composable
 internal fun rememberLinkOpen(): (String) -> Unit {
     val gate = LocalGate.current
     val blocked = LocalGateBlocked.current
     val old = LocalLinkOpen.current
     val uri = LocalUriHandler.current
-    return when {
+    val own = LocalTimaLink.current
+    val outer: (String) -> Unit = when {
         gate != null -> { url -> gate(GateAsk.Link(url, blocked)) }
         old != null -> old
         else -> { url -> runCatching { uri.openUri(url) } }
     }
+    return { url -> if (!(url.startsWith("tima://") && own?.invoke(url) == true && !blocked)) outer(url) }
 }
 
 /**

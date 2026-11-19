@@ -64,6 +64,8 @@ class NewGroupStore(
      * жизнь store, и после смены языка беда пришла бы на прежнем.
      */
     private val words: () -> Words = { CurrentWords.value },
+    /** «Секретная» (ПЛАН-(СЦ) СЦ2) — ставится сразу после рождения; `null` — галочки нет. */
+    private val secrecy: io.tima.domain.chat.EntitySecrecy? = null,
 ) {
 
     private val _state = MutableStateFlow(NewGroupState())
@@ -124,6 +126,19 @@ class NewGroupStore(
     /** Виден ли канал в каталоге. «По подписке» значит «не в каталоге». */
     fun choseCatalogue(inCatalogue: Boolean) {
         _state.value = _state.value.copy(inCatalogue = inCatalogue, trouble = null)
+    }
+
+    /** «Секретная» (СЦ2): не находится в поиске и лентах, войти можно только по приглашению. */
+    fun choseSecret(secret: Boolean) {
+        _state.value = _state.value.copy(secret = secret, trouble = null)
+    }
+
+    /** Есть ли галочка «Секретная»: без порта поставить признак нечем. */
+    val secretAllowed: Boolean get() = secrecy != null
+
+    /** Поставить «секретная» созданному; провал создание не отменяет — признак ставится и потом. */
+    private suspend fun hideIfAsked(current: NewGroupState, kind: io.tima.domain.chat.EntityKind, id: String) {
+        if (current.secret) runCatching { secrecy?.set(kind, id, true) }
     }
 
     /** Принимает ли канал обсуждения (ADR-0024 §6). */
@@ -300,6 +315,7 @@ class NewGroupStore(
             )
             _state.value = when (outcome) {
                 is CreateGroupStep.Created -> {
+                    hideIfAsked(current, io.tima.domain.chat.EntityKind.Group, outcome.groupId)
                     // Раздел — сразу после рождения, до показа: иначе группа мелькнёт в
                     // «Общем» и перепрыгнет. Провал переноса группу не отменяет.
                     if (current.shelfId.isNotEmpty()) {
@@ -332,7 +348,10 @@ class NewGroupStore(
                 comments = current.comments,
             )
             _state.value = when (outcome) {
-                is ChannelStep.Created -> current.copy(expect = false, created = outcome.channelId)
+                is ChannelStep.Created -> {
+                    hideIfAsked(current, io.tima.domain.chat.EntityKind.Channel, outcome.channelId)
+                    current.copy(expect = false, created = outcome.channelId)
+                }
                 is ChannelStep.BadTitle -> current.copyWithTrouble(outcome.reason)
                 is ChannelStep.Offline -> current.copyWithTrouble(words().trouble.offline)
                 is ChannelStep.Refused -> current.copyWithTrouble(words().trouble.refused(outcome.reason))
@@ -349,7 +368,9 @@ class NewGroupStore(
                 items = current.bringing,
             )
             _state.value = when (outcome) {
-                is CommunityStep.Created -> current.copy(
+                is CommunityStep.Created -> current.also {
+                    hideIfAsked(current, io.tima.domain.chat.EntityKind.Community, outcome.communityId)
+                }.copy(
                     expect = false,
                     created = outcome.communityId,
                     // Что не внеслось — названо поимённо. Молчание здесь означало бы,
@@ -401,6 +422,8 @@ data class NewGroupState(
     val inCatalogue: Boolean = true,
     /** Канал: принимает ли обсуждения (ADR-0024 §6). */
     val comments: Boolean = true,
+    /** «Секретная» (ПЛАН-(СЦ) СЦ2): ставится сразу после создания. */
+    val secret: Boolean = false,
     /** Сообщество: что можно внести — свои группы и каналы, ещё не связанные ни с чем. */
     val linkable: List<CommunityItem> = emptyList(),
     /** Сообщество: что человек отметил на шаге «что вносим». */

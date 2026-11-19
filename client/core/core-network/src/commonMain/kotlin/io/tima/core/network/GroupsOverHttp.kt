@@ -47,6 +47,7 @@ class GroupsOverHttp(private val api: GroupsApi) : GroupRegistry {
                     callTtlUntilMs = it.callTtlUntil.takeIf { t -> t.isNotEmpty() }
                         ?.let { t -> runCatching { kotlinx.datetime.Instant.parse(t).toEpochMilliseconds() }.getOrNull() },
                     communityId = it.communityId.ifBlank { null },
+                    secret = it.hidden,
                 )
             },
         )

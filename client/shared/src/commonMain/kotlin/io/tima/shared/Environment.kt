@@ -558,6 +558,9 @@ class Network(
     override val communities: CommunitiesOverHttp =
         CommunitiesOverHttp(link.route, link.client, token = { token() }, me = { session.userId })
 
+    override val invites: io.tima.core.network.InvitesOverHttp =
+        io.tima.core.network.InvitesOverHttp(link.route, link.client, token = { token() })
+
     override val access: LevelAccessOverHttp =
         LevelAccessOverHttp(link.route, link.client, token = { token() })
 

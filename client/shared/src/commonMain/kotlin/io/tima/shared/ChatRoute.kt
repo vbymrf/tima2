@@ -1794,6 +1794,8 @@ internal fun NewGroup(
             channels = CreateChannel(social.channels),
             communities = CreateCommunity(social.communities),
             linkable = { social.communities.linkable() },
+            // «Секретная» — сразу после рождения (ПЛАН-(СЦ) СЦ2).
+            secrecy = social.invites,
         )
     }
     val state by store.state.collectAsState()
@@ -1839,6 +1841,7 @@ internal fun NewGroup(
         ready = store::ready,
         onCatalogue = store::choseCatalogue,
         onComments = store::choseComments,
+        onSecret = store::choseSecret,
         onItem = store::choseItem,
         // «Назад» с первого шага закрывает мастер, с остальных — шаг назад: человек,
         // ошибшийся на третьем шаге, не должен начинать заново.

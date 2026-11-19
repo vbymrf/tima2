@@ -281,7 +281,12 @@ class GroupInfo(
     val callTtlUntilMs: Long? = null,
     /** Сообщество группы — по нему подборка сообщений общая на всё сообщество (Решения §11.2). */
     val communityId: String? = null,
-)
+    /** Секретная (ПЛАН-(СЦ) СЦ2): не находится нигде, вход по приглашению. */
+    val secret: Boolean = false,
+) {
+    /** Тип сущности — для значка строки и слов страницы (СЦ2, СЦ3). */
+    val type: EntityType get() = EntityType.group(kind, secret)
+}
 
 /** Участник группы. */
 class GroupMember(
