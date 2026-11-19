@@ -223,6 +223,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterInvites(mux, s.Store, groupsDeps{store: s.Store, limiter: func() *ratelimit.Limiter { return s.Limit }, notifier: s.notifier()},
 		s.notifier(), s.requireActiveDevice)
 	RegisterSecret(mux, s.Store, s.requireActiveDevice)
+	// Владение по ключу личности (ПЛАН-(СЦ) §6, СЦ11): цепочка, предложение и принятие передачи.
+	RegisterOwnership(mux, s.Store, store.OwnershipOf(s.Store), s.notifier(), s.requireActiveDevice)
 	// Закреплённое и описание (ПЛАН-(ЗО) ЗО1–ЗО2).
 	RegisterShowcase(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	// Страна и язык человека: две задачи — отсев у клиента и региональные ленты у

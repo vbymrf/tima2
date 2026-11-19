@@ -262,6 +262,25 @@ class VectorsTest {
     }
 
     @Test
+    fun `entity_transfer - акт передачи владения совпадает байт-в-байт и подпись Kodium как у tweetnacl`() {
+        val v = vector("entity_transfer")
+        val inputs = v["inputs"]!!.jsonObject
+        val bytes = EntityTransfer.bytes(
+            inputs["kind"]!!.jsonPrimitive.content,
+            inputs["entity_id"]!!.jsonPrimitive.content,
+            inputs["link"]!!.jsonPrimitive.int,
+            inputs["from"]!!.jsonPrimitive.content,
+            inputs["to"]!!.jsonPrimitive.content,
+            inputs["expires_unix"]!!.jsonPrimitive.long,
+        )
+        assertEquals(v["bytes_hex"]!!.jsonPrimitive.content, bytes.toHex())
+        // Ключ личности из seed — тот же путь, что у фразы (fromRaw): подпись обязана совпасть с эталоном.
+        val key = KodiumPrivateKey.fromRaw(inputs["seed_hex"]!!.jsonPrimitive.content.chunked(2).map { it.toInt(16).toByte() }.toByteArray())
+        assertEquals(v["identity_pub_hex"]!!.jsonPrimitive.content, key.getPublicKey().signingKey.toHex())
+        assertEquals(v["signature_hex"]!!.jsonPrimitive.content, MessageSigner.sign(key, bytes).getOrThrow().toHex())
+    }
+
+    @Test
     fun `mlkem768 - keygen из seed детерминирован escrow round-trip`() {
         val v = vector("mlkem768_escrow")
         val seed = v.hex("keygen_seed") // 64 байта, layout noble/FIPS 203: d(32) ‖ z(32)
@@ -295,6 +314,8 @@ class VectorsTest {
             "markup_json", "canonical_bytes_v3", "group_message_canonical_v3",
             // Разметка v2 (ADR-0048, 2026-10-19) — сверяется в MarkupVectorTest.
             "markup_json_v2",
+            // Акт передачи владения сущностью (ПЛАН-(СЦ) §6, СЦ11, 2026-11-19).
+            "entity_transfer",
         )
         assertEquals(expected, vectors.keys, "Состав vectors.json изменился — обнови KAT")
     }

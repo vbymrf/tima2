@@ -466,3 +466,27 @@ func TestGroupMessageCanonicalV3Vector(t *testing.T) {
 	digest := sha256.Sum256(cb)
 	assertHex(t, v.Sha256Hex, digest[:], "sha256(group_message_canonical_bytes v3)")
 }
+
+// Акт передачи владения (ПЛАН-(СЦ) §6, СЦ11) — те же байты, что у Kotlin и node; подпись tweetnacl проходит
+// проверку тем же путём, что подписи сервера.
+func TestEntityTransferVector(t *testing.T) {
+	v := vec[struct {
+		Inputs struct {
+			Kind        string `json:"kind"`
+			EntityID    string `json:"entity_id"`
+			Link        int    `json:"link"`
+			From        string `json:"from"`
+			To          string `json:"to"`
+			ExpiresUnix int64  `json:"expires_unix"`
+		} `json:"inputs"`
+		BytesHex       string `json:"bytes_hex"`
+		IdentityPubHex string `json:"identity_pub_hex"`
+		SignatureHex   string `json:"signature_hex"`
+	}](t, loadVectors(t), "entity_transfer")
+	in := v.Inputs
+	bytes := EntityTransferBytes(in.Kind, in.EntityID, in.Link, in.From, in.To, in.ExpiresUnix)
+	assertHex(t, v.BytesHex, bytes, "entity_transfer")
+	if !VerifyEnvelopeSignature(unhex(t, v.IdentityPubHex), bytes, unhex(t, v.SignatureHex)) {
+		t.Fatal("entity_transfer: подпись эталона не прошла проверку сервера")
+	}
+}

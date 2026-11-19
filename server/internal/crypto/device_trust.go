@@ -1,6 +1,9 @@
 package crypto
 
-import "encoding/base64"
+import (
+	"encoding/base64"
+	"strconv"
+)
 
 // Байты подписей доверия к устройствам (ПЛАН-(ДУ+ИУ)-УСТРОЙСТВ-И-ИСТОРИИ §2а). Зеркало —
 // `messenger-crypto/.../DeviceTrust.kt`: строка в строку, иначе подпись клиента не сойдётся.
@@ -31,3 +34,12 @@ func DeviceEpochKeyBytes(deviceID, epoch string, encryptionPub []byte) []byte {
 }
 
 func b64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
+
+// EntityTransferBytes — акт передачи владения сущностью Социума (doc_mig/ПЛАН-(СЦ)-СОЦИУМА.md §6, СЦ11): его
+// подписывают владелец ключом последнего звена и принимающий своим ключом личности. Номер звена и срок в байтах —
+// чтобы акт нельзя было повторить и нельзя было придержать. Зеркало — `messenger-crypto/.../EntityTransfer.kt`,
+// вектор `entity_transfer`.
+func EntityTransferBytes(kind, entityID string, linkNo int, fromUserID, toUserID string, expiresUnix int64) []byte {
+	return []byte("tima.entity-transfer.v1|" + kind + "|" + entityID + "|" + strconv.Itoa(linkNo) + "|" +
+		fromUserID + "|" + toUserID + "|" + strconv.FormatInt(expiresUnix, 10))
+}
