@@ -44,6 +44,12 @@ class TimaApplication : Application() {
      */
     val callEngine: LiveKitCallEngine by lazy { LiveKitCallEngine(this, CallKeep.scope) }
 
+    /**
+     * Движок звукового чата сообщества (ПЛАН-(СЦ) СЦ7) — свой: за движком звонков следит окно звонка, и вход в
+     * звуковой чат через него оживил бы окно. Во время звонка звуковой чат отключается (§1.5, 4).
+     */
+    val voiceEngine: LiveKitCallEngine by lazy { LiveKitCallEngine(this, CallKeep.scope) }
+
     override fun onCreate() {
         super.onCreate()
         // Звонок и стенд живут у процесса ([CallKeep]) — на главном потоке, как раньше в окне.

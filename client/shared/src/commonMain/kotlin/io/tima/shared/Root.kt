@@ -402,6 +402,8 @@ fun Root(
      * видит. Собирает его точка входа платформы — там же, где база и установщик.
      */
     callEngine: CallEngine? = null,
+    /** Свой движок звукового чата (ПЛАН-(СЦ) СЦ7) — не тот, что у звонков; `null` — звукового чата нет. */
+    voiceEngine: CallEngine? = null,
 ) {
     // Системная тема спрашивается ровно один раз и только затем, чтобы решить, с чего
     // начать при первом запуске. Дальше решает человек.
@@ -523,11 +525,14 @@ fun Root(
         val callStrip = remember { mutableStateOf<CallStripModel?>(null) }
         val strip = callStrip.value
         if (strip != null && strip.shown()) CallStrip(strip) else io.tima.feature.chat.NowPlayingBar(audioHub)
+        // Полоса звукового чата поверх окон, пока человек в чате (ПЛАН-(СЦ) §1.8, 4).
+        VoiceStripSlot.current?.invoke()
         androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.weight(1f)) {
         androidx.compose.runtime.CompositionLocalProvider(LocalCallStrip provides callStrip) {
         Inside(
             entry = entry,
             callEngine = callEngine,
+            voiceEngine = voiceEngine,
             deviceDatabase = deviceDatabase,
             linkCode = linkCode,
             transferCode = transferCode,
@@ -598,6 +603,7 @@ private fun Inside(
     deviceDatabase: (String) -> TimaDatabase,
     /** Чем исполнять звонок; `null` — платформа звонить не умеет. См. [Root]. */
     callEngine: CallEngine?,
+    voiceEngine: CallEngine? = null,
     linkCode: String?,
     transferCode: String?,
     installer: UpdateInstaller?,
@@ -713,6 +719,7 @@ private fun Inside(
         assembled = assembled,
         platform = entry.platform,
         callEngine = callEngine,
+        voiceEngine = voiceEngine,
         deviceSecret = current.secret,
         askSecrets = remember(current.session.userId) { entry.signingKeys(current.session.userId) },
         linkCode = linkCode,
@@ -965,6 +972,8 @@ private fun App(
     onTransferTaken: (TransferAcceptStep.Taken) -> Unit = {},
     /** Чем исполнять звонок; `null` — платформа звонить не умеет. См. [Root]. */
     callEngine: CallEngine? = null,
+    /** Движок звукового чата (ПЛАН-(СЦ) СЦ7); `null` — звукового чата нет. */
+    voiceEngine: CallEngine? = null,
     /** Пин-код этого аккаунта (ПЛАН-(ПН)); `null` — проверки, снимки. */
     pin: PinHost? = null,
     /** Замок стоит — поверх всего, кроме идущего звонка (Р11). */
@@ -1871,6 +1880,26 @@ private fun App(
     val sociumTops by (assembled.liveStates?.tops ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, LiveStates.Top>()) }).collectAsState()
     val sociumByChat = remember(sociumChats) { sociumChats.associateBy { it.chatId } }
     val wordsNowSocium = Tima.words.socium
+    // Звуковой чат (ПЛАН-(СЦ) СЦ7): своя сессия на своём движке; звонок ставит её на паузу (§1.5, 4).
+    val voice = remember(voiceEngine) { voiceEngine?.let { VoiceSession(network.voiceChats, it, scope) } }
+    val voiceState = voice?.state?.collectAsState()?.value
+    LaunchedEffect(voice) {
+        if (voice != null) androidx.compose.runtime.snapshotFlow { callHost.active }.collect { voice.onCall(it) }
+    }
+    SideEffect {
+        val vst = voiceState
+        VoiceStripSlot.current = if (voice != null && vst?.inside == true && where !is Where.Voice) {
+            {
+                io.tima.feature.group.VoiceStrip(
+                    title = vst.title, allowMute = vst.chat?.allowMute ?: true, mic = vst.mic,
+                    onOpen = { vst.chat?.let { c -> where = Where.Voice(c.roomId, vst.title, c.communityId) } },
+                    onMic = voice::mic, onLeave = voice::leave,
+                )
+            }
+        } else {
+            null
+        }
+    }
     val groupLook: (String) -> io.tima.feature.group.RowLook = { id ->
         val local = sociumByChat[id]
         val top = sociumTops["group:$id"]
@@ -4354,6 +4383,73 @@ private fun App(
                 }
             }
 
+            is Where.Voice -> {
+                {
+                    val vs = voice
+                    if (vs == null) {
+                        LaunchedEffect(current) { where = Where.Nothing }
+                    } else {
+                        val st = vs.state.collectAsState().value
+                        val peers by vs.peers.collectAsState()
+                        LaunchedEffect(current) {
+                            if (st.chat?.roomId != current.roomId) {
+                                if (st.inside) vs.leave()
+                                vs.enter(current.roomId, current.title)
+                            }
+                        }
+                        LaunchedEffect(st.chat?.roomId) {
+                            while (true) { vs.refresh(); kotlinx.coroutines.delay(5_000) }
+                        }
+                        val chat = st.chat
+                        val staff = roleOf("community", current.communityId).let {
+                            it == io.tima.domain.chat.GroupRole.Owner || it == io.tima.domain.chat.GroupRole.Admin
+                        }
+                        val nameOf: (String) -> String = { id -> peopleCards[id]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: id.take(8) }
+                        LaunchedEffect(chat?.present) { chat?.present?.let { people.want(it) } }
+                        Column(androidx.compose.ui.Modifier.fillMaxSize()) {
+                            st.trouble?.let { t ->
+                                io.tima.core.ui.Trouble(
+                                    when (t) {
+                                        io.tima.core.network.VoiceEnterStep.Full -> Tima.words.socium.voiceFull
+                                        io.tima.core.network.VoiceEnterStep.Kicked -> Tima.words.socium.voiceKicked
+                                        else -> Tima.words.trouble.offline
+                                    },
+                                )
+                            }
+                            io.tima.feature.group.VoiceChatScreen(
+                                title = current.title,
+                                people = chat?.present.orEmpty().map { uid ->
+                                    io.tima.feature.group.VoicePerson(uid, nameOf(uid), peers.any { it.userId == uid && it.speaking }, chat?.hostId == uid)
+                                },
+                                allowMute = chat?.allowMute ?: true,
+                                mic = st.mic,
+                                sound = st.sound,
+                                paused = st.paused,
+                                canTakeHost = chat != null && chat.hostAllowed && chat.hostId.isEmpty(),
+                                onKick = if (chat != null && (staff || (chat.hostId == assembled.session.userId && chat.hostCanKick))) {
+                                    { uid -> if (uid != assembled.session.userId) vs.kick(uid) }
+                                } else {
+                                    null
+                                },
+                                onTakeHost = { vs.host(assembled.session.userId) },
+                                onMic = vs::mic,
+                                onSound = vs::sound,
+                                onText = chat?.groupId?.takeIf { it.isNotEmpty() }?.let { g -> { where = Where.Chat(g, current.title) } },
+                                onLeave = { vs.leave(); where = Where.Nothing },
+                                onBack = { where = Where.Nothing },
+                            )
+                            if (staff && chat != null) {
+                                Column(androidx.compose.ui.Modifier.padding(io.tima.core.ui.TimaSpacing.about4)) {
+                                    io.tima.feature.group.VoiceSettings(chat.allowMute, chat.hostAllowed, chat.hostCanKick, chat.maxParticipants) { m, h, k, max ->
+                                        scope.launch { network.voiceChats.settings(chat.roomId, m, h, k, max); vs.refresh() }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             is Where.Thread -> {
                 {
                     val kind = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Group
@@ -4588,6 +4684,22 @@ private fun App(
                                 // «Написать» — любой, кто видит страницу (§1.9, 3); у элемента сообщества — лента сообщества.
                                 onWrite = { where = Where.Thread(kind, id, current.title) },
                                 onShare = null,
+                                extra = if (kind == "community" && voice != null) {
+                                    {
+                                        var rooms by remember(id) { mutableStateOf<List<io.tima.core.network.VoiceChatInfo>>(emptyList()) }
+                                        var reload by remember(id) { mutableStateOf(0) }
+                                        LaunchedEffect(id, reload) { rooms = network.voiceChats.list(id).orEmpty() }
+                                        val staff = role == io.tima.domain.chat.GroupRole.Owner || role == io.tima.domain.chat.GroupRole.Admin
+                                        io.tima.feature.group.VoiceRoomsList(
+                                            rooms = rooms.map { it.roomId to it.title },
+                                            count = { rid -> rooms.firstOrNull { it.roomId == rid }?.present?.size ?: 0 },
+                                            onEnter = { rid, t -> where = Where.Voice(rid, t, id) },
+                                            onCreate = if (staff) { name -> scope.launch { network.voiceChats.create(id, name); reload++ } } else null,
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
                                 showLevels = if (inside && kind == "group") levelsShown["$kind:$id"] == true else null,
                                 onShowLevels = { on ->
                                     levelsShown["$kind:$id"] = on

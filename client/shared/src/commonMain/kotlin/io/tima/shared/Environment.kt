@@ -567,6 +567,9 @@ class Network(
     override val threads: io.tima.core.network.ThreadsOverHttp =
         io.tima.core.network.ThreadsOverHttp(link.route, link.client, token = { token() })
 
+    override val voiceChats: io.tima.core.network.VoiceChatsOverHttp =
+        io.tima.core.network.VoiceChatsOverHttp(link.route, link.client, token = { token() })
+
     override val access: LevelAccessOverHttp =
         LevelAccessOverHttp(link.route, link.client, token = { token() })
 

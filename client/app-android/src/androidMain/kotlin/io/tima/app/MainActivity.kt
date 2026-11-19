@@ -302,6 +302,7 @@ class MainActivity : ComponentActivity() {
             Root(
                 entry = entry,
                 callEngine = callEngine,
+                voiceEngine = (application as TimaApplication).voiceEngine,
                 // «Выйти» в подокне переходов (заказчик 2026-09-26): служба канала
                 // останавливается ДО конца процесса — иначе START_STICKY подняла бы её
                 // обратно, и «вышедшее» приложение продолжало бы жить в шторке.

@@ -161,6 +161,9 @@ interface ChatPorts {
 
     /** Переписка «сущность — человек» (ПЛАН-(СЦ) §1.9, СЦ15). */
     val threads: io.tima.core.network.ThreadsOverHttp
+
+    /** Звуковые чаты сообществ (ПЛАН-(СЦ) СЦ7). */
+    val voiceChats: io.tima.core.network.VoiceChatsOverHttp
 }
 
 /** Группы: создание, состав, ротация ключа при смене состава. */

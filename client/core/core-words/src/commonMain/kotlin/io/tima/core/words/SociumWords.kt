@@ -109,6 +109,26 @@ interface SociumWords {
     val blockPerson: String
     val unblockPerson: String
     val threadAbout: String
+    // Звуковой чат (СЦ7).
+    val voiceHost: String
+    val voicePaused: String
+    val voiceNoE2e: String
+    val voiceText: String
+    val voiceTakeHost: String
+    val micOn: String
+    val micOff: String
+    val soundOn: String
+    val soundOff: String
+    val voiceChats: String
+    val voiceNewHint: String
+    val voiceCreate: String
+    val voiceAllowMute: String
+    val voiceHostAllowed: String
+    val voiceHostKicks: String
+    val voiceFull: String
+    val voiceKicked: String
+    fun voiceInside(n: Int): String
+    fun voiceMax(n: Int): String
 }
 
 object RussianSociumWords : SociumWords {
@@ -199,6 +219,25 @@ object RussianSociumWords : SociumWords {
     override val blockPerson = "Заблокировать человека"
     override val unblockPerson = "Разблокировать"
     override val threadAbout = "Переписка с сущностью не шифруется: её читают те, кто за неё пишет"
+    override val voiceHost = "ведущий"
+    override val voicePaused = "На паузе: идёт звонок"
+    override val voiceNoE2e = "Звук без сквозного шифрования, записи нет"
+    override val voiceText = "Переписка"
+    override val voiceTakeHost = "Стать ведущим"
+    override val micOn = "Включить микрофон"
+    override val micOff = "Выключить микрофон"
+    override val soundOn = "Включить звук"
+    override val soundOff = "Выключить звук"
+    override val voiceChats = "Звуковые чаты"
+    override val voiceNewHint = "Название звукового чата"
+    override val voiceCreate = "Создать"
+    override val voiceAllowMute = "Участники могут выключать микрофон и звук"
+    override val voiceHostAllowed = "Ведущий разрешён"
+    override val voiceHostKicks = "Ведущий может выгонять"
+    override val voiceFull = "Звуковой чат полон"
+    override val voiceKicked = "Вас выгнали из этого разговора"
+    override fun voiceInside(n: Int) = "внутри: $n"
+    override fun voiceMax(n: Int) = "наибольшее число участников: $n"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -289,6 +328,25 @@ object EnglishSociumWords : SociumWords {
     override val blockPerson = "Block this person"
     override val unblockPerson = "Unblock"
     override val threadAbout = "Conversation with an entity is not end-to-end encrypted: those who write for it read it"
+    override val voiceHost = "host"
+    override val voicePaused = "Paused: a call is on"
+    override val voiceNoE2e = "Sound is not end-to-end encrypted, nothing is recorded"
+    override val voiceText = "Text"
+    override val voiceTakeHost = "Become the host"
+    override val micOn = "Turn microphone on"
+    override val micOff = "Turn microphone off"
+    override val soundOn = "Turn sound on"
+    override val soundOff = "Turn sound off"
+    override val voiceChats = "Voice chats"
+    override val voiceNewHint = "Voice chat title"
+    override val voiceCreate = "Create"
+    override val voiceAllowMute = "Participants may turn microphone and sound off"
+    override val voiceHostAllowed = "Host allowed"
+    override val voiceHostKicks = "Host may remove people"
+    override val voiceFull = "The voice chat is full"
+    override val voiceKicked = "You were removed from this conversation"
+    override fun voiceInside(n: Int) = "inside: $n"
+    override fun voiceMax(n: Int) = "maximum participants: $n"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -379,4 +437,23 @@ object SpanishSociumWords : SociumWords {
     override val blockPerson = "Bloquear a la persona"
     override val unblockPerson = "Desbloquear"
     override val threadAbout = "La conversación con una entidad no está cifrada de extremo a extremo: la leen quienes escriben por ella"
+    override val voiceHost = "anfitrión"
+    override val voicePaused = "En pausa: hay una llamada"
+    override val voiceNoE2e = "El sonido no está cifrado de extremo a extremo, no se graba"
+    override val voiceText = "Texto"
+    override val voiceTakeHost = "Ser anfitrión"
+    override val micOn = "Activar micrófono"
+    override val micOff = "Silenciar micrófono"
+    override val soundOn = "Activar sonido"
+    override val soundOff = "Silenciar sonido"
+    override val voiceChats = "Chats de voz"
+    override val voiceNewHint = "Nombre del chat de voz"
+    override val voiceCreate = "Crear"
+    override val voiceAllowMute = "Los participantes pueden silenciar micrófono y sonido"
+    override val voiceHostAllowed = "Anfitrión permitido"
+    override val voiceHostKicks = "El anfitrión puede expulsar"
+    override val voiceFull = "El chat de voz está lleno"
+    override val voiceKicked = "Te expulsaron de esta conversación"
+    override fun voiceInside(n: Int) = "dentro: $n"
+    override fun voiceMax(n: Int) = "máximo de participantes: $n"
 }

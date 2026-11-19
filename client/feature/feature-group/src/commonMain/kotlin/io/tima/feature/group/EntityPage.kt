@@ -108,6 +108,8 @@ fun EntityAboutTop(
     showLevels: Boolean?,
     onShowLevels: (Boolean) -> Unit,
     avatarPicture: String? = null,
+    /** Под кнопками — у сообщества звуковые чаты (СЦ7); `null` — ничего. */
+    extra: (@Composable () -> Unit)? = null,
 ) {
     val w = Tima.words.socium
     val colors = Tima.colors
@@ -156,6 +158,7 @@ fun EntityAboutTop(
                 Secondary(w.showLevels)
             }
         }
+        extra?.invoke()
     }
 }
 

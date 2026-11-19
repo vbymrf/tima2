@@ -324,6 +324,9 @@ internal sealed interface Where {
     /** «Управление → Обращения» (СЦ15). */
     data class Appeals(val kind: String, val id: String, val title: String) : Where
 
+    /** Звуковой чат сообщества (ПЛАН-(СЦ) СЦ7). */
+    data class Voice(val roomId: String, val title: String, val communityId: String) : Where
+
     /**
      * Окно «Описание» — сообщения уровня 0 группы, канала, сообщества (ПЛАН-(ЗО) ЗО4). Открывается
      * аватаром в разделах и текстом шапки; забирается при каждом открытии и нигде не хранится.
@@ -413,6 +416,7 @@ internal fun whereCode(where: Where): String = when (where) {
     is Where.ManageMain -> "manage.main"
     is Where.Thread -> "thread"
     is Where.Appeals -> "appeals"
+    is Where.Voice -> "voice"
     is Where.Showcase -> "showcase"
     is Where.Link -> "link.confirm"
     is Where.Certify -> "device.certify"
@@ -468,6 +472,7 @@ internal object NavStore {
             is Where.ManageMain -> listOf("manage.main", w.kind, w.id, w.title).joinToString(f)
             is Where.Thread -> listOf("thread", w.kind, w.id, w.title, w.userId).joinToString(f)
             is Where.Appeals -> listOf("appeals", w.kind, w.id, w.title).joinToString(f)
+            is Where.Voice -> listOf("voice", w.roomId, w.title, w.communityId).joinToString(f)
             is Where.Members -> listOf("members", w.groupId, w.name.orEmpty()).joinToString(f)
             is Where.Access -> listOf("access", w.groupId, w.name.orEmpty()).joinToString(f)
             is Where.Showcase -> listOf("showcase", w.kind, w.id, w.title).joinToString(f)
@@ -492,6 +497,7 @@ internal object NavStore {
             "manage.main" -> Where.ManageMain(at(1), at(2), at(3))
             "thread" -> Where.Thread(at(1), at(2), at(3), at(4))
             "appeals" -> Where.Appeals(at(1), at(2), at(3))
+            "voice" -> Where.Voice(at(1), at(2), at(3))
             "members" -> Where.Members(at(1), at(2).ifEmpty { null })
             "access" -> Where.Access(at(1), at(2).ifEmpty { null })
             "showcase" -> Where.Showcase(at(1), at(2), at(3))
