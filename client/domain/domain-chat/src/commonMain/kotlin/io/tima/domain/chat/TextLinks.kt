@@ -13,7 +13,8 @@ object TextLinks {
         "fr", "by", "kz", "ua", "tv", "pro", "online", "site", "store", "edu", "gov", "eu", "us", "xyz", "tech",
     )
 
-    private val SCHEME = Regex("""(?i)(?:https?://|www\.)[^\s<>"«»]+""")
+    // `tima://` — свои ссылки приложения (ПЛАН-(СЦ) СЦ2): приглашение и сущность открываются внутри.
+    private val SCHEME = Regex("""(?i)(?:https?://|www\.|tima://)[^\s<>"«»]+""")
     private val BARE = Regex(
         """(?i)(?<![\p{L}\p{N}@._/-])(?:[\p{L}\p{N}-]+\.)+(?:${ZONES.joinToString("|")})(?![\p{L}\p{N}-])(?:/[^\s<>"«»]*)?""",
     )
@@ -36,5 +37,6 @@ object TextLinks {
     }
 
     /** Адрес для открытия: без схемы — с `https://`. */
-    fun openable(url: String): String = if (url.startsWith("http://", true) || url.startsWith("https://", true)) url else "https://$url"
+    fun openable(url: String): String =
+        if (url.startsWith("http://", true) || url.startsWith("https://", true) || url.startsWith("tima://", true)) url else "https://$url"
 }

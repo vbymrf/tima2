@@ -1923,6 +1923,10 @@ internal fun Members(
     contacts: List<InviteCandidate>? = null,
     /** Полоса вкладок страницы сущности (ПЛАН-(СЦ) СЦ6). */
     tabs: (@Composable () -> Unit)? = null,
+    /**
+     * Секретная группа (ПЛАН-(СЦ) СЦ2): «добавить из книги» — послать приглашение; `null` — добавлять, как раньше.
+     */
+    onInviteCard: ((String) -> Unit)? = null,
 ) {
     val kindNow by rememberUpdatedState(groupKind)
     val store = remember(groupId) {
@@ -1981,7 +1985,7 @@ internal fun Members(
         onInviteNick = store::inviteByNick,
         contacts = contacts,
         onContacts = store::contactsSheet,
-        onInviteUser = store::inviteUser,
+        onInviteUser = onInviteCard ?: store::inviteUser,
         claims = claims,
         onConfirmClaim = { userId ->
             scope.launch {

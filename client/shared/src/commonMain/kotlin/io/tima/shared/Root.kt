@@ -5400,6 +5400,28 @@ private fun App(
                             InviteCandidate(entry.userId!!, (peopleCards[entry.userId!!] ?: ChatPerson()).withBookName(entry.name, entry.phone))
                         },
                         tabs = { pageTabBar("group", current.groupId, current.name.orEmpty(), io.tima.feature.group.PageTab.Members) },
+                        // Секретная (СЦ2): приглашение на сервере и черновик-карточка в личной переписке с приглашённым —
+                        // отправляет её сам пригласивший; заблокировал его получатель — не дойдёт, как любое его сообщение.
+                        onInviteCard = if (socialState.mine.firstOrNull { it.groupId == current.groupId }?.secret == true) {
+                            { uid ->
+                                scope.launch {
+                                    val step = network.invites.invite(io.tima.domain.chat.EntityKind.Group, current.groupId, uid)
+                                    Journal.note(LogCode.NAV, "приглашение", "итог" to (step::class.simpleName ?: "?"))
+                                    if (step is io.tima.domain.chat.InviteStep.Sent) {
+                                        val card = peopleCards[uid]
+                                        val chatId = openPersonalChat(uid, card?.name, card?.phone, "invite")
+                                        val title = current.name ?: step.invite.title
+                                        runCatching {
+                                            environment.drafts.save(chatId, wordsNowSocium.inviteCard(title) + "\n" +
+                                                io.tima.domain.chat.EntityInvites.inviteLink(step.invite.inviteId))
+                                        }
+                                        where = Where.Chat(chatId, card?.name)
+                                    }
+                                }
+                            }
+                        } else {
+                            null
+                        },
                     )
                 }
             }

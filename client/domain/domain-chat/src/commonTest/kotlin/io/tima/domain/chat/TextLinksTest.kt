@@ -25,4 +25,13 @@ class TextLinksTest {
         assertEquals("https://www.tima.ru", TextLinks.openable("www.tima.ru"))
         assertEquals("http://x.ru", TextLinks.openable("http://x.ru"))
     }
+
+    @Test
+    fun своя_ссылка_приглашения_находится_и_открывается_как_есть() {
+        // ПЛАН-(СЦ) СЦ2: карточка приглашения в личной переписке — строка и ссылка tima://invite/….
+        val text = "Приглашение: Клуб\ntima://invite/i-7"
+        val found = TextLinks.find(text).single()
+        assertEquals("tima://invite/i-7", text.substring(found))
+        assertEquals("tima://invite/i-7", TextLinks.openable("tima://invite/i-7"))
+    }
 }
