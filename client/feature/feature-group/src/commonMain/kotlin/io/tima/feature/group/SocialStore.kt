@@ -12,9 +12,12 @@ import io.tima.domain.chat.GroupInfo
 import io.tima.domain.chat.GroupRegistry
 import io.tima.domain.chat.GroupsStep
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -46,10 +49,25 @@ class SocialStore(
     private val words: () -> Words = { CurrentWords.value },
     /** Свои каналы (ПЛАН-(СЦ) СЦ3); `null` — каналов в «Каталоге» нет; ответ `null` — нет связи. */
     private val channels: (suspend () -> List<io.tima.domain.chat.ChannelInfo>?)? = null,
+    /**
+     * Снимок каталога с устройства (заказчик 2026-11-19): прошлый удачный ответ — сразу при создании, до сети.
+     * `null` — снимков нет (проверки).
+     */
+    private val restore: (suspend () -> SocialState?)? = null,
+    /** Сохранить удачный ответ снимком; зовётся после каждого обновления, где свои группы доехали. */
+    private val keep: (suspend (SocialState) -> Unit)? = null,
 ) {
 
     private val _state = MutableStateFlow(SocialState())
     val state: StateFlow<SocialState> = _state.asStateFlow()
+
+    init {
+        // Снимок не перебивает уже пришедший ответ сети: строки сети новее.
+        if (restore != null) scope.launch {
+            val snap = runCatching { restore.invoke() }.getOrNull() ?: return@launch
+            _state.update { s -> if (s.loaded) s else s.copy(mine = snap.mine, cards = snap.cards, communities = snap.communities, channels = snap.channels, loaded = true) }
+        }
+    }
 
     /** Обновить оба списка. Вызывается при открытии окна и по возвращении в него. */
     fun refresh() {
@@ -58,22 +76,31 @@ class SocialStore(
         _state.value = current.copy(expect = true, trouble = null)
 
         scope.launch {
-            val mine = groups.mine()
-            val cards = groups.cards()
-            // Сообщества — третий список того же окна. Спрашиваются здесь же, а не своим
-            // экраном: человек открывает «Социум» один раз, и три похода в сеть подряд
-            // он видит как одну задержку, а не как три.
-            val communities = communities?.mine() ?: emptyList()
-            val channels = channels?.invoke()
-            _state.value = _state.value.copy(
-                channels = channels ?: _state.value.channels,
-                expect = false,
-                loaded = true,
-                mine = (mine as? GroupsStep.Groups)?.groups ?: _state.value.mine,
-                cards = (cards as? CardsStep.Cards)?.cards ?: _state.value.cards,
-                communities = communities,
-                trouble = troubleOf(mine, cards),
-            )
+            // Четыре списка — разом, а не подряд (заказчик 2026-11-19): ожидание — как у самого долгого, не сумма.
+            // Каждый ложится в строки, как только пришёл: свои группы не ждут карточек и каналов. Прежде по
+            // журналам телефонов сумма была 0,35–0,57 с медианой и до 2,1 с на Redmi — по Wi-Fi.
+            val (mine, cards) = coroutineScope {
+                val mine = async {
+                    groups.mine().also { m ->
+                        if (m is GroupsStep.Groups) _state.update { it.copy(mine = m.groups, loaded = true) }
+                    }
+                }
+                val cards = async {
+                    groups.cards().also { c -> if (c is CardsStep.Cards) _state.update { it.copy(cards = c.cards) } }
+                }
+                // Сообщества и каналы — тот же «Каталог». Нет связи — прежний список остаётся.
+                val communitiesJob = async {
+                    communities?.mine()?.let { list -> _state.update { it.copy(communities = list) } }
+                }
+                val channelsJob = async {
+                    channels?.invoke()?.let { list -> _state.update { it.copy(channels = list) } }
+                }
+                communitiesJob.await()
+                channelsJob.await()
+                mine.await() to cards.await()
+            }
+            _state.update { it.copy(expect = false, loaded = true, trouble = troubleOf(mine, cards)) }
+            if (mine is GroupsStep.Groups) runCatching { keep?.invoke(_state.value) }
         }
     }
 

@@ -42,6 +42,40 @@ class SocialStoreTest {
     }
 
     @Test
+    fun свои_группы_не_ждут_карточек() = runTest {
+        // Заказчик 2026-11-19: каталог ждал четыре запроса подряд. Теперь каждый список ложится, как пришёл.
+        val store = SocialStore(FakeGroups(cardsDelayMs = 5_000), this)
+        store.refresh()
+        runCurrent()
+        assertEquals(listOf("Ядро"), store.state.value.mine.map { it.title }, "свои группы ждали карточек")
+        assertTrue(store.state.value.cards.isEmpty())
+        assertTrue(store.state.value.expect, "запрос ещё идёт")
+        testScheduler.advanceTimeBy(5_001)
+        runCurrent()
+        assertEquals(listOf("Соседи"), store.state.value.cards.map { it.title })
+        assertTrue(!store.state.value.expect)
+    }
+
+    @Test
+    fun снимок_сразу_и_сохраняется_после_ответа() = runTest {
+        val snap = SocialState(mine = listOf(GroupInfo("g-0", "Прошлая", GroupRole.Member)), loaded = true)
+        var kept: SocialState? = null
+        val store = SocialStore(
+            FakeGroups(cardsDelayMs = 1_000), this,
+            restore = { snap },
+            keep = { kept = it },
+        )
+        runCurrent()
+        assertEquals(listOf("Прошлая"), store.state.value.mine.map { it.title }, "снимок не показан до сети")
+        store.refresh()
+        runCurrent()
+        assertEquals(listOf("Ядро"), store.state.value.mine.map { it.title }, "ответ сети не перебил снимок")
+        testScheduler.advanceTimeBy(1_001)
+        runCurrent()
+        assertEquals(listOf("Ядро"), kept?.mine?.map { it.title }, "удачный ответ не сохранён снимком")
+    }
+
+    @Test
     fun пустой_список_и_неудача_различаются() = runTest {
         // Молчащий экран неотличим от поломки, поэтому неудача обязана называться словами.
         val store = SocialStore(FakeGroups(mineAnswer = { GroupsStep.Offline(3_000) }), this)
@@ -101,6 +135,8 @@ class SocialStoreTest {
             CardsStep.Cards(listOf(GroupCard("g-2", "Соседи", "Дом 12", GroupKind.Personal)))
         },
         private val askAnswer: () -> AskStep = { AskStep.Asked("pending") },
+        /** Карточки отвечают с задержкой — свои группы не должны их ждать. */
+        private val cardsDelayMs: Long = 0,
     ) : GroupRegistry {
         var asks = 0
 
@@ -108,7 +144,10 @@ class SocialStoreTest {
             GroupCreateStep.Created("g-1")
 
         override suspend fun mine(): GroupsStep = mineAnswer()
-        override suspend fun cards(): CardsStep = cardsAnswer()
+        override suspend fun cards(): CardsStep {
+            if (cardsDelayMs > 0) kotlinx.coroutines.delay(cardsDelayMs)
+            return cardsAnswer()
+        }
 
         override suspend fun askToJoin(groupId: String): AskStep {
             asks++

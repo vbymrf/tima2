@@ -1446,7 +1446,15 @@ private fun App(
 
     // Окно 2 «Социум»: свои группы и карточки, которые открыли контакты. Списки живут
     // здесь, а не в оболочке: рама знает раму, работа с сервером — дело feature-group.
-    val social = remember { SocialStore(GroupsOverHttp(network.groups), scope, network.communities, channels = { network.channels.mine() }) }
+    // Снимок «Каталога» — в настройках устройства под номером личности (заказчик 2026-11-19): при запуске окно
+    // сразу показывает прошлые строки, сеть потом обновляет.
+    val social = remember {
+        SocialStore(
+            GroupsOverHttp(network.groups), scope, network.communities, channels = { network.channels.mine() },
+            restore = { SocialSnapshot.decode(runCatching { environment.settings.all().first()[SocialSnapshot.key(session.userId)] }.getOrNull()) },
+            keep = { s -> environment.settings.put(SocialSnapshot.key(session.userId), SocialSnapshot.encode(s)) },
+        )
+    }
     // Окно 5 «Страница»: своя лента — своё и принесённое. Один Store на приложение: одна
     // страница у человека, и второй показывал бы то же самое со своим отставанием.
     val page = remember {
