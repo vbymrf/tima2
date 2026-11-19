@@ -63,3 +63,28 @@ func TestАватарСущности(t *testing.T) {
 		t.Fatalf("после снятия: %d %+v", code, got)
 	}
 }
+
+// Число участников и подписчиков (ПЛАН-(СЦ) §4б п. 9): группа — не вышедшие участники, сообщество — подписчики.
+func TestЧислоУчастниковСущности(t *testing.T) {
+	ts, _ := setup(t)
+	owner := registerDevice(t, ts, "+79990008711")
+	member := registerDevice(t, ts, "+79990008712")
+	group := makeGroup(t, ts, owner.token, "public")
+	community := makeCommunity(t, ts, owner, "Счёт")
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/groups/"+group+"/members", map[string]any{"user_id": member.userID}, nil); code != 201 {
+		t.Fatalf("участник: %d", code)
+	}
+	var got struct {
+		Counts map[string]int `json:"counts"`
+	}
+	if code := postAuthed(t, ts, member.token, "POST", "/api/v1/entities/counts", map[string]any{"kind": "group", "ids": []string{group}}, &got); code != 200 || got.Counts[group] != 2 {
+		t.Fatalf("группа: %d %+v", code, got)
+	}
+	got.Counts = nil
+	if code := postAuthed(t, ts, member.token, "POST", "/api/v1/entities/counts", map[string]any{"kind": "community", "ids": []string{community}}, &got); code != 200 || got.Counts[community] != 1 {
+		t.Fatalf("сообщество: %d %+v", code, got)
+	}
+	if code := postAuthed(t, ts, member.token, "POST", "/api/v1/entities/counts", map[string]any{"kind": "x", "ids": []string{group}}, nil); code != 400 {
+		t.Fatalf("вид: ждали 400, пришло %d", code)
+	}
+}

@@ -20,6 +20,8 @@ func RegisterEntityAvatars(mux *http.ServeMux, st *store.Store, requireDevice Mi
 		mux.HandleFunc("PUT /api/v1/"+k.plural+"/{entityID}/avatar", requireDevice(setEntityAvatar(st, k.kind)))
 	}
 	mux.HandleFunc("POST /api/v1/entities/avatars", requireDevice(entityAvatars(st)))
+	// Число участников и подписчиков (§4б п. 9) — тем же видом запроса.
+	mux.HandleFunc("POST /api/v1/entities/counts", requireDevice(entityCounts(st)))
 }
 
 // mayManageMain — «Основное» (§3): владелец и админ; у канала — владелец.
@@ -98,5 +100,27 @@ func entityAvatars(st *store.Store) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"avatars": out})
+	}
+}
+
+// entityCounts — POST /entities/counts {kind, ids}: номер → число участников (группа) или подписчиков.
+func entityCounts(st *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Kind string   `json:"kind"`
+			IDs  []string `json:"ids"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil || (req.Kind != "group" && req.Kind != "channel" && req.Kind != "community") || len(req.IDs) > 500 {
+			writeErr(w, http.StatusBadRequest, "bad_json", "нужны kind (group|channel|community) и ids до 500")
+			return
+		}
+		out, err := store.EntityCounts(r.Context(), st, req.Kind, req.IDs)
+		if err != nil {
+			log.Printf("entityCounts: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"counts": out})
 	}
 }
