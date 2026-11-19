@@ -79,5 +79,11 @@ func (d Deletions) Due(ctx context.Context) (int64, error) {
 		}
 		total += ct.RowsAffected()
 	}
+	// Звуковые чаты удалённого сообщества закрываются вместе с ним (СЦ7).
+	if _, err := d.s.pool.Exec(ctx, `
+		UPDATE voice_rooms SET closed_at = now()
+		 WHERE closed_at IS NULL AND community_id IN (SELECT community_id FROM communities WHERE deleted_at IS NOT NULL)`); err != nil {
+		return total, err
+	}
 	return total, nil
 }

@@ -229,6 +229,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterDeletion(mux, s.Store, store.DeletionsOf(s.Store), s.requireActiveDevice)
 	// Переписка «сущность — человек» (СЦ15): одна лента на пару, автор стороны сущности скрыт, пять людей в сутки.
 	RegisterThreads(mux, s.Store, store.ThreadsOf(s.Store), s.notifier(), s.requireActiveDevice)
+	// Звуковой чат в сообществе (СЦ7): вход по видимости, предел, выгнанные, ведущий, настройки.
+	RegisterCommunityVoice(mux, s.Store, store.CommunityVoiceOf(s.Store), s.livekitSettings, s.notifier(), s.requireActiveDevice)
 	// Закреплённое и описание (ПЛАН-(ЗО) ЗО1–ЗО2).
 	RegisterShowcase(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	// Страна и язык человека: две задачи — отсев у клиента и региональные ленты у
