@@ -141,6 +141,12 @@ interface SociumWords {
     val pinsFull: String
     val cancel: String
     fun pinsDeleteChosen(n: Int): String
+
+    // Роли и бан (СЦ6).
+    val makeModerator: String
+    val makeAdmin: String
+    val makeMember: String
+    val banDay: String
 }
 
 object RussianSociumWords : SociumWords {
@@ -261,6 +267,10 @@ object RussianSociumWords : SociumWords {
     override val pinsFull = "Закреплено 20 — уберите лишние"
     override val cancel = "Отмена"
     override fun pinsDeleteChosen(n: Int) = "Удалить выбранные: $n"
+    override val makeModerator = "Сделать модератором"
+    override val makeAdmin = "Сделать админом"
+    override val makeMember = "Сделать участником"
+    override val banDay = "Бан на сутки"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -381,6 +391,10 @@ object EnglishSociumWords : SociumWords {
     override val pinsFull = "20 pinned — remove some first"
     override val cancel = "Cancel"
     override fun pinsDeleteChosen(n: Int) = "Delete selected: $n"
+    override val makeModerator = "Make moderator"
+    override val makeAdmin = "Make admin"
+    override val makeMember = "Make member"
+    override val banDay = "Ban for a day"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -501,4 +515,8 @@ object SpanishSociumWords : SociumWords {
     override val pinsFull = "20 fijados: quita alguno"
     override val cancel = "Cancelar"
     override fun pinsDeleteChosen(n: Int) = "Eliminar seleccionados: $n"
+    override val makeModerator = "Hacer moderador"
+    override val makeAdmin = "Hacer administrador"
+    override val makeMember = "Hacer miembro"
+    override val banDay = "Bloquear un día"
 }

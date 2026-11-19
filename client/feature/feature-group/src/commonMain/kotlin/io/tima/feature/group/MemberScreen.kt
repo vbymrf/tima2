@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -84,6 +86,10 @@ fun MemberScreen(
     onConfirmClaim: (String) -> Unit = {},
     /** Полоса вкладок страницы сущности (ПЛАН-(СЦ) СЦ6): «Участники» — вкладка страницы. */
     tabs: (@Composable () -> Unit)? = null,
+    /** Роль участника (СЦ6): `(кто, роль)` — admin, moderator, member; `null` — права нет. */
+    onRole: ((String, String) -> Unit)? = null,
+    /** Бан на сутки (СЦ6); `null` — права нет. */
+    onBan: ((String) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.social
@@ -170,6 +176,20 @@ fun MemberScreen(
                         look = look,
                         removeMay = state.memberEdit && !member.role.deliveryEdits,
                         onRemove = { onRemove(member.userId) },
+                        // Роли и бан (СЦ6): тому, кто ниже меня; владелец назначает и админов.
+                        actions = if (member.role != GroupRole.Owner && state.myRole.rank() > member.role.rank() && (onRole != null || onBan != null)) {
+                            buildList {
+                                val w = Tima.words.socium
+                                if (onRole != null && state.myRole.rank() >= GroupRole.Admin.rank()) {
+                                    if (member.role != GroupRole.Moderator) add(w.makeModerator to { onRole(member.userId, "moderator") })
+                                    if (state.myRole == GroupRole.Owner && member.role != GroupRole.Admin) add(w.makeAdmin to { onRole(member.userId, "admin") })
+                                    if (member.role != GroupRole.Member) add(w.makeMember to { onRole(member.userId, "member") })
+                                }
+                                if (onBan != null) add(w.banDay to { onBan(member.userId) })
+                            }
+                        } else {
+                            emptyList()
+                        },
                     )
                 }
             }
@@ -275,9 +295,12 @@ private fun MemberLine(
     look: PersonLook,
     removeMay: Boolean,
     onRemove: () -> Unit,
+    actions: List<Pair<String, () -> Unit>> = emptyList(),
 ) {
     val words = Tima.words.social
+    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     ListLine(
+        onClick = if (actions.isNotEmpty()) ({ open = !open }) else null,
         modifier = Modifier.testTag(MembersTags.ROW),
         left = { Avatar(letters = person.letter()) },
         right = {
@@ -293,9 +316,27 @@ private fun MemberLine(
                 // последнее прибежище, когда о человеке не известно ничего.
                 Name(person.line(look) ?: Tima.words.chat.someone)
                 member.bannedUntil?.let { Secondary(words.bannedUntil(it)) }
+                if (open) {
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+                    ) {
+                        for ((label, act) in actions) {
+                            Button(label = label, onClick = { act(); open = false }, kind = io.tima.core.ui.ButtonKind.Quiet, modifier = Modifier.testTag(MembersTags.ROLE))
+                        }
+                    }
+                }
             }
         },
     )
+}
+
+/** Старшинство роли: владелец 3, админ 2, модератор 1, участник 0. */
+private fun GroupRole.rank(): Int = when (this) {
+    GroupRole.Owner -> 3
+    GroupRole.Admin -> 2
+    GroupRole.Moderator -> 1
+    else -> 0
 }
 
 private fun roleCaption(role: GroupRole, words: SocialWords): String = when (role) {
@@ -319,6 +360,8 @@ data class IdentityClaimLine(val userId: String, val newName: String, val oldNam
  * и её «Исключить» помечены одинаково у всех строк: нужная строка выбирается по имени внутри неё.
  */
 object MembersTags {
+    /** Действие над участником — роль или бан (ПЛАН-(СЦ) СЦ6). */
+    const val ROLE = "members:role"
     const val PHONE = "members:phone"
     const val INVITE_PHONE = "members:invite-phone"
     const val NICK = "members:nick"

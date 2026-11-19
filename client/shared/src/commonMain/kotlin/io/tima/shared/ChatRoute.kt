@@ -1973,6 +1973,21 @@ internal fun Members(
 
     MemberScreen(
         tabs = tabs,
+        // Роли и бан (ПЛАН-(СЦ) СЦ6) — ручками сервера; после — состав заново.
+        onRole = { uid, role ->
+            scope.launch {
+                val ok = (network as? ChatPorts)?.invites?.setRole(groupId, uid, role) ?: false
+                Journal.note(LogCode.NAV, "роль участника", "роль" to role, "вышло" to ok)
+                store.refresh()
+            }
+        },
+        onBan = { uid ->
+            scope.launch {
+                val ok = (network as? ChatPorts)?.invites?.ban(groupId, uid, 24 * 3600L) ?: false
+                Journal.note(LogCode.NAV, "бан участника", "вышло" to ok)
+                store.refresh()
+            }
+        },
         state = state,
         onNumber = store::changedNumber,
         onCountryCode = store::changedCountryCode,

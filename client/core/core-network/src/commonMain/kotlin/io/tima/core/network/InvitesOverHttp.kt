@@ -125,6 +125,28 @@ class InvitesOverHttp(
         ""
     }
 
+    /** Роль участника группы (ПЛАН-(СЦ) СЦ6): admin, moderator, member — строго ниже своей. */
+    suspend fun setRole(groupId: String, userId: String, role: String): Boolean = try {
+        client.put(route.api("/api/v1/groups/$groupId/members/$userId/role")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("role", JsonPrimitive(role)) }.toString())
+        }.status.value in 200..299
+    } catch (_: Throwable) {
+        false
+    }
+
+    /** Бан участника группы на [seconds] (СЦ6): писать не может; модератор и выше — того, кто ниже. */
+    suspend fun ban(groupId: String, userId: String, seconds: Long): Boolean = try {
+        client.post(route.api("/api/v1/groups/$groupId/members/$userId/ban")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("seconds", JsonPrimitive(seconds)) }.toString())
+        }.status.value in 200..299
+    } catch (_: Throwable) {
+        false
+    }
+
     /** Аватар сущности (ПЛАН-(СЦ) СЦ5): своё завершённое медиа; пусто — снять. */
     suspend fun setAvatar(kind: EntityKind, id: String, mediaId: String): Boolean = try {
         client.put(route.api(path(kind, id) + "/avatar")) {
