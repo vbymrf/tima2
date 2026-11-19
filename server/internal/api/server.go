@@ -227,6 +227,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterOwnership(mux, s.Store, store.OwnershipOf(s.Store), s.notifier(), s.requireActiveDevice)
 	// Удаление с месяцем на отмену (СЦ14): каналы и сообщества — удалить; все три — отменить.
 	RegisterDeletion(mux, s.Store, store.DeletionsOf(s.Store), s.requireActiveDevice)
+	// Переписка «сущность — человек» (СЦ15): одна лента на пару, автор стороны сущности скрыт, пять людей в сутки.
+	RegisterThreads(mux, s.Store, store.ThreadsOf(s.Store), s.notifier(), s.requireActiveDevice)
 	// Закреплённое и описание (ПЛАН-(ЗО) ЗО1–ЗО2).
 	RegisterShowcase(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	// Страна и язык человека: две задачи — отсев у клиента и региональные ленты у
