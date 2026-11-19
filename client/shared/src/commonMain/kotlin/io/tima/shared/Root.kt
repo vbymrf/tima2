@@ -1437,7 +1437,7 @@ private fun App(
 
     // Окно 2 «Социум»: свои группы и карточки, которые открыли контакты. Списки живут
     // здесь, а не в оболочке: рама знает раму, работа с сервером — дело feature-group.
-    val social = remember { SocialStore(GroupsOverHttp(network.groups), scope, network.communities) }
+    val social = remember { SocialStore(GroupsOverHttp(network.groups), scope, network.communities, channels = { network.channels.mine() }) }
     // Окно 5 «Страница»: своя лента — своё и принесённое. Один Store на приложение: одна
     // страница у человека, и второй показывал бы то же самое со своим отставанием.
     val page = remember {
@@ -1864,6 +1864,42 @@ private fun App(
     }
 
     val mutedAll by (assembled.liveStates?.muted ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>()) }).collectAsState()
+    // Строки Социума (ПЛАН-(СЦ) СЦ3): последнее сообщение и его время — из своей базы (личные группы расшифрованы
+    // здесь же) и из вершин «зашли, забрали» (открытые группы и каналы — текстом с сервера); что новее, то и в строке.
+    val sociumChats by remember(environment) { environment.chats.list(io.tima.domain.chat.ObserveChats.MAX_PAGE) }
+        .collectAsState(initial = emptyList())
+    val sociumTops by (assembled.liveStates?.tops ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, LiveStates.Top>()) }).collectAsState()
+    val sociumByChat = remember(sociumChats) { sociumChats.associateBy { it.chatId } }
+    val groupLook: (String) -> io.tima.feature.group.RowLook = { id ->
+        val local = sociumByChat[id]
+        val top = sociumTops["group:$id"]
+        val localAt = local?.atMs ?: 0L
+        val topAt = top?.atMs ?: 0L
+        val at = maxOf(localAt, topAt).takeIf { it > 0 }
+        val preview = if (topAt > localAt && !top?.preview.isNullOrBlank()) top?.preview else local?.preview ?: top?.preview
+        io.tima.feature.group.RowLook(preview = preview, atMs = at, time = at?.let(::sociumTime).orEmpty(), muted = "group:$id" in mutedAll)
+    }
+    val sociumLook: (String, String) -> io.tima.feature.group.RowLook = { kind, id ->
+        if (kind == "channel") {
+            val top = sociumTops["channel:$id"]
+            val at = top?.atMs?.takeIf { it > 0 }
+            io.tima.feature.group.RowLook(
+                preview = top?.preview, atMs = at, time = at?.let(::sociumTime).orEmpty(),
+                fresh = top?.unread ?: 0, muted = "channel:$id" in mutedAll,
+            )
+        } else if (kind == "community") {
+            // Последнее из любого его элемента, который я вижу (§1.3, 1): строка 2 — элемент, строка 3 — сообщение.
+            val latest = socialState.mine.filter { it.communityId == id }
+                .map { it to groupLook(it.groupId) }.maxByOrNull { it.second.atMs ?: 0L }
+            val look = latest?.second ?: io.tima.feature.group.RowLook()
+            look.copy(
+                element = latest?.first?.let { io.tima.domain.chat.EntityKind.Group to it.title },
+                muted = "community:$id" in mutedAll,
+            )
+        } else {
+            groupLook(id)
+        }
+    }
     // Отметки и «печатает» для списка «Чаты» (ПЛАН-(ОП)); секунды — чтобы «печатает» гасло само.
     val liveReceipts by (assembled.liveStates?.receipts ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, io.tima.feature.chat.ChatReceipt>()) }).collectAsState()
     val liveTyping by (assembled.liveStates?.typing ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, Long>()) }).collectAsState()
@@ -3948,6 +3984,10 @@ private fun App(
                         catalog = {
                             CatalogTab(
                                 state = socialState,
+                                lookOf = sociumLook,
+                                ownColor = communityView.ownColor?.let { androidx.compose.ui.graphics.Color(it.toULong() shl 32) },
+                                // Канал — пока окном «Описание» с его записями уровня 0; лента канала — К5.
+                                onOpenChannel = { ch -> where = Where.Showcase("channel", ch.channelId, ch.title) },
                                 countOf = { groupId -> noticeCounts.chat(groupId, null) },
                                 onOpen = { where = Where.Chat(it.groupId, it.title) },
                                 onNew = { where = Where.NewGroup },
@@ -5342,3 +5382,16 @@ internal suspend fun probeStream(cards: io.tima.core.network.LinkCardsOverHttp, 
 
 /** Снимок «как показывать звонок» на время одного звонка (ПЛАН-(ЗН)): вид, режим адаптации, увеличение с начала. */
 private data class CallLookSnap(val adapt: Boolean, val preset: io.tima.core.call.CameraCrop)
+
+/** Время строки Социума (ПЛАН-(СЦ) СЦ3): сегодня — часы, в этом году — число и месяц, раньше — с годом. */
+internal fun sociumTime(atMs: Long, nowMs: Long = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()): String {
+    val zone = kotlinx.datetime.TimeZone.currentSystemDefault()
+    val at = kotlinx.datetime.Instant.fromEpochMilliseconds(atMs).toLocalDateTime(zone)
+    val now = kotlinx.datetime.Instant.fromEpochMilliseconds(nowMs).toLocalDateTime(zone)
+    fun two(n: Int) = n.toString().padStart(2, '0')
+    return when {
+        at.date == now.date -> two(at.hour) + ":" + two(at.minute)
+        at.year == now.year -> two(at.dayOfMonth) + "." + two(at.monthNumber)
+        else -> two(at.dayOfMonth) + "." + two(at.monthNumber) + "." + at.year
+    }
+}

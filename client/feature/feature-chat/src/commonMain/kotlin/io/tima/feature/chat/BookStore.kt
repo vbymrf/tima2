@@ -278,6 +278,11 @@ data class BookView(
      */
     val avatarLook: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
     /**
+     * Цвет названия в строке Социума там, где я владелец, админ или модератор (ПЛАН-(СЦ) §1.2, 3) — ARGB; `null` —
+     * зелёный темы (по умолчанию). Только у вида сообществ.
+     */
+    val ownColor: Long? = null,
+    /**
      * Чем называть человека. Ни одной галки — order по умолчанию, тот же самый:
      * имя → имя пользователя → ник → outsiders → «Без имени».
      */
@@ -347,6 +352,7 @@ data class BookView(
         ).joinToString(","))
         settings.put("$prefix.$ORDER", order.joinToString(",") { it.wire })
         if (prefix == COMMUNITY) settings.put("$prefix.$AVATAR", avatarLook.name.lowercase())
+        if (prefix == COMMUNITY) settings.put("$prefix.$OWN_COLOR", ownColor?.toString().orEmpty())
         if (prefix == BOOK) settings.put("$prefix.$STRANGER", stranger.wire)
     }
 
@@ -364,6 +370,9 @@ data class BookView(
         private const val NAMES = "names"
         private const val ORDER = "names_order"
         private const val AVATAR = "avatar_look"
+
+        /** Цвет названия своей роли в строке Социума (ПЛАН-(СЦ) СЦ3). */
+        private const val OWN_COLOR = "own_color"
         private const val STRANGER = "stranger_look"
         private const val FOLDERS = "folders"
         private const val MENU = "menu"
@@ -399,6 +408,7 @@ data class BookView(
                 order = orderFrom(saved["$prefix.$ORDER"]),
                 avatarLook = io.tima.core.ui.AvatarLook.entries.firstOrNull { it.name.lowercase() == saved["$prefix.$AVATAR"] }
                     ?: io.tima.core.ui.AvatarLook.Free,
+                ownColor = saved["$prefix.$OWN_COLOR"]?.toLongOrNull(),
                 stranger = io.tima.domain.chat.StrangerLook.byWire(saved["$prefix.$STRANGER"]) ?: io.tima.domain.chat.StrangerLook.Tinted,
             )
         }

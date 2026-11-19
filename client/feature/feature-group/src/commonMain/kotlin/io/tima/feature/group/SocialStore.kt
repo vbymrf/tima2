@@ -44,6 +44,8 @@ class SocialStore(
      * жизнь store, и после смены языка беда пришла бы на прежнем.
      */
     private val words: () -> Words = { CurrentWords.value },
+    /** Свои каналы (ПЛАН-(СЦ) СЦ3); `null` — каналов в «Каталоге» нет; ответ `null` — нет связи. */
+    private val channels: (suspend () -> List<io.tima.domain.chat.ChannelInfo>?)? = null,
 ) {
 
     private val _state = MutableStateFlow(SocialState())
@@ -62,7 +64,9 @@ class SocialStore(
             // экраном: человек открывает «Социум» один раз, и три похода в сеть подряд
             // он видит как одну задержку, а не как три.
             val communities = communities?.mine() ?: emptyList()
+            val channels = channels?.invoke()
             _state.value = _state.value.copy(
+                channels = channels ?: _state.value.channels,
                 expect = false,
                 loaded = true,
                 mine = (mine as? GroupsStep.Groups)?.groups ?: _state.value.mine,
@@ -128,6 +132,8 @@ data class SocialState(
      * лежит, вместо того чтобы видеть.
      */
     val communities: List<CommunityPage> = emptyList(),
+    /** Свои каналы — тоже в «Каталоге» (ПЛАН-(СЦ) СЦ3), без лент людей. */
+    val channels: List<io.tima.domain.chat.ChannelInfo> = emptyList(),
     /** Идёт запрос: списки могли ещё не приехать. */
     val expect: Boolean = false,
     /** Списки хоть раз доехали. До этого «пусто» означает «не знаем», а не «нет». */

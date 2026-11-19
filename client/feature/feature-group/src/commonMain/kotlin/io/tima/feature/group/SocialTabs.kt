@@ -61,6 +61,15 @@ fun CatalogTab(
      * или `community`. `null` — аватар не нажимается, строка ведёт туда же, что и прежде.
      */
     onShowcase: ((kind: String, id: String, title: String) -> Unit)? = null,
+    /**
+     * Что строка показывает сверх названия (ПЛАН-(СЦ) СЦ3): последнее сообщение, время, выключены ли уведомления.
+     * `(вид, номер)`; вид — `group` или `community`. По времени последнего строки и идут, новые сверху (§1.5, 1).
+     */
+    lookOf: (kind: String, id: String) -> RowLook = { _, _ -> RowLook() },
+    /** Цвет названия у своей роли (настройка «Вид → Социум»); `null` — зелёный темы. */
+    ownColor: androidx.compose.ui.graphics.Color? = null,
+    /** Открыть канал (ПЛАН-(СЦ) СЦ3). `null` — каналов в «Каталоге» нет. */
+    onOpenChannel: ((io.tima.domain.chat.ChannelInfo) -> Unit)? = null,
 ) {
     val words = Tima.words.social
     ProvidePlace(TextPlace.LISTS) {
@@ -71,32 +80,56 @@ fun CatalogTab(
         // нём лежит, иначе состав читается раньше, чем то, чему он принадлежит.
         if (onOpenCommunity != null && state.communities.isNotEmpty()) {
             Caption(Tima.words.communities.communities, modifier = Modifier.padding(TimaSpacing.about4))
-            for (community in state.communities) {
-                ListLine(
+            for (community in state.communities.sortedByDescending { lookOf("community", it.communityId).atMs ?: 0L }) {
+                EntityRow(
+                    title = community.title,
+                    type = io.tima.domain.chat.EntityType(io.tima.domain.chat.EntityKind.Community, io.tima.domain.chat.EntityReach.Public),
+                    role = when {
+                        community.owner -> io.tima.domain.chat.GroupRole.Owner
+                        community.admin -> io.tima.domain.chat.GroupRole.Admin
+                        else -> io.tima.domain.chat.GroupRole.Member
+                    },
+                    look = lookOf("community", community.communityId),
                     onClick = { onOpenCommunity(community.communityId) },
-                    left = {
+                    ownColor = ownColor,
+                    avatar = {
                         Avatar(
                             letters = community.title.take(2).uppercase(),
+                            size = io.tima.core.ui.AvatarSize.Row,
                             modifier = showcaseClick(onShowcase) { it("community", community.communityId, community.title) },
                         )
-                    },
-                    middle = {
-                        Column {
-                            Name(community.title)
-                            Secondary(
-                                if (community.owner) {
-                                    Tima.words.communities.yourCommunity
-                                } else {
-                                    Tima.words.communities.youSubscribed
-                                },
-                                lineOne = true,
-                            )
-                        }
                     },
                 )
             }
         }
 
+        // Каналы — своей группой строк, как сообщества: они тоже вещают, а не переписываются. Внутри сообщества
+        // канал живёт в его списке, а не здесь.
+        if (onOpenChannel != null) {
+            val channels = state.channels.filter { it.communityId == null }.sortedByDescending { lookOf("channel", it.channelId).atMs ?: 0L }
+            for (channel in channels) {
+                EntityRow(
+                    title = channel.title,
+                    type = channel.type,
+                    role = channel.role,
+                    look = lookOf("channel", channel.channelId),
+                    onClick = { onOpenChannel(channel) },
+                    ownColor = ownColor,
+                    avatar = {
+                        Avatar(
+                            letters = channel.title.take(2).uppercase(),
+                            size = io.tima.core.ui.AvatarSize.Row,
+                            modifier = showcaseClick(onShowcase) { it("channel", channel.channelId, channel.title) },
+                        )
+                    },
+                )
+            }
+        }
+
+        val mine = state.mine.sortedByDescending { lookOf("group", it.groupId).atMs ?: 0L }
+        val line: @Composable (GroupInfo) -> Unit = { group ->
+            GroupLine(group, onOpen, countOf(group.groupId), onShowcase, look = lookOf("group", group.groupId), ownColor = ownColor)
+        }
         if (state.mine.isEmpty()) {
             // «Пусто» и «ещё не знаем» — разные вещи, и человек не должен их путать.
             EmptyTab(
@@ -108,10 +141,10 @@ fun CatalogTab(
                 },
             )
         } else if (layout != null) {
-            Box(Modifier.weight(1f)) { layout(state.mine) { group -> GroupLine(group, onOpen, countOf(group.groupId), onShowcase) } }
+            Box(Modifier.weight(1f)) { layout(mine) { group -> line(group) } }
         } else {
             LazyColumn(Modifier.weight(1f)) {
-                items(state.mine, key = { it.groupId }) { group -> GroupLine(group, onOpen, countOf(group.groupId), onShowcase) }
+                items(mine, key = { it.groupId }) { group -> line(group) }
             }
         }
 
@@ -125,29 +158,33 @@ fun CatalogTab(
     }
 }
 
-/** Строка группы каталога: имя и моя роль в ней. */
+/**
+ * Строка группы каталога (ПЛАН-(СЦ) СЦ3): название цветом роли, последнее сообщение в две строки, справа тип значком,
+ * время и число новых. Сообщений ещё нет — второй строкой моя роль, как раньше.
+ */
 @Composable
 fun GroupLine(
     group: GroupInfo,
     onOpen: (GroupInfo) -> Unit,
     howMany: Int = 0,
     onShowcase: ((kind: String, id: String, title: String) -> Unit)? = null,
+    look: RowLook = RowLook(),
+    ownColor: androidx.compose.ui.graphics.Color? = null,
 ) {
     val words = Tima.words.social
-    ListLine(
+    EntityRow(
+        title = group.title,
+        type = group.type,
+        role = group.myRole,
+        look = look.copy(fresh = howMany, preview = look.preview?.takeIf { it.isNotBlank() } ?: roleWord(group, words)),
         onClick = { onOpen(group) },
-        left = {
+        ownColor = ownColor,
+        avatar = {
             Avatar(
                 letters = group.title.take(2).uppercase(),
+                size = io.tima.core.ui.AvatarSize.Row,
                 modifier = showcaseClick(onShowcase) { it("group", group.groupId, group.title) },
             )
-        },
-        right = if (howMany > 0) ({ io.tima.core.ui.Counter(howMany) }) else null,
-        middle = {
-            Column {
-                Name(group.title)
-                Secondary(roleWord(group, words))
-            }
         },
     )
 }

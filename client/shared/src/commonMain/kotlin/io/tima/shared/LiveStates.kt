@@ -74,8 +74,11 @@ class LiveStates(
     /** Отключённые уведомления: `вид:сущность` — `chat:…`, `group:…`, `channel:…`, `community:…`. */
     val muted: StateFlow<Set<String>> = _muted.asStateFlow()
 
-    /** Вершина сущности: новое до [topId], непрочитанного [unread]. */
-    data class Top(val topId: Long, val unread: Int)
+    /**
+     * Вершина сущности: новое до [topId], непрочитанного [unread]; время [atMs] и текст [preview] последнего — для
+     * строки Социума (ПЛАН-(СЦ) СЦ3).
+     */
+    data class Top(val topId: Long, val unread: Int, val atMs: Long = 0, val preview: String = "")
 
     /**
      * Вершина поднялась у сущности с включёнными уведомлениями: `(вид, сущность, номер)`. Зовёт
@@ -110,9 +113,12 @@ class LiveStates(
                 val (d, r) = v.split(':').mapNotNull { it.toLongOrNull() }.takeIf { it.size == 2 } ?: return@mapNotNull null
                 k.removePrefix(RECEIPT) to ChatReceipt(d, r)
             }.toMap()
+            // «номер:непрочитано[:время:текст]» — прежняя запись из двух чисел тоже читается.
             _tops.value = saved.filterKeys { it.startsWith(TOP) }.mapNotNull { (k, v) ->
-                val (id, unread) = v.split(':').mapNotNull { it.toLongOrNull() }.takeIf { it.size == 2 } ?: return@mapNotNull null
-                k.removePrefix(TOP) to Top(id, unread.toInt())
+                val parts = v.split(':', limit = 4)
+                val id = parts.getOrNull(0)?.toLongOrNull() ?: return@mapNotNull null
+                val unread = parts.getOrNull(1)?.toLongOrNull() ?: return@mapNotNull null
+                k.removePrefix(TOP) to Top(id, unread.toInt(), parts.getOrNull(2)?.toLongOrNull() ?: 0, parts.getOrNull(3).orEmpty())
             }.toMap()
             _muted.value = saved.filter { (k, v) -> k.startsWith(MUTED) && v == "1" }.keys.map { it.removePrefix(MUTED) }.toSet()
         }
@@ -166,10 +172,10 @@ class LiveStates(
             is StateRow.Top -> {
                 val key = "${row.kind}:${row.entityId}"
                 val was = _tops.value[key]
-                val fresh = Top(row.topId, row.unread)
+                val fresh = Top(row.topId, row.unread, row.topAtMs, row.preview.ifEmpty { was?.preview.orEmpty() })
                 if (fresh != was) {
                     _tops.value = _tops.value + (key to fresh)
-                    runCatching { settings.put(TOP + key, "${fresh.topId}:${fresh.unread}") }
+                    runCatching { settings.put(TOP + key, "${fresh.topId}:${fresh.unread}:${fresh.atMs}:${fresh.preview}") }
                 }
                 // Новое, а не отметка прочтения с другого устройства: вершина выросла.
                 if (row.topId > (was?.topId ?: 0) && row.unread > 0 && key !in _muted.value) {

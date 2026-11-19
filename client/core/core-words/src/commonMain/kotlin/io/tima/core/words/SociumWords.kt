@@ -64,6 +64,11 @@ interface SociumWords {
     val badPhrase: String
     val offerDropped: String
     val receiverRole: String
+
+    // Цвет названия своей роли (СЦ3, §1.2, 3).
+    val ownColorTitle: String
+    val ownColorAbout: String
+    val ownColorDefault: String
 }
 
 object RussianSociumWords : SociumWords {
@@ -115,6 +120,9 @@ object RussianSociumWords : SociumWords {
     override val badPhrase = "Фраза не та"
     override val offerDropped = "Три неверные фразы — предложение погашено"
     override val receiverRole = "Принять может модератор и выше (в сообществе — админ)"
+    override val ownColorTitle = "Цвет названия своей роли"
+    override val ownColorAbout = "где вы владелец, админ или модератор — название в строке этим цветом"
+    override val ownColorDefault = "По умолчанию — зелёный"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -166,6 +174,9 @@ object EnglishSociumWords : SociumWords {
     override val badPhrase = "Wrong phrase"
     override val offerDropped = "Three wrong phrases: the offer is cancelled"
     override val receiverRole = "Only a moderator or above (in a community, an admin) can accept"
+    override val ownColorTitle = "Colour of your own roles"
+    override val ownColorAbout = "where you are the owner, an admin or a moderator, the title is shown in this colour"
+    override val ownColorDefault = "Default: green"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -217,4 +228,7 @@ object SpanishSociumWords : SociumWords {
     override val badPhrase = "Frase incorrecta"
     override val offerDropped = "Tres frases incorrectas: la oferta se canceló"
     override val receiverRole = "Solo un moderador o superior (en una comunidad, un administrador) puede aceptar"
+    override val ownColorTitle = "Color de tus roles"
+    override val ownColorAbout = "donde eres propietario, administrador o moderador, el título va en este color"
+    override val ownColorDefault = "Por defecto: verde"
 }

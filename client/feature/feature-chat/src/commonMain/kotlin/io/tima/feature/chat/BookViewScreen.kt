@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -20,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -408,6 +410,8 @@ fun PersonLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modif
         if (!forPeople) {
             PartLine()
             AvatarLookSetting(view.avatarLook) { onChange(view.copy(avatarLook = it)) }
+            PartLine()
+            OwnColorSetting(view.ownColor) { onChange(view.copy(ownColor = it)) }
         }
 
         PartLine()
@@ -472,6 +476,39 @@ private fun StrangerLookSetting(chosen: io.tima.domain.chat.StrangerLook, onChoo
         }
     }
 }
+
+/**
+ * «Цвет названия своей роли» (ПЛАН-(СЦ) §1.2, 3): где я владелец, админ или модератор, название строки Социума —
+ * этим цветом; по умолчанию зелёный темы. Нажатие раскрывает палитру и «По умолчанию».
+ */
+@Composable
+private fun OwnColorSetting(chosen: Long?, onChoose: (Long?) -> Unit) {
+    val w = Tima.words.socium
+    var open by remember { mutableStateOf(false) }
+    val color = chosen?.let { androidx.compose.ui.graphics.Color(it.toULong() shl 32) } ?: Tima.colors.confirmed
+    ListLine(
+        modifier = Modifier.testTag(OWN_COLOR_TAG),
+        onClick = { open = !open },
+        right = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                Box(Modifier.size(20.dp).background(color, androidx.compose.foundation.shape.CircleShape))
+                io.tima.core.ui.ExpandMark(open)
+            }
+        },
+        middle = {
+            Caption(w.ownColorTitle, fontSize = TimaType.sz4, weight = FontWeight.Bold, maxLines = 2, color = color)
+            Tertiary(w.ownColorAbout)
+        },
+    )
+    if (!open) return
+    Column(Modifier.fillMaxWidth().background(Tima.colors.softAccent).padding(TimaSpacing.about3)) {
+        io.tima.core.ui.ColorPicker(color, onPick = { picked -> onChoose((picked.value shr 32).toLong()) })
+        io.tima.core.ui.Button(w.ownColorDefault, onClick = { onChoose(null) }, kind = io.tima.core.ui.ButtonKind.Quiet)
+    }
+}
+
+/** Метка настройки цвета своей роли — для сценариев. */
+const val OWN_COLOR_TAG = "view:own-color"
 
 /** «Аватар в группе»: строка с выбранным справа; нажатие раскрывает три вида с пояснениями. */
 @Composable

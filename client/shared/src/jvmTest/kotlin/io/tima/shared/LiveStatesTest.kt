@@ -77,7 +77,7 @@ class LiveStatesTest {
             api = api {
                 """{"rev":3,"now_ms":0,"states":[
                    {"kind":"notify","rev":1,"entity_kind":"group","entity_id":"g2","off":true},
-                   {"kind":"top","rev":2,"entity_kind":"group","entity_id":"g1","top_id":10,"top_at_ms":5,"unread":4},
+                   {"kind":"top","rev":2,"entity_kind":"group","entity_id":"g1","top_id":10,"top_at_ms":5,"unread":4,"preview":"встреча: в 10:00"},
                    {"kind":"top","rev":3,"entity_kind":"group","entity_id":"g2","top_id":11,"top_at_ms":6,"unread":1}]}"""
             },
             settings = settings,
@@ -85,7 +85,16 @@ class LiveStatesTest {
         )
         live.onTopRaised = { kind, id, top -> raised += Triple(kind, id, top) }
         live.top(3)
-        assertEquals(LiveStates.Top(10, 4), live.tops.value["group:g1"])
+        // Время и текст последнего — для строки Социума (ПЛАН-(СЦ) СЦ3); текст с двоеточием переживает запись.
+        assertEquals(LiveStates.Top(10, 4, 5, "встреча: в 10:00"), live.tops.value["group:g1"])
+        assertEquals("10:4:5:встреча: в 10:00", settings.values.value["states.top.group:g1"], "вершина не пережила бы перезапуск")
+        val restarted = LiveStates(
+            api = api { """{"rev":3,"states":[]}""" },
+            settings = settings,
+            scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)),
+        )
+        testScheduler.advanceUntilIdle()
+        assertEquals(LiveStates.Top(10, 4, 5, "встреча: в 10:00"), restarted.tops.value["group:g1"], "после перезапуска")
         assertTrue(live.isMuted("group", "g2"), "отключение не легло")
         assertEquals(listOf(Triple("group", "g1", 10L)), raised, "уведомлена отключённая или не уведомлена включённая")
         live.readEntity("group", "g1", 10)

@@ -30,7 +30,16 @@ sealed interface StateRow {
      * Вершина сущности «зашли, забрали» (ПЛАН-(ОУ)): в открытой группе или канале новое до [topId];
      * [unread] — после моей отметки прочтения, не больше 100.
      */
-    data class Top(override val rev: Long, val kind: String, val entityId: String, val topId: Long, val topAtMs: Long, val unread: Int) : StateRow
+    data class Top(
+        override val rev: Long,
+        val kind: String,
+        val entityId: String,
+        val topId: Long,
+        val topAtMs: Long,
+        val unread: Int,
+        /** Текст последнего, до 120 знаков (ПЛАН-(СЦ) СЦ3); зашифрованное — пусто. */
+        val preview: String = "",
+    ) : StateRow
 
     /** «Отключить уведомления» у сущности (ПЛАН-(ОУ)): [off] — отключены. */
     data class Notify(override val rev: Long, val kind: String, val entityId: String, val off: Boolean) : StateRow
@@ -73,6 +82,7 @@ class StatesOverHttp(
                         "top" -> StateRow.Top(
                             rev, o.str("entity_kind").orEmpty(), o.str("entity_id").orEmpty(),
                             o.long("top_id") ?: 0, o.long("top_at_ms") ?: 0, (o.long("unread") ?: 0).toInt(),
+                            o.str("preview").orEmpty(),
                         )
                         "notify" -> StateRow.Notify(rev, o.str("entity_kind").orEmpty(), o.str("entity_id").orEmpty(), o.bool("off") == true)
                         // Новый вид от сервера новее нас — пропускаем, ленту не роняем.

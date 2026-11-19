@@ -38,6 +38,27 @@ sealed interface ChannelStep {
     data class Refused(val reason: String) : ChannelStep
 }
 
+/**
+ * Свой канал — строкой «Каталога» Социума (ПЛАН-(СЦ) СЦ3): владелец, модератор или подписчик. Ленты людей сюда не
+ * входят — они дружба, а не каналы (ЛС §1).
+ */
+data class ChannelInfo(
+    val channelId: String,
+    val title: String,
+    val owner: Boolean,
+    val moderator: Boolean,
+    val isPublic: Boolean,
+    val secret: Boolean,
+    val communityId: String?,
+) {
+    val type: EntityType get() = EntityType(EntityKind.Channel, if (isPublic) EntityReach.Public else EntityReach.Personal, secret)
+    val role: GroupRole get() = when {
+        owner -> GroupRole.Owner
+        moderator -> GroupRole.Moderator
+        else -> GroupRole.Member
+    }
+}
+
 /** Порт к серверу: каналы. */
 interface Channels {
     suspend fun create(
