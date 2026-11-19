@@ -4649,6 +4649,7 @@ private fun App(
                             }
                         },
                         trouble = trouble,
+                        meId = session.userId,
                     )
                 }
             }

@@ -153,7 +153,8 @@ interface SociumWords {
     val roleLogHint: String
     val roleLogEmpty: String
     /** «добавил(а)», «назначил(а) модератором» … — между именем того, кто сделал, и того, с кем. */
-    fun roleLogAction(action: String, detail: String): String
+    fun roleLogAction(action: String, detail: String, mine: Boolean = false): String
+    val staffNobody: String
     fun membersCount(n: Int): String
     fun subscribersCount(n: Int): String
     val you: String
@@ -296,17 +297,22 @@ object RussianSociumWords : SociumWords {
     override val roleLogTitle = "Журнал ролей"
     override val roleLogHint = "Роль назначается нажатием на участника во вкладке «Участники»."
     override val roleLogEmpty = "Записей пока нет"
-    override fun roleLogAction(action: String, detail: String) = when (action) {
-        "add" -> "добавил(а)"
-        "remove" -> "исключил(а)"
-        "ban" -> "забанил(а) на ${(detail.toLongOrNull() ?: 0) / 3600} ч:"
-        "role" -> when (detail) {
-            "admin" -> "назначил(а) админом:"
-            "moderator" -> "назначил(а) модератором:"
-            else -> "сделал(а) участником:"
+    // «Вы добавили», но «Анна добавил(а)» (живой взгляд 2026-11-19: «Вы назначил(а)» резало слух).
+    override fun roleLogAction(action: String, detail: String, mine: Boolean): String {
+        val e = if (mine) "и" else "(а)"
+        return when (action) {
+            "add" -> "добавил$e"
+            "remove" -> "исключил$e"
+            "ban" -> "забанил$e на ${(detail.toLongOrNull() ?: 0) / 3600} ч:"
+            "role" -> when (detail) {
+                "admin" -> "назначил$e админом:"
+                "moderator" -> "назначил$e модератором:"
+                else -> "сделал$e участником:"
+            }
+            else -> action
         }
-        else -> action
     }
+    override val staffNobody = "Пока никого"
     override fun membersCount(n: Int) = "участников: $n"
     override fun subscribersCount(n: Int) = "подписчиков: $n"
     override val you = "Вы"
@@ -447,7 +453,8 @@ object EnglishSociumWords : SociumWords {
     override val roleLogTitle = "Role log"
     override val roleLogHint = "To change a role, tap a member on the Members tab."
     override val roleLogEmpty = "No entries yet"
-    override fun roleLogAction(action: String, detail: String) = when (action) {
+    override val staffNobody = "Nobody yet"
+    override fun roleLogAction(action: String, detail: String, mine: Boolean) = when (action) {
         "add" -> "added"
         "remove" -> "removed"
         "ban" -> "banned for ${(detail.toLongOrNull() ?: 0) / 3600} h:"
@@ -598,7 +605,8 @@ object SpanishSociumWords : SociumWords {
     override val roleLogTitle = "Registro de roles"
     override val roleLogHint = "Para cambiar un rol, toca a un miembro en la pestaña Miembros."
     override val roleLogEmpty = "Aún no hay registros"
-    override fun roleLogAction(action: String, detail: String) = when (action) {
+    override val staffNobody = "Nadie aún"
+    override fun roleLogAction(action: String, detail: String, mine: Boolean) = when (action) {
         "add" -> "añadió a"
         "remove" -> "expulsó a"
         "ban" -> "bloqueó por ${(detail.toLongOrNull() ?: 0) / 3600} h a"

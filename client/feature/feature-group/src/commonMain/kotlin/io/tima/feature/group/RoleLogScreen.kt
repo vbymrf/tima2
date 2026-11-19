@@ -51,16 +51,19 @@ fun RoleLogScreen(
     onRemoveStaff: (String) -> Unit = {},
     onAddNick: (String) -> Unit = {},
     trouble: String? = null,
+    /** Мой номер: свои записи журнала — «Вы добавили», а не «Вы добавил(а)». */
+    meId: String = "",
 ) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(title = w.manageRoles, onBack = onBack, caption = title, avatar = title.take(2).uppercase())
         Column(Modifier.padding(TimaSpacing.about4)) {
-            Secondary(w.roleLogHint)
+            // Подсказка про «Участники» — только там, где эта вкладка есть (у канала её нет; живой взгляд 2026-11-19).
+            if (onMembers != null) Secondary(w.roleLogHint)
             onMembers?.let { Button(w.tabMembers, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(RoleLogTags.MEMBERS)) }
             if (staff != null) {
                 Name(staffTitle)
-                if (staff.isEmpty()) Tertiary(w.roleLogEmpty)
+                if (staff.isEmpty()) Tertiary(w.staffNobody)
                 for (uid in staff) {
                     ListLine(
                         modifier = Modifier.testTag(RoleLogTags.STAFF),
@@ -90,7 +93,7 @@ fun RoleLogScreen(
                     modifier = Modifier.testTag(RoleLogTags.ROW),
                     middle = {
                         Column {
-                            Name(nameOf(e.actorId) + " " + w.roleLogAction(e.action, e.detail) + " " + nameOf(e.targetId))
+                            Name(nameOf(e.actorId) + " " + w.roleLogAction(e.action, e.detail, mine = e.actorId == meId) + " " + nameOf(e.targetId))
                             Tertiary(time(e.atMs))
                         }
                     },
