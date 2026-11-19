@@ -174,7 +174,8 @@ fun MemberScreen(
                         member = member,
                         person = state.people[member.userId] ?: ChatPerson.EMPTY,
                         look = look,
-                        removeMay = state.memberEdit && !member.role.deliveryEdits,
+                        // Исключить — того, кто ниже меня (модератор — участника, админ — и модератора).
+                        removeMay = state.memberEdit && member.role != GroupRole.Owner && state.myRole.rank() > member.role.rank(),
                         onRemove = { onRemove(member.userId) },
                         // Роли и бан (СЦ6): тому, кто ниже меня; владелец назначает и админов.
                         actions = if (member.role != GroupRole.Owner && state.myRole.rank() > member.role.rank() && (onRole != null || onBan != null)) {
@@ -185,7 +186,7 @@ fun MemberScreen(
                                     if (state.myRole == GroupRole.Owner && member.role != GroupRole.Admin) add(w.makeAdmin to { onRole(member.userId, "admin") })
                                     if (member.role != GroupRole.Member) add(w.makeMember to { onRole(member.userId, "member") })
                                 }
-                                if (onBan != null) add(w.banDay to { onBan(member.userId) })
+                                if (onBan != null && state.myRole.bans) add(w.banDay to { onBan(member.userId) })
                             }
                         } else {
                             emptyList()

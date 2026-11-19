@@ -108,6 +108,8 @@ fun EntityAboutTop(
     showLevels: Boolean?,
     onShowLevels: (Boolean) -> Unit,
     avatarPicture: String? = null,
+    /** «участников: N» или «подписчиков: N» под типом (§4б п. 9); `null` — не знаем. */
+    count: String? = null,
     /** Под кнопками — у сообщества звуковые чаты (СЦ7); `null` — ничего. */
     extra: (@Composable () -> Unit)? = null,
 ) {
@@ -123,6 +125,7 @@ fun EntityAboutTop(
                     TypeIcon(type, 16.dp)
                     Secondary(type.words(w))
                 }
+                count?.let { Tertiary(it) }
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -167,7 +167,9 @@ class GroupChatsTest {
         assertEquals(GroupRole.Unknown, GroupRole.from("archivist"))
         assertEquals(GroupRole.Owner, GroupRole.from("owner"))
         assertTrue(GroupRole.Admin.deliveryEdits)
-        assertTrue(!GroupRole.Moderator.deliveryEdits, "модератор состав не правит")
+        assertTrue(GroupRole.Moderator.deliveryEdits, "модератор зовёт и исключает (ПЛАН-(СЦ) §3)")
+        assertTrue(!GroupRole.Moderator.bans, "модератор не банит (ПЛАН-(СЦ) §3)")
+        assertTrue(GroupRole.Admin.bans)
         assertTrue(!GroupRole.Unknown.deliveryEdits, "неизвестной роли прав не даём")
     }
 

@@ -4567,6 +4567,27 @@ private fun App(
                 }
             }
 
+            is Where.Roles -> {
+                {
+                    // Журнал ролей (СЦ6) — у групп; у канала и сообщества пока только подсказка.
+                    var entries by remember(current) { mutableStateOf<List<io.tima.domain.chat.RoleLogEntry>?>(if (current.kind == "group") null else emptyList()) }
+                    LaunchedEffect(current) {
+                        if (current.kind == "group") {
+                            entries = network.invites.roleLog(current.id)
+                            entries?.flatMap { listOf(it.actorId, it.targetId) }?.distinct()?.let { people.want(it) }
+                        }
+                    }
+                    io.tima.feature.group.RoleLogScreen(
+                        title = current.title,
+                        entries = entries,
+                        nameOf = { id -> peopleCards[id]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: id.take(8) },
+                        time = { ms -> if (ms > 0) sociumTime(ms) else "" },
+                        onMembers = if (current.kind == "group") ({ where = Where.Members(current.id, current.title) }) else null,
+                        onBack = { where = Where.Nothing },
+                    )
+                }
+            }
+
             is Where.Invite -> {
                 {
                     val store = remember(current) { io.tima.feature.group.InviteStore(network.invites, scope, current.inviteId) }
@@ -4656,6 +4677,12 @@ private fun App(
                             val kind = current.kind
                             val id = current.id
                             val role = roleOf(kind, id)
+                            // Число участников или подписчиков (§4б п. 9) — с сервера при входе на страницу.
+                            var pageCount by remember(kind, id) { mutableStateOf<Int?>(null) }
+                            LaunchedEffect(kind, id) {
+                                val k = io.tima.domain.chat.EntityKind.fromWire(kind) ?: io.tima.domain.chat.EntityKind.Group
+                                pageCount = network.invites.counts(k, listOf(id))[id]
+                            }
                             val inside = when (kind) {
                                 "group" -> socialState.mine.any { it.groupId == id }
                                 "community" -> socialState.communities.any { it.communityId == id }
@@ -4696,7 +4723,14 @@ private fun App(
                                 },
                                 // «Написать» — любой, кто видит страницу (§1.9, 3); у элемента сообщества — лента сообщества.
                                 onWrite = { where = Where.Thread(kind, id, current.title) },
-                                onShare = null,
+                                // «Поделиться» — у публичных несекретных (§1.6, 2; §1.8, 3): ссылка на сущность.
+                                onShare = typeOf(kind, id).takeIf { it.reach == io.tima.domain.chat.EntityReach.Public && !it.secret }?.let { t ->
+                                    {
+                                        Journal.note(LogCode.NAV, "поделиться сущностью", "вид" to kind)
+                                        invite.share(current.title + "\n" + io.tima.domain.chat.EntityInvites.entityLink(t.kind, id))
+                                    }
+                                },
+                                count = pageCount?.let { n -> if (kind == "group") Tima.words.socium.membersCount(n) else Tima.words.socium.subscribersCount(n) },
                                 extra = if (kind == "community" && voice != null) {
                                     {
                                         var rooms by remember(id) { mutableStateOf<List<io.tima.core.network.VoiceChatInfo>>(emptyList()) }
@@ -4737,7 +4771,7 @@ private fun App(
                             Journal.note(LogCode.NAV, "управление", "раздел" to s.name)
                             when (s) {
                                 io.tima.feature.group.ManageSection.Main -> where = Where.ManageMain(current.kind, current.id, current.title)
-                                io.tima.feature.group.ManageSection.Roles,
+                                io.tima.feature.group.ManageSection.Roles -> where = Where.Roles(current.kind, current.id, current.title)
                                 io.tima.feature.group.ManageSection.Requests -> if (current.kind == "group") where = Where.Members(current.id, current.title)
                                 io.tima.feature.group.ManageSection.Access -> where = Where.Access(current.id, current.title)
                                 io.tima.feature.group.ManageSection.Messages -> where = Where.Showcase(current.kind, current.id, current.title)

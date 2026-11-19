@@ -314,8 +314,14 @@ enum class GroupRole {
     Unknown,
     ;
 
-    /** Может звать и исключать. Правило сервера: owner и admin. */
-    val deliveryEdits: Boolean get() = this == Owner || this == Admin
+    /**
+     * Может звать и исключать (того, кто ниже). Правило сервера с 2026-11-19 (ПЛАН-(СЦ) §3, §4а 15): owner, admin
+     * и moderator; прежде — owner и admin.
+     */
+    val deliveryEdits: Boolean get() = this == Owner || this == Admin || this == Moderator
+
+    /** Может банить: owner и admin (ПЛАН-(СЦ) §3 — модератор без бана). */
+    val bans: Boolean get() = this == Owner || this == Admin
 
     companion object {
         fun from(line: String): GroupRole = when (line) {

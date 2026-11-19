@@ -147,6 +147,40 @@ class InvitesOverHttp(
         false
     }
 
+    /** Журнал ролей группы (СЦ6): новые первыми; `null` — сервер не ответил или права нет. */
+    suspend fun roleLog(groupId: String): List<io.tima.domain.chat.RoleLogEntry>? = try {
+        val r = client.get(route.api("/api/v1/groups/$groupId/role-log")) { header("Authorization", "Bearer ${token()}") }
+        if (r.status != HttpStatusCode.OK) null else r.jsonBody()?.get("entries")?.jsonArrayOrNull()?.mapNotNull { e ->
+            val o = e.jsonObjectOrNull() ?: return@mapNotNull null
+            io.tima.domain.chat.RoleLogEntry(
+                actorId = o.str("actor_id") ?: return@mapNotNull null,
+                targetId = o.str("target_id") ?: return@mapNotNull null,
+                action = o.str("action").orEmpty(),
+                detail = o.str("detail").orEmpty(),
+                atMs = o.str("at")?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() } ?: 0L,
+            )
+        }
+    } catch (_: Throwable) {
+        null
+    }
+
+    /** Число участников (группа) или подписчиков (канал, сообщество) — шапка страницы (§4б п. 9). */
+    suspend fun counts(kind: EntityKind, ids: List<String>): Map<String, Int> = try {
+        if (ids.isEmpty()) emptyMap() else {
+            val r = client.post(route.api("/api/v1/entities/counts")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("kind", JsonPrimitive(kind.wire))
+                    put("ids", kotlinx.serialization.json.JsonArray(ids.take(500).map { JsonPrimitive(it) }))
+                }.toString())
+            }
+            r.jsonBody()?.get("counts")?.jsonObjectOrNull()?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.content?.toIntOrNull()?.let { k to it } }?.toMap().orEmpty()
+        }
+    } catch (_: Throwable) {
+        emptyMap()
+    }
+
     /** Аватар сущности (ПЛАН-(СЦ) СЦ5): своё завершённое медиа; пусто — снять. */
     suspend fun setAvatar(kind: EntityKind, id: String, mediaId: String): Boolean = try {
         client.put(route.api(path(kind, id) + "/avatar")) {

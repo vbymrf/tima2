@@ -147,6 +147,15 @@ interface SociumWords {
     val makeAdmin: String
     val makeMember: String
     val banDay: String
+
+    // Журнал ролей (СЦ6) и число участников (§4б п. 9).
+    val roleLogTitle: String
+    val roleLogHint: String
+    val roleLogEmpty: String
+    /** «добавил(а)», «назначил(а) модератором» … — между именем того, кто сделал, и того, с кем. */
+    fun roleLogAction(action: String, detail: String): String
+    fun membersCount(n: Int): String
+    fun subscribersCount(n: Int): String
 }
 
 object RussianSociumWords : SociumWords {
@@ -271,6 +280,22 @@ object RussianSociumWords : SociumWords {
     override val makeAdmin = "Сделать админом"
     override val makeMember = "Сделать участником"
     override val banDay = "Бан на сутки"
+    override val roleLogTitle = "Журнал ролей"
+    override val roleLogHint = "Роль назначается нажатием на участника во вкладке «Участники»."
+    override val roleLogEmpty = "Записей пока нет"
+    override fun roleLogAction(action: String, detail: String) = when (action) {
+        "add" -> "добавил(а)"
+        "remove" -> "исключил(а)"
+        "ban" -> "забанил(а) на ${(detail.toLongOrNull() ?: 0) / 3600} ч:"
+        "role" -> when (detail) {
+            "admin" -> "назначил(а) админом:"
+            "moderator" -> "назначил(а) модератором:"
+            else -> "сделал(а) участником:"
+        }
+        else -> action
+    }
+    override fun membersCount(n: Int) = "участников: $n"
+    override fun subscribersCount(n: Int) = "подписчиков: $n"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -395,6 +420,22 @@ object EnglishSociumWords : SociumWords {
     override val makeAdmin = "Make admin"
     override val makeMember = "Make member"
     override val banDay = "Ban for a day"
+    override val roleLogTitle = "Role log"
+    override val roleLogHint = "To change a role, tap a member on the Members tab."
+    override val roleLogEmpty = "No entries yet"
+    override fun roleLogAction(action: String, detail: String) = when (action) {
+        "add" -> "added"
+        "remove" -> "removed"
+        "ban" -> "banned for ${(detail.toLongOrNull() ?: 0) / 3600} h:"
+        "role" -> when (detail) {
+            "admin" -> "made admin:"
+            "moderator" -> "made moderator:"
+            else -> "made member:"
+        }
+        else -> action
+    }
+    override fun membersCount(n: Int) = "members: $n"
+    override fun subscribersCount(n: Int) = "subscribers: $n"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -519,4 +560,20 @@ object SpanishSociumWords : SociumWords {
     override val makeAdmin = "Hacer administrador"
     override val makeMember = "Hacer miembro"
     override val banDay = "Bloquear un día"
+    override val roleLogTitle = "Registro de roles"
+    override val roleLogHint = "Para cambiar un rol, toca a un miembro en la pestaña Miembros."
+    override val roleLogEmpty = "Aún no hay registros"
+    override fun roleLogAction(action: String, detail: String) = when (action) {
+        "add" -> "añadió a"
+        "remove" -> "expulsó a"
+        "ban" -> "bloqueó por ${(detail.toLongOrNull() ?: 0) / 3600} h a"
+        "role" -> when (detail) {
+            "admin" -> "hizo administrador a"
+            "moderator" -> "hizo moderador a"
+            else -> "hizo miembro a"
+        }
+        else -> action
+    }
+    override fun membersCount(n: Int) = "miembros: $n"
+    override fun subscribersCount(n: Int) = "suscriptores: $n"
 }
