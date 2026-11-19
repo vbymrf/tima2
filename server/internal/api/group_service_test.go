@@ -121,11 +121,35 @@ func TestGroupServiceCRUDAndRoles(t *testing.T) {
 		t.Fatalf("owner назначает moderator: %d", code)
 	}
 
-	// Бан: теперь-модератор банит... некого ниже нет — добавим и забаним
-	addMemberAPI(t, ts, owner.token, groupID, outsider.userID, "member")
+	// Бан (ПЛАН-(СЦ) §3, §4а 15): модератор добавляет и исключает, но не банит; банит админ.
+	addMemberAPI(t, ts, member.token, groupID, outsider.userID, "member")
 	if code := authedJSON(t, ts, "POST", "/api/v1/groups/"+groupID+"/members/"+outsider.userID+"/ban",
-		member.token, map[string]any{"seconds": 3600}, nil); code != http.StatusNoContent {
-		t.Fatalf("бан модератором: %d", code)
+		member.token, map[string]any{"seconds": 3600}, nil); code != http.StatusForbidden {
+		t.Fatalf("бан модератором: ожидался 403, получен %d", code)
+	}
+	if code := authedJSON(t, ts, "POST", "/api/v1/groups/"+groupID+"/members/"+outsider.userID+"/ban",
+		admin.token, map[string]any{"seconds": 3600}, nil); code != http.StatusNoContent {
+		t.Fatalf("бан админом: %d", code)
+	}
+	// Журнал ролей: модератору закрыт, админу — новые первыми.
+	if code := authedJSON(t, ts, "GET", "/api/v1/groups/"+groupID+"/role-log", member.token, nil, nil); code != http.StatusForbidden {
+		t.Fatalf("журнал модератору: ожидался 403, получен %d", code)
+	}
+	var roleLog struct {
+		Entries []struct {
+			ActorID  string `json:"actor_id"`
+			TargetID string `json:"target_id"`
+			Action   string `json:"action"`
+			Detail   string `json:"detail"`
+		} `json:"entries"`
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/groups/"+groupID+"/role-log", admin.token, nil, &roleLog); code != http.StatusOK {
+		t.Fatalf("журнал админу: %d", code)
+	}
+	if len(roleLog.Entries) < 3 || roleLog.Entries[0].Action != "ban" || roleLog.Entries[0].ActorID != admin.userID ||
+		roleLog.Entries[1].Action != "add" || roleLog.Entries[1].ActorID != member.userID ||
+		roleLog.Entries[2].Action != "role" || roleLog.Entries[2].Detail != "moderator" {
+		t.Fatalf("журнал ролей: %+v", roleLog.Entries)
 	}
 	if code := authedJSON(t, ts, "POST", "/api/v1/groups/"+groupID+"/members/"+member.userID+"/ban",
 		outsider.token, map[string]any{"seconds": 60}, nil); code != http.StatusForbidden {

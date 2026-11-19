@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"tima/server/internal/auth"
@@ -324,8 +325,9 @@ func addGroupMember(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_role", "роль — admin, moderator или member")
 			return
 		}
-		if roleRank[role] < rankAdmin || newRank >= roleRank[role] {
-			writeErr(w, http.StatusForbidden, "forbidden", "добавляют owner|admin, роль — строго ниже своей")
+		// ПЛАН-(СЦ) §3, §4а 15: добавляет и модератор — роль строго ниже своей, то есть участника.
+		if roleRank[role] < rankModerator || newRank >= roleRank[role] {
+			writeErr(w, http.StatusForbidden, "forbidden", "добавляют owner|admin|moderator, роль — строго ниже своей")
 			return
 		}
 		err := deps.store.AddGroupMember(r.Context(), r.PathValue("groupID"), req.UserID, req.Role)
@@ -337,6 +339,7 @@ func addGroupMember(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		noteRole(r, deps, "add", req.UserID, req.Role)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{"user_id": req.UserID, "role": req.Role})
@@ -369,14 +372,18 @@ func removeGroupMember(deps groupsDeps) http.HandlerFunc {
 		}
 		id, _ := auth.FromContext(r.Context())
 		self := id.UserID == targetID
-		if !self && (roleRank[role] < rankAdmin || roleRank[targetRole] >= roleRank[role]) {
-			writeErr(w, http.StatusForbidden, "forbidden", "исключают owner|admin участника ниже рангом")
+		// ПЛАН-(СЦ) §3, §4а 15: исключает и модератор — того, кто ниже.
+		if !self && (roleRank[role] < rankModerator || roleRank[targetRole] >= roleRank[role]) {
+			writeErr(w, http.StatusForbidden, "forbidden", "исключают owner|admin|moderator участника ниже рангом")
 			return
 		}
 		if err := deps.store.RemoveGroupMember(r.Context(), r.PathValue("groupID"), targetID); err != nil {
 			log.Printf("removeGroupMember: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
+		}
+		if !self {
+			noteRole(r, deps, "remove", targetID, "")
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -421,13 +428,14 @@ func setGroupRole(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		noteRole(r, deps, "role", targetID, req.Role)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"user_id": targetID, "role": req.Role})
 	}
 }
 
 // banGroupMember — POST /groups/{groupID}/members/{userID}/ban {seconds}.
-// Банят moderator и выше, цель — строго ниже рангом; членство сохраняется.
+// Банят admin и выше (ПЛАН-(СЦ) §3: модератор — без бана), цель — строго ниже рангом; членство сохраняется.
 func banGroupMember(deps groupsDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, role, ok := groupAndRole(deps, w, r)
@@ -451,8 +459,8 @@ func banGroupMember(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		if roleRank[role] < rankModerator || roleRank[targetRole] >= roleRank[role] {
-			writeErr(w, http.StatusForbidden, "forbidden", "банят moderator и выше участника ниже рангом")
+		if roleRank[role] < rankAdmin || roleRank[targetRole] >= roleRank[role] {
+			writeErr(w, http.StatusForbidden, "forbidden", "банят owner|admin участника ниже рангом")
 			return
 		}
 		if err := deps.store.BanGroupMember(r.Context(), r.PathValue("groupID"), targetID, req.Seconds); err != nil {
@@ -460,6 +468,7 @@ func banGroupMember(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		noteRole(r, deps, "ban", targetID, strconv.FormatInt(req.Seconds, 10))
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

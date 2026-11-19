@@ -110,6 +110,8 @@ type groupsDeps struct {
 	trust func() string
 	// deletion — сроки удаления (ПЛАН-(СЦ) СЦ14): «удалить» ставит месяц на отмену.
 	deletion store.Deletions
+	// roles — журнал ролей (ПЛАН-(СЦ) СЦ6): кто, кому, что, когда.
+	roles store.RoleLog
 }
 
 // RegisterGroups — шестнадцать маршрутов групп.
@@ -122,8 +124,9 @@ func RegisterGroups(
 	callTTL func() time.Duration,
 	trust func() string,
 	deletion store.Deletions,
+	roles store.RoleLog,
 ) {
-	deps := groupsDeps{store: st, limiter: limit, notifier: n, callTTL: callTTL, trust: trust, deletion: deletion}
+	deps := groupsDeps{store: st, limiter: limit, notifier: n, callTTL: callTTL, trust: trust, deletion: deletion, roles: roles}
 
 	mux.HandleFunc("POST /api/v1/groups", requireDevice(createGroup(deps)))
 	mux.HandleFunc("GET /api/v1/groups", requireDevice(listMyGroups(deps)))
@@ -148,6 +151,7 @@ func RegisterGroups(
 	mux.HandleFunc("DELETE /api/v1/groups/{groupID}/members/{userID}", requireDevice(removeGroupMember(deps)))
 	mux.HandleFunc("PUT /api/v1/groups/{groupID}/members/{userID}/role", requireDevice(setGroupRole(deps)))
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/members/{userID}/ban", requireDevice(banGroupMember(deps)))
+	mux.HandleFunc("GET /api/v1/groups/{groupID}/role-log", requireDevice(groupRoleLog(deps)))
 
 	mux.HandleFunc("POST /api/v1/groups/{groupID}/messages", requireDevice(postGroupMessage(deps)))
 	mux.HandleFunc("GET /api/v1/groups/{groupID}/messages", requireDevice(listGroupMessages(deps)))

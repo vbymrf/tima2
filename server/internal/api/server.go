@@ -206,7 +206,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	}
 	RegisterGroups(mux, s.Store, func() *ratelimit.Limiter { return s.Limit }, s.notifier(), s.requireActiveDevice,
 		func() time.Duration { return s.CallGroups.orDefault().TTL },
-		func() string { return NormalizeDeviceTrust(s.DeviceTrust) }, store.DeletionsOf(s.Store))
+		func() string { return NormalizeDeviceTrust(s.DeviceTrust) }, store.DeletionsOf(s.Store), store.RoleLogOf(s.Store))
 	// Медиа (шаг 4): вместе с маршрутами уехало поле Blob.
 	RegisterMedia(mux, s.Store, func() *blob.Client { return s.Blob }, s.notifier(), s.requireActiveDevice)
 	// Каналы — первая группа, вынесенная в registrar (шаг 4 программы). Дальше
