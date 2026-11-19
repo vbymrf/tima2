@@ -332,6 +332,12 @@ class ChatStore(
             _state.value = _state.value.copy(pinMay = pinMay)
             scope.launch { runCatching { withContext(io) { board.refresh(chatId, _state.value.group) } } }
             scope.launch { board.pinned.collect { _state.value = _state.value.copy(pinned = it[chatId] ?: 0L) } }
+            scope.launch {
+                board.boards.collect { all ->
+                    val b = all[chatId]
+                    _state.value = _state.value.copy(pinnedIds = b?.ids.orEmpty(), pinTitle = b?.title.orEmpty())
+                }
+            }
         }
         // Черновик этой переписки — в строку ввода, если человек ещё ничего не набрал.
         drafts?.let { port ->
@@ -1086,6 +1092,11 @@ class ChatStore(
     /** Снять закрепление. */
     fun unpin() = pinning.change(0)
 
+    /** Закреплённые группой (ПЛАН-(СЦ) СЦ12): добавить или заменить все; снять выбранные; название. */
+    fun pinAdd(line: ChatLine, replace: Boolean) = pinning.add(listOf(line.serverId), replace)
+    fun pinRemove(ids: List<Long>) = pinning.remove(ids)
+    fun pinRename(title: String) = pinning.rename(title)
+
     /** Журнал закрепления — у вызывающего: модуль окна журнала не знает (core-diag). */
     var pinLog: ((on: Boolean, step: PinStep) -> Unit)?
         get() = pinning.log
@@ -1316,6 +1327,10 @@ data class ChatState(
     val peek: FoundMessage? = null,
     /** Номер закреплённого (ПЛАН-(ЗО) ЗО3); 0 — ничего не закреплено или не знаем. */
     val pinned: Long = 0,
+    /** Закреплённые группой (ПЛАН-(СЦ) СЦ12): номера, новые первыми; пусто — ничего или одно не знаем. */
+    val pinnedIds: List<Long> = emptyList(),
+    /** Название группы закреплённых; пусто — «Группа сообщений». */
+    val pinTitle: String = "",
     /** Могу ли закреплять и снимать здесь: личная — да, группа — модератор и выше. */
     val pinMay: Boolean = false,
     /** Набранное в ветке. Отдельно от общего черновика: это два разных текста. */

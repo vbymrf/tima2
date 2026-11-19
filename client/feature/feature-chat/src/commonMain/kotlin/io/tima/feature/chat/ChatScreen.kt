@@ -276,6 +276,9 @@ fun ChatScreen(
     onInvite: (ChatLine) -> Unit = {},
     /** Снять закрепление ✕ в полосе (ПЛАН-(ЗО) ЗО3); `null` — права нет, крестика нет. */
     onUnpin: (() -> Unit)? = null,
+    /** Закреплённые группой (ПЛАН-(СЦ) СЦ12): снять выбранные, название; `null` — права нет. */
+    onPinsRemove: ((List<Long>) -> Unit)? = null,
+    onPinsRename: ((String) -> Unit)? = null,
     /** Нажатие на текст шапки группы — окно «Описание» (ПЛАН-(ЗО) ЗО4); `null` — у личной. */
     onShowcase: (() -> Unit)? = null,
     /**
@@ -388,13 +391,30 @@ fun ChatScreen(
         }
         // Закреплённое — полоса под шапкой: строка сообщения, нажатие — переход к нему (§11.4),
         // ✕ — снять, у кого право (ПЛАН-(ЗО) ЗО3). Не загружено — заглушка.
-        if (state.pinned > 0) {
+        var pinsOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        if (state.pinnedIds.size > 1) {
+            // Группа закреплённых (ПЛАН-(СЦ) СЦ12): «Закреплена группа сообщений.», ниже число и название; на месте ✕ —
+            // число; нажатие — подокно.
+            PinnedGroupBar(count = state.pinnedIds.size, title = state.pinTitle, onOpen = { pinsOpen = true })
+        } else if (state.pinned > 0) {
             val found = state.lines.firstOrNull { it.serverId == state.pinned }
             PinnedBar(
                 text = found?.takeUnless { it.deleted }?.text,
                 // Закреплённое старше ленты — лента дорастает до него (2026-11-09).
                 onOpen = { if (found != null || onReach != null) jumps.go(state.pinned) },
                 onUnpin = onUnpin?.takeIf { state.pinMay },
+            )
+        }
+        if (pinsOpen && state.pinnedIds.isNotEmpty()) {
+            PinsSheet(
+                title = state.pinTitle,
+                items = state.pinnedIds.map { id -> id to state.lines.firstOrNull { it.serverId == id }?.takeUnless { it.deleted }?.text },
+                may = state.pinMay,
+                onOpen = { id -> pinsOpen = false; jumps.go(id) },
+                onRemove = onPinsRemove?.let { remove -> { ids: List<Long> -> remove(ids) } },
+                onClear = onUnpin?.let { clear -> { pinsOpen = false; clear() } },
+                onRename = onPinsRename,
+                onClose = { pinsOpen = false },
             )
         }
         androidx.compose.runtime.CompositionLocalProvider(

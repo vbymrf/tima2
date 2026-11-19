@@ -995,7 +995,8 @@ class Receiver(
      * кадр приезжает и живым каналом, и догоном, а строка должна остаться одна.
      */
     private suspend fun aboutPin(d: EventStreamProtocol.Decision.MessagePinned) {
-        pins.applied(d.chatId, d.messageId)
+        val ids = d.ids
+        if (ids != null) pins.applied(d.chatId, io.tima.domain.chat.PinBoard(d.title.orEmpty(), ids)) else pins.applied(d.chatId, d.messageId)
         val mine = d.by == session.userId
         val who = if (mine) null else (d.by.takeIf { it.isNotEmpty() }?.let { notices?.nameOf(it) } ?: words().chat.someone)
         runCatching {

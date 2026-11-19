@@ -443,6 +443,9 @@ internal fun Chat(
 ) {
     // Групповая ли переписка — решает столбец `kind`, а не догадка по идентификатору.
     var chatMenu by remember { mutableStateOf(false) }
+    // Закреплённые группой (ПЛАН-(СЦ) СЦ12): окно выбора при уже закреплённом и подокно «Удалить часть».
+    var pinChoice by remember { mutableStateOf<io.tima.domain.chat.ChatLine?>(null) }
+    var pinsChoosing by remember { mutableStateOf(false) }
     // От этого зависит трое: показывать ли автора у реплик, спрашивать ли имена и есть ли
     // вход в состав.
     val group = remember(chatId) {
@@ -783,6 +786,8 @@ internal fun Chat(
             onPlace = store::savePlace,
             onPeekClose = store::peekClosed,
             onUnpin = if (pins != null) store::unpin else null,
+            onPinsRemove = if (pins != null) store::pinRemove else null,
+            onPinsRename = if (pins != null) store::pinRename else null,
             onShowcase = onShowcase,
             cancelledSenders = cancelledSenders,
             // Строка ввода правит набранное без знаков (ADR-0048).
@@ -1683,12 +1688,45 @@ internal fun Chat(
                 null
             },
             // Закрепить и открепить (ПЛАН-(ЗО) ЗО3): у кого право и у отправленного.
+            // Закреплённые группой (ПЛАН-(СЦ) СЦ12): «Открепить» убирает только это сообщение; «Закрепить», когда уже
+            // закреплено, — окно выбора «Добавить · Заменить · Удалить все · Удалить часть · Отмена».
             onPin = if (pins != null && state.pinMay && line.serverId > 0) {
-                { if (state.pinned == line.serverId) store.unpin() else store.pin(line); close() }
+                {
+                    val already = line.serverId in state.pinnedIds || state.pinned == line.serverId
+                    when {
+                        already -> store.pinRemove(listOf(line.serverId))
+                        state.pinnedIds.isEmpty() && state.pinned == 0L -> store.pin(line)
+                        else -> pinChoice = line
+                    }
+                    close()
+                }
             } else {
                 null
             },
-            pinned = state.pinned == line.serverId,
+            pinned = state.pinned == line.serverId || line.serverId in state.pinnedIds,
+        )
+    }
+    pinChoice?.let { line ->
+        io.tima.feature.chat.PinChoice(
+            full = state.pinnedIds.size >= io.tima.domain.chat.PinBoard.MAX,
+            onAdd = { store.pinAdd(line, replace = false); pinChoice = null },
+            onReplace = { store.pinAdd(line, replace = true); pinChoice = null },
+            onClear = { store.unpin(); pinChoice = null },
+            onSome = { pinChoice = null; pinsChoosing = true },
+            onCancel = { pinChoice = null },
+        )
+    }
+    if (pinsChoosing && state.pinnedIds.isNotEmpty()) {
+        io.tima.feature.chat.PinsSheet(
+            title = state.pinTitle,
+            items = state.pinnedIds.map { id -> id to state.lines.firstOrNull { it.serverId == id }?.takeUnless { it.deleted }?.text },
+            may = state.pinMay,
+            onOpen = { pinsChoosing = false },
+            onRemove = { ids -> store.pinRemove(ids); pinsChoosing = false },
+            onClear = { store.unpin(); pinsChoosing = false },
+            onRename = store::pinRename,
+            onClose = { pinsChoosing = false },
+            startChoosing = true,
         )
     }
     if (chatMenu && group && onMoveToShelf != null) {

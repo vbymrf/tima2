@@ -53,6 +53,49 @@ class PinsOverHttp(
         client.delete(route.api(path(chatId, group))) { header("Authorization", "Bearer ${token()}") }
     }
 
+    private fun listPath(chatId: String, group: Boolean) =
+        if (group) "/api/v1/groups/$chatId/pins" else "/api/v1/chats/$chatId/pins"
+
+    /** Список (СЦ12); старый сервер (404) — из одного закреплённого. */
+    override suspend fun list(chatId: String, group: Boolean): io.tima.domain.chat.PinBoard? {
+        val response = try {
+            client.get(route.api(listPath(chatId, group))) { header("Authorization", "Bearer ${token()}") }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status == HttpStatusCode.NotFound) {
+            return read(chatId, group)?.let { io.tima.domain.chat.PinBoard("", if (it > 0) listOf(it) else emptyList()) }
+        }
+        if (response.status != HttpStatusCode.OK) return null
+        val body = response.jsonBody() ?: return null
+        val ids = body["items"]?.jsonArrayOrNull()?.mapNotNull { it.jsonObjectOrNull()?.long("message_id") }.orEmpty()
+        return io.tima.domain.chat.PinBoard(body.str("title").orEmpty(), ids)
+    }
+
+    override suspend fun add(chatId: String, group: Boolean, ids: List<Long>, replace: Boolean): PinStep = step {
+        client.post(route.api(listPath(chatId, group))) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody("{\"message_ids\":[${ids.joinToString(",")}],\"mode\":\"${if (replace) "replace" else "add"}\"}")
+        }
+    }
+
+    override suspend fun remove(chatId: String, group: Boolean, ids: List<Long>): PinStep = step {
+        client.delete(route.api(listPath(chatId, group))) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody("{\"message_ids\":[${ids.joinToString(",")}]}")
+        }
+    }
+
+    override suspend fun rename(chatId: String, group: Boolean, title: String): PinStep = step {
+        client.put(route.api(listPath(chatId, group) + "/title")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(kotlinx.serialization.json.buildJsonObject { put("title", kotlinx.serialization.json.JsonPrimitive(title)) }.toString())
+        }
+    }
+
     private suspend fun step(call: suspend () -> HttpResponse): PinStep {
         val response = try {
             call()

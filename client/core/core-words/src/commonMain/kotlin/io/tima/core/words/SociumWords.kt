@@ -129,6 +129,18 @@ interface SociumWords {
     val voiceKicked: String
     fun voiceInside(n: Int): String
     fun voiceMax(n: Int): String
+    // Закреплённые группой (СЦ12).
+    val pinnedGroup: String
+    val pinsDefaultTitle: String
+    val pinsDeleteGroup: String
+    val pinsDeleteSome: String
+    val pinsAdd: String
+    val pinsReplace: String
+    val pinsClearAll: String
+    val pinsAlready: String
+    val pinsFull: String
+    val cancel: String
+    fun pinsDeleteChosen(n: Int): String
 }
 
 object RussianSociumWords : SociumWords {
@@ -238,6 +250,17 @@ object RussianSociumWords : SociumWords {
     override val voiceKicked = "Вас выгнали из этого разговора"
     override fun voiceInside(n: Int) = "внутри: $n"
     override fun voiceMax(n: Int) = "наибольшее число участников: $n"
+    override val pinnedGroup = "Закреплена группа сообщений."
+    override val pinsDefaultTitle = "Группа сообщений"
+    override val pinsDeleteGroup = "Удалить группу"
+    override val pinsDeleteSome = "Удалить сообщения"
+    override val pinsAdd = "Добавить"
+    override val pinsReplace = "Заменить"
+    override val pinsClearAll = "Удалить все"
+    override val pinsAlready = "Уже закреплено"
+    override val pinsFull = "Закреплено 20 — уберите лишние"
+    override val cancel = "Отмена"
+    override fun pinsDeleteChosen(n: Int) = "Удалить выбранные: $n"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -347,6 +370,17 @@ object EnglishSociumWords : SociumWords {
     override val voiceKicked = "You were removed from this conversation"
     override fun voiceInside(n: Int) = "inside: $n"
     override fun voiceMax(n: Int) = "maximum participants: $n"
+    override val pinnedGroup = "A group of messages is pinned."
+    override val pinsDefaultTitle = "Message group"
+    override val pinsDeleteGroup = "Delete the group"
+    override val pinsDeleteSome = "Delete messages"
+    override val pinsAdd = "Add"
+    override val pinsReplace = "Replace"
+    override val pinsClearAll = "Delete all"
+    override val pinsAlready = "Already pinned"
+    override val pinsFull = "20 pinned — remove some first"
+    override val cancel = "Cancel"
+    override fun pinsDeleteChosen(n: Int) = "Delete selected: $n"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -456,4 +490,15 @@ object SpanishSociumWords : SociumWords {
     override val voiceKicked = "Te expulsaron de esta conversación"
     override fun voiceInside(n: Int) = "dentro: $n"
     override fun voiceMax(n: Int) = "máximo de participantes: $n"
+    override val pinnedGroup = "Hay un grupo de mensajes fijado."
+    override val pinsDefaultTitle = "Grupo de mensajes"
+    override val pinsDeleteGroup = "Eliminar el grupo"
+    override val pinsDeleteSome = "Eliminar mensajes"
+    override val pinsAdd = "Añadir"
+    override val pinsReplace = "Reemplazar"
+    override val pinsClearAll = "Eliminar todos"
+    override val pinsAlready = "Ya fijado"
+    override val pinsFull = "20 fijados: quita alguno"
+    override val cancel = "Cancelar"
+    override fun pinsDeleteChosen(n: Int) = "Eliminar seleccionados: $n"
 }

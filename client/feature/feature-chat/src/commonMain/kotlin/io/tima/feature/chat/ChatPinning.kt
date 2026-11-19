@@ -98,6 +98,30 @@ internal class ChatPinning(
         }
     }
 
+    /** Добавить к закреплённым или заменить все (ПЛАН-(СЦ) СЦ12). */
+    fun add(ids: List<Long>, replace: Boolean) = run(true) { b, group -> b.add(chatId, group, ids, replace) }
+
+    /** Снять выбранные. */
+    fun remove(ids: List<Long>) = run(false) { b, group -> b.remove(chatId, group, ids) }
+
+    /** Название группы закреплённых. */
+    fun rename(title: String) = run(true) { b, group -> b.rename(chatId, group, title) }
+
+    private fun run(on: Boolean, call: suspend (ChatPins, Boolean) -> PinStep) {
+        val board = pins ?: return
+        val group = _state.value.group
+        scope.launch {
+            val step = withContext(io) { call(board, group) }
+            val w = words().showcase
+            when (step) {
+                PinStep.Done -> Unit
+                is PinStep.Refused -> _state.value = _state.value.copy(notice = ChatNotice.Said(w.pinRefused(step.code)))
+                PinStep.Offline -> _state.value = _state.value.copy(notice = ChatNotice.Said(w.pinRefused("offline")))
+            }
+            log?.invoke(on, step)
+        }
+    }
+
     /** Журнал закрепления — у вызывающего: модуль окна журнала не знает (core-diag). */
     var log: ((on: Boolean, step: PinStep) -> Unit)? = null
 }

@@ -248,6 +248,11 @@ class EventStreamProtocol {
             val messageId: Long,
             val by: String,
             val eventId: Long?,
+            /** Закреплённые списком (ПЛАН-(СЦ) СЦ12); `null` — прежний сервер. */
+            val ids: List<Long>? = null,
+            val title: String? = null,
+            /** `added | removed | replaced | cleared | renamed`; `null` — прежний сервер. */
+            val change: String? = null,
         ) : Decision
 
         /**
@@ -685,7 +690,13 @@ class EventStreamProtocol {
                 if (chatId == null || messageId == null) {
                     Decision.Skip("message.pinned без обязательных полей", eventId)
                 } else {
-                    Decision.MessagePinned(chatId, messageId, json.string("by") ?: "", eventId)
+                    Decision.MessagePinned(
+                        chatId, messageId, json.string("by") ?: "", eventId,
+                        // Список (ПЛАН-(СЦ) СЦ12): номера и название; прежний сервер их не шлёт.
+                        ids = (json["message_ids"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it.jsonPrimitive.longOrNull },
+                        title = json.string("title"),
+                        change = json.string("change"),
+                    )
                 }
             }
             "message.deleted" -> {

@@ -25,6 +25,22 @@ class EventStreamProtocolPinnedTest {
     }
 
     @Test
+    fun список_закреплённых_разбирается_прежнее_поле_на_месте() {
+        // ПЛАН-(СЦ) СЦ12: сервер шлёт и номера списком, и название, и что изменилось; прежнее message_id — новейшее.
+        val d = assertIs<EventStreamProtocol.Decision.MessagePinned>(
+            protocol.decide("""{"event":"message.pinned","event_id":8,"group_id":"g-1","message_id":12,"message_ids":[12,7],"title":"Важное","change":"added"}"""),
+        )
+        assertEquals(12L, d.messageId)
+        assertEquals(listOf(12L, 7L), d.ids)
+        assertEquals("Важное", d.title)
+        assertEquals("added", d.change)
+        val old = assertIs<EventStreamProtocol.Decision.MessagePinned>(
+            protocol.decide("""{"event":"message.pinned","event_id":9,"chat_id":"c-1","message_id":3}"""),
+        )
+        assertEquals(null, old.ids, "прежний сервер — списка нет")
+    }
+
+    @Test
     fun без_номера_пропускается() {
         assertIs<EventStreamProtocol.Decision.Skip>(protocol.decide("""{"event":"message.pinned","event_id":7,"chat_id":"c-1"}"""))
     }
