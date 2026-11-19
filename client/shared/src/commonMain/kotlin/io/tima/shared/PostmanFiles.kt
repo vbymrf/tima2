@@ -26,6 +26,9 @@ import kotlinx.coroutines.launch
  *   нет и попросить снова не у кого — отметка «нет» (раздел [GONE]): лента такого фото не показывает.
  * - **Мобильная сеть** («Память и трафик», заказчик 2026-10-22): [mayDownload] говорит, можно ли
  *   забирать сейчас; нельзя — файл ждёт смены сети ([resume]).
+ * - **Фото внутри сообщения** (картинка редактора, карточки ссылки, видео по ссылке) — тоже заранее, в
+ *   «Фото» (ПЛАН-(СЦ) СЦ9): без этого каждое показанное фото шло двумя запросами по сети, и при открытии
+ *   переписки оно приходило последним. Скачанное загрузчиком по сети ложится сюда же ([keepSeen]).
  */
 class PostmanFiles(
     private val media: () -> Media,
@@ -62,6 +65,15 @@ class PostmanFiles(
     /** Лежит ли файл на устройстве — закрытые байты, как пришли с сервера. */
     fun local(mediaId: String): ByteArray? =
         folder.get(MediaFolder.PHOTO, mediaId) ?: folder.get(MediaFolder.FILE, mediaId) ?: folder.get(MediaFolder.VOICE, mediaId)
+
+    /**
+     * Фото, скачанное загрузчиком картинок по сети, — в папку закрытым, как пришло (СЦ9): следующий показ
+     * без сети. Уже лежит — ничего.
+     */
+    fun keepSeen(mediaId: String, sealed: ByteArray) {
+        if (local(mediaId) != null) return
+        runCatching { folder.put(MediaFolder.PHOTO, mediaId, sealed) }
+    }
 
     /** Своё отправленное — сразу в папку: показать без сети и загрузить снова, если попросят. */
     fun keepSent(mediaId: String, sealed: ByteArray, photo: Boolean, voice: Boolean = false) {
@@ -109,9 +121,10 @@ class PostmanFiles(
         }
     }
 
-    /** Пришло сообщение: файлы вне пузыря — забрать сразу, не дожидаясь нажатия. */
+    /** Пришло сообщение: файлы вне пузыря и фото внутри него — забрать сразу, не дожидаясь нажатия. */
     fun received(content: RichContent?) {
-        receivedMedia(outsideOf(content ?: return))
+        val c = content ?: return
+        receivedMedia(outsideOf(c) + insideOf(c))
     }
 
     /** Пришли файлы — сообщения или правки, заменившей фото (ADR-0052): забрать сразу. */
@@ -180,6 +193,22 @@ class PostmanFiles(
                 }
             }
             return indexes.mapNotNull { content.media.getOrNull(it) }
+        }
+
+        /**
+         * Фото внутри сообщения (СЦ9): картинка редактора, картинка карточки ссылки и видео по ссылке. Только
+         * картинки (`mime` начинается с `image/`); номер вне списка файлов — пропуск.
+         */
+        fun insideOf(content: RichContent): List<RichMedia> {
+            val indexes = content.blocks.mapNotNull { b ->
+                when (b) {
+                    is RichBlock.Image -> b.media
+                    is RichBlock.Link -> b.media.takeIf { it >= 0 }
+                    is RichBlock.Video -> b.picture.takeIf { it >= 0 }
+                    else -> null
+                }
+            }
+            return indexes.mapNotNull { content.media.getOrNull(it) }.filter { it.mime.startsWith("image/") }.distinct()
         }
     }
 }

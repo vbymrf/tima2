@@ -32,8 +32,16 @@ class PictureSource {
     /** Своя папка аккаунта: закрытые байты фото вне пузыря; `null` — смотреть не во что. */
     var local: ((String) -> ByteArray?)? = null
 
+    /**
+     * Положить в свою папку скачанное по сети фото сообщения — закрытым (ПЛАН-(СЦ) СЦ9): следующий показ без
+     * сети. Только картинки с ключом — фото сообщений; аватары открыты и в папку фото не идут.
+     */
+    var keep: ((String, ByteArray) -> Unit)? = null
+
     suspend fun bytes(mediaId: String, key: ByteArray? = null): ByteArray? {
-        val raw = local?.invoke(mediaId) ?: media?.download(mediaId) ?: return null
+        val raw = local?.invoke(mediaId)
+            ?: media?.download(mediaId)?.also { got -> if (key != null) keep?.invoke(mediaId, got) }
+            ?: return null
         if (key == null) return raw
         // Ключ не подошёл — так и сказать журналу: «нет файла» и «не тот ключ» чинятся по-разному.
         return io.tima.core.encryption.MediaFiles.open(key, raw)

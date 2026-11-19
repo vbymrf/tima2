@@ -54,9 +54,41 @@ class PostmanFilesTest {
         testScheduler.advanceUntilIdle()
         assertContentEquals(byteArrayOf(1), folder.get(MediaFolder.PHOTO, "p-1"), "фото — в раздел «Фото»")
         assertContentEquals(byteArrayOf(2), folder.get(MediaFolder.FILE, "f-1"), "файл — в «Файлы»")
-        postman.received(RichContent(listOf(RichBlock.Image(0)), listOf(photo("inline"))))
+    }
+
+    @Test
+    fun фото_внутри_сообщения_забираются_заранее_в_фото() = runTest {
+        // ПЛАН-(СЦ) СЦ9: картинка редактора, карточки ссылки и видео по ссылке — заранее, как вложения;
+        // файл карточки, который не картинка, — нет.
+        val folder = MemoryFolder()
+        val media = FakeMedia(mutableMapOf("inline" to byteArrayOf(3), "card" to byteArrayOf(4), "video" to byteArrayOf(5), "pdf" to byteArrayOf(6)))
+        val postman = PostmanFiles({ media }, folder, this)
+        postman.received(
+            RichContent(
+                listOf(
+                    RichBlock.Image(0),
+                    RichBlock.Link("https://a.b", "card", "t", "d", media = 1),
+                    RichBlock.Video("https://v.b", "", picture = 2),
+                    RichBlock.Link("https://c.d", "card", "t", "d", media = 3),
+                ),
+                listOf(photo("inline"), photo("card"), photo("video"), file("pdf")),
+            ),
+        )
         testScheduler.advanceUntilIdle()
-        assertTrue(folder.files.keys.none { it.second == "inline" }, "картинка внутри сообщения — не почтальона")
+        assertContentEquals(byteArrayOf(3), folder.get(MediaFolder.PHOTO, "inline"), "картинка редактора — в «Фото»")
+        assertContentEquals(byteArrayOf(4), folder.get(MediaFolder.PHOTO, "card"), "картинка карточки — в «Фото»")
+        assertContentEquals(byteArrayOf(5), folder.get(MediaFolder.PHOTO, "video"), "картинка видео — в «Фото»")
+        assertTrue(folder.files.keys.none { it.second == "pdf" }, "не картинка внутри — не забирается")
+    }
+
+    @Test
+    fun скачанное_загрузчиком_фото_ложится_в_папку_один_раз() = runTest {
+        val folder = MemoryFolder()
+        val postman = PostmanFiles({ FakeMedia(mutableMapOf()) }, folder, this)
+        postman.keepSeen("seen", byteArrayOf(8))
+        assertContentEquals(byteArrayOf(8), postman.local("seen"))
+        postman.keepSeen("seen", byteArrayOf(9))
+        assertContentEquals(byteArrayOf(8), postman.local("seen"), "лежит — не перезаписывается")
     }
 
     @Test

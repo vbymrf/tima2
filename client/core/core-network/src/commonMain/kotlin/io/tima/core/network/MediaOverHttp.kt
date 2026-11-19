@@ -141,6 +141,10 @@ class MediaOverHttp(
             ?.jsonArray?.firstOrNull()?.jsonPrimitive?.content ?: return null
         val file = client.get(url)
         if (file.status.isSuccess()) file.readRawBytes() else null
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        // Отмена — не «нет байтов»: картинка ушла с экрана. Проглоченная, она писала в журнал ложное
+        // `MEDIA-LOAD нет-байтов` (ПЛАН-(СЦ) §0.5, СЦ9).
+        throw e
     } catch (_: Throwable) {
         null
     }
@@ -160,6 +164,8 @@ class MediaOverHttp(
                 if (file != null && file.status.isSuccess()) Media.MediaFetch.Got(file.readRawBytes()) else Media.MediaFetch.Failed
             }
         }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
     } catch (_: Throwable) {
         Media.MediaFetch.Failed
     }

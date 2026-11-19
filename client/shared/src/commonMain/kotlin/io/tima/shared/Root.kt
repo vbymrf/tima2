@@ -1247,6 +1247,7 @@ private fun App(
         pictureSource?.media = network.media
         // Своя папка — первой (Решения §6): фото вне пузыря у почтальона живёт недолго.
         pictureSource?.local = { id -> assembled.receiver.postman.local(id) }
+        pictureSource?.keep = { id, sealed -> assembled.receiver.postman.keepSeen(id, sealed) }
     }
     val peopleCards by people.cards.collectAsState()
     val peopleHues by people.hues.collectAsState()

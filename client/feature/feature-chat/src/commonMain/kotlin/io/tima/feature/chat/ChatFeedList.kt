@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import io.tima.core.ui.IconButton
 import io.tima.core.ui.authorStrip
 import androidx.compose.ui.graphics.ImageBitmap
@@ -157,7 +158,7 @@ internal fun Feed(
         LaunchedEffect(jumps.request) {
             val target = jumps.request ?: return@LaunchedEffect
             jumps.taken()
-            jumpScope.launch { jumps.performReaching(target, { feed }, listState, record = jumps.record, flash = !jumps.quiet) }
+            jumpScope.launch { jumps.performReaching(target, { feed }, listState, record = jumps.record, flash = !jumps.quiet, animate = !jumps.quiet) }
         }
     }
     // Дошли до верха ленты — ещё порция старых (заказчик 2026-11-09). Лента перевёрнута: верх — конец списка.
@@ -273,6 +274,8 @@ internal fun Feed(
     }
     }
     if (jumps != null) JumpButtons(jumps, lines, listState, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3))
+    // Дата при прокрутке (ПЛАН-(СЦ) СЦ8) — только в переписке, не в подокне одного сообщения.
+    if (days) FloatingDay(lines, listState, jumps?.topCover ?: 0, Modifier.align(Alignment.TopCenter))
     }
     }
 
@@ -325,6 +328,54 @@ const val NEW_DIVIDER_TAG = "chat:new"
 
 /** Метка разделителя дней — для сценариев. */
 const val DAY_DIVIDER_TAG = "chat:day"
+
+/** Метка пузыря даты при прокрутке — для сценариев (СЦ8). */
+const val FLOATING_DAY_TAG = "chat:day:float"
+
+/** Сколько пузырь даты держится после остановки прокрутки. */
+internal const val FLOATING_DAY_HOLD_MS = 1_000L
+
+/**
+ * Дата при прокрутке (ПЛАН-(СЦ) СЦ8; заказчик 2026-11-18: «светло-зелёным пузырём вверху посередине во время
+ * прокрутки; не прокручиваем — пропадает»). День — верхнего видимого сообщения; держится ещё
+ * [FLOATING_DAY_HOLD_MS] после остановки. В светлых темах подложка светло-зелёная (`softAccent`), в тёмной —
+ * светло-серая (§1.1, 8). Под то, что лежит поверх ленты сверху ([FeedJumps.topCover]), не заходит.
+ */
+@Composable
+internal fun FloatingDay(lines: List<ChatLine>, state: androidx.compose.foundation.lazy.LazyListState, cover: Int, modifier: Modifier = Modifier) {
+    val scrolling = state.isScrollInProgress
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(scrolling) {
+        if (scrolling) {
+            shown = true
+        } else {
+            kotlinx.coroutines.delay(FLOATING_DAY_HOLD_MS)
+            shown = false
+        }
+    }
+    if (!shown) return
+    // Лента перевёрнута: верхнее видимое — с наибольшим номером.
+    val top = state.layoutInfo.visibleItemsInfo.maxByOrNull { it.index }?.index ?: return
+    val atMs = lines.getOrNull(top)?.atMs ?: return
+    val colors = Tima.colors
+    val dark = colors.surface.luminance() < 0.5f
+    val coverDp = with(androidx.compose.ui.platform.LocalDensity.current) { cover.toDp() }
+    Caption(
+        feedDay(atMs, Tima.words.chat),
+        fontSize = TimaType.sz6,
+        weight = FontWeight.Bold,
+        color = if (dark) Color(0xFF1E1E1E) else colors.text,
+        lineOne = true,
+        modifier = modifier
+            .padding(top = coverDp + TimaSpacing.about2)
+            .background(if (dark) FLOATING_DAY_DARK else colors.softAccent, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .testTag(FLOATING_DAY_TAG),
+    )
+}
+
+/** Подложка пузыря даты в тёмной теме — светло-серая (заказчик 2026-11-18, §1.1, 8). */
+private val FLOATING_DAY_DARK = Color(0xFFD6D6D6)
 
 /** День над первым сообщением дня — посередине, тихо, как служебная строка. */
 @Composable

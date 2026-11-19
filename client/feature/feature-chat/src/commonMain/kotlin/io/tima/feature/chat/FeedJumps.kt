@@ -30,6 +30,7 @@ import io.tima.domain.chat.JumpBuffer
 import io.tima.domain.chat.JumpKind
 import io.tima.domain.chat.JumpPoint
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.layout.onSizeChanged
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -217,7 +218,7 @@ private fun anchorOf(lines: List<ChatLine>, state: LazyListState): Long? =
  * Перейти к сообщению, которого может не быть в ленте: старое — лента дорастает до него ([FeedJumps.reach]),
  * и переход ждёт, пока оно придёт. Не дождались — ничего (заказчик 2026-11-09: указатели на старое молчали).
  */
-internal suspend fun FeedJumps.performReaching(target: Long, lines: () -> List<ChatLine>, state: LazyListState, record: Boolean = true, flash: Boolean = true) {
+internal suspend fun FeedJumps.performReaching(target: Long, lines: () -> List<ChatLine>, state: LazyListState, record: Boolean = true, flash: Boolean = true, animate: Boolean = true) {
     if (lines().none { it.serverId == target }) {
         if (reach?.invoke(target) != true) return
         kotlinx.coroutines.withTimeoutOrNull(REACH_WAIT_MS) {
@@ -226,7 +227,7 @@ internal suspend fun FeedJumps.performReaching(target: Long, lines: () -> List<C
         // Пришедшее — сначала разложить на экране, потом крутить к нему.
         state.scrollToItem(state.firstVisibleItemIndex)
     }
-    perform(target, lines(), state, record, flash)
+    perform(target, lines(), state, record, flash, animate)
 }
 
 /** Сколько ждать, пока дорощенная лента принесёт сообщение. */
@@ -238,8 +239,12 @@ private const val REACH_WAIT_MS = 5_000L
  * Одно место для всех переходов — по ссылке, ответу, закреплённому, «назад» и «вперёд»: сообщение
  * встаёт **верхом к верху** видимой ленты (заказчик 2026-10-20: «переход идёт на низ сообщения —
  * сделай на верх»). Видимое — область самой ленты без её полей и без [FeedJumps.topCover].
+ *
+ * [animate] `false` — встать на место сразу (открытие переписки, ПЛАН-(СЦ) СЦ9): анимация проезжала строки
+ * между низом и местом, каждая начинала грузить свои фото и тут же отменяла загрузку — в журнале пачки
+ * `JobCancellationException`, а фото у верхнего края приходило последним.
  */
-internal suspend fun FeedJumps.perform(target: Long, lines: List<ChatLine>, state: LazyListState, record: Boolean = true, flash: Boolean = true) {
+internal suspend fun FeedJumps.perform(target: Long, lines: List<ChatLine>, state: LazyListState, record: Boolean = true, flash: Boolean = true, animate: Boolean = true) {
     val index = lines.indexOfFirst { it.serverId == target }
     if (index < 0) return
     if (record) {
@@ -253,8 +258,10 @@ internal suspend fun FeedJumps.perform(target: Long, lines: List<ChatLine>, stat
     moving = true
     try {
         // Не на экране — сначала довести до него (лента перевёрнута: встаёт низом к низу).
-        if (state.layoutInfo.visibleItemsInfo.none { it.index == index }) state.animateScrollToItem(index)
-        topDelta(state, index, topCover)?.let { if (it != 0) state.animateScrollBy(it.toFloat()) }
+        if (state.layoutInfo.visibleItemsInfo.none { it.index == index }) {
+            if (animate) state.animateScrollToItem(index) else state.scrollToItem(index)
+        }
+        topDelta(state, index, topCover)?.let { if (it != 0) { if (animate) state.animateScrollBy(it.toFloat()) else state.scrollBy(it.toFloat()) } }
     } finally {
         moving = false
     }
