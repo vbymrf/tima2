@@ -35,46 +35,31 @@ var pinTarget = map[string]string{
 		AND parent_post_id IS NULL`,
 }
 
-// SetPin закрепляет сообщение, заменяя прежнее закреплённое. Нет такого живого сообщения в
-// контейнере — ErrMessageGone.
+// SetPin закрепляет сообщение — с 2026-11-19 добавляет его к закреплённым (ПЛАН-(СЦ) СЦ12, ЗГ-1: «закрепили
+// второе — одно становится группой»); уже закреплено — ничего. Нет такого живого сообщения в контейнере —
+// ErrMessageGone; закреплено 20 — ErrPinsFull.
 func (s *Store) SetPin(ctx context.Context, kind, container string, messageID int64, actorID string) error {
-	target, ok := pinTarget[kind]
-	if !ok {
-		return errors.New("неизвестный вид контейнера закрепления: " + kind)
-	}
-	ct, err := s.pool.Exec(ctx, `
-		INSERT INTO pins (container_kind, container_id, message_id, pinned_by)
-		SELECT $3, $1::text, $2, $4 WHERE EXISTS (`+target+`)
-		ON CONFLICT (container_kind, container_id)
-		DO UPDATE SET message_id = EXCLUDED.message_id, pinned_by = EXCLUDED.pinned_by, pinned_at = now()`,
-		container, messageID, kind, actorID)
-	if err != nil {
-		if isBadUUID(err) {
-			return ErrMessageGone
-		}
-		return err
-	}
-	if ct.RowsAffected() == 0 {
-		return ErrMessageGone
-	}
-	return nil
+	_, err := PinBoardOf(s).Add(ctx, kind, container, []int64{messageID}, false, actorID)
+	return err
 }
 
 // ClearPin снимает закрепление. Было ли что снимать — второе значение: событие «откреплено» без
 // закреплённого слать незачем.
+//
+// С 2026-11-19 (СЦ12) снимает всё закреплённое списком: прежний клиент знает одно и снимает «его».
 func (s *Store) ClearPin(ctx context.Context, kind, container string) (bool, error) {
-	ct, err := s.pool.Exec(ctx, `DELETE FROM pins WHERE container_kind = $1 AND container_id = $2`, kind, container)
+	ct, err := s.pool.Exec(ctx, `DELETE FROM pin_items WHERE container_kind = $1 AND container_id = $2`, kind, container)
 	if err != nil {
 		return false, err
 	}
 	return ct.RowsAffected() > 0, nil
 }
 
-// PinOf — что закреплено в контейнере; пустой Pin — ничего.
+// PinOf — что закреплено в контейнере; пустой Pin — ничего. Из списка (СЦ12) — последнее закреплённое.
 func (s *Store) PinOf(ctx context.Context, kind, container string) (Pin, error) {
 	var p Pin
-	err := s.pool.QueryRow(ctx, `SELECT message_id, pinned_by::text, pinned_at FROM pins
-		WHERE container_kind = $1 AND container_id = $2`, kind, container).Scan(&p.MessageID, &p.By, &p.At)
+	err := s.pool.QueryRow(ctx, `SELECT message_id, pinned_by::text, pinned_at FROM pin_items
+		WHERE container_kind = $1 AND container_id = $2 ORDER BY position DESC LIMIT 1`, kind, container).Scan(&p.MessageID, &p.By, &p.At)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Pin{}, nil
 	}
@@ -106,4 +91,4 @@ func (s *Store) ChatUsers(ctx context.Context, chatID string) ([]string, error) 
 
 // unpinDeletedSQL — удалённое закреплённое открепляется само (решение заказчика 2026-10-18).
 // Выполняется удалениями тем же исполнителем, что и пометка: $1 вид, $2 контейнер, $3 номер.
-const unpinDeletedSQL = `DELETE FROM pins WHERE container_kind = $1 AND container_id = $2 AND message_id = $3`
+const unpinDeletedSQL = `DELETE FROM pin_items WHERE container_kind = $1 AND container_id = $2 AND message_id = $3`

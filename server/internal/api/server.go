@@ -233,6 +233,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterCommunityVoice(mux, s.Store, store.CommunityVoiceOf(s.Store), s.livekitSettings, s.notifier(), s.requireActiveDevice)
 	// Закреплённое и описание (ПЛАН-(ЗО) ЗО1–ЗО2).
 	RegisterShowcase(mux, s.Store, s.notifier(), s.requireActiveDevice)
+	// Закреплённые группой (ПЛАН-(СЦ) СЦ12): до 20, название; прежние «…/pin» — поверх того же списка.
+	RegisterPinGroups(mux, s.Store, store.PinBoardOf(s.Store), s.notifier(), s.requireActiveDevice)
 	// Страна и язык человека: две задачи — отсев у клиента и региональные ленты у
 	// сервера (ПЛАН-(Я)-ЯЗЫКА). Ни перевода, ни определения языка по тексту здесь нет.
 	RegisterLocale(mux, s.Store, s.requireActiveDevice)

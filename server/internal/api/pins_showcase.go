@@ -116,6 +116,10 @@ func pinChange(w http.ResponseWriter, r *http.Request, st ShowcaseStore, kind, c
 		if err := st.SetPin(r.Context(), kind, container, n, id.UserID); errors.Is(err, store.ErrMessageGone) {
 			writeErr(w, http.StatusConflict, "message_not_pinnable", "закрепить можно живое сообщение этой переписки")
 			return 0, false
+		} else if errors.Is(err, store.ErrPinsFull) {
+			// Прежний «…/pin» поверх списка (СЦ12): закреплено 20.
+			writeErr(w, http.StatusConflict, "pins_full", "закреплено 20 — уберите лишние")
+			return 0, false
 		} else if err != nil {
 			log.Printf("pin %s: %v", kind, err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
