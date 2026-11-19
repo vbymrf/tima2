@@ -224,6 +224,8 @@ func listStates(st StatesStore) http.HandlerFunc {
 				m["user_id"], m["online"], m["until_ms"], m["last_seen_ms"] = s.PeerID, s.Online, s.UntilMs, s.LastSeenMs
 			case "top":
 				m["entity_kind"], m["entity_id"], m["top_id"], m["top_at_ms"], m["unread"] = s.EntityKind, s.ChatID, s.TopID, s.TopAtMs, s.Unread
+				// Текст последнего (ПЛАН-(СЦ) СЦ3): строка Социума показывает его до входа.
+				m["preview"] = s.Preview
 			case "notify":
 				m["entity_kind"], m["entity_id"], m["off"] = s.EntityKind, s.ChatID, s.Off
 			}

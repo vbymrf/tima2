@@ -277,6 +277,9 @@ type StateRow struct {
 	TopAtMs     int64
 	Unread      int64 // top: непрочитанного после отметки, не больше 100
 	Off         bool  // notify: уведомления отключены
+	// Preview — top: текст последнего сообщения, до 120 знаков (ПЛАН-(СЦ) СЦ3). Канал — текст записи, открытая
+	// группа — первый узел текста (то же, что ищется); зашифрованное и вложения без текста — пусто.
+	Preview string
 }
 
 // ListStates — строки ленты человека после after и вершина ленты.
@@ -293,13 +296,13 @@ func (s *Store) ListStates(ctx context.Context, userID string, after int64) ([]S
 	// сообщение меняют его с двух сторон, и хранимое число разошлось бы с правдой.
 	rows, err := s.pool.Query(ctx, `
 		SELECT 'receipt', rev, chat_id::text, peer_id::text, delivered_ms, read_ms, 0::bigint, false, 0::bigint,
-		       '', 0::bigint, 0::bigint, 0::bigint, false
+		       '', 0::bigint, 0::bigint, 0::bigint, false, ''::text
 		  FROM chat_receipts WHERE owner_id = $1 AND rev > $2
 		UNION ALL
-		SELECT 'typing', rev, chat_id::text, from_id::text, 0, 0, until_ms, false, 0, '', 0, 0, 0, false
+		SELECT 'typing', rev, chat_id::text, from_id::text, 0, 0, until_ms, false, 0, '', 0, 0, 0, false, ''
 		  FROM typing_states WHERE owner_id = $1 AND rev > $2
 		UNION ALL
-		SELECT 'presence', rev, '', target_id::text, 0, 0, until_ms, online, last_seen_ms, '', 0, 0, 0, false
+		SELECT 'presence', rev, '', target_id::text, 0, 0, until_ms, online, last_seen_ms, '', 0, 0, 0, false, ''
 		  FROM presence_states WHERE owner_id = $1 AND rev > $2
 		UNION ALL
 		SELECT 'top', t.rev, t.entity_id::text, '', 0, 0, 0, false, 0, t.kind, t.top_id, t.top_at_ms,
@@ -311,12 +314,18 @@ func (s *Store) ListStates(ctx context.Context, userID string, after int64) ([]S
 		              WHERE m.group_id = t.entity_id AND m.message_id > COALESCE(r.read_id, 0)
 		                AND m.sender_id <> $1 AND m.edit_of = 0 LIMIT 100) x)
 		       END,
-		       false
+		       false,
+		       COALESCE(CASE t.kind
+		         WHEN 'channel' THEN (SELECT left(p.text, 120) FROM channel_posts p
+		              WHERE p.channel_id = t.entity_id AND p.post_id = t.top_id AND NOT p.deleted)
+		         ELSE (SELECT left(m.search_text, 120) FROM group_messages m
+		              WHERE m.group_id = t.entity_id AND m.message_id = t.top_id)
+		       END, '')
 		  FROM entity_tops t
 		  LEFT JOIN entity_reads r ON r.owner_id = t.owner_id AND r.kind = t.kind AND r.entity_id = t.entity_id
 		 WHERE t.owner_id = $1 AND t.rev > $2
 		UNION ALL
-		SELECT 'notify', rev, entity_id::text, '', 0, 0, 0, false, 0, kind, 0, 0, 0, off
+		SELECT 'notify', rev, entity_id::text, '', 0, 0, 0, false, 0, kind, 0, 0, 0, off, ''
 		  FROM notify_settings WHERE owner_id = $1 AND rev > $2
 		ORDER BY 2`, userID, after)
 	if err != nil {
@@ -327,7 +336,7 @@ func (s *Store) ListStates(ctx context.Context, userID string, after int64) ([]S
 	for rows.Next() {
 		var r StateRow
 		if err := rows.Scan(&r.Kind, &r.Rev, &r.ChatID, &r.PeerID, &r.DeliveredMs, &r.ReadMs,
-			&r.UntilMs, &r.Online, &r.LastSeenMs, &r.EntityKind, &r.TopID, &r.TopAtMs, &r.Unread, &r.Off); err != nil {
+			&r.UntilMs, &r.Online, &r.LastSeenMs, &r.EntityKind, &r.TopID, &r.TopAtMs, &r.Unread, &r.Off, &r.Preview); err != nil {
 			return nil, top, err
 		}
 		out = append(out, r)

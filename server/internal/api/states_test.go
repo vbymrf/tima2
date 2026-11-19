@@ -29,6 +29,8 @@ type stateRow struct {
 	TopID       int64  `json:"top_id"`
 	Unread      int64  `json:"unread"`
 	Off         bool   `json:"off"`
+	// Текст последнего у вершины (ПЛАН-(СЦ) СЦ3).
+	Preview string `json:"preview"`
 }
 
 type statesPage struct {

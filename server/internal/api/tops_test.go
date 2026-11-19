@@ -57,7 +57,7 @@ func TestПостКаналаВершинойАНеКопией(t *testing.T) {
 	}
 	for i := 0; i < 3; i++ {
 		if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels/"+ch+"/posts",
-			map[string]string{"text": "пост"}, &post); code != 201 {
+			map[string]string{"text": "пост " + string(rune('А'+i))}, &post); code != 201 {
 			t.Fatalf("пост: %d", code)
 		}
 	}
@@ -69,6 +69,10 @@ func TestПостКаналаВершинойАНеКопией(t *testing.T) {
 	top := topOf(t, page, ch)
 	if top == nil || top.EntityKind != "channel" || top.TopID != post.PostID || top.Unread != 3 {
 		t.Fatalf("вершина канала не та: %+v", top)
+	}
+	// Текст последнего — до входа в канал (ПЛАН-(СЦ) СЦ3).
+	if top.Preview != "пост В" {
+		t.Fatalf("текст последнего у вершины: %q", top.Preview)
 	}
 	// У автора своё новым не считается — вершины нет вовсе.
 	var mine statesPage
