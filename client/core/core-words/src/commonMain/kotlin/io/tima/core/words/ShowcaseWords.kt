@@ -14,6 +14,8 @@ interface ShowcaseWords {
      * [on] — закрепили; иначе сняли.
      */
     fun pinLine(who: String?, on: Boolean): String
+    /** Служебная строка: список закреплённых изменён (СЦ12); `who == null` — я сам. */
+    fun pinsUpdated(who: String?): String
     /** Отказ сервера: `not_moderator`, `message_not_pinnable` и прочие; `offline` — нет сети. */
     fun pinRefused(code: String): String
 
@@ -51,6 +53,7 @@ object RussianShowcaseWords : ShowcaseWords {
         on -> "$who закрепил(а) сообщение"
         else -> "$who открепил(а) сообщение"
     }
+    override fun pinsUpdated(who: String?) = if (who == null) "Вы обновили закреплённые" else "$who обновил(а) закреплённые"
     override fun pinRefused(code: String) = when (code) {
         "not_moderator" -> "Закрепляет модератор и выше"
         "message_not_pinnable" -> "Это сообщение закрепить нельзя: его нет или оно удалено"
@@ -90,6 +93,7 @@ object EnglishShowcaseWords : ShowcaseWords {
         on -> "$who pinned a message"
         else -> "$who unpinned a message"
     }
+    override fun pinsUpdated(who: String?) = if (who == null) "You updated the pinned messages" else "$who updated the pinned messages"
     override fun pinRefused(code: String) = when (code) {
         "not_moderator" -> "Only moderators and above can pin"
         "message_not_pinnable" -> "This message can't be pinned: it's gone or deleted"
@@ -129,6 +133,7 @@ object SpanishShowcaseWords : ShowcaseWords {
         on -> "$who fijó un mensaje"
         else -> "$who desfijó un mensaje"
     }
+    override fun pinsUpdated(who: String?) = if (who == null) "Usted actualizó los fijados" else "$who actualizó los fijados"
     override fun pinRefused(code: String) = when (code) {
         "not_moderator" -> "Solo moderadores y superiores pueden fijar"
         "message_not_pinnable" -> "Este mensaje no se puede fijar: no existe o fue eliminado"

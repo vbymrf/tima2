@@ -996,6 +996,8 @@ class Receiver(
      */
     private suspend fun aboutPin(d: EventStreamProtocol.Decision.MessagePinned) {
         val ids = d.ids
+        // Прежний список — до применения: по нему видно, первое ли это закрепление (СЦ12, «обновил(а) закреплённые»).
+        val before = pins.boards.value[d.chatId]?.ids.orEmpty()
         if (ids != null) pins.applied(d.chatId, io.tima.domain.chat.PinBoard(d.title.orEmpty(), ids)) else pins.applied(d.chatId, d.messageId)
         val mine = d.by == session.userId
         val who = if (mine) null else (d.by.takeIf { it.isNotEmpty() }?.let { notices?.nameOf(it) } ?: words().chat.someone)
@@ -1003,7 +1005,14 @@ class Receiver(
             environment.journal.note(
                 chatId = d.chatId,
                 key = "pin/${d.chatId}/${d.eventId ?: d.messageId}",
-                text = words().showcase.pinLine(who, d.messageId > 0),
+                // ПЛАН-(СЦ) СЦ12: первое закрепление и полное снятие — как прежде; любое другое изменение списка —
+                // «обновил(а) закреплённые». Своё событие приходит после оптимистичного обновления: прежний список
+                // уже равен новому, и одно закреплённое тогда — первое.
+                text = when (io.tima.domain.chat.pinChange(before, ids, d.messageId)) {
+                    io.tima.domain.chat.PinChange.Pinned -> words().showcase.pinLine(who, true)
+                    io.tima.domain.chat.PinChange.Unpinned -> words().showcase.pinLine(who, false)
+                    io.tima.domain.chat.PinChange.Updated -> words().showcase.pinsUpdated(who)
+                },
                 atMs = msNow(),
             )
         }

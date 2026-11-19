@@ -148,8 +148,8 @@ class InvitesOverHttp(
     }
 
     /** Журнал ролей группы (СЦ6): новые первыми; `null` — сервер не ответил или права нет. */
-    suspend fun roleLog(groupId: String): List<io.tima.domain.chat.RoleLogEntry>? = try {
-        val r = client.get(route.api("/api/v1/groups/$groupId/role-log")) { header("Authorization", "Bearer ${token()}") }
+    suspend fun roleLog(kind: EntityKind, id: String): List<io.tima.domain.chat.RoleLogEntry>? = try {
+        val r = client.get(route.api(path(kind, id) + "/role-log")) { header("Authorization", "Bearer ${token()}") }
         if (r.status != HttpStatusCode.OK) null else r.jsonBody()?.get("entries")?.jsonArrayOrNull()?.mapNotNull { e ->
             val o = e.jsonObjectOrNull() ?: return@mapNotNull null
             io.tima.domain.chat.RoleLogEntry(
@@ -162,6 +162,23 @@ class InvitesOverHttp(
         }
     } catch (_: Throwable) {
         null
+    }
+
+    /** Модератор канала или админ сообщества (СЦ6): выдать или снять; раздаёт владелец. */
+    suspend fun setStaff(kind: EntityKind, id: String, userId: String, on: Boolean): Boolean = try {
+        val base = path(kind, id) + if (kind == EntityKind.Channel) "/moderators" else "/admins"
+        val r = if (on) {
+            client.post(route.api(base)) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("user_id", JsonPrimitive(userId)) }.toString())
+            }
+        } else {
+            client.delete(route.api("$base/$userId")) { header("Authorization", "Bearer ${token()}") }
+        }
+        r.status.value in 200..299
+    } catch (_: Throwable) {
+        false
     }
 
     /** Число участников (группа) или подписчиков (канал, сообщество) — шапка страницы (§4б п. 9). */

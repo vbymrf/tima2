@@ -156,6 +156,11 @@ interface SociumWords {
     fun roleLogAction(action: String, detail: String): String
     fun membersCount(n: Int): String
     fun subscribersCount(n: Int): String
+    val you: String
+    val staffModerators: String
+    val staffAdmins: String
+    val staffRemove: String
+    val staffAdd: String
 }
 
 object RussianSociumWords : SociumWords {
@@ -212,7 +217,7 @@ object RussianSociumWords : SociumWords {
     override val ownColorDefault = "По умолчанию — зелёный"
     override val notifyTitle = "Уведомления"
     override val manageMain = "Основное"
-    override val manageMainAbout = "название, «секретная»"
+    override val manageMainAbout = "аватар, название, «секретная»"
     override val manageRoles = "Роли"
     override val manageRolesAbout = "назначить и снять"
     override val manageRequests = "Заявки"
@@ -296,6 +301,11 @@ object RussianSociumWords : SociumWords {
     }
     override fun membersCount(n: Int) = "участников: $n"
     override fun subscribersCount(n: Int) = "подписчиков: $n"
+    override val you = "Вы"
+    override val staffModerators = "Модераторы"
+    override val staffAdmins = "Админы"
+    override val staffRemove = "Снять"
+    override val staffAdd = "Добавить"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -352,7 +362,7 @@ object EnglishSociumWords : SociumWords {
     override val ownColorDefault = "Default: green"
     override val notifyTitle = "Notifications"
     override val manageMain = "Main"
-    override val manageMainAbout = "title, “secret”"
+    override val manageMainAbout = "avatar, title, “secret”"
     override val manageRoles = "Roles"
     override val manageRolesAbout = "appoint and remove"
     override val manageRequests = "Requests"
@@ -436,6 +446,11 @@ object EnglishSociumWords : SociumWords {
     }
     override fun membersCount(n: Int) = "members: $n"
     override fun subscribersCount(n: Int) = "subscribers: $n"
+    override val you = "You"
+    override val staffModerators = "Moderators"
+    override val staffAdmins = "Admins"
+    override val staffRemove = "Remove"
+    override val staffAdd = "Add"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -492,7 +507,7 @@ object SpanishSociumWords : SociumWords {
     override val ownColorDefault = "Por defecto: verde"
     override val notifyTitle = "Notificaciones"
     override val manageMain = "Principal"
-    override val manageMainAbout = "nombre, «secreto»"
+    override val manageMainAbout = "avatar, nombre, «secreto»"
     override val manageRoles = "Roles"
     override val manageRolesAbout = "asignar y quitar"
     override val manageRequests = "Solicitudes"
@@ -576,4 +591,9 @@ object SpanishSociumWords : SociumWords {
     }
     override fun membersCount(n: Int) = "miembros: $n"
     override fun subscribersCount(n: Int) = "suscriptores: $n"
+    override val you = "Usted"
+    override val staffModerators = "Moderadores"
+    override val staffAdmins = "Administradores"
+    override val staffRemove = "Quitar"
+    override val staffAdd = "Añadir"
 }

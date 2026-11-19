@@ -120,3 +120,19 @@ interface RemotePins {
 
     suspend fun rename(chatId: String, group: Boolean, title: String): PinStep = PinStep.Refused("old_server")
 }
+
+/** Какую служебную строку ставить на событие закрепления (ПЛАН-(СЦ) СЦ12). */
+enum class PinChange { Pinned, Unpinned, Updated }
+
+/**
+ * Первое закрепление и полное снятие — как прежде; любое другое изменение списка — «обновил(а) закреплённые».
+ * [before] — список до события; [after] — из события (`null` — старое событие одним номером, [messageId] > 0 —
+ * закрепили). Своё событие приходит после оптимистичного обновления: [before] уже равен [after], и одно
+ * закреплённое тогда — первое.
+ */
+fun pinChange(before: List<Long>, after: List<Long>?, messageId: Long): PinChange = when {
+    after == null -> if (messageId > 0) PinChange.Pinned else PinChange.Unpinned
+    after.isEmpty() -> PinChange.Unpinned
+    before.isEmpty() || (before == after && after.size == 1) -> PinChange.Pinned
+    else -> PinChange.Updated
+}

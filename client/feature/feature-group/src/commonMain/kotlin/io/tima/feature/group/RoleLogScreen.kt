@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import io.tima.core.ui.Button
@@ -25,6 +27,10 @@ import io.tima.domain.chat.RoleLogEntry
 object RoleLogTags {
     const val MEMBERS = "roles:members"
     const val ROW = "roles:row"
+    const val STAFF = "roles:staff"
+    const val REMOVE = "roles:remove"
+    const val NICK = "roles:nick"
+    const val ADD = "roles:add"
 }
 
 /**
@@ -39,6 +45,12 @@ fun RoleLogScreen(
     time: (Long) -> String,
     onMembers: (() -> Unit)?,
     onBack: () -> Unit,
+    /** Канал и сообщество (СЦ6): модераторы или админы списком; `null` — у группы роли во «Участниках». */
+    staff: List<String>? = null,
+    staffTitle: String = "",
+    onRemoveStaff: (String) -> Unit = {},
+    onAddNick: (String) -> Unit = {},
+    trouble: String? = null,
 ) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
@@ -46,6 +58,26 @@ fun RoleLogScreen(
         Column(Modifier.padding(TimaSpacing.about4)) {
             Secondary(w.roleLogHint)
             onMembers?.let { Button(w.tabMembers, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(RoleLogTags.MEMBERS)) }
+            if (staff != null) {
+                Name(staffTitle)
+                if (staff.isEmpty()) Tertiary(w.roleLogEmpty)
+                for (uid in staff) {
+                    ListLine(
+                        modifier = Modifier.testTag(RoleLogTags.STAFF),
+                        middle = { Name(nameOf(uid)) },
+                        right = { Button(w.staffRemove, onClick = { onRemoveStaff(uid) }, kind = ButtonKind.Quiet, modifier = Modifier.testTag(RoleLogTags.REMOVE)) },
+                    )
+                }
+                var nick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(TimaSpacing.about2),
+                ) {
+                    io.tima.core.ui.Field(value = nick, onChange = { nick = it }, hint = "@" + Tima.words.social.nickField.lowercase(), modifier = Modifier.weight(1f).testTag(RoleLogTags.NICK))
+                    Button(w.staffAdd, onClick = { if (nick.isNotBlank()) { onAddNick(nick.trim().removePrefix("@")); nick = "" } }, modifier = Modifier.testTag(RoleLogTags.ADD))
+                }
+                trouble?.let { Secondary(it) }
+            }
             Name(w.roleLogTitle)
             when {
                 entries == null -> Secondary(Tima.words.trouble.offline)

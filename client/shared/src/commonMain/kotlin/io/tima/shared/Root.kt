@@ -4569,21 +4569,56 @@ private fun App(
 
             is Where.Roles -> {
                 {
-                    // Журнал ролей (СЦ6) — у групп; у канала и сообщества пока только подсказка.
-                    var entries by remember(current) { mutableStateOf<List<io.tima.domain.chat.RoleLogEntry>?>(if (current.kind == "group") null else emptyList()) }
-                    LaunchedEffect(current) {
-                        if (current.kind == "group") {
-                            entries = network.invites.roleLog(current.id)
-                            entries?.flatMap { listOf(it.actorId, it.targetId) }?.distinct()?.let { people.want(it) }
-                        }
+                    // Журнал ролей (СЦ6); у канала и сообщества — ещё модераторы или админы списком.
+                    val kind = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Group
+                    val group = kind == io.tima.domain.chat.EntityKind.Group
+                    var entries by remember(current) { mutableStateOf<List<io.tima.domain.chat.RoleLogEntry>?>(null) }
+                    var staff by remember(current) { mutableStateOf<List<String>?>(if (group) null else emptyList()) }
+                    var trouble by remember(current) { mutableStateOf<String?>(null) }
+                    var tick by remember(current) { mutableStateOf(0) }
+                    val youWord = Tima.words.socium.you
+                    val offlineWord = Tima.words.trouble.offline
+                    val noNickWord = Tima.words.social.noSuchNickname
+                    LaunchedEffect(current, tick) {
+                        entries = network.invites.roleLog(kind, current.id)
+                        if (!group) staff = network.ownership.staff(kind, current.id)
+                        val ids = entries.orEmpty().flatMap { listOf(it.actorId, it.targetId) } + staff.orEmpty()
+                        if (ids.isNotEmpty()) people.want(ids.distinct())
                     }
                     io.tima.feature.group.RoleLogScreen(
                         title = current.title,
                         entries = entries,
-                        nameOf = { id -> peopleCards[id]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: id.take(8) },
+                        nameOf = { id ->
+                            if (id == session.userId) youWord
+                            else peopleCards[id]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: id.take(8)
+                        },
                         time = { ms -> if (ms > 0) sociumTime(ms) else "" },
-                        onMembers = if (current.kind == "group") ({ where = Where.Members(current.id, current.title) }) else null,
+                        onMembers = if (group) ({ where = Where.Members(current.id, current.title) }) else null,
                         onBack = { where = Where.Nothing },
+                        staff = staff,
+                        staffTitle = if (kind == io.tima.domain.chat.EntityKind.Channel) Tima.words.socium.staffModerators else Tima.words.socium.staffAdmins,
+                        onRemoveStaff = { uid ->
+                            scope.launch {
+                                val ok = network.invites.setStaff(kind, current.id, uid, false)
+                                Journal.note(LogCode.NAV, "снять роль", "вид" to current.kind, "вышло" to ok)
+                                tick++
+                            }
+                        },
+                        onAddNick = { nick ->
+                            scope.launch {
+                                trouble = null
+                                when (val found = network.directory.byNickname(nick)) {
+                                    is io.tima.domain.chat.UserLookup.Found -> {
+                                        val ok = network.invites.setStaff(kind, current.id, found.userId, true)
+                                        Journal.note(LogCode.NAV, "выдать роль", "вид" to current.kind, "вышло" to ok)
+                                        if (!ok) trouble = offlineWord
+                                        tick++
+                                    }
+                                    else -> trouble = noNickWord
+                                }
+                            }
+                        },
+                        trouble = trouble,
                     )
                 }
             }

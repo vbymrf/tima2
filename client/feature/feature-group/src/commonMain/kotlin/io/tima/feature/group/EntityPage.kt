@@ -207,7 +207,8 @@ fun manageSections(role: GroupRole?, kind: io.tima.domain.chat.EntityKind): List
     if (!mod) return emptyList()
     return listOfNotNull(
         ManageSection.Main.takeIf { admin },
-        ManageSection.Roles.takeIf { admin },
+        // Роли: у группы — владелец и админ (админ — модераторов); у канала и сообщества раздаёт владелец.
+        ManageSection.Roles.takeIf { if (kind == io.tima.domain.chat.EntityKind.Group) admin else owner },
         ManageSection.Requests.takeIf { admin && kind == io.tima.domain.chat.EntityKind.Group },
         ManageSection.Access.takeIf { admin && kind == io.tima.domain.chat.EntityKind.Group },
         ManageSection.Messages,

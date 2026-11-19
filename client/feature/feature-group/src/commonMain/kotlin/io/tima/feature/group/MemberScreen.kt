@@ -300,6 +300,7 @@ private fun MemberLine(
 ) {
     val words = Tima.words.social
     var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    Column {
     ListLine(
         onClick = if (actions.isNotEmpty()) ({ open = !open }) else null,
         modifier = Modifier.testTag(MembersTags.ROW),
@@ -316,20 +317,25 @@ private fun MemberLine(
                 // Как в переписке группы: по «Виду», а не идентификатором. Идентификатор —
                 // последнее прибежище, когда о человеке не известно ничего.
                 Name(person.line(look) ?: Tima.words.chat.someone)
+                // Роль видна всегда: справа может стоять «Исключить» (живой взгляд 2026-11-19 на realme).
+                if (removeMay) Tertiary(roleCaption(member.role, words))
                 member.bannedUntil?.let { Secondary(words.bannedUntil(it)) }
-                if (open) {
-                    androidx.compose.foundation.layout.FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-                        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
-                    ) {
-                        for ((label, act) in actions) {
-                            Button(label = label, onClick = { act(); open = false }, kind = io.tima.core.ui.ButtonKind.Quiet, modifier = Modifier.testTag(MembersTags.ROLE))
-                        }
-                    }
-                }
             }
         },
     )
+    // Действия — во всю ширину под строкой: сбоку их сжимала «Исключить» до «модераторо / м».
+    if (open) {
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = Modifier.padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2),
+            horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+        ) {
+            for ((label, act) in actions) {
+                Button(label = label, onClick = { act(); open = false }, kind = io.tima.core.ui.ButtonKind.Quiet, modifier = Modifier.testTag(MembersTags.ROLE))
+            }
+        }
+    }
+    }
 }
 
 /** Старшинство роли: владелец 3, админ 2, модератор 1, участник 0. */

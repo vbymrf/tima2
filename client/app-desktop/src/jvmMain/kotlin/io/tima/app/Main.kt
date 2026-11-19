@@ -167,6 +167,12 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
     val callEngine = remember {
         DesktopCallEngine.createOrNull(CoroutineScope(SupervisorJob() + Dispatchers.Default))
     }
+    // Звуковой чат сообщества (ПЛАН-(СЦ) СЦ7, §4б п. 10) — своим движком, как на Android: окно звонка следит за
+    // звонковым, и разговор в сообществе не должен поднимать его. Библиотека различает комнаты по номеру, второй
+    // экземпляр живёт рядом с первым.
+    val voiceEngine = remember {
+        if (callEngine == null) null else DesktopCallEngine.createOrNull(CoroutineScope(SupervisorJob() + Dispatchers.Default))
+    }
     DisposableEffect(Unit) {
         hasTray = Tray.install(
             onOpen = { windowShown = true },
@@ -296,6 +302,7 @@ private fun window(store: ReportsStore, hidden: Boolean) = application {
                 // ответа именно в этот момент — худшее время.
                 build = Build(name = BUILD_NAME, code = BUILD_CODE, stream = BUILD_STREAM),
                 callEngine = callEngine,
+                voiceEngine = voiceEngine,
                 loginStart = Autostart,
             )
         }
