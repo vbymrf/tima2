@@ -193,3 +193,45 @@ func TestСекретноеСообществоИСекретныйЭлемен�
 		t.Fatalf("чужой ставит секретность: ждали 403, пришло %d", code)
 	}
 }
+
+// Лента человека — тоже канал, но в «Каталог» Социума не идёт: сервер отмечает её полем feed (ПЛАН-(СЦ) СЦ3).
+func TestСвоиКаналыОтмечаютЛентуИМодератора(t *testing.T) {
+	ts, _ := setup(t)
+	owner := registerDevice(t, ts, "+79990008131")
+	mod := registerDevice(t, ts, "+79990008132")
+	var created struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels", map[string]any{"title": "Анонсы"}, &created); code != 201 {
+		t.Fatalf("канал: %d", code)
+	}
+	if code := postAuthed(t, ts, mod.token, "POST", "/api/v1/channels/"+created.ChannelID+"/subscribe", nil, nil); code != 200 {
+		t.Fatalf("подписка: %d", code)
+	}
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels/"+created.ChannelID+"/moderators",
+		map[string]any{"user_id": mod.userID}, nil); code != 200 && code != 201 && code != 204 {
+		t.Fatalf("модератор: %d", code)
+	}
+	var mine struct {
+		Channels []struct {
+			ChannelID string `json:"channel_id"`
+			Feed      bool   `json:"feed"`
+			Moderator bool   `json:"moderator"`
+		} `json:"channels"`
+	}
+	if code := getAuthed(t, ts, mod.token, "/api/v1/channels", &mine); code != 200 {
+		t.Fatalf("свои каналы: %d", code)
+	}
+	found := false
+	for _, c := range mine.Channels {
+		if c.ChannelID == created.ChannelID {
+			found = true
+			if c.Feed || !c.Moderator {
+				t.Fatalf("канал отмечен не так: %+v", c)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("канала нет в своих")
+	}
+}

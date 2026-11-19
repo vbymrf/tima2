@@ -157,6 +157,8 @@ func channelJSON(c store.ChannelView) map[string]any {
 		"comments_enabled": c.CommentsEnabled, "community_id": c.CommunityID,
 		// Секретный (ПЛАН-(СЦ) СЦ2).
 		"hidden": c.Hidden,
+		// Лента человека, а не канал; модератор ли просящий (ПЛАН-(СЦ) СЦ3).
+		"feed": c.Feed, "moderator": c.Moderator,
 	}
 }
 

@@ -30,6 +30,10 @@ type ChannelView struct {
 	Channel
 	Subscribed bool
 	Owner      bool
+	// Feed — это лента человека (страница), а не канал: в «Каталоге» Социума её нет (ПЛАН-(СЦ) СЦ3, ЛС §1).
+	Feed bool
+	// Moderator — просящий модератор канала: название в строке — цветом роли (СЦ3).
+	Moderator bool
 }
 
 type ChannelPost struct {
@@ -99,7 +103,9 @@ func (s *Store) MyChannels(ctx context.Context, userID string) ([]ChannelView, e
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.channel_id, c.title, c.description, c.owner_id, c.is_public, c.comments_enabled,
 		       COALESCE(c.community_id::text, ''), c.hidden,
-		       TRUE AS subscribed, (c.owner_id = $1) AS owner
+		       TRUE AS subscribed, (c.owner_id = $1) AS owner,
+		       EXISTS (SELECT 1 FROM user_feeds f WHERE f.channel_id = c.channel_id) AS feed,
+		       EXISTS (SELECT 1 FROM channel_moderators m WHERE m.channel_id = c.channel_id AND m.user_id = $1) AS moderator
 		FROM channels c
 		JOIN channel_subscriptions s ON s.channel_id = c.channel_id AND s.subscriber_id = $1
 		WHERE c.deleted_at IS NULL
@@ -135,7 +141,9 @@ func (s *Store) DiscoverChannels(
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.channel_id, c.title, c.description, c.owner_id, c.is_public, c.comments_enabled,
 		       COALESCE(c.community_id::text, ''), c.hidden,
-		       FALSE AS subscribed, (c.owner_id = $1) AS owner
+		       FALSE AS subscribed, (c.owner_id = $1) AS owner,
+		       EXISTS (SELECT 1 FROM user_feeds f WHERE f.channel_id = c.channel_id) AS feed,
+		       FALSE AS moderator
 		FROM channels c
 		WHERE c.deleted_at IS NULL AND c.is_public AND NOT c.hidden
 		  AND NOT EXISTS (SELECT 1 FROM channel_subscriptions s
@@ -163,7 +171,7 @@ func scanChannelViews(rows pgx.Rows) ([]ChannelView, error) {
 		var v ChannelView
 		if err := rows.Scan(&v.ChannelID, &v.Title, &v.Description, &v.OwnerID, &v.IsPublic, &v.CommentsEnabled,
 			&v.CommunityID, &v.Hidden,
-			&v.Subscribed, &v.Owner); err != nil {
+			&v.Subscribed, &v.Owner, &v.Feed, &v.Moderator); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
