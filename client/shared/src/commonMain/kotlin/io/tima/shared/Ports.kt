@@ -158,6 +158,9 @@ interface ChatPorts {
 
     /** Владение по ключу личности (ПЛАН-(СЦ) §6, СЦ11). */
     val ownership: io.tima.core.network.OwnershipOverHttp
+
+    /** Переписка «сущность — человек» (ПЛАН-(СЦ) §1.9, СЦ15). */
+    val threads: io.tima.core.network.ThreadsOverHttp
 }
 
 /** Группы: создание, состав, ротация ключа при смене состава. */

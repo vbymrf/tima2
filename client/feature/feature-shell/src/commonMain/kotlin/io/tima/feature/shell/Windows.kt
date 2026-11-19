@@ -182,6 +182,8 @@ fun ActivityWindow(
     onPointersView: (() -> Unit)? = null,
     /** Второй ряд «Указателей» — полоса разделов. `null` — ряда нет. */
     pointersRow: (@Composable () -> Unit)? = null,
+    /** «Ответы» (ПЛАН-(СЦ) §1.9, СЦ15): ленты с сущностями; `null` — прежняя заглушка. */
+    answers: (@Composable () -> Unit)? = null,
 ) {
     var reactions by remember { mutableStateOf(REACTION_FILTERS.first()) }
     WindowWithTabs(
@@ -201,9 +203,9 @@ fun ActivityWindow(
         },
     ) { tab ->
         when (tab) {
-            WindowTab.Answers -> TabStub(
+            WindowTab.Answers -> answers?.invoke() ?: TabStub(
                 "Здесь будет то, где вам ответили",
-                "Ветки обсуждений и отслеживаемое. Комментариев и веток на сервере нет.",
+                "Ветки обсуждений и отслеживаемое.",
             )
 
             WindowTab.Reactions -> TabStub(

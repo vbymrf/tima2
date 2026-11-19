@@ -96,6 +96,19 @@ interface SociumWords {
     val deleteAbout: String
     val cancelDeletion: String
     fun willBeDeleted(date: String): String
+    // Переписка «сущность — человек» (СЦ15).
+    val answersEmpty: String
+    val notAccepting: String
+    val threadBlocked: String
+    val peopleLimit: String
+    val writeHint: String
+    val send: String
+    val acceptMessages: String
+    fun peopleToday(n: Int, limit: Int): String
+    val blockedMark: String
+    val blockPerson: String
+    val unblockPerson: String
+    val threadAbout: String
 }
 
 object RussianSociumWords : SociumWords {
@@ -174,6 +187,18 @@ object RussianSociumWords : SociumWords {
     override val deleteAbout = "Удаление — через месяц: до тех пор его можно отменить, а всё живёт как прежде"
     override val cancelDeletion = "Отменить удаление"
     override fun willBeDeleted(date: String) = "Будет удалена $date"
+    override val answersEmpty = "Вам пока никто не ответил и вы никому не писали"
+    override val notAccepting = "Сущность не принимает сообщения"
+    override val threadBlocked = "Сообщения заблокированы"
+    override val peopleLimit = "Сегодня уже написали пятерым — больше нельзя до завтра"
+    override val writeHint = "Сообщение"
+    override val send = "Отправить"
+    override val acceptMessages = "Принимать сообщения"
+    override fun peopleToday(n: Int, limit: Int) = "Сегодня написали: $n из $limit"
+    override val blockedMark = "блок"
+    override val blockPerson = "Заблокировать человека"
+    override val unblockPerson = "Разблокировать"
+    override val threadAbout = "Переписка с сущностью не шифруется: её читают те, кто за неё пишет"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -252,6 +277,18 @@ object EnglishSociumWords : SociumWords {
     override val deleteAbout = "Deletion happens in a month: until then it can be cancelled and everything works as before"
     override val cancelDeletion = "Cancel deletion"
     override fun willBeDeleted(date: String) = "Will be deleted on $date"
+    override val answersEmpty = "Nobody has answered you yet and you have written to nobody"
+    override val notAccepting = "It does not accept messages"
+    override val threadBlocked = "Messages are blocked"
+    override val peopleLimit = "Already written to five people today — no more until tomorrow"
+    override val writeHint = "Message"
+    override val send = "Send"
+    override val acceptMessages = "Accept messages"
+    override fun peopleToday(n: Int, limit: Int) = "Written to today: $n of $limit"
+    override val blockedMark = "blocked"
+    override val blockPerson = "Block this person"
+    override val unblockPerson = "Unblock"
+    override val threadAbout = "Conversation with an entity is not end-to-end encrypted: those who write for it read it"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -330,4 +367,16 @@ object SpanishSociumWords : SociumWords {
     override val deleteAbout = "Se elimina en un mes: hasta entonces se puede cancelar y todo funciona como antes"
     override val cancelDeletion = "Cancelar la eliminación"
     override fun willBeDeleted(date: String) = "Se eliminará el $date"
+    override val answersEmpty = "Aún nadie te respondió y no escribiste a nadie"
+    override val notAccepting = "No acepta mensajes"
+    override val threadBlocked = "Mensajes bloqueados"
+    override val peopleLimit = "Hoy ya se escribió a cinco personas: no más hasta mañana"
+    override val writeHint = "Mensaje"
+    override val send = "Enviar"
+    override val acceptMessages = "Aceptar mensajes"
+    override fun peopleToday(n: Int, limit: Int) = "Hoy se escribió a: $n de $limit"
+    override val blockedMark = "bloq."
+    override val blockPerson = "Bloquear a la persona"
+    override val unblockPerson = "Desbloquear"
+    override val threadAbout = "La conversación con una entidad no está cifrada de extremo a extremo: la leen quienes escriben por ella"
 }

@@ -4082,6 +4082,15 @@ private fun App(
                 )
 
                 Window.Activity -> ActivityWindow(
+                    // «Ответы» — ленты с сущностями (ПЛАН-(СЦ) §1.9, СЦ15): забираются при входе в «Общение».
+                    answers = {
+                        var rows by remember { mutableStateOf<List<io.tima.domain.chat.ThreadRow>?>(null) }
+                        LaunchedEffect(Unit) { rows = network.threads.mine() ?: emptyList() }
+                        io.tima.feature.group.AnswersList(rows, time = { ms -> if (ms > 0) sociumTime(ms) else "" }) { row ->
+                            Journal.note(LogCode.NAV, "ответы: лента", "вид" to row.kind.wire)
+                            where = Where.Thread(row.kind.wire, row.entityId, row.title)
+                        }
+                    },
                     onSwitchWindows = { windowSwitcher = true },
                     onSearch = {},
                     onSettings = toSettings,
@@ -4345,6 +4354,110 @@ private fun App(
                 }
             }
 
+            is Where.Thread -> {
+                {
+                    val kind = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Group
+                    val asEntity = current.userId.isNotEmpty()
+                    var page by remember(current) { mutableStateOf<io.tima.domain.chat.ThreadPage?>(null) }
+                    var tick by remember(current) { mutableStateOf(0) }
+                    var input by remember(current) { mutableStateOf("") }
+                    var outcome by remember(current) { mutableStateOf<io.tima.domain.chat.ThreadStep?>(null) }
+                    LaunchedEffect(current, tick) {
+                        val got = if (asEntity) network.threads.withPerson(kind, current.id, current.userId) else network.threads.mineWith(kind, current.id)
+                        page = got
+                        val last = got?.messages?.lastOrNull()?.messageId ?: 0L
+                        if (last > 0) {
+                            if (asEntity) network.threads.readAs(kind, current.id, current.userId, last) else network.threads.read(got!!.kind, got.entityId, last)
+                        }
+                    }
+                    val textOf: (io.tima.domain.chat.ThreadMessage) -> String = { m ->
+                        io.tima.core.encryption.TextBodyCodec.decodeLine(m.body)?.text?.takeIf { it.isNotBlank() } ?: m.preview
+                    }
+                    io.tima.feature.group.ThreadScreen(
+                        title = if (asEntity) (peopleCards[current.userId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: current.userId.take(8)) else current.title,
+                        caption = if (asEntity) current.title else Tima.words.socium.threadAbout,
+                        messages = page?.messages.orEmpty(),
+                        asEntity = asEntity,
+                        text = textOf,
+                        authorName = { id -> peopleCards[id]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: id.take(8) },
+                        time = { ms -> if (ms > 0) sociumTime(ms) else "" },
+                        input = input,
+                        onInput = { input = it; outcome = null },
+                        onSend = {
+                            val text = input.trim()
+                            scope.launch {
+                                val body = io.tima.core.encryption.TextBodyCodec.encodeTyped(text)
+                                val preview = text.take(120)
+                                val p = page
+                                val step = if (asEntity) {
+                                    network.threads.writeAs(kind, current.id, current.userId, body, preview)
+                                } else {
+                                    network.threads.write(p?.kind ?: kind, p?.entityId ?: current.id, body, preview)
+                                }
+                                Journal.note(LogCode.NAV, "лента сущности: отправлено", "как" to if (asEntity) "entity" else "user", "итог" to (step::class.simpleName ?: "?"))
+                                outcome = step
+                                if (step == io.tima.domain.chat.ThreadStep.Sent) {
+                                    input = ""
+                                    tick++
+                                }
+                            }
+                        },
+                        outcome = outcome,
+                        onBack = { where = Where.Nothing },
+                        extra = {
+                            val p = page
+                            if (asEntity && p != null) {
+                                io.tima.core.ui.Button(
+                                    if (p.blocked) Tima.words.socium.unblockPerson else Tima.words.socium.blockPerson,
+                                    onClick = { scope.launch { network.threads.block(kind, current.id, current.userId, !p.blocked); tick++ } },
+                                    kind = io.tima.core.ui.ButtonKind.Quiet,
+                                    modifier = androidx.compose.ui.Modifier.padding(horizontal = io.tima.core.ui.TimaSpacing.about4),
+                                )
+                            } else if (p != null) {
+                                // У человека — состояние ленты: включено, выключено, заблокировано (§1.9, 10).
+                                androidx.compose.foundation.layout.Row(
+                                    androidx.compose.ui.Modifier.padding(horizontal = io.tima.core.ui.TimaSpacing.about4),
+                                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+                                ) {
+                                    for (st in io.tima.domain.chat.ThreadState.entries) {
+                                        io.tima.core.ui.Chip(
+                                            when (st) {
+                                                io.tima.domain.chat.ThreadState.On -> Tima.words.socium.notifyOn
+                                                io.tima.domain.chat.ThreadState.Off -> Tima.words.socium.notifyOff
+                                                io.tima.domain.chat.ThreadState.Blocked -> Tima.words.socium.notifyBlocked
+                                            },
+                                            kind = if (p.state == st) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Neutral,
+                                            onClick = { scope.launch { network.threads.setState(p.kind, p.entityId, st); tick++ } },
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+
+            is Where.Appeals -> {
+                {
+                    val kind = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Group
+                    var appeals by remember(current) { mutableStateOf<io.tima.domain.chat.Appeals?>(null) }
+                    var tick by remember(current) { mutableStateOf(0) }
+                    LaunchedEffect(current, tick) {
+                        appeals = network.threads.appeals(kind, current.id)
+                        appeals?.rows?.map { it.userId }?.let { people.want(it) }
+                    }
+                    io.tima.feature.group.AppealsScreen(
+                        title = current.title,
+                        appeals = appeals,
+                        nameOf = { id -> peopleCards[id]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: id.take(8) },
+                        time = { ms -> if (ms > 0) sociumTime(ms) else "" },
+                        onAccept = { on -> scope.launch { network.threads.setAccepts(kind, current.id, on); tick++ } },
+                        onOpen = { row -> where = Where.Thread(current.kind, current.id, current.title, row.userId) },
+                        onBack = { where = Where.Nothing },
+                    )
+                }
+            }
+
             is Where.Invite -> {
                 {
                     val store = remember(current) { io.tima.feature.group.InviteStore(network.invites, scope, current.inviteId) }
@@ -4472,7 +4585,8 @@ private fun App(
                                         }
                                     }
                                 },
-                                onWrite = null,
+                                // «Написать» — любой, кто видит страницу (§1.9, 3); у элемента сообщества — лента сообщества.
+                                onWrite = { where = Where.Thread(kind, id, current.title) },
                                 onShare = null,
                                 showLevels = if (inside && kind == "group") levelsShown["$kind:$id"] == true else null,
                                 onShowLevels = { on ->
@@ -4502,7 +4616,8 @@ private fun App(
                                 io.tima.feature.group.ManageSection.Access -> where = Where.Access(current.id, current.title)
                                 io.tima.feature.group.ManageSection.Messages -> where = Where.Showcase(current.kind, current.id, current.title)
                                 io.tima.feature.group.ManageSection.Danger -> where = Where.Ownership(current.kind, current.id, current.title)
-                                io.tima.feature.group.ManageSection.Voice, io.tima.feature.group.ManageSection.Appeals -> Unit
+                                io.tima.feature.group.ManageSection.Appeals -> where = Where.Appeals(current.kind, current.id, current.title)
+                                io.tima.feature.group.ManageSection.Voice -> Unit
                             }
                         },
                         onBack = { where = Where.Nothing },
