@@ -155,6 +155,7 @@ func addModerator(st ModerationStore) http.HandlerFunc {
 		if !answerModeration(w, st.SetChannelModerator(r.Context(), r.PathValue("channelID"), id.UserID, req.UserID, true), "addModerator") {
 			return
 		}
+		noteEntityRole(r, st, "channel", r.PathValue("channelID"), req.UserID, "moderator")
 		w.WriteHeader(http.StatusCreated)
 	}
 }
@@ -165,6 +166,7 @@ func removeModerator(st ModerationStore) http.HandlerFunc {
 		if !answerModeration(w, st.SetChannelModerator(r.Context(), r.PathValue("channelID"), id.UserID, r.PathValue("userID"), false), "removeModerator") {
 			return
 		}
+		noteEntityRole(r, st, "channel", r.PathValue("channelID"), r.PathValue("userID"), "member")
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

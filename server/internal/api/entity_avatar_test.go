@@ -88,3 +88,31 @@ func TestЧислоУчастниковСущности(t *testing.T) {
 		t.Fatalf("вид: ждали 400, пришло %d", code)
 	}
 }
+
+// Журнал ролей сообщества (ПЛАН-(СЦ) СЦ6): владелец назначает и снимает админа — две записи; не владельцу — 403.
+func TestЖурналРолейСообщества(t *testing.T) {
+	ts, _ := setup(t)
+	owner := registerDevice(t, ts, "+79990008721")
+	other := registerDevice(t, ts, "+79990008722")
+	community := makeCommunity(t, ts, owner, "Журнал")
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/communities/"+community+"/admins", map[string]any{"user_id": other.userID}, nil); code != 201 {
+		t.Fatalf("назначить админа: %d", code)
+	}
+	if code := postAuthed(t, ts, owner.token, "DELETE", "/api/v1/communities/"+community+"/admins/"+other.userID, nil, nil); code != 204 {
+		t.Fatalf("снять админа: %d", code)
+	}
+	if code := postAuthed(t, ts, other.token, "GET", "/api/v1/communities/"+community+"/role-log", nil, nil); code != 403 {
+		t.Fatalf("журнал не владельцу: ждали 403, пришло %d", code)
+	}
+	var got struct {
+		Entries []struct {
+			TargetID string `json:"target_id"`
+			Action   string `json:"action"`
+			Detail   string `json:"detail"`
+		} `json:"entries"`
+	}
+	if code := postAuthed(t, ts, owner.token, "GET", "/api/v1/communities/"+community+"/role-log", nil, &got); code != 200 ||
+		len(got.Entries) != 2 || got.Entries[0].Detail != "member" || got.Entries[1].Detail != "admin" || got.Entries[1].TargetID != other.userID {
+		t.Fatalf("журнал: %d %+v", code, got)
+	}
+}

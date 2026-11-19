@@ -384,6 +384,11 @@ func setCommunityAdmin(st CommunityStore, on bool) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		role := "member"
+		if on {
+			role = "admin"
+		}
+		noteEntityRole(r, st, "community", r.PathValue("communityID"), userID, role)
 		if on {
 			w.WriteHeader(http.StatusCreated)
 		} else {
