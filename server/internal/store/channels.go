@@ -22,6 +22,8 @@ type Channel struct {
 	CommentsEnabled bool
 	// CommunityID — сообщество, с которым канал связан. Пусто — отдельный.
 	CommunityID string
+	// Hidden — секретный (ПЛАН-(СЦ) СЦ2): не в `discover`, подписка только по приглашению.
+	Hidden bool
 }
 
 type ChannelView struct {
@@ -67,9 +69,9 @@ func (s *Store) CreateChannel(ctx context.Context, c Channel) (string, error) {
 
 	var id string
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO channels (title, description, owner_id, is_public, comments_enabled)
-		VALUES ($1,$2,$3,$4,$5) RETURNING channel_id`,
-		c.Title, c.Description, c.OwnerID, c.IsPublic, c.CommentsEnabled).Scan(&id); err != nil {
+		INSERT INTO channels (title, description, owner_id, is_public, comments_enabled, hidden)
+		VALUES ($1,$2,$3,$4,$5,$6) RETURNING channel_id`,
+		c.Title, c.Description, c.OwnerID, c.IsPublic, c.CommentsEnabled, c.Hidden).Scan(&id); err != nil {
 		return "", err
 	}
 	if _, err := tx.Exec(ctx, `
@@ -82,9 +84,10 @@ func (s *Store) CreateChannel(ctx context.Context, c Channel) (string, error) {
 func (s *Store) GetChannel(ctx context.Context, channelID string) (Channel, error) {
 	var c Channel
 	err := s.pool.QueryRow(ctx, `
-		SELECT channel_id, title, description, owner_id, is_public, comments_enabled
+		SELECT channel_id, title, description, owner_id, is_public, comments_enabled, hidden,
+		       COALESCE(community_id::text, '')
 		FROM channels WHERE channel_id = $1 AND deleted_at IS NULL`, channelID).
-		Scan(&c.ChannelID, &c.Title, &c.Description, &c.OwnerID, &c.IsPublic, &c.CommentsEnabled)
+		Scan(&c.ChannelID, &c.Title, &c.Description, &c.OwnerID, &c.IsPublic, &c.CommentsEnabled, &c.Hidden, &c.CommunityID)
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return c, ErrChannelNotFound
 	}
@@ -95,7 +98,7 @@ func (s *Store) GetChannel(ctx context.Context, channelID string) (Channel, erro
 func (s *Store) MyChannels(ctx context.Context, userID string) ([]ChannelView, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.channel_id, c.title, c.description, c.owner_id, c.is_public, c.comments_enabled,
-		       COALESCE(c.community_id::text, ''),
+		       COALESCE(c.community_id::text, ''), c.hidden,
 		       TRUE AS subscribed, (c.owner_id = $1) AS owner
 		FROM channels c
 		JOIN channel_subscriptions s ON s.channel_id = c.channel_id AND s.subscriber_id = $1
@@ -131,10 +134,10 @@ func (s *Store) DiscoverChannels(
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.channel_id, c.title, c.description, c.owner_id, c.is_public, c.comments_enabled,
-		       COALESCE(c.community_id::text, ''),
+		       COALESCE(c.community_id::text, ''), c.hidden,
 		       FALSE AS subscribed, (c.owner_id = $1) AS owner
 		FROM channels c
-		WHERE c.deleted_at IS NULL AND c.is_public
+		WHERE c.deleted_at IS NULL AND c.is_public AND NOT c.hidden
 		  AND NOT EXISTS (SELECT 1 FROM channel_subscriptions s
 		                  WHERE s.channel_id = c.channel_id AND s.subscriber_id = $1)
 		  AND ($3 = '' OR EXISTS (
@@ -159,7 +162,7 @@ func scanChannelViews(rows pgx.Rows) ([]ChannelView, error) {
 	for rows.Next() {
 		var v ChannelView
 		if err := rows.Scan(&v.ChannelID, &v.Title, &v.Description, &v.OwnerID, &v.IsPublic, &v.CommentsEnabled,
-			&v.CommunityID,
+			&v.CommunityID, &v.Hidden,
 			&v.Subscribed, &v.Owner); err != nil {
 			return nil, err
 		}

@@ -28,6 +28,8 @@ type Community struct {
 	Title       string
 	OwnerID     string
 	IsPublic    bool
+	// Hidden — секретное (ПЛАН-(СЦ) СЦ2): не в `discover`, страница постороннему — «не найдено».
+	Hidden bool
 }
 
 // CommunityView — сообщество глазами просящего.
@@ -47,6 +49,8 @@ type CommunityItem struct {
 	// В списке страницы она не показывается никогда (ADR-0018 п. 5), и признак нужен
 	// именно для этого.
 	Personal bool
+	// Hidden — секретный элемент (СЦ2): постороннему в списке не показывается, как личная.
+	Hidden bool
 }
 
 // CommunityMessage — сообщение уровня 0: описание сообщества.
@@ -70,9 +74,9 @@ func (s *Store) CreateCommunity(ctx context.Context, c Community) (string, error
 
 	var id string
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO communities (title, owner_id, is_public)
-		VALUES ($1,$2,$3) RETURNING community_id`,
-		c.Title, c.OwnerID, c.IsPublic).Scan(&id); err != nil {
+		INSERT INTO communities (title, owner_id, is_public, hidden)
+		VALUES ($1,$2,$3,$4) RETURNING community_id`,
+		c.Title, c.OwnerID, c.IsPublic, c.Hidden).Scan(&id); err != nil {
 		return "", err
 	}
 	// Владелец подписан со дня основания: иначе своё же сообщество не попадёт в его
@@ -88,9 +92,9 @@ func (s *Store) CreateCommunity(ctx context.Context, c Community) (string, error
 func (s *Store) GetCommunity(ctx context.Context, communityID string) (Community, error) {
 	var c Community
 	err := s.pool.QueryRow(ctx, `
-		SELECT community_id, title, owner_id, is_public
+		SELECT community_id, title, owner_id, is_public, hidden
 		  FROM communities WHERE community_id = $1 AND deleted_at IS NULL`, communityID).
-		Scan(&c.CommunityID, &c.Title, &c.OwnerID, &c.IsPublic)
+		Scan(&c.CommunityID, &c.Title, &c.OwnerID, &c.IsPublic, &c.Hidden)
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return c, ErrCommunityNotFound
 	}
@@ -100,7 +104,7 @@ func (s *Store) GetCommunity(ctx context.Context, communityID string) (Community
 // MyCommunities — сообщества, где человек владелец, админ или подписчик.
 func (s *Store) MyCommunities(ctx context.Context, userID string) ([]CommunityView, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT c.community_id, c.title, c.owner_id, c.is_public,
+		SELECT c.community_id, c.title, c.owner_id, c.is_public, c.hidden,
 		       TRUE AS subscribed,
 		       (c.owner_id = $1) AS owner,
 		       EXISTS (SELECT 1 FROM community_admins a
@@ -122,10 +126,10 @@ func (s *Store) DiscoverCommunities(ctx context.Context, userID string, limit in
 		limit = 50
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT c.community_id, c.title, c.owner_id, c.is_public,
+		SELECT c.community_id, c.title, c.owner_id, c.is_public, c.hidden,
 		       FALSE AS subscribed, (c.owner_id = $1) AS owner, FALSE AS admin
 		  FROM communities c
-		 WHERE c.deleted_at IS NULL AND c.is_public
+		 WHERE c.deleted_at IS NULL AND c.is_public AND NOT c.hidden
 		   AND NOT EXISTS (SELECT 1 FROM community_subscriptions s
 		                    WHERE s.community_id = c.community_id AND s.subscriber_id = $1)
 		 ORDER BY c.created_at DESC
@@ -141,7 +145,7 @@ func scanCommunityViews(rows pgx.Rows) ([]CommunityView, error) {
 	var out []CommunityView
 	for rows.Next() {
 		var v CommunityView
-		if err := rows.Scan(&v.CommunityID, &v.Title, &v.OwnerID, &v.IsPublic,
+		if err := rows.Scan(&v.CommunityID, &v.Title, &v.OwnerID, &v.IsPublic, &v.Hidden,
 			&v.Subscribed, &v.Owner, &v.Admin); err != nil {
 			return nil, err
 		}
@@ -157,10 +161,10 @@ func scanCommunityViews(rows pgx.Rows) ([]CommunityView, error) {
 // владелец не видит собственного состава.
 func (s *Store) CommunityItems(ctx context.Context, communityID string) ([]CommunityItem, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT 'group' AS kind, group_id::text, title, (kind = 'private') AS personal
+		SELECT 'group' AS kind, group_id::text, title, (kind = 'private') AS personal, hidden
 		  FROM groups WHERE community_id = $1 AND deleted_at IS NULL
 		UNION ALL
-		SELECT 'channel', channel_id::text, title, FALSE
+		SELECT 'channel', channel_id::text, title, FALSE, hidden
 		  FROM channels WHERE community_id = $1 AND deleted_at IS NULL
 		 ORDER BY kind, title`, communityID)
 	if err != nil {
@@ -173,7 +177,7 @@ func (s *Store) CommunityItems(ctx context.Context, communityID string) ([]Commu
 	var out []CommunityItem
 	for rows.Next() {
 		var it CommunityItem
-		if err := rows.Scan(&it.Kind, &it.ID, &it.Title, &it.Personal); err != nil {
+		if err := rows.Scan(&it.Kind, &it.ID, &it.Title, &it.Personal, &it.Hidden); err != nil {
 			return nil, err
 		}
 		out = append(out, it)

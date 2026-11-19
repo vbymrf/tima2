@@ -26,11 +26,11 @@ import (
 const maxAudience = 1000
 
 // cardOpenTo — видит ли этот человек карточку группы, не будучи участником.
-func cardOpenTo(deps groupsDeps, r *http.Request, groupKind, groupID, userID string) (bool, error) {
-	if groupKind == "public" {
-		return true, nil
-	}
-	return deps.store.GroupCardOpenTo(r.Context(), groupID, userID)
+//
+// Публичная — да, личная — по карточке; секретная — только по живому приглашению (ПЛАН-(СЦ) СЦ2). Вид
+// группы решает хранилище одним запросом: признак «секретная» мог смениться между двумя чтениями.
+func cardOpenTo(deps groupsDeps, r *http.Request, _ string, groupID, userID string) (bool, error) {
+	return deps.store.GroupOpenToOutsider(r.Context(), groupID, userID)
 }
 
 // putGroupAudience — PUT /groups/{groupID}/audience: список получателей карточки целиком.

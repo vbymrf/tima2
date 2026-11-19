@@ -219,6 +219,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Сообщества: контейнер, который связывает готовые группы и каналы. Стоит рядом с
 	// каналами, потому что в них и складывается.
 	RegisterCommunities(mux, s.Store, s.requireActiveDevice)
+	// Секретные сущности и приглашения (ПЛАН-(СЦ) СЦ2): в секретную — только так.
+	RegisterInvites(mux, s.Store, groupsDeps{store: s.Store, limiter: func() *ratelimit.Limiter { return s.Limit }, notifier: s.notifier()},
+		s.notifier(), s.requireActiveDevice)
+	RegisterSecret(mux, s.Store, s.requireActiveDevice)
 	// Закреплённое и описание (ПЛАН-(ЗО) ЗО1–ЗО2).
 	RegisterShowcase(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	// Страна и язык человека: две задачи — отсев у клиента и региональные ленты у

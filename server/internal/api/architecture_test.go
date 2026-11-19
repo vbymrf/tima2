@@ -262,7 +262,7 @@ const (
 	// цепочки (RevokedSigningKeys) — в выдачу /keys/devices по просьбе `revoked=1`.
 	// 308 → 310: обёртки личных до доставки (план КК, КК10): отметка «забрано» (MarkWrapsTaken) и счёт
 	// незабранных для решения об уничтожении ключа эпохи (UntakenWraps). Потребитель — узкий ChatStore.
-	storeMethodBudget = 310
+	storeMethodBudget = 318
 	// 71 → 65: семь маршрутов каналов свернулись в один RegisterChannels.
 	routeBudget = 65
 )

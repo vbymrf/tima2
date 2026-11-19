@@ -34,6 +34,7 @@ type ShowcaseStore interface {
 	GetGroup(ctx context.Context, groupID string) (store.Group, error)
 	GroupRole(ctx context.Context, groupID, userID string) (string, error)
 	GroupCardOpenTo(ctx context.Context, groupID, userID string) (bool, error)
+	GroupOpenToOutsider(ctx context.Context, groupID, userID string) (bool, error)
 	ActiveMemberDevices(ctx context.Context, groupID, exceptDevice string) ([]string, error)
 	GetChannel(ctx context.Context, channelID string) (store.Channel, error)
 	IsSubscribed(ctx context.Context, channelID, userID string) (bool, error)
@@ -278,13 +279,13 @@ func groupShowcase(st ShowcaseStore) http.HandlerFunc {
 		}
 		id, _ := auth.FromContext(r.Context())
 		if _, err := st.GroupRole(r.Context(), groupID, id.UserID); errors.Is(err, store.ErrNotMember) {
-			open := g.Kind == "public"
-			if !open {
-				if open, err = st.GroupCardOpenTo(r.Context(), groupID, id.UserID); err != nil {
-					log.Printf("groupShowcase: card: %v", err)
-					writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
-					return
-				}
+			// Публичная, по карточке, секретная — по приглашению (СЦ2).
+			_ = g
+			open, err := st.GroupOpenToOutsider(r.Context(), groupID, id.UserID)
+			if err != nil {
+				log.Printf("groupShowcase: card: %v", err)
+				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+				return
 			}
 			if !open {
 				writeErr(w, http.StatusNotFound, "group_not_found", "группа не найдена")

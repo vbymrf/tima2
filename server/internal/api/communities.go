@@ -46,6 +46,8 @@ type CommunityStore interface {
 	CommunityMessages(ctx context.Context, communityID string, limit int) ([]store.CommunityMessage, error)
 	ShowcaseCount(ctx context.Context, kind, container string) (int, error)
 	ShowcaseSuper(ctx context.Context, kind, container string) (int64, error)
+	// Секретное сообщество открыто подписчику, владельцу и приглашённому (ПЛАН-(СЦ) СЦ2).
+	HasPendingInvite(ctx context.Context, kind, entityID, userID string) (bool, error)
 }
 
 var _ CommunityStore = (*store.Store)(nil)
@@ -77,6 +79,8 @@ func communityJSON(v store.CommunityView) map[string]any {
 	return map[string]any{
 		"community_id": v.CommunityID, "title": v.Title, "owner_id": v.OwnerID,
 		"is_public": v.IsPublic, "subscribed": v.Subscribed, "owner": v.Owner, "admin": v.Admin,
+		// Секретное (ПЛАН-(СЦ) СЦ2).
+		"hidden": v.Hidden,
 	}
 }
 
@@ -85,6 +89,8 @@ func createCommunity(st CommunityStore) http.HandlerFunc {
 		var req struct {
 			Title    string `json:"title"`
 			IsPublic *bool  `json:"is_public,omitempty"`
+			// Секретное (ПЛАН-(СЦ) СЦ2): не в каталоге, вход по приглашению.
+			Hidden bool `json:"hidden"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -100,7 +106,7 @@ func createCommunity(st CommunityStore) http.HandlerFunc {
 		}
 		id, _ := auth.FromContext(r.Context())
 		communityID, err := st.CreateCommunity(r.Context(), store.Community{
-			Title: req.Title, OwnerID: id.UserID, IsPublic: public,
+			Title: req.Title, OwnerID: id.UserID, IsPublic: public, Hidden: req.Hidden,
 		})
 		if err != nil {
 			log.Printf("createCommunity: %v", err)
@@ -180,6 +186,14 @@ func communityPage(st CommunityStore) http.HandlerFunc {
 				}
 			}
 		}
+		subscribed, _ := st.IsSubscribedToCommunity(r.Context(), communityID, id.UserID)
+		// Секретное — постороннему «не найдено»; приглашённому — страница, чтобы знал, куда зовут (СЦ2).
+		if c.Hidden && !inCharge && !subscribed {
+			if invited, err := st.HasPendingInvite(r.Context(), "community", communityID, id.UserID); err != nil || !invited {
+				writeErr(w, http.StatusNotFound, "not_found", "сообщество не найдено")
+				return
+			}
+		}
 		items, err := st.CommunityItems(r.Context(), communityID)
 		if err != nil {
 			log.Printf("communityPage: состав: %v", err)
@@ -188,14 +202,14 @@ func communityPage(st CommunityStore) http.HandlerFunc {
 		}
 		out := make([]map[string]any, 0, len(items))
 		for _, it := range items {
-			if it.Personal && !inCharge {
+			// Личная и секретная — только тем, кто распоряжается (ADR-0018 п. 5; СЦ2).
+			if (it.Personal || it.Hidden) && !inCharge {
 				continue
 			}
 			out = append(out, map[string]any{
-				"kind": it.Kind, "id": it.ID, "title": it.Title, "personal": it.Personal,
+				"kind": it.Kind, "id": it.ID, "title": it.Title, "personal": it.Personal, "hidden": it.Hidden,
 			})
 		}
-		subscribed, _ := st.IsSubscribedToCommunity(r.Context(), communityID, id.UserID)
 		messages, err := st.CommunityMessages(r.Context(), communityID, 0)
 		if err != nil {
 			log.Printf("communityPage: описание: %v", err)
@@ -299,7 +313,8 @@ func answerLink(w http.ResponseWriter, err error, what string) bool {
 func subscribeCommunity(st CommunityStore, on bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		communityID := r.PathValue("communityID")
-		if _, err := st.GetCommunity(r.Context(), communityID); errors.Is(err, store.ErrCommunityNotFound) {
+		c, err := st.GetCommunity(r.Context(), communityID)
+		if errors.Is(err, store.ErrCommunityNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found", "сообщество не найдено")
 			return
 		} else if err != nil {
@@ -307,6 +322,15 @@ func subscribeCommunity(st CommunityStore, on bool) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
+		// В секретное — только по приглашению (СЦ2); отписаться можно всегда.
+		if on && c.Hidden && c.OwnerID != id.UserID {
+			sub, _ := st.IsSubscribedToCommunity(r.Context(), communityID, id.UserID)
+			invited, err := st.HasPendingInvite(r.Context(), "community", communityID, id.UserID)
+			if !sub && (err != nil || !invited) {
+				writeErr(w, http.StatusNotFound, "not_found", "сообщество не найдено")
+				return
+			}
+		}
 		if err := st.SubscribeCommunity(r.Context(), communityID, id.UserID, on); err != nil {
 			log.Printf("subscribeCommunity: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

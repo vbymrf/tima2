@@ -60,6 +60,22 @@ type ChannelStore interface {
 	// Поимённое разрешение на запись уровня 3 (К4): разговор наследует круг корня,
 	// значит и разрешение проверяется по корню.
 	FeedGrantActive(ctx context.Context, channelID string, postID uint64, userID string) (bool, error)
+
+	// Секретный канал открыт подписчику, владельцу и приглашённому (ПЛАН-(СЦ) СЦ2).
+	HasPendingInvite(ctx context.Context, kind, entityID, userID string) (bool, error)
+}
+
+// channelClosedTo — закрыт ли секретный канал этому человеку: не владелец, не подписчик, не приглашён. Ошибка
+// хранилища — закрыт: секретное лучше не показать лишний раз, чем показать.
+func channelClosedTo(ctx context.Context, st ChannelStore, ch store.Channel, userID string) bool {
+	if ch.OwnerID == userID {
+		return false
+	}
+	if sub, err := st.IsSubscribed(ctx, ch.ChannelID, userID); err == nil && sub {
+		return false
+	}
+	invited, err := st.HasPendingInvite(ctx, "channel", ch.ChannelID, userID)
+	return err != nil || !invited
 }
 
 // Проверка соответствия — обязанность компилятора, а не прогона: разошлись
@@ -96,6 +112,8 @@ func createChannel(st ChannelStore) http.HandlerFunc {
 			// Принимает ли канал обсуждения (ADR-0024 §6). Тоже необязательное: молчание
 			// не должно закрывать разговор.
 			CommentsEnabled *bool `json:"comments_enabled,omitempty"`
+			// Секретный (ПЛАН-(СЦ) СЦ2): не в каталоге, подписка по приглашению.
+			Hidden bool `json:"hidden"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -116,7 +134,7 @@ func createChannel(st ChannelStore) http.HandlerFunc {
 		id, _ := auth.FromContext(r.Context())
 		channelID, err := st.CreateChannel(r.Context(), store.Channel{
 			Title: req.Title, Description: req.Description, OwnerID: id.UserID,
-			IsPublic: public, CommentsEnabled: comments,
+			IsPublic: public, CommentsEnabled: comments, Hidden: req.Hidden,
 		})
 		if err != nil {
 			log.Printf("createChannel: %v", err)
@@ -137,6 +155,8 @@ func channelJSON(c store.ChannelView) map[string]any {
 		// связан. Второе клиенту нужно ровно для того, чтобы не предлагать внести
 		// уже внесённое.
 		"comments_enabled": c.CommentsEnabled, "community_id": c.CommunityID,
+		// Секретный (ПЛАН-(СЦ) СЦ2).
+		"hidden": c.Hidden,
 	}
 }
 
@@ -202,7 +222,8 @@ func writeChannels(w http.ResponseWriter, channels []store.ChannelView) {
 func subscribeChannel(st ChannelStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		channelID := r.PathValue("channelID")
-		if _, err := st.GetChannel(r.Context(), channelID); errors.Is(err, store.ErrChannelNotFound) {
+		ch, err := st.GetChannel(r.Context(), channelID)
+		if errors.Is(err, store.ErrChannelNotFound) {
 			writeErr(w, http.StatusNotFound, "not_found", "канал не найден")
 			return
 		} else if err != nil {
@@ -210,6 +231,11 @@ func subscribeChannel(st ChannelStore) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
+		// Секретный — только по приглашению (СЦ2; МОДЕРАЦИЯ.md §6.1: раньше подписывался любой, кто знает номер).
+		if ch.Hidden && channelClosedTo(r.Context(), st, ch, id.UserID) {
+			writeErr(w, http.StatusNotFound, "not_found", "канал не найден")
+			return
+		}
 		if err := st.Subscribe(r.Context(), channelID, id.UserID); err != nil {
 			log.Printf("subscribeChannel: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -365,6 +391,10 @@ func listChannelPosts(st ChannelStore) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
+		if ch.Hidden && channelClosedTo(r.Context(), st, ch, id.UserID) {
+			writeErr(w, http.StatusNotFound, "not_found", "канал не найден")
+			return
+		}
 		if !ch.IsPublic {
 			if sub, _ := st.IsSubscribed(r.Context(), channelID, id.UserID); !sub && ch.OwnerID != id.UserID {
 				writeErr(w, http.StatusForbidden, "not_subscribed", "лента приватного канала — для подписчиков")

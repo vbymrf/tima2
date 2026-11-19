@@ -54,6 +54,8 @@ type GroupStore interface {
 	SetGroupCardAudience(ctx context.Context, groupID string, userIDs []string) error
 	CardsFor(ctx context.Context, userID string) ([]store.GroupCardRow, error)
 	GroupCardOpenTo(ctx context.Context, groupID, userID string) (bool, error)
+	// Видит ли не-участник группу: публичную, по карточке, секретную — по приглашению (СЦ2).
+	GroupOpenToOutsider(ctx context.Context, groupID, userID string) (bool, error)
 	// Предел описания — не больше 50 сообщений уровня 0 (ПЛАН-(ЗО) ЗО2).
 	ShowcaseCount(ctx context.Context, kind, container string) (int, error)
 	NarrowGroupMessageLevel(ctx context.Context, groupID string, messageID int64, level int16, requesterID string, allowForeign bool) (string, error)

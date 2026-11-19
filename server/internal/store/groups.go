@@ -28,6 +28,9 @@ type Group struct {
 	// CallTTLUntil — временная группа звонка (0058): живёт до этого срока, каждый звонок
 	// его отодвигает. nil — обычная группа, срока нет (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ, решение 1).
 	CallTTLUntil *time.Time
+	// Hidden — секретная (ПЛАН-(СЦ) СЦ2): не находится нигде, вход только по приглашению.
+	// Ставят и снимают владелец и админ; вид (личная / публичная) от этого не меняется.
+	Hidden bool
 }
 
 type Member struct {
@@ -64,10 +67,10 @@ func (s *Store) CreateGroup(ctx context.Context, g Group) (string, error) {
 
 	var id string
 	if err := tx.QueryRow(ctx, `
-		INSERT INTO groups (kind, title, description, owner_id, slow_mode_sec, premoderation, threads_only, call_ttl_until)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		INSERT INTO groups (kind, title, description, owner_id, slow_mode_sec, premoderation, threads_only, call_ttl_until, hidden)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		RETURNING group_id`,
-		g.Kind, g.Title, g.Description, g.OwnerID, g.SlowModeSec, g.Premoderation, g.ThreadsOnly, g.CallTTLUntil).Scan(&id); err != nil {
+		g.Kind, g.Title, g.Description, g.OwnerID, g.SlowModeSec, g.Premoderation, g.ThreadsOnly, g.CallTTLUntil, g.Hidden).Scan(&id); err != nil {
 		return "", err
 	}
 	if _, err := tx.Exec(ctx, `
@@ -82,9 +85,11 @@ func (s *Store) GetGroup(ctx context.Context, groupID string) (Group, error) {
 	g := Group{GroupID: groupID}
 	err := s.pool.QueryRow(ctx, `
 		SELECT kind, title, COALESCE(description, ''), owner_id,
-		       COALESCE(slow_mode_sec, 0), premoderation, threads_only, call_ttl_until
+		       COALESCE(slow_mode_sec, 0), premoderation, threads_only, call_ttl_until, hidden,
+		       COALESCE(community_id::text, '')
 		FROM groups WHERE group_id = $1 AND deleted_at IS NULL`, groupID).
-		Scan(&g.Kind, &g.Title, &g.Description, &g.OwnerID, &g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CallTTLUntil)
+		Scan(&g.Kind, &g.Title, &g.Description, &g.OwnerID, &g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CallTTLUntil, &g.Hidden,
+			&g.CommunityID)
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return g, ErrGroupNotFound
 	}
@@ -93,16 +98,35 @@ func (s *Store) GetGroup(ctx context.Context, groupID string) (Group, error) {
 
 // UpdateGroup перезаписывает изменяемые настройки; PATCH-обработчик собирает
 // полную структуру поверх GetGroup. kind и owner_id не меняются.
+//
+// Стала секретной — аудитория карточки стирается той же транзакцией (ПЛАН-(СЦ) СЦ2, ADR-0018 п. 3, 8):
+// иначе тот, кому её раньше показали, продолжал бы видеть то, чего «нет».
 func (s *Store) UpdateGroup(ctx context.Context, g Group) error {
-	ct, err := s.pool.Exec(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	ct, err := tx.Exec(ctx, `
 		UPDATE groups SET title = $2, description = $3, slow_mode_sec = $4,
-		       premoderation = $5, threads_only = $6
+		       premoderation = $5, threads_only = $6, hidden = $7
 		WHERE group_id = $1 AND deleted_at IS NULL`,
-		g.GroupID, g.Title, g.Description, g.SlowModeSec, g.Premoderation, g.ThreadsOnly)
-	if err == nil && ct.RowsAffected() == 0 {
+		g.GroupID, g.Title, g.Description, g.SlowModeSec, g.Premoderation, g.ThreadsOnly, g.Hidden)
+	if err != nil {
+		if isBadUUID(err) {
+			return ErrGroupNotFound
+		}
+		return err
+	}
+	if ct.RowsAffected() == 0 {
 		return ErrGroupNotFound
 	}
-	return err
+	if g.Hidden {
+		if _, err := tx.Exec(ctx, `DELETE FROM group_card_audience WHERE group_id = $1`, g.GroupID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Store) SoftDeleteGroup(ctx context.Context, groupID string) error {
@@ -264,7 +288,7 @@ func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]MyGroup
 	rows, err := s.pool.Query(ctx, `
 		SELECT g.group_id, g.kind, g.title, COALESCE(g.description, ''), g.owner_id,
 		       COALESCE(g.slow_mode_sec, 0), g.premoderation, g.threads_only,
-		       COALESCE(g.community_id::text, ''), m.role, g.call_ttl_until
+		       COALESCE(g.community_id::text, ''), m.role, g.call_ttl_until, g.hidden
 		FROM memberships m
 		JOIN groups g ON g.group_id = m.target_id AND g.deleted_at IS NULL
 		WHERE m.target_type = 'group' AND m.user_id = $1 AND m.left_at IS NULL
@@ -280,7 +304,7 @@ func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]MyGroup
 	for rows.Next() {
 		var g MyGroup
 		if err := rows.Scan(&g.GroupID, &g.Kind, &g.Title, &g.Description, &g.OwnerID,
-			&g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CommunityID, &g.MyRole, &g.CallTTLUntil); err != nil {
+			&g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CommunityID, &g.MyRole, &g.CallTTLUntil, &g.Hidden); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

@@ -65,6 +65,8 @@ func createGroup(deps groupsDeps) http.HandlerFunc {
 			// CallTemp — временная группа звонка (ПЛАН-(ГЗ)-ГРУППОВЫХ-ЗВОНКОВ ГЗ1): живёт срок
 			// от последнего звонка и удаляется вместе с перепиской. Только личная.
 			CallTemp bool `json:"call_temp"`
+			// Hidden — секретная (ПЛАН-(СЦ) СЦ2): не находится нигде, вход по приглашению.
+			Hidden bool `json:"hidden"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
@@ -98,7 +100,7 @@ func createGroup(deps groupsDeps) http.HandlerFunc {
 		groupID, err := deps.store.CreateGroup(r.Context(), store.Group{
 			Kind: req.Kind, Title: req.Title, Description: req.Description, OwnerID: id.UserID,
 			SlowModeSec: req.SlowModeSec, Premoderation: req.Premoderation, ThreadsOnly: req.ThreadsOnly,
-			CallTTLUntil: ttlUntil,
+			CallTTLUntil: ttlUntil, Hidden: req.Hidden,
 		})
 		if err != nil {
 			log.Printf("createGroup: %v", err)
@@ -142,6 +144,8 @@ func groupJSON(g store.Group, myRole string) map[string]any {
 		// Сообщество, с которым группа связана; пусто — отдельная. Клиенту нужно ровно
 		// для того, чтобы не предлагать внести уже внесённое.
 		"community_id": g.CommunityID,
+		// Секретная (ПЛАН-(СЦ) СЦ2).
+		"hidden": g.Hidden,
 	}
 	// Временная группа звонка: когда удалится (решение 11 — «удалится через N ч»).
 	// Поле новое и только у временной: строка обычной группы не меняется.
@@ -192,10 +196,15 @@ func patchGroup(deps groupsDeps) http.HandlerFunc {
 			SlowModeSec   *int32  `json:"slow_mode_sec"`
 			Premoderation *bool   `json:"premoderation"`
 			ThreadsOnly   *bool   `json:"threads_only"`
+			// Hidden — «секретная»: ставят и снимают владелец и админ (СЦ2).
+			Hidden *bool `json:"hidden"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
 			return
+		}
+		if req.Hidden != nil {
+			g.Hidden = *req.Hidden
 		}
 		if req.Title != nil {
 			if *req.Title == "" || len(*req.Title) > 200 {
