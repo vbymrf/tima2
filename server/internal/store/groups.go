@@ -31,6 +31,8 @@ type Group struct {
 	// Hidden — секретная (ПЛАН-(СЦ) СЦ2): не находится нигде, вход только по приглашению.
 	// Ставят и снимают владелец и админ; вид (личная / публичная) от этого не меняется.
 	Hidden bool
+	// DeleteAt — срок удаления (ПЛАН-(СЦ) СЦ14); nil — не назначено. До срока группа живёт как прежде.
+	DeleteAt *time.Time
 }
 
 type Member struct {
@@ -86,10 +88,10 @@ func (s *Store) GetGroup(ctx context.Context, groupID string) (Group, error) {
 	err := s.pool.QueryRow(ctx, `
 		SELECT kind, title, COALESCE(description, ''), owner_id,
 		       COALESCE(slow_mode_sec, 0), premoderation, threads_only, call_ttl_until, hidden,
-		       COALESCE(community_id::text, '')
+		       COALESCE(community_id::text, ''), delete_at
 		FROM groups WHERE group_id = $1 AND deleted_at IS NULL`, groupID).
 		Scan(&g.Kind, &g.Title, &g.Description, &g.OwnerID, &g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CallTTLUntil, &g.Hidden,
-			&g.CommunityID)
+			&g.CommunityID, &g.DeleteAt)
 	if errors.Is(err, pgx.ErrNoRows) || isBadUUID(err) {
 		return g, ErrGroupNotFound
 	}
@@ -288,7 +290,7 @@ func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]MyGroup
 	rows, err := s.pool.Query(ctx, `
 		SELECT g.group_id, g.kind, g.title, COALESCE(g.description, ''), g.owner_id,
 		       COALESCE(g.slow_mode_sec, 0), g.premoderation, g.threads_only,
-		       COALESCE(g.community_id::text, ''), m.role, g.call_ttl_until, g.hidden
+		       COALESCE(g.community_id::text, ''), m.role, g.call_ttl_until, g.hidden, g.delete_at
 		FROM memberships m
 		JOIN groups g ON g.group_id = m.target_id AND g.deleted_at IS NULL
 		WHERE m.target_type = 'group' AND m.user_id = $1 AND m.left_at IS NULL
@@ -304,7 +306,7 @@ func (s *Store) ListGroupsForUser(ctx context.Context, userID string) ([]MyGroup
 	for rows.Next() {
 		var g MyGroup
 		if err := rows.Scan(&g.GroupID, &g.Kind, &g.Title, &g.Description, &g.OwnerID,
-			&g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CommunityID, &g.MyRole, &g.CallTTLUntil, &g.Hidden); err != nil {
+			&g.SlowModeSec, &g.Premoderation, &g.ThreadsOnly, &g.CommunityID, &g.MyRole, &g.CallTTLUntil, &g.Hidden, &g.DeleteAt); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

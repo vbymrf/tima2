@@ -141,6 +141,18 @@ object OwnershipTags {
     const val CANDIDATE = "ownership:candidate"
 }
 
+/**
+ * Удаление в «Опасном» (ПЛАН-(СЦ) СЦ14): месяц на отмену. [deleteAt] — дата словами, когда удаление назначено;
+ * `null` — не назначено.
+ */
+data class DeletionLook(val deleteAt: String?, val onDelete: () -> Unit, val onCancel: () -> Unit)
+
+/** Метки удаления — для сценариев. */
+object DeletionTags {
+    const val DELETE = "danger:delete"
+    const val CANCEL = "danger:cancel"
+}
+
 @Composable
 fun OwnershipScreen(
     state: OwnershipState,
@@ -153,10 +165,24 @@ fun OwnershipScreen(
     onDecline: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Удалить с месяцем на отмену — владельцу (СЦ14); `null` — блока нет. */
+    deletion: DeletionLook? = null,
 ) {
     val w = Tima.words.socium
     Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
-        SubwindowHeader(title = w.transferTitle, onBack = onBack, caption = title)
+        SubwindowHeader(title = w.manageDanger, onBack = onBack, caption = title)
+        if (deletion != null) {
+            Column(Modifier.padding(TimaSpacing.about5), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3)) {
+                val at = deletion.deleteAt
+                if (at != null) {
+                    Secondary(w.willBeDeleted(at))
+                    Button(w.cancelDeletion, onClick = deletion.onCancel, modifier = Modifier.testTag(DeletionTags.CANCEL))
+                } else {
+                    Secondary(w.deleteAbout)
+                    Button(w.deleteEntity, onClick = deletion.onDelete, kind = ButtonKind.Dangerous, modifier = Modifier.testTag(DeletionTags.DELETE))
+                }
+            }
+        }
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(TimaSpacing.about5),
             verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),

@@ -147,6 +147,10 @@ func groupJSON(g store.Group, myRole string) map[string]any {
 		// Секретная (ПЛАН-(СЦ) СЦ2).
 		"hidden": g.Hidden,
 	}
+	// Срок удаления (СЦ14): у всех участников полоса «Будет удалена …», владельцу — «Отменить удаление».
+	if g.DeleteAt != nil {
+		m["delete_at"] = g.DeleteAt.UTC().Format(time.RFC3339)
+	}
 	// Временная группа звонка: когда удалится (решение 11 — «удалится через N ч»).
 	// Поле новое и только у временной: строка обычной группы не меняется.
 	if g.CallTTLUntil != nil {
@@ -246,7 +250,8 @@ func deleteGroup(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "forbidden", "группу удаляет только owner")
 			return
 		}
-		if err := deps.store.SoftDeleteGroup(r.Context(), r.PathValue("groupID")); err != nil {
+		// С месяцем на отмену (ПЛАН-(СЦ) СЦ14): ответ прежний, но назначается срок, а удаляет работник по сроку.
+		if _, err := deps.deletion.Schedule(r.Context(), "group", r.PathValue("groupID"), entityDeletionDelay); err != nil {
 			log.Printf("deleteGroup: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return

@@ -1870,6 +1870,7 @@ private fun App(
         .collectAsState(initial = emptyList())
     val sociumTops by (assembled.liveStates?.tops ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, LiveStates.Top>()) }).collectAsState()
     val sociumByChat = remember(sociumChats) { sociumChats.associateBy { it.chatId } }
+    val wordsNowSocium = Tima.words.socium
     val groupLook: (String) -> io.tima.feature.group.RowLook = { id ->
         val local = sociumByChat[id]
         val top = sociumTops["group:$id"]
@@ -1877,7 +1878,12 @@ private fun App(
         val topAt = top?.atMs ?: 0L
         val at = maxOf(localAt, topAt).takeIf { it > 0 }
         val preview = if (topAt > localAt && !top?.preview.isNullOrBlank()) top?.preview else local?.preview ?: top?.preview
-        io.tima.feature.group.RowLook(preview = preview, atMs = at, time = at?.let(::sociumTime).orEmpty(), muted = "group:$id" in mutedAll)
+        // Удаление назначено (СЦ14) — строка говорит об этом вместо последнего сообщения.
+        val dying = socialState.mine.firstOrNull { it.groupId == id }?.deleteAtMs
+        io.tima.feature.group.RowLook(
+            preview = dying?.let { wordsNowSocium.willBeDeleted(sociumTime(it, 0L)) } ?: preview,
+            atMs = at, time = at?.let(::sociumTime).orEmpty(), muted = "group:$id" in mutedAll,
+        )
     }
     // Страница сущности (ПЛАН-(СЦ) СЦ4–СЦ6): моя роль, тип, вкладки по роли; галочка «Показывать уровень сообщений»
     // запоминается для сущности на устройстве (§1.7, 2).
@@ -4298,6 +4304,14 @@ private fun App(
                     }
                     val ownState by store.state.collectAsState()
                     LaunchedEffect(current) { store.refresh() }
+                    // Удаление с месяцем на отмену (СЦ14) — владельцу, здесь же, в «Опасном».
+                    var deleteAt by remember(current) { mutableStateOf<String?>(null) }
+                    var deleteTick by remember(current) { mutableStateOf(0) }
+                    LaunchedEffect(current, deleteTick) {
+                        deleteAt = network.invites.deletionAt(kind, current.id)?.takeIf { it.isNotEmpty() }
+                            ?.let { iso -> runCatching { sociumTime(kotlinx.datetime.Instant.parse(iso).toEpochMilliseconds(), 0L) }.getOrNull() ?: iso }
+                    }
+                    val isOwner = roleOf(current.kind, current.id) == io.tima.domain.chat.GroupRole.Owner
                     io.tima.feature.group.OwnershipScreen(
                         state = ownState,
                         title = current.title,
@@ -4308,6 +4322,25 @@ private fun App(
                         onTake = { Journal.note(LogCode.NAV, "владение", "итог" to "accept"); store.take() },
                         onDecline = store::decline,
                         onBack = { where = Where.Nothing },
+                        deletion = if (!isOwner) null else io.tima.feature.group.DeletionLook(
+                            deleteAt = deleteAt,
+                            onDelete = {
+                                scope.launch {
+                                    val ok = network.invites.deleteEntity(kind, current.id, cancel = false)
+                                    Journal.note(LogCode.NAV, "удалить сущность", "вид" to current.kind, "вышло" to ok)
+                                    deleteTick++
+                                    social.refresh()
+                                }
+                            },
+                            onCancel = {
+                                scope.launch {
+                                    val ok = network.invites.deleteEntity(kind, current.id, cancel = true)
+                                    Journal.note(LogCode.NAV, "отменить удаление", "вид" to current.kind, "вышло" to ok)
+                                    deleteTick++
+                                    social.refresh()
+                                }
+                            },
+                        ),
                     )
                 }
             }

@@ -206,7 +206,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	}
 	RegisterGroups(mux, s.Store, func() *ratelimit.Limiter { return s.Limit }, s.notifier(), s.requireActiveDevice,
 		func() time.Duration { return s.CallGroups.orDefault().TTL },
-		func() string { return NormalizeDeviceTrust(s.DeviceTrust) })
+		func() string { return NormalizeDeviceTrust(s.DeviceTrust) }, store.DeletionsOf(s.Store))
 	// Медиа (шаг 4): вместе с маршрутами уехало поле Blob.
 	RegisterMedia(mux, s.Store, func() *blob.Client { return s.Blob }, s.notifier(), s.requireActiveDevice)
 	// Каналы — первая группа, вынесенная в registrar (шаг 4 программы). Дальше
@@ -225,6 +225,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	RegisterSecret(mux, s.Store, s.requireActiveDevice)
 	// Владение по ключу личности (ПЛАН-(СЦ) §6, СЦ11): цепочка, предложение и принятие передачи.
 	RegisterOwnership(mux, s.Store, store.OwnershipOf(s.Store), s.notifier(), s.requireActiveDevice)
+	// Удаление с месяцем на отмену (СЦ14): каналы и сообщества — удалить; все три — отменить.
+	RegisterDeletion(mux, s.Store, store.DeletionsOf(s.Store), s.requireActiveDevice)
 	// Закреплённое и описание (ПЛАН-(ЗО) ЗО1–ЗО2).
 	RegisterShowcase(mux, s.Store, s.notifier(), s.requireActiveDevice)
 	// Страна и язык человека: две задачи — отсев у клиента и региональные ленты у

@@ -150,14 +150,18 @@ func TestGroupServiceCRUDAndRoles(t *testing.T) {
 		t.Fatalf("GET после выхода: ожидался 404, получен %d", code)
 	}
 
-	// Удаление группы: не-owner → 403, owner → 204, после — 404 всем
+	// Удаление группы: не-owner → 403, owner → 204. С 2026-11-19 (ПЛАН-(СЦ) СЦ14, решение заказчика §1.3, 5) —
+	// месяц на отмену: группа живёт со сроком `delete_at`, удаляет работник по сроку (entity_deletion_test.go).
 	if code := authedJSON(t, ts, "DELETE", "/api/v1/groups/"+groupID, member.token, nil, nil); code != http.StatusForbidden {
 		t.Fatalf("удаление модератором: ожидался 403, получен %d", code)
 	}
 	if code := authedJSON(t, ts, "DELETE", "/api/v1/groups/"+groupID, owner.token, nil, nil); code != http.StatusNoContent {
 		t.Fatalf("удаление owner-ом: %d", code)
 	}
-	if code := authedJSON(t, ts, "GET", "/api/v1/groups/"+groupID, owner.token, nil, nil); code != http.StatusNotFound {
-		t.Fatalf("GET после удаления: ожидался 404, получен %d", code)
+	var after struct {
+		DeleteAt string `json:"delete_at"`
+	}
+	if code := authedJSON(t, ts, "GET", "/api/v1/groups/"+groupID, owner.token, nil, &after); code != http.StatusOK || after.DeleteAt == "" {
+		t.Fatalf("GET после «удалить»: ожидалась живая группа со сроком, получен %d %+v", code, after)
 	}
 }

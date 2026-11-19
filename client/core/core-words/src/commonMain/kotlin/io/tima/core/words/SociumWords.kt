@@ -90,6 +90,12 @@ interface SociumWords {
     val titleHint: String
     val save: String
     val saved: String
+
+    // Удаление с месяцем на отмену (СЦ14).
+    val deleteEntity: String
+    val deleteAbout: String
+    val cancelDeletion: String
+    fun willBeDeleted(date: String): String
 }
 
 object RussianSociumWords : SociumWords {
@@ -164,6 +170,10 @@ object RussianSociumWords : SociumWords {
     override val titleHint = "Название"
     override val save = "Сохранить"
     override val saved = "Сохранено"
+    override val deleteEntity = "Удалить"
+    override val deleteAbout = "Удаление — через месяц: до тех пор его можно отменить, а всё живёт как прежде"
+    override val cancelDeletion = "Отменить удаление"
+    override fun willBeDeleted(date: String) = "Будет удалена $date"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -238,6 +248,10 @@ object EnglishSociumWords : SociumWords {
     override val titleHint = "Title"
     override val save = "Save"
     override val saved = "Saved"
+    override val deleteEntity = "Delete"
+    override val deleteAbout = "Deletion happens in a month: until then it can be cancelled and everything works as before"
+    override val cancelDeletion = "Cancel deletion"
+    override fun willBeDeleted(date: String) = "Will be deleted on $date"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -312,4 +326,8 @@ object SpanishSociumWords : SociumWords {
     override val titleHint = "Nombre"
     override val save = "Guardar"
     override val saved = "Guardado"
+    override val deleteEntity = "Eliminar"
+    override val deleteAbout = "Se elimina en un mes: hasta entonces se puede cancelar y todo funciona como antes"
+    override val cancelDeletion = "Cancelar la eliminación"
+    override fun willBeDeleted(date: String) = "Se eliminará el $date"
 }

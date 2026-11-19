@@ -283,6 +283,8 @@ class GroupInfo(
     val communityId: String? = null,
     /** Секретная (ПЛАН-(СЦ) СЦ2): не находится нигде, вход по приглашению. */
     val secret: Boolean = false,
+    /** Срок удаления (ПЛАН-(СЦ) СЦ14), мс; `null` — не назначено. До срока группа живёт как прежде. */
+    val deleteAtMs: Long? = null,
 ) {
     /** Тип сущности — для значка строки и слов страницы (СЦ2, СЦ3). */
     val type: EntityType get() = EntityType.group(kind, secret)

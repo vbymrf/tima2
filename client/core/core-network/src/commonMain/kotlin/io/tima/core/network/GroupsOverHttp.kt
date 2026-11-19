@@ -48,6 +48,8 @@ class GroupsOverHttp(private val api: GroupsApi) : GroupRegistry {
                         ?.let { t -> runCatching { kotlinx.datetime.Instant.parse(t).toEpochMilliseconds() }.getOrNull() },
                     communityId = it.communityId.ifBlank { null },
                     secret = it.hidden,
+                    deleteAtMs = it.deleteAt.takeIf { t -> t.isNotEmpty() }
+                        ?.let { t -> runCatching { kotlinx.datetime.Instant.parse(t).toEpochMilliseconds() }.getOrNull() },
                 )
             },
         )

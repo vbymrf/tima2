@@ -1,6 +1,7 @@
 package io.tima.core.network
 
 import io.ktor.client.HttpClient
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.patch
@@ -102,6 +103,26 @@ class InvitesOverHttp(
         response.status == HttpStatusCode.OK
     } catch (_: Throwable) {
         false
+    }
+
+    /**
+     * Удаление с месяцем на отмену (ПЛАН-(СЦ) СЦ14): `DELETE /{вид}/{id}` ставит срок, `DELETE …/deletion` отменяет.
+     * `true` — сервер принял.
+     */
+    suspend fun deleteEntity(kind: EntityKind, id: String, cancel: Boolean): Boolean = try {
+        client.delete(route.api(path(kind, id) + if (cancel) "/deletion" else "")) {
+            header("Authorization", "Bearer ${token()}")
+        }.status == HttpStatusCode.NoContent
+    } catch (_: Throwable) {
+        false
+    }
+
+    /** Срок удаления: ISO-время или `null` — не назначено; `""` — нет связи. */
+    suspend fun deletionAt(kind: EntityKind, id: String): String? = try {
+        val response = client.get(route.api(path(kind, id) + "/deletion")) { header("Authorization", "Bearer ${token()}") }
+        if (response.status != HttpStatusCode.OK) "" else response.jsonBody()?.str("delete_at")
+    } catch (_: Throwable) {
+        ""
     }
 
     /** Переименовать группу (ПЛАН-(СЦ) СЦ5, «Основное»): тем же PATCH, что прочие настройки. */

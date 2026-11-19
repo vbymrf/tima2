@@ -94,6 +94,7 @@ class GroupsApi(
                 callTtlUntil = objectValue.str("call_ttl_until").orEmpty(),
                 communityId = objectValue.str("community_id").orEmpty(),
                 hidden = objectValue.bool("hidden") ?: false,
+                deleteAt = objectValue.str("delete_at").orEmpty(),
             )
         }
         return groups?.let { GroupsResult.Groups(it) }
@@ -305,6 +306,8 @@ class RemoteGroup(
     val communityId: String = "",
     /** Секретная (ПЛАН-(СЦ) СЦ2). */
     val hidden: Boolean = false,
+    /** Срок удаления (СЦ14), ISO; пусто — не назначено. */
+    val deleteAt: String = "",
 )
 
 /** Участник группы. */

@@ -108,6 +108,8 @@ type groupsDeps struct {
 	callTTL func() time.Duration
 	// trust — режим доверия к устройствам: от него зависит, кому обязан дойти ключ группы.
 	trust func() string
+	// deletion — сроки удаления (ПЛАН-(СЦ) СЦ14): «удалить» ставит месяц на отмену.
+	deletion store.Deletions
 }
 
 // RegisterGroups — шестнадцать маршрутов групп.
@@ -119,8 +121,9 @@ func RegisterGroups(
 	requireDevice Middleware,
 	callTTL func() time.Duration,
 	trust func() string,
+	deletion store.Deletions,
 ) {
-	deps := groupsDeps{store: st, limiter: limit, notifier: n, callTTL: callTTL, trust: trust}
+	deps := groupsDeps{store: st, limiter: limit, notifier: n, callTTL: callTTL, trust: trust, deletion: deletion}
 
 	mux.HandleFunc("POST /api/v1/groups", requireDevice(createGroup(deps)))
 	mux.HandleFunc("GET /api/v1/groups", requireDevice(listMyGroups(deps)))
