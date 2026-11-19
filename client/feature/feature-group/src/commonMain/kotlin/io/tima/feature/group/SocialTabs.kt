@@ -95,6 +95,7 @@ fun CatalogTab(
                     avatar = {
                         Avatar(
                             letters = community.title.take(2).uppercase(),
+                            picture = lookOf("community", community.communityId).picture,
                             size = io.tima.core.ui.AvatarSize.Row,
                             modifier = showcaseClick(onShowcase) { it("community", community.communityId, community.title) },
                         )
@@ -118,6 +119,7 @@ fun CatalogTab(
                     avatar = {
                         Avatar(
                             letters = channel.title.take(2).uppercase(),
+                            picture = lookOf("channel", channel.channelId).picture,
                             size = io.tima.core.ui.AvatarSize.Row,
                             modifier = showcaseClick(onShowcase) { it("channel", channel.channelId, channel.title) },
                         )
@@ -182,6 +184,7 @@ fun GroupLine(
         avatar = {
             Avatar(
                 letters = group.title.take(2).uppercase(),
+                picture = look.picture,
                 size = io.tima.core.ui.AvatarSize.Row,
                 modifier = showcaseClick(onShowcase) { it("group", group.groupId, group.title) },
             )

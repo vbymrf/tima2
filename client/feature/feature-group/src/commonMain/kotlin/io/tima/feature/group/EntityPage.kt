@@ -275,11 +275,14 @@ fun ManageMainScreen(
     onSecret: (Boolean) -> Unit,
     onSave: () -> Unit,
     onBack: () -> Unit,
+    /** Аватар (СЦ5): картинка сейчас и кнопки «Сменить» / «Убрать»; `null` — блока нет. */
+    avatar: (@Composable () -> Unit)? = null,
 ) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(title = w.manageMain, onBack = onBack, caption = title)
         Column(Modifier.padding(TimaSpacing.about5), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4)) {
+            avatar?.invoke()
             if (renamable) io.tima.core.ui.Field(title, onTitle, modifier = Modifier.testTag(ManageMainTags.TITLE), hint = w.titleHint, sentences = true)
             Row(
                 Modifier.fillMaxWidth().clickable { onSecret(!secret) }.testTag(ManageMainTags.SECRET),

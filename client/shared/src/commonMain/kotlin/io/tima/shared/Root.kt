@@ -1958,7 +1958,17 @@ private fun App(
         val saved = runCatching { environment.settings.all().first() }.getOrDefault(emptyMap())
         for ((k, v) in saved) if (k.startsWith(PAGE_LEVELS)) levelsShown[k.removePrefix(PAGE_LEVELS)] = v == "1"
     }
-    val sociumLook: (String, String) -> io.tima.feature.group.RowLook = { kind, id ->
+    // Аватары сущностей (СЦ5) — одним запросом на вид при входе в Социум и после смены.
+    var avatarsTick by remember { mutableStateOf(0) }
+    var entityAvatars by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(socialState.mine.size, socialState.channels.size, socialState.communities.size, avatarsTick) {
+        val all = mutableMapOf<String, String>()
+        all += network.invites.avatars(io.tima.domain.chat.EntityKind.Group, socialState.mine.map { it.groupId }).mapKeys { "group:${it.key}" }
+        all += network.invites.avatars(io.tima.domain.chat.EntityKind.Channel, socialState.channels.map { it.channelId }).mapKeys { "channel:${it.key}" }
+        all += network.invites.avatars(io.tima.domain.chat.EntityKind.Community, socialState.communities.map { it.communityId }).mapKeys { "community:${it.key}" }
+        entityAvatars = all
+    }
+    val sociumLookBare: (String, String) -> io.tima.feature.group.RowLook = { kind, id ->
         if (kind == "channel") {
             val top = sociumTops["channel:$id"]
             val at = top?.atMs?.takeIf { it > 0 }
@@ -1978,6 +1988,9 @@ private fun App(
         } else {
             groupLook(id)
         }
+    }
+    val sociumLook: (String, String) -> io.tima.feature.group.RowLook = { kind, id ->
+        sociumLookBare(kind, id).copy(picture = entityAvatars["$kind:$id"]?.let { "tima-media://$it" })
     }
     // Отметки и «печатает» для списка «Чаты» (ПЛАН-(ОП)); секунды — чтобы «печатает» гасло само.
     val liveReceipts by (assembled.liveStates?.receipts ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, io.tima.feature.chat.ChatReceipt>()) }).collectAsState()
@@ -4700,6 +4713,7 @@ private fun App(
                                 } else {
                                     null
                                 },
+                                avatarPicture = entityAvatars["$kind:$id"]?.let { "tima-media://$it" },
                                 showLevels = if (inside && kind == "group") levelsShown["$kind:$id"] == true else null,
                                 onShowLevels = { on ->
                                     levelsShown["$kind:$id"] = on
@@ -4744,7 +4758,46 @@ private fun App(
                     var title by remember(current) { mutableStateOf(current.title) }
                     var secret by remember(current) { mutableStateOf(wasSecret) }
                     var saved by remember(current) { mutableStateOf<Boolean?>(null) }
-                    io.tima.feature.group.ManageMainScreen(
+                    // Аватар (СЦ5): выбор, обрезка квадратом, JPEG через медиа и «PUT …/avatar».
+                    var cropping by remember(current) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+                    var picture by remember(current) { mutableStateOf<String?>(null) }
+                    LaunchedEffect(current) {
+                        picture = network.invites.avatars(kind, listOf(current.id))[current.id]?.let { "tima-media://$it" }
+                    }
+                    val pick = io.tima.core.media.rememberImagePicker { picked ->
+                        picked?.let { cropping = io.tima.core.media.decodeImage(it.bytes) }
+                    }
+                    val croppingNow = cropping
+                    if (croppingNow != null) {
+                        io.tima.feature.chat.AvatarCropScreen(
+                            image = croppingNow,
+                            onDone = { cut ->
+                                cropping = null
+                                scope.launch {
+                                    val id = network.media.upload(io.tima.core.media.encodeJpeg(cut), "image/jpeg")
+                                    val ok = id != null && network.invites.setAvatar(kind, current.id, id)
+                                    Journal.note(LogCode.NAV, "аватар сущности", "вид" to current.kind, "вышло" to ok)
+                                    if (ok) { picture = "tima-media://$id"; avatarsTick++ }
+                                    saved = ok
+                                }
+                            },
+                            onCancel = { cropping = null },
+                        )
+                    } else io.tima.feature.group.ManageMainScreen(
+                        avatar = {
+                            androidx.compose.foundation.layout.Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(io.tima.core.ui.TimaSpacing.about3),
+                            ) {
+                                io.tima.core.ui.Avatar(letters = title.take(2).uppercase(), picture = picture, size = io.tima.core.ui.AvatarSize.Big)
+                                io.tima.core.ui.Button(Tima.words.chat.avatarChange, onClick = pick, kind = io.tima.core.ui.ButtonKind.Quiet)
+                                if (picture != null) {
+                                    io.tima.core.ui.Button(Tima.words.chat.avatarRemove, onClick = {
+                                        scope.launch { if (network.invites.setAvatar(kind, current.id, "")) { picture = null; avatarsTick++ } }
+                                    }, kind = io.tima.core.ui.ButtonKind.Dangerous)
+                                }
+                            }
+                        },
                         title = title,
                         secret = secret,
                         renamable = kind == io.tima.domain.chat.EntityKind.Group,

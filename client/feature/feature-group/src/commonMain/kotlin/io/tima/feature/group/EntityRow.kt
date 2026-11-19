@@ -56,6 +56,8 @@ data class RowLook(
     val element: Pair<EntityKind, String>? = null,
     /** Звуковой чат: идёт разговор — зелёная точка на аватаре. */
     val live: Boolean = false,
+    /** Аватар сущности — `tima-media://<номер>` (СЦ5); `null` — буквы. */
+    val picture: String? = null,
 )
 
 /** Метка строки Социума — для сценариев; нужная строка — по названию внутри. */

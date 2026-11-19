@@ -125,6 +125,34 @@ class InvitesOverHttp(
         ""
     }
 
+    /** Аватар сущности (ПЛАН-(СЦ) СЦ5): своё завершённое медиа; пусто — снять. */
+    suspend fun setAvatar(kind: EntityKind, id: String, mediaId: String): Boolean = try {
+        client.put(route.api(path(kind, id) + "/avatar")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("media_id", JsonPrimitive(mediaId)) }.toString())
+        }.status == HttpStatusCode.OK
+    } catch (_: Throwable) {
+        false
+    }
+
+    /** Аватары сущностей вида: номер → media_id; нет связи — пусто. */
+    suspend fun avatars(kind: EntityKind, ids: List<String>): Map<String, String> = try {
+        if (ids.isEmpty()) emptyMap() else {
+            val r = client.post(route.api("/api/v1/entities/avatars")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("kind", JsonPrimitive(kind.wire))
+                    put("ids", kotlinx.serialization.json.JsonArray(ids.take(500).map { JsonPrimitive(it) }))
+                }.toString())
+            }
+            r.jsonBody()?.get("avatars")?.jsonObjectOrNull()?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.content?.let { k to it } }?.toMap().orEmpty()
+        }
+    } catch (_: Throwable) {
+        emptyMap()
+    }
+
     /** Переименовать группу (ПЛАН-(СЦ) СЦ5, «Основное»): тем же PATCH, что прочие настройки. */
     suspend fun rename(groupId: String, title: String): Boolean = try {
         client.patch(route.api(path(EntityKind.Group, groupId))) {
