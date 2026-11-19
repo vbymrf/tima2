@@ -34,4 +34,11 @@ class TextLinksTest {
         assertEquals("tima://invite/i-7", text.substring(found))
         assertEquals("tima://invite/i-7", TextLinks.openable("tima://invite/i-7"))
     }
+
+    @Test
+    fun ссылка_на_сущность_с_полным_номером_целиком() {
+        val url = "tima://entity/community/8a2e4fb1-e51c-4e92-b368-8e67a85e9230"
+        assertEquals(url, url.substring(TextLinks.find(url).single()))
+        assertEquals(EntityKind.Community to "8a2e4fb1-e51c-4e92-b368-8e67a85e9230", EntityInvites.entityOf(url))
+    }
 }

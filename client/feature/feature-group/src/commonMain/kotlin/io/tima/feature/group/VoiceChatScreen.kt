@@ -47,6 +47,7 @@ object VoiceTags {
     const val STRIP = "voice:strip"
     const val CREATE = "voice:create"
     const val ROOM = "voice:room"
+    const val NAME = "voice:name"
 }
 
 /** Участник звукового чата на экране. */
@@ -99,10 +100,12 @@ fun VoiceChatScreen(
             onText?.let { Button(w.voiceText, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(VoiceTags.TEXT)) }
             if (canTakeHost) Button(w.voiceTakeHost, onClick = onTakeHost, kind = ButtonKind.Quiet, modifier = Modifier.testTag(VoiceTags.HOST))
         }
-        Row(
+        // С переносом: в одну строку три кнопки не помещались, и «Выйти» уезжала за правый край — на realme её не было
+        // видно вовсе (живой разговор троих 2026-11-19).
+        FlowRow(
             Modifier.fillMaxWidth().padding(TimaSpacing.about4),
             horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         ) {
             // Микрофон и звук — только если разрешено настройкой чата (§1.3, 4); иначе остаётся «Выйти».
             if (allowMute) {
@@ -152,7 +155,7 @@ fun VoiceRoomsList(
         if (onCreate != null) {
             var name by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                io.tima.core.ui.Field(name, { name = it }, modifier = Modifier.weight(1f), hint = w.voiceNewHint, sentences = true)
+                io.tima.core.ui.Field(name, { name = it }, modifier = Modifier.weight(1f).testTag(VoiceTags.NAME), hint = w.voiceNewHint, sentences = true)
                 Button(w.voiceCreate, onClick = { if (name.isNotBlank()) { onCreate(name.trim()); name = "" } }, modifier = Modifier.testTag(VoiceTags.CREATE))
             }
         }

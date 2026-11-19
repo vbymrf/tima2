@@ -4417,7 +4417,11 @@ private fun App(
                         val staff = roleOf("community", current.communityId).let {
                             it == io.tima.domain.chat.GroupRole.Owner || it == io.tima.domain.chat.GroupRole.Admin
                         }
-                        val nameOf: (String) -> String = { id -> peopleCards[id]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: id.take(8) }
+                        val youWord = Tima.words.socium.you
+                        val nameOf: (String) -> String = { id ->
+                            if (id == session.userId) youWord
+                            else peopleCards[id]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: id.take(8)
+                        }
                         LaunchedEffect(chat?.present) { chat?.present?.let { people.want(it) } }
                         Column(androidx.compose.ui.Modifier.fillMaxSize()) {
                             st.trouble?.let { t ->
@@ -4685,7 +4689,8 @@ private fun App(
                     CommunityScreen(
                         state = communityState,
                         onBack = { where = Where.Nothing },
-                        onSubscribe = store::subscribe,
+                        // После подписки — и список Социума: иначе страница сообщества говорила «Не подписан» (живьём 2026-11-19).
+                        onSubscribe = { on -> store.subscribe(on); scope.launch { kotlinx.coroutines.delay(1_500); social.refresh() } },
                         // Элемент состава открывается тем же экраном, что и обычно:
                         // сообщество ничем не владеет, и «открыть группу изнутри» — это
                         // просто открыть группу.
