@@ -4193,6 +4193,41 @@ private fun App(
                 }
             }
 
+            is Where.Ownership -> {
+                {
+                    val kind = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Group
+                    val store = remember(current) {
+                        io.tima.feature.group.OwnershipStore(
+                            ownership = network.ownership,
+                            transfer = io.tima.domain.chat.TransferOwnership(
+                                ownership = network.ownership,
+                                sign = { words, bytes -> io.tima.core.encryption.IdentitySignerOverKodium.sign(words, bytes) },
+                                act = { k, id, link, from, to, exp -> io.tima.crypto.EntityTransfer.bytes(k, id, link, from, to, exp) },
+                                nowUnix = { kotlinx.datetime.Clock.System.now().epochSeconds },
+                            ),
+                            scope = scope,
+                            kind = kind,
+                            entityId = current.id,
+                            me = session.userId,
+                            candidates = { network.ownership.staff(kind, current.id) },
+                        )
+                    }
+                    val ownState by store.state.collectAsState()
+                    LaunchedEffect(current) { store.refresh() }
+                    io.tima.feature.group.OwnershipScreen(
+                        state = ownState,
+                        title = current.title,
+                        nameOf = { id -> peopleCards[id]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: id.take(8) },
+                        onChoose = store::choose,
+                        onPhrase = store::phrase,
+                        onGive = { Journal.note(LogCode.NAV, "владение", "итог" to "offer"); store.give() },
+                        onTake = { Journal.note(LogCode.NAV, "владение", "итог" to "accept"); store.take() },
+                        onDecline = store::decline,
+                        onBack = { where = Where.Nothing },
+                    )
+                }
+            }
+
             is Where.Invite -> {
                 {
                     val store = remember(current) { io.tima.feature.group.InviteStore(network.invites, scope, current.inviteId) }

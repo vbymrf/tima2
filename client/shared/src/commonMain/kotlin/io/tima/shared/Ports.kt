@@ -155,6 +155,9 @@ interface ChatPorts {
 
     /** Приглашения и «секретная» у сущностей (ПЛАН-(СЦ) СЦ2). */
     val invites: io.tima.core.network.InvitesOverHttp
+
+    /** Владение по ключу личности (ПЛАН-(СЦ) §6, СЦ11). */
+    val ownership: io.tima.core.network.OwnershipOverHttp
 }
 
 /** Группы: создание, состав, ротация ключа при смене состава. */

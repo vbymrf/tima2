@@ -48,6 +48,22 @@ interface SociumWords {
     val write: String
     val share: String
     val leave: String
+
+    // Передача владения (СЦ11, §6.4).
+    val transferTitle: String
+    val transferAbout: String
+    val transferNeedsOldKey: String
+    val transferNoCandidates: String
+    val transferSent: String
+    val transferWithdraw: String
+    fun transferPending(to: String): String
+    fun ownershipOffered(title: String, from: String): String
+    val ownershipAccepted: String
+    val phraseHint: String
+    val phraseAbout: String
+    val badPhrase: String
+    val offerDropped: String
+    val receiverRole: String
 }
 
 object RussianSociumWords : SociumWords {
@@ -85,6 +101,20 @@ object RussianSociumWords : SociumWords {
     override val write = "Написать"
     override val share = "Поделиться"
     override val leave = "Выйти"
+    override val transferTitle = "Передать владение"
+    override val transferAbout = "Выберите, кому передать: принять может модератор и выше (в сообществе — админ). Вы станете участником."
+    override val transferNeedsOldKey = "Передать можно ключом, которым владение получено. Введите прежнюю секретную фразу."
+    override val transferNoCandidates = "Некому передать: назначьте модератора (в сообществе — админа)"
+    override val transferSent = "Предложение отправлено, ждёт ответа 30 минут"
+    override val transferWithdraw = "Отозвать предложение"
+    override fun transferPending(to: String) = "Ждёт ответа: $to"
+    override fun ownershipOffered(title: String, from: String) = "Вам передают владение «$title» от $from"
+    override val ownershipAccepted = "Вы владелец"
+    override val phraseHint = "12 слов секретной фразы"
+    override val phraseAbout = "Подпись — вашей секретной фразой. Фраза не уходит с устройства и не сохраняется."
+    override val badPhrase = "Фраза не та"
+    override val offerDropped = "Три неверные фразы — предложение погашено"
+    override val receiverRole = "Принять может модератор и выше (в сообществе — админ)"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -122,6 +152,20 @@ object EnglishSociumWords : SociumWords {
     override val write = "Write"
     override val share = "Share"
     override val leave = "Leave"
+    override val transferTitle = "Transfer ownership"
+    override val transferAbout = "Choose who receives it: a moderator or above (in a community, an admin). You will become a member."
+    override val transferNeedsOldKey = "Ownership can be transferred only with the key it was received with. Enter your previous secret phrase."
+    override val transferNoCandidates = "Nobody to transfer to: appoint a moderator (in a community, an admin)"
+    override val transferSent = "Offer sent, waiting 30 minutes for an answer"
+    override val transferWithdraw = "Withdraw the offer"
+    override fun transferPending(to: String) = "Waiting for: $to"
+    override fun ownershipOffered(title: String, from: String) = "$from is transferring \"$title\" to you"
+    override val ownershipAccepted = "You are the owner"
+    override val phraseHint = "12 words of the secret phrase"
+    override val phraseAbout = "You sign with your secret phrase. It never leaves the device and is not stored."
+    override val badPhrase = "Wrong phrase"
+    override val offerDropped = "Three wrong phrases: the offer is cancelled"
+    override val receiverRole = "Only a moderator or above (in a community, an admin) can accept"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -159,4 +203,18 @@ object SpanishSociumWords : SociumWords {
     override val write = "Escribir"
     override val share = "Compartir"
     override val leave = "Salir"
+    override val transferTitle = "Transferir la propiedad"
+    override val transferAbout = "Elige a quién: puede aceptar un moderador o superior (en una comunidad, un administrador). Pasarás a ser miembro."
+    override val transferNeedsOldKey = "Solo se transfiere con la clave con la que se recibió. Introduce tu frase secreta anterior."
+    override val transferNoCandidates = "No hay a quién transferir: nombra un moderador (en una comunidad, un administrador)"
+    override val transferSent = "Oferta enviada, espera respuesta 30 minutos"
+    override val transferWithdraw = "Retirar la oferta"
+    override fun transferPending(to: String) = "Esperando a: $to"
+    override fun ownershipOffered(title: String, from: String) = "$from te transfiere «$title»"
+    override val ownershipAccepted = "Eres el propietario"
+    override val phraseHint = "12 palabras de la frase secreta"
+    override val phraseAbout = "Firmas con tu frase secreta. No sale del dispositivo ni se guarda."
+    override val badPhrase = "Frase incorrecta"
+    override val offerDropped = "Tres frases incorrectas: la oferta se canceló"
+    override val receiverRole = "Solo un moderador o superior (en una comunidad, un administrador) puede aceptar"
 }

@@ -561,6 +561,9 @@ class Network(
     override val invites: io.tima.core.network.InvitesOverHttp =
         io.tima.core.network.InvitesOverHttp(link.route, link.client, token = { token() })
 
+    override val ownership: io.tima.core.network.OwnershipOverHttp =
+        io.tima.core.network.OwnershipOverHttp(link.route, link.client, token = { token() })
+
     override val access: LevelAccessOverHttp =
         LevelAccessOverHttp(link.route, link.client, token = { token() })
 
