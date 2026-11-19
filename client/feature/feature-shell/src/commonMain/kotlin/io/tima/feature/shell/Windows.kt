@@ -223,12 +223,10 @@ fun ActivityWindow(
 }
 
 /**
- * Окно 5 «Страница» — `§7`, перерисовано 2026-08-25 под ADR-0018.
- *
- * **Переключатель «Открытое / Личное» стоит не на всех подвкладках.** «Каталог» —
- * это собственность человека: каналы, сообщества, группы, голосовые комнаты. Она не
- * бывает «открытой» или «личной», поэтому переключателя там нет вовсе (`§7`), а не
- * стоит серым. Серый переключатель сообщал бы, что за ним что-то есть.
+ * Окно 5 «Страница» — одна вкладка «Лента» (заказчик 2026-11-19: «Нужно убрать всё из окна Страница. Там оставить одну
+ * вкладку Лента»). Группы и прочие сущности живут в «Социуме» (ПЛАН-(СЦ)): вкладка «Группы» здесь была остатком
+ * прежнего замысла, и новое в группах считалось этому окну — человек видел число на «Странице», а в «Социуме» —
+ * ничего. «Подписан» и «Коллекции» были заглушками. Самим окном займёмся потом.
  */
 @Composable
 fun PageWindow(
@@ -238,99 +236,28 @@ fun PageWindow(
     onNeighbourWindow: (InSide) -> Unit,
     modifier: Modifier = Modifier,
     /**
-     * Содержимое вкладки «Лента». `null` — заглушка, как было.
+     * Содержимое вкладки «Лента». `null` — заглушка.
      *
      * Слотом, а не экраном внутри: оболочка не знает ни о страницах, ни о переносе — она
-     * знает про окна и вкладки. Заведи она здесь свой экран, и `feature-shell` пришлось бы
-     * связать с доменом ради одной вкладки.
+     * знает про окна и вкладки.
      */
     feed: (@Composable () -> Unit)? = null,
-    /**
-     * Содержимое вкладки «Группы». `null` — заглушка, как было.
-     *
-     * Слотом по той же причине, что и «Лента»: оболочка знает про окна и вкладки, а не
-     * про переписки. Своя загрузка групп здесь связала бы `feature-shell` с доменом ради
-     * одной вкладки.
-     */
-    groups: (@Composable () -> Unit)? = null,
-    /** Число вкладки — из журнала уведомлений (ЖУ2): у «Групп» — сколько групп с новым. */
-    countOf: (WindowTab) -> Int = { 0 },
 ) {
-    var collections by remember { mutableStateOf(COLLECTION_TABS.first()) }
-    var outline by remember { mutableStateOf(COLLECTION_MODES.last()) }
     WindowWithTabs(
         window = Window.Page,
-        // Порядок из макета: страница открывается на «Подписан», и это её первая вкладка.
         tabs = PAGE_TABS,
-        countOf = countOf,
         onSwitchWindows = onSwitchWindows,
         onSearch = onSearch,
         onSettings = onSettings,
         onNeighbourWindow = onNeighbourWindow,
         modifier = modifier,
-        secondRow = { tab ->
-            if (tab == WindowTab.Collections) {
-                FilterRow(
-                    items = COLLECTION_TABS,
-                    selected = collections,
-                    onPick = { collections = it },
-                    trailing = if (collections == WindowTab.Catalogue) {
-                        null
-                    } else {
-                        { ModeSwitch(COLLECTION_MODES, outline, { outline = it }) }
-                    },
-                )
-            }
-        },
-    ) { tab ->
-        when (tab) {
-            WindowTab.Subscribed -> TabStub(
-                "Здесь будут каналы и сообщества",
-                "На них подписываются. Подписок на сервере нет.",
-            )
-
-            WindowTab.Feed -> if (feed != null) {
-                feed()
-            } else {
-                TabStub(
-                    "Здесь будет то, что вы показываете",
-                    "Отложенные записи и положенные группы. Подвкладок у «Ленты» нет — " +
-                        "так в макете. Раздача по книге не реализована.",
-                )
-            }
-
-            WindowTab.Collections -> when (collections) {
-                WindowTab.Catalogue -> TabStub(
-                    "Здесь будет ваша собственность",
-                    "Каналы, сообщества, группы и голосовые комнаты — то, чем вы " +
-                        "управляете. Переключателем контура каталог не управляется. " +
-                        "Ничего этого на сервере нет.",
-                )
-
-                else -> TabStub(
-                    "Здесь будет собранное вами: " + Tima.words.tabs.label(collections).lowercase() +
-                        ", " + Tima.words.tabs.label(outline).lowercase(),
-                    if (outline == WindowTab.Personal) {
-                        "Контур под сквозным шифрованием, метка «E2E · личная». " +
-                            "Коллекций на сервере нет."
-                    } else {
-                        "Публичный контур: то, что видно всем. Коллекций на сервере нет."
-                    },
-                )
-            }
-
-            WindowTab.Groups -> if (groups != null) {
-                groups()
-            } else {
-                TabStub(
-                    "Здесь будут группы, где вы состоите",
-                    "Каталог окна 2 и эта вкладка ещё не связаны с данными.",
-                )
-            }
-
-            else -> TabStub(
-                "Здесь будет вкладка страницы",
-                "Эта вкладка ещё не связана с данными.",
+    ) { _ ->
+        if (feed != null) {
+            feed()
+        } else {
+            TabStub(
+                "Здесь будет то, что вы показываете",
+                "Записи вашей страницы.",
             )
         }
     }
@@ -353,24 +280,13 @@ internal val SOCIUM_TABS = listOf(WindowTab.Catalogue, WindowTab.Common, WindowT
 internal val SOCIAL_TABS = listOf(WindowTab.Answers, WindowTab.Reactions, WindowTab.Pointers)
 
 /** Вкладки окна 5 (`§7`). */
-internal val PAGE_TABS =
-    listOf(WindowTab.Subscribed, WindowTab.Feed, WindowTab.Collections, WindowTab.Groups)
+internal val PAGE_TABS = listOf(WindowTab.Feed)
 
 /** «Лента» и «Слайды» — два способа смотреть одно и то же (`§5`). */
 internal val MEDIA_MODES = listOf(WindowTab.Feed, WindowTab.Slides)
 
 /** Фильтры «Реакций» (`§6`). */
 internal val REACTION_FILTERS = listOf(WindowTab.All, WindowTab.Comments, WindowTab.Marks)
-
-/** Подвкладки «Коллекций» (`§7`). */
-internal val COLLECTION_TABS = listOf(WindowTab.Media, WindowTab.Messages, WindowTab.Catalogue)
-
-/**
- * Контур коллекций (`§7`). Открывается окно на «Личном»: это своё хозяйство, и
- * показывать его сначала публичной частью значило бы прятать от человека его же
- * содержимое — так и в макете, где залито «Личное».
- */
-internal val COLLECTION_MODES = listOf(WindowTab.Open, WindowTab.Personal)
 
 /**
  * Фильтры журнала звонков — `интерфейс.md §2`, ряд под вкладками окна 1.

@@ -119,14 +119,7 @@ class RowFitTest {
                 }
             },
             "социум-реакции" to { Row { FilterRow(REACTION_FILTERS, WindowTab.All, {}) } },
-            "страница-вкладки" to { Row { TabRow(PAGE_TABS, WindowTab.Collections, {}) } },
-            "страница-коллекции" to {
-                Row {
-                    FilterRow(COLLECTION_TABS, COLLECTION_TABS.first(), {}) {
-                        ModeSwitch(COLLECTION_MODES, WindowTab.Personal, {})
-                    }
-                }
-            },
+            "страница-вкладки" to { Row { TabRow(PAGE_TABS, WindowTab.Feed, {}) } },
         )
 
         /**

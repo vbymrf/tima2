@@ -1132,13 +1132,11 @@ private fun App(
     // Подокно «Вид» вкладки «Контакты»: настроек три группы и они независимы, перебор
     // по кругу не дал бы угадать следующее состояние.
     var bookView by remember { mutableStateOf(false) }
-    /** Разделы набора сообществ — поток из базы, читают Страница, меню чата и мастер. */
+    /** Разделы набора сообществ — поток из базы, читают каталог Социума, меню чата и мастер. */
     val communityRows by environment.communitySections.sections().collectAsState(initial = emptyList())
     /** Обычные разделы набора сообществ и отдельно «Общий» — как у книги. */
     val communityShelves = communityRows.filterNot { it.common }
     val communityCommon = communityRows.firstOrNull { it.common }
-    /** Выбранный раздел на вкладке «Группы» Страницы. */
-    var groupSection by remember { mutableStateOf("") }
     // ── «Вид» набора сообществ: каталог Социума (решение заказчика 2026-09-18) ──
     // Свой вид под своим префиксом настроек: у набора сообществ свои разделы, и как их
     // показывать — тоже своё. Читается тем же потоком настроек, что и вид книги.
@@ -2442,7 +2440,7 @@ private fun App(
             Window.Social -> socialTab
             Window.Media -> windowTabs.state(Window.Media, WindowTab.Common).value
             Window.Activity -> windowTabs.state(Window.Activity, WindowTab.Answers).value
-            Window.Page -> windowTabs.state(Window.Page, WindowTab.Subscribed).value
+            Window.Page -> windowTabs.state(Window.Page, WindowTab.Feed).value
             else -> null
         }
     }
@@ -2580,7 +2578,6 @@ private fun App(
             onRemove = { id ->
                 scope.launch { shelves.remove(id) }
                 if (catalogSection == id) catalogSection = ""
-                if (groupSection == id) groupSection = ""
             },
             onBack = { communitySectionsScreen = false },
             // Набор про сообщества: на полках группы, а не люди, и слова экрана — их.
@@ -4225,50 +4222,13 @@ private fun App(
                 }
 
                 Window.Page -> PageWindow(
-                    // Число «Групп» — сколько групп с новым (ЖУ2).
-                    countOf = { which -> if (which == WindowTab.Groups) noticeCounts.tab(io.tima.domain.chat.NoticeTab.Groups) else 0 },
                     onSwitchWindows = { windowSwitcher = true },
                     onSearch = {},
                     onSettings = toSettings,
                     onNeighbourWindow = switchWindow,
-                    // Своя страница: принесённое и своё вперемешку. Обновляется при
-                    // открытии вкладки — список меняется от чужих действий (автор удалил,
-                    // автор сузил), и держать его закэшированным значило бы показывать то,
-                    // чего уже нет.
-                    // Группы человека. Тот же список из базы, что у окна 1, только
-                    // другого рода: второго похода в базу для этого не нужно.
-                    groups = {
-                        Column {
-                            // Полоса разделов сообществ — тот же механизм, что у книги
-                            // (В/Г по «Виду»), набор свой. Появляется, когда есть что выбирать.
-                            val tabs = sectionTabs(communityShelves, communityCommon, Tima.words.book)
-                            if (communityShelves.isNotEmpty()) {
-                                SectionsRow(
-                                    tabs = tabs,
-                                    chosen = groupSection,
-                                    // Значки или слова — по «Виду» набора сообществ, как в каталоге.
-                                    icons = communityView.icons,
-                                    onPick = { groupSection = it },
-                                    newIn = { key ->
-                                        val id = if (key == COMMON_SECTION) "" else key
-                                        val everyone = key.isEmpty() || key == ALL_SECTION
-                                        listState.groups.count { noticeCounts.chat(it.chatId, null) > 0 && (everyone || it.sectionId == id) }
-                                    },
-                                )
-                            }
-                            GroupsScreen(
-                                state = listState,
-                                onOpen = { where = Where.Chat(it.chatId, it.title) },
-                                chosen = groupSection,
-                                countOf = { chat -> noticeCounts.chat(chat.chatId, null) },
-                                tagOf = { chat ->
-                                    callGroupsTtl[chat.chatId]?.let { wordsNow.groupCall.ttl(((it - msNow()) / 3_600_000L).toInt().coerceAtLeast(0)) }
-                                },
-                                callGroupOf = callGroupOf,
-                                mutedOf = { chat -> "group:${chat.chatId}" in mutedAll },
-                            )
-                        }
-                    },
+                    // Одна вкладка «Лента» (заказчик 2026-11-19): группы и прочие сущности — в «Социуме».
+                    // Своя страница: принесённое и своё вперемешку. Обновляется при открытии вкладки — список
+                    // меняется от чужих действий (автор удалил, автор сузил).
                     feed = {
                         val state by page.state.collectAsState()
                         LaunchedEffect(Unit) { page.refresh() }

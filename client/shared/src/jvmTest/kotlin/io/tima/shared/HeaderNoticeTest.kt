@@ -12,7 +12,8 @@ class HeaderNoticeTest {
     @Test
     fun вкладки_журнала_окон() {
         assertEquals(listOf(NoticeTab.Chats, NoticeTab.Calls), noticeTabsOf(Window.Phone))
-        assertEquals(listOf(NoticeTab.Channels), noticeTabsOf(Window.Social))
+        assertEquals(listOf(NoticeTab.Channels, NoticeTab.Groups), noticeTabsOf(Window.Social))
+        assertEquals(emptyList(), noticeTabsOf(Window.Page), "на «Странице» сущностей нет (заказчик 2026-11-19)")
         assertEquals(emptyList(), noticeTabsOf(Window.Activity), "у «Общения» своего журнала нет (Р8)")
     }
 
@@ -20,7 +21,7 @@ class HeaderNoticeTest {
     fun вкладка_окна_для_уведомления() {
         assertEquals(WindowTab.Calls, windowTabOf(NoticeTab.Calls))
         assertEquals(WindowTab.Catalogue, windowTabOf(NoticeTab.Channels))
-        assertEquals(WindowTab.Groups, windowTabOf(NoticeTab.Groups))
+        assertEquals(WindowTab.Catalogue, windowTabOf(NoticeTab.Groups))
     }
 }
 
@@ -38,7 +39,7 @@ class NoticeTapTest {
     fun окно_вкладки_уведомлений() {
         assertEquals(Window.Phone, noticeWindowOf(NoticeTab.Calls))
         assertEquals(Window.Social, noticeWindowOf(NoticeTab.Channels))
-        assertEquals(Window.Page, noticeWindowOf(NoticeTab.Groups))
+        assertEquals(Window.Social, noticeWindowOf(NoticeTab.Groups))
     }
 }
 

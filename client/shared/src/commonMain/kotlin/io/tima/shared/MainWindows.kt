@@ -334,12 +334,11 @@ internal fun windowCounters(counts: io.tima.domain.chat.NoticeCounts): Map<Windo
     // 2026-09-30): «Телефон» = «Чаты» + «Звонки». До того — сумма непрочитанных сообщений,
     // без пропущенных звонков.
     val phone = counts.tab(io.tima.domain.chat.NoticeTab.Chats) + counts.tab(io.tima.domain.chat.NoticeTab.Calls)
-    val page = counts.tab(io.tima.domain.chat.NoticeTab.Groups)
-    // Каналы — в «Социуме»: там их каталог и лента (ПЛАН-(ОУ)).
-    val social = counts.tab(io.tima.domain.chat.NoticeTab.Channels)
+    // Каналы и группы — в «Социуме»: там их каталог (ПЛАН-(ОУ), ПЛАН-(СЦ)). Прежде группы считались «Странице»
+    // (вкладка «Группы» окна 5) — заказчик 2026-11-19: «уведомления приходят на Страницу», а в «Социуме» — ничего.
+    val social = counts.tab(io.tima.domain.chat.NoticeTab.Channels) + counts.tab(io.tima.domain.chat.NoticeTab.Groups)
     return buildMap {
         if (phone > 0) put(Window.Phone, phone)
-        if (page > 0) put(Window.Page, page)
         if (social > 0) put(Window.Social, social)
     }
 }
@@ -744,24 +743,23 @@ internal fun HourglassLayer(awaited: androidx.compose.runtime.State<Window?>) {
 /** Вкладки журнала уведомлений окна — те, из которых складывается его число ([windowCounters]). */
 internal fun noticeTabsOf(window: Window): List<io.tima.domain.chat.NoticeTab> = when (window) {
     Window.Phone -> listOf(io.tima.domain.chat.NoticeTab.Chats, io.tima.domain.chat.NoticeTab.Calls)
-    Window.Social -> listOf(io.tima.domain.chat.NoticeTab.Channels)
-    Window.Page -> listOf(io.tima.domain.chat.NoticeTab.Groups)
+    Window.Social -> listOf(io.tima.domain.chat.NoticeTab.Channels, io.tima.domain.chat.NoticeTab.Groups)
     else -> emptyList()
 }
 
-/** Вкладка окна, где живёт вкладка журнала уведомлений: «Каналы» — каталог «Социума», «Группы» — на «Странице». */
+/** Вкладка окна, где живёт вкладка журнала уведомлений: «Каналы» и «Группы» — каталог «Социума». */
 internal fun windowTabOf(tab: io.tima.domain.chat.NoticeTab): WindowTab = when (tab) {
     io.tima.domain.chat.NoticeTab.Chats -> WindowTab.Chats
     io.tima.domain.chat.NoticeTab.Calls -> WindowTab.Calls
     io.tima.domain.chat.NoticeTab.Channels -> WindowTab.Catalogue
-    io.tima.domain.chat.NoticeTab.Groups -> WindowTab.Groups
+    io.tima.domain.chat.NoticeTab.Groups -> WindowTab.Catalogue
 }
 
-/** Окно вкладки журнала уведомлений: «Чаты» и «Звонки» — «Телефон», «Каналы» — «Социум», «Группы» — «Страница». */
+/** Окно вкладки журнала уведомлений: «Чаты» и «Звонки» — «Телефон», «Каналы» и «Группы» — «Социум». */
 internal fun noticeWindowOf(tab: io.tima.domain.chat.NoticeTab): Window = when (tab) {
     io.tima.domain.chat.NoticeTab.Chats, io.tima.domain.chat.NoticeTab.Calls -> Window.Phone
     io.tima.domain.chat.NoticeTab.Channels -> Window.Social
-    io.tima.domain.chat.NoticeTab.Groups -> Window.Page
+    io.tima.domain.chat.NoticeTab.Groups -> Window.Social
 }
 
 /**
