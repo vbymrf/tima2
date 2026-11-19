@@ -206,6 +206,10 @@ func (s *Store) ResolveRereg(ctx context.Context, r Rereg, wait, window, deleteA
 		if err := scheduleDelete(ctx, tx, r.OldUserID, deleteAt, RevokedReregConfirmed); err != nil {
 			return "", err
 		}
+		// Владение — в распоряжение новой личности, передача — только прежним ключом (ПЛАН-(СЦ) §6.3, ответ «а»).
+		if err := rebindOwnership(ctx, tx, r.OldUserID, r.NewUserID); err != nil {
+			return "", err
+		}
 	default:
 		// Порядок важен: частичный уникальный индекс «одна текущая личность на аккаунт».
 		if _, err := tx.Exec(ctx, `UPDATE users SET valid_to = COALESCE(valid_to, now()) WHERE user_id = $1`, r.NewUserID); err != nil {

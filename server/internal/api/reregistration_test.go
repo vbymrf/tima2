@@ -309,6 +309,14 @@ func TestReregistrationNewWins(t *testing.T) {
 		t.Fatalf("С: %d", code)
 	}
 	certifyByIdentity(t, db, oldPhone.id)
+	// Владение прежней личности (ПЛАН-(СЦ) §6.3, ответ «а»): группа и сообщество.
+	ownedGroup := makeGroup(t, ts, oldPhone.token, "public")
+	var ownedCommunity struct {
+		CommunityID string `json:"community_id"`
+	}
+	if code := jsonAuth(t, ts, "POST", "/api/v1/communities", oldPhone.token, map[string]any{"title": "Перевязка", "is_public": true}, &ownedCommunity); code != 201 {
+		t.Fatalf("сообщество С: %d", code)
+	}
 	newPub, newPriv, _ := ed25519.GenerateKey(rand.Reader)
 	newPhone, code, errCode := registerRereg(t, ts, phone, newPub, oldPhone.token, oldPriv)
 	if code != 201 {
@@ -355,6 +363,34 @@ func TestReregistrationNewWins(t *testing.T) {
 	}
 	if strings.Contains(revokedText("rereg_confirmed"), "отозвано") {
 		t.Fatal("у причины обязан быть свой текст")
+	}
+	// Распоряжается новая личность, передать не может: последнее звено — «перевязка» с ключом прежней.
+	var g struct {
+		MyRole string `json:"my_role"`
+	}
+	if code := getAuthed(t, ts, newPhone.token, "/api/v1/groups/"+ownedGroup, &g); code != 200 || g.MyRole != "owner" {
+		t.Fatalf("группа у Н: %d %+v", code, g)
+	}
+	for _, path := range []string{"/api/v1/groups/" + ownedGroup + "/ownership", "/api/v1/communities/" + ownedCommunity.CommunityID + "/ownership"} {
+		var own struct {
+			Chain []struct {
+				OwnerID     string `json:"owner_id"`
+				Kind        string `json:"kind"`
+				IdentityPub string `json:"identity_pub"`
+			} `json:"chain"`
+			CanTransfer bool `json:"can_transfer"`
+		}
+		if code := getAuthed(t, ts, newPhone.token, path, &own); code != 200 || len(own.Chain) != 2 || own.CanTransfer {
+			t.Fatalf("%s: %d %+v", path, code, own)
+		}
+		last := own.Chain[1]
+		if last.OwnerID != newPhone.userID || last.Kind != "rebind" || last.IdentityPub != own.Chain[0].IdentityPub {
+			t.Fatalf("%s: звено перевязки %+v, первое %+v", path, last, own.Chain[0])
+		}
+	}
+	// Распоряжение: переименовать группу новой личности можно.
+	if code := jsonAuth(t, ts, "PATCH", "/api/v1/groups/"+ownedGroup, newPhone.token, map[string]any{"title": "после перевязки"}, nil); code != 200 {
+		t.Fatalf("PATCH группы Н: %d", code)
 	}
 }
 
