@@ -6,10 +6,11 @@
 appId: io.tima.app.v2
 ---
 - runFlow: group-open.yaml
+# «Участники» — вкладка страницы группы (ПЛАН-(СЦ) СЦ6, 2026-11-19): заголовок шапки → страница → вкладка.
 - tapOn:
-    id: "header:more"
+    id: "header:title"
 - tapOn:
-    id: "chat:members"
+    id: "page:tab:members"
 - extendedWaitUntil:
     visible: "${MAESTRO_MEMBER}"
     timeout: 10000

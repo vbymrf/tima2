@@ -69,6 +69,27 @@ interface SociumWords {
     val ownColorTitle: String
     val ownColorAbout: String
     val ownColorDefault: String
+    // Страница и «Управление» (СЦ4, СЦ5).
+    val notifyTitle: String
+    val manageMain: String
+    val manageMainAbout: String
+    val manageRoles: String
+    val manageRolesAbout: String
+    val manageRequests: String
+    val manageRequestsAbout: String
+    val manageAccess: String
+    val manageAccessAbout: String
+    val manageMessages: String
+    val manageMessagesAbout: String
+    val manageVoice: String
+    val manageVoiceAbout: String
+    val manageAppeals: String
+    val manageAppealsAbout: String
+    val manageDanger: String
+    val manageDangerAbout: String
+    val titleHint: String
+    val save: String
+    val saved: String
 }
 
 object RussianSociumWords : SociumWords {
@@ -123,6 +144,26 @@ object RussianSociumWords : SociumWords {
     override val ownColorTitle = "Цвет названия своей роли"
     override val ownColorAbout = "где вы владелец, админ или модератор — название в строке этим цветом"
     override val ownColorDefault = "По умолчанию — зелёный"
+    override val notifyTitle = "Уведомления"
+    override val manageMain = "Основное"
+    override val manageMainAbout = "название, «секретная»"
+    override val manageRoles = "Роли"
+    override val manageRolesAbout = "назначить и снять"
+    override val manageRequests = "Заявки"
+    override val manageRequestsAbout = "просят вступить"
+    override val manageAccess = "Доступ"
+    override val manageAccessAbout = "уровень 3 и сроки"
+    override val manageMessages = "Сообщения"
+    override val manageMessagesAbout = "суперсообщение, закреплённые"
+    override val manageVoice = "Звуковые чаты"
+    override val manageVoiceAbout = "создать, настройки, список"
+    override val manageAppeals = "Обращения"
+    override val manageAppealsAbout = "переписка с людьми, «Принимать сообщения»"
+    override val manageDanger = "Опасное"
+    override val manageDangerAbout = "передать владение, удалить"
+    override val titleHint = "Название"
+    override val save = "Сохранить"
+    override val saved = "Сохранено"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -177,6 +218,26 @@ object EnglishSociumWords : SociumWords {
     override val ownColorTitle = "Colour of your own roles"
     override val ownColorAbout = "where you are the owner, an admin or a moderator, the title is shown in this colour"
     override val ownColorDefault = "Default: green"
+    override val notifyTitle = "Notifications"
+    override val manageMain = "Main"
+    override val manageMainAbout = "title, “secret”"
+    override val manageRoles = "Roles"
+    override val manageRolesAbout = "appoint and remove"
+    override val manageRequests = "Requests"
+    override val manageRequestsAbout = "asking to join"
+    override val manageAccess = "Access"
+    override val manageAccessAbout = "level 3 and terms"
+    override val manageMessages = "Messages"
+    override val manageMessagesAbout = "super message, pinned"
+    override val manageVoice = "Voice chats"
+    override val manageVoiceAbout = "create, settings, list"
+    override val manageAppeals = "Appeals"
+    override val manageAppealsAbout = "conversations with people, “Accept messages”"
+    override val manageDanger = "Danger zone"
+    override val manageDangerAbout = "transfer ownership, delete"
+    override val titleHint = "Title"
+    override val save = "Save"
+    override val saved = "Saved"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -231,4 +292,24 @@ object SpanishSociumWords : SociumWords {
     override val ownColorTitle = "Color de tus roles"
     override val ownColorAbout = "donde eres propietario, administrador o moderador, el título va en este color"
     override val ownColorDefault = "Por defecto: verde"
+    override val notifyTitle = "Notificaciones"
+    override val manageMain = "Principal"
+    override val manageMainAbout = "nombre, «secreto»"
+    override val manageRoles = "Roles"
+    override val manageRolesAbout = "asignar y quitar"
+    override val manageRequests = "Solicitudes"
+    override val manageRequestsAbout = "piden entrar"
+    override val manageAccess = "Acceso"
+    override val manageAccessAbout = "nivel 3 y plazos"
+    override val manageMessages = "Mensajes"
+    override val manageMessagesAbout = "supermensaje, fijados"
+    override val manageVoice = "Chats de voz"
+    override val manageVoiceAbout = "crear, ajustes, lista"
+    override val manageAppeals = "Consultas"
+    override val manageAppealsAbout = "conversaciones con personas, «Aceptar mensajes»"
+    override val manageDanger = "Zona peligrosa"
+    override val manageDangerAbout = "transferir la propiedad, eliminar"
+    override val titleHint = "Nombre"
+    override val save = "Guardar"
+    override val saved = "Guardado"
 }

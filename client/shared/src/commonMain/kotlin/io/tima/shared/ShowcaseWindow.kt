@@ -42,6 +42,9 @@ internal fun ShowcaseWindow(
     onJoin: () -> Unit,
     onGroupSuper: (ComposedDoc) -> Unit,
     onBack: () -> Unit,
+    /** Полоса вкладок и верх «О сущности» (ПЛАН-(СЦ) СЦ4). */
+    tabs: (@Composable () -> Unit)? = null,
+    top: (@Composable () -> Unit)? = null,
 ) {
     var state by remember(of) { mutableStateOf(ShowcaseState()) }
     var reload by remember(of) { mutableIntStateOf(0) }
@@ -94,7 +97,10 @@ internal fun ShowcaseWindow(
         title = title,
         state = state,
         onBack = onBack,
-        action = if (member) null else (if (of.kind == "community") w.subscribe else w.join) to onJoin,
+        // Вступить и подписаться — кнопками верха страницы, когда он есть (СЦ4).
+        action = if (member || top != null) null else (if (of.kind == "community") w.subscribe else w.join) to onJoin,
+        tabs = tabs,
+        top = top,
         onSuper = if (owner && page != null && of.kind != "channel") {
             {
                 val draft = page.superDraft(of.kind, of.id)

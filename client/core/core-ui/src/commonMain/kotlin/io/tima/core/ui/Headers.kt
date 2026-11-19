@@ -253,7 +253,7 @@ fun SubwindowHeader(
             modifier = Modifier
                 .weight(1f)
                 .widthIn(min = TITLE_MIN)
-                .then(if (onPerson != null) Modifier.clickable(onClick = onPerson) else Modifier),
+                .then(if (onPerson != null) Modifier.testTag(HEADER_TITLE_TAG).clickable(onClick = onPerson) else Modifier),
         ) {
             // Многословный заголовок переносится, однословный ужимается по ширине:
             // на плашке одно слово перенести некуда, а обрезать его нельзя — от него
@@ -286,6 +286,9 @@ const val WINDOW_SWITCHER_TAG: String = "window:switcher"
  * (2026-10-21), а угол у разных телефонов разный.
  */
 const val HEADER_MORE_TAG: String = "header:more"
+
+/** Нажимаемый заголовок шапки подокна — страница сущности или человека (ПЛАН-(СЦ) СЦ4). */
+const val HEADER_TITLE_TAG: String = "header:title"
 
 /** Стрелка «назад» шапки подокна: у неё нет надписи, а «Назад» телефона при открытой клавиатуре её только прячет (PH-45). */
 const val HEADER_BACK_TAG: String = "header:back"

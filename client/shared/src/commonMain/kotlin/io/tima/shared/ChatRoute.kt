@@ -328,6 +328,8 @@ internal fun Chat(
     scope: kotlinx.coroutines.CoroutineScope,
     onBack: () -> Unit,
     onMembers: () -> Unit,
+    /** «Показывать уровень сообщений» со страницы сущности — запомненная галочка (ПЛАН-(СЦ) §1.7, 2). */
+    circlesInitial: Boolean = false,
     /** Отчёт о проблеме из подокна неотправленного — с причиной и тем, ждёт оно или отказано. */
     onReportFailed: ((reason: String?, waiting: Boolean) -> Unit)? = null,
     /** Унести реплику к себе на страницу: `(messageId, круг записи)`. */
@@ -508,6 +510,8 @@ internal fun Chat(
             readEffects = readEffects,
         )
     }
+    // Запомненная на странице галочка уровня (ПЛАН-(СЦ) §1.7, 2) — при каждом входе, а не только первом.
+    LaunchedEffect(chatId, circlesInitial) { if (group) store.circlesShown(circlesInitial) }
     // Вид группы — первым: от него зависит, нужен ли ей ключ (заказчик 2026-10-21).
     LaunchedEffect(store, groupKind) { store.groupKind(groupKind) }
     val state by store.state.collectAsState()
@@ -1693,9 +1697,11 @@ internal fun Chat(
             currentSection = currentShelf,
             onMoveTo = { sectionId -> onMoveToShelf(chatId, sectionId) },
             onClose = { chatMenu = false },
-            circlesShown = state.showCircles,
-            onCircles = store::circlesShown,
-            onMembers = onMembers,
+            // «Доступность» и «Участники» переехали на страницу сущности (ПЛАН-(СЦ) §1.6, 4; §1.7, 2).
+            circlesShown = null,
+            onCircles = null,
+            onMembers = null,
+            group = true,
             onMyColor = if (onMyColor != null) { { myColor = true } } else null,
             onGroupCall = onGroupCall,
             notifyOff = liveStates?.let { "group:$chatId" in mutedNow },
@@ -1877,6 +1883,8 @@ internal fun Members(
     people: ChatPeople? = null,
     look: PersonLook = PersonLook.DEFAULT,
     contacts: List<InviteCandidate>? = null,
+    /** Полоса вкладок страницы сущности (ПЛАН-(СЦ) СЦ6). */
+    tabs: (@Composable () -> Unit)? = null,
 ) {
     val kindNow by rememberUpdatedState(groupKind)
     val store = remember(groupId) {
@@ -1922,6 +1930,7 @@ internal fun Members(
     }
 
     MemberScreen(
+        tabs = tabs,
         state = state,
         onNumber = store::changedNumber,
         onCountryCode = store::changedCountryCode,

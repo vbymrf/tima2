@@ -1879,6 +1879,50 @@ private fun App(
         val preview = if (topAt > localAt && !top?.preview.isNullOrBlank()) top?.preview else local?.preview ?: top?.preview
         io.tima.feature.group.RowLook(preview = preview, atMs = at, time = at?.let(::sociumTime).orEmpty(), muted = "group:$id" in mutedAll)
     }
+    // Страница сущности (ПЛАН-(СЦ) СЦ4–СЦ6): моя роль, тип, вкладки по роли; галочка «Показывать уровень сообщений»
+    // запоминается для сущности на устройстве (§1.7, 2).
+    val roleOf: (String, String) -> io.tima.domain.chat.GroupRole? = { kind, id ->
+        when (kind) {
+            "group" -> socialState.mine.firstOrNull { it.groupId == id }?.myRole
+            "community" -> socialState.communities.firstOrNull { it.communityId == id }?.let {
+                when {
+                    it.owner -> io.tima.domain.chat.GroupRole.Owner
+                    it.admin -> io.tima.domain.chat.GroupRole.Admin
+                    else -> io.tima.domain.chat.GroupRole.Member
+                }
+            }
+            "channel" -> socialState.channels.firstOrNull { it.channelId == id }?.role
+            else -> null
+        }
+    }
+    val typeOf: (String, String) -> io.tima.domain.chat.EntityType = { kind, id ->
+        when (kind) {
+            "group" -> socialState.mine.firstOrNull { it.groupId == id }?.type
+                ?: io.tima.domain.chat.EntityType(io.tima.domain.chat.EntityKind.Group, io.tima.domain.chat.EntityReach.Public)
+            "channel" -> socialState.channels.firstOrNull { it.channelId == id }?.type
+                ?: io.tima.domain.chat.EntityType(io.tima.domain.chat.EntityKind.Channel, io.tima.domain.chat.EntityReach.Public)
+            else -> io.tima.domain.chat.EntityType(io.tima.domain.chat.EntityKind.Community, io.tima.domain.chat.EntityReach.Public)
+        }
+    }
+    val pageTabBar: @Composable (String, String, String, io.tima.feature.group.PageTab) -> Unit = { kind, id, title, now ->
+        io.tima.feature.group.EntityTabsBar(
+            tabs = io.tima.feature.group.pageTabs(roleOf(kind, id), hasMembers = kind == "group"),
+            current = now,
+            onTab = { tab ->
+                Journal.note(LogCode.NAV, "вкладка страницы", "вкладка" to tab.name)
+                where = when (tab) {
+                    io.tima.feature.group.PageTab.About -> Where.Showcase(kind, id, title)
+                    io.tima.feature.group.PageTab.Members -> Where.Members(id, title)
+                    io.tima.feature.group.PageTab.Manage -> Where.Manage(kind, id, title)
+                }
+            },
+        )
+    }
+    val levelsShown = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    LaunchedEffect(environment) {
+        val saved = runCatching { environment.settings.all().first() }.getOrDefault(emptyMap())
+        for ((k, v) in saved) if (k.startsWith(PAGE_LEVELS)) levelsShown[k.removePrefix(PAGE_LEVELS)] = v == "1"
+    }
     val sociumLook: (String, String) -> io.tima.feature.group.RowLook = { kind, id ->
         if (kind == "channel") {
             val top = sociumTops["channel:$id"]
@@ -4352,6 +4396,114 @@ private fun App(
                             where = Where.Chat(current.id, current.title)
                         },
                         onBack = { where = Where.Nothing },
+                        tabs = { pageTabBar(current.kind, current.id, current.title, io.tima.feature.group.PageTab.About) },
+                        top = {
+                            val kind = current.kind
+                            val id = current.id
+                            val role = roleOf(kind, id)
+                            val inside = when (kind) {
+                                "group" -> socialState.mine.any { it.groupId == id }
+                                "community" -> socialState.communities.any { it.communityId == id }
+                                else -> socialState.channels.any { it.channelId == id }
+                            }
+                            val muted = "$kind:$id" in mutedAll
+                            io.tima.feature.group.EntityAboutTop(
+                                title = current.title,
+                                type = typeOf(kind, id),
+                                role = role,
+                                inside = inside,
+                                group = kind == "group",
+                                notify = if (muted) io.tima.feature.group.NotifyState.Off else io.tima.feature.group.NotifyState.On,
+                                onJoin = if (inside) null else {
+                                    {
+                                        when (kind) {
+                                            "group" -> social.ask(id)
+                                            "community" -> scope.launch { network.communities.subscribe(id, true); social.refresh() }
+                                        }
+                                    }
+                                },
+                                onNotify = if (!inside) null else {
+                                    { assembled.liveStates?.mute(kind, id, !muted) }
+                                },
+                                // Владелец не уходит, пока не передал (409 owner_locked).
+                                onLeave = if (!inside || role == io.tima.domain.chat.GroupRole.Owner || kind == "channel") null else {
+                                    {
+                                        scope.launch {
+                                            Journal.note(LogCode.NAV, "выйти из сущности", "вид" to kind)
+                                            when (kind) {
+                                                "group" -> network.groups.removeMember(id, session.userId)
+                                                "community" -> network.communities.subscribe(id, false)
+                                            }
+                                            social.refresh()
+                                            where = Where.Nothing
+                                        }
+                                    }
+                                },
+                                onWrite = null,
+                                onShare = null,
+                                showLevels = if (inside && kind == "group") levelsShown["$kind:$id"] == true else null,
+                                onShowLevels = { on ->
+                                    levelsShown["$kind:$id"] = on
+                                    scope.launch { runCatching { environment.settings.put(PAGE_LEVELS + "$kind:$id", if (on) "1" else "0") } }
+                                },
+                            )
+                        },
+                    )
+                }
+            }
+
+            is Where.Manage -> {
+                {
+                    val kind = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Group
+                    io.tima.feature.group.ManageScreen(
+                        title = current.title,
+                        tabs = { pageTabBar(current.kind, current.id, current.title, io.tima.feature.group.PageTab.Manage) },
+                        sections = io.tima.feature.group.manageSections(roleOf(current.kind, current.id), kind),
+                        counts = { 0 },
+                        onSection = { s ->
+                            Journal.note(LogCode.NAV, "управление", "раздел" to s.name)
+                            when (s) {
+                                io.tima.feature.group.ManageSection.Main -> where = Where.ManageMain(current.kind, current.id, current.title)
+                                io.tima.feature.group.ManageSection.Roles,
+                                io.tima.feature.group.ManageSection.Requests -> if (current.kind == "group") where = Where.Members(current.id, current.title)
+                                io.tima.feature.group.ManageSection.Access -> where = Where.Access(current.id, current.title)
+                                io.tima.feature.group.ManageSection.Messages -> where = Where.Showcase(current.kind, current.id, current.title)
+                                io.tima.feature.group.ManageSection.Danger -> where = Where.Ownership(current.kind, current.id, current.title)
+                                io.tima.feature.group.ManageSection.Voice, io.tima.feature.group.ManageSection.Appeals -> Unit
+                            }
+                        },
+                        onBack = { where = Where.Nothing },
+                    )
+                }
+            }
+
+            is Where.ManageMain -> {
+                {
+                    val kind = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Group
+                    val wasSecret = typeOf(current.kind, current.id).secret
+                    var title by remember(current) { mutableStateOf(current.title) }
+                    var secret by remember(current) { mutableStateOf(wasSecret) }
+                    var saved by remember(current) { mutableStateOf<Boolean?>(null) }
+                    io.tima.feature.group.ManageMainScreen(
+                        title = title,
+                        secret = secret,
+                        renamable = kind == io.tima.domain.chat.EntityKind.Group,
+                        saved = saved,
+                        onTitle = { title = it; saved = null },
+                        onSecret = { secret = it; saved = null },
+                        onSave = {
+                            scope.launch {
+                                var ok = true
+                                if (kind == io.tima.domain.chat.EntityKind.Group && title.isNotBlank() && title != current.title) {
+                                    ok = network.invites.rename(current.id, title.trim())
+                                }
+                                if (secret != wasSecret) ok = network.invites.set(kind, current.id, secret) && ok
+                                Journal.note(LogCode.NAV, "управление: основное", "вышло" to ok)
+                                saved = ok
+                                if (ok) social.refresh()
+                            }
+                        },
+                        onBack = { where = Where.Nothing },
                     )
                 }
             }
@@ -4633,6 +4785,7 @@ private fun App(
                             }
                         },
                         liveStates = assembled.liveStates,
+                        circlesInitial = levelsShown["group:${current.chatId}"] == true,
                         onPullGroupNew = { id -> assembled.receiver.pullGroupNew(id) },
                         myDeviceId = assembled.session.deviceId,
                         reregWarn = reregOld,
@@ -4986,6 +5139,7 @@ private fun App(
                         contacts = bookStateForChats.all.filter { it.inTima }.map { entry ->
                             InviteCandidate(entry.userId!!, (peopleCards[entry.userId!!] ?: ChatPerson()).withBookName(entry.name, entry.phone))
                         },
+                        tabs = { pageTabBar("group", current.groupId, current.name.orEmpty(), io.tima.feature.group.PageTab.Members) },
                     )
                 }
             }
@@ -5071,6 +5225,9 @@ internal const val SUGGESTION_KIND = "suggestion"
 
 /** Сколько висит короткое слово во вкладке «Звонки» («Чат удалён»). */
 private const val CALLS_NOTE_MS = 2_500L
+
+/** Галочка «Показывать уровень сообщений» сущности — на устройстве (ПЛАН-(СЦ) §1.7, 2): ключ «вид:номер». */
+internal const val PAGE_LEVELS = "page.levels."
 
 /**
  * Что предлагает сервер этой платформе.

@@ -104,6 +104,17 @@ class InvitesOverHttp(
         false
     }
 
+    /** Переименовать группу (ПЛАН-(СЦ) СЦ5, «Основное»): тем же PATCH, что прочие настройки. */
+    suspend fun rename(groupId: String, title: String): Boolean = try {
+        client.patch(route.api(path(EntityKind.Group, groupId))) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("title", JsonPrimitive(title)) }.toString())
+        }.status == HttpStatusCode.OK
+    } catch (_: Throwable) {
+        false
+    }
+
     private fun inviteOf(o: JsonObject): EntityInvite? {
         val id = o.str("invite_id") ?: return null
         val kind = EntityKind.fromWire(o.str("entity_kind").orEmpty()) ?: return null

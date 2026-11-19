@@ -82,6 +82,8 @@ fun MemberScreen(
     /** Заявки новых личностей (ДУ6, Р9) — только у владельца и модераторов. */
     claims: List<IdentityClaimLine> = emptyList(),
     onConfirmClaim: (String) -> Unit = {},
+    /** Полоса вкладок страницы сущности (ПЛАН-(СЦ) СЦ6): «Участники» — вкладка страницы. */
+    tabs: (@Composable () -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.social
@@ -94,6 +96,7 @@ fun MemberScreen(
                 { Chip(words.access, kind = ChipKind.Selected, onClick = open) }
             },
         )
+        tabs?.invoke()
 
         Column(
             modifier = Modifier.fillMaxSize().padding(TimaSpacing.about4),

@@ -62,6 +62,10 @@ fun ShowcaseScreen(
     onSuper: (() -> Unit)? = null,
     avatarPicture: String? = null,
     modifier: Modifier = Modifier,
+    /** Полоса вкладок страницы сущности (ПЛАН-(СЦ) СЦ4); `null` — нет. */
+    tabs: (@Composable () -> Unit)? = null,
+    /** Верх «О сущности» над суперсообщением: тип, пузыри, кнопки (СЦ4); `null` — нет. */
+    top: (@Composable () -> Unit)? = null,
 ) {
     val w = Tima.words.showcase
     var single by remember { mutableStateOf<Long?>(null) }
@@ -80,6 +84,7 @@ fun ShowcaseScreen(
             avatar = title.take(2).uppercase(),
             avatarPicture = avatarPicture,
         )
+        if (single == null) tabs?.invoke()
         androidx.compose.runtime.CompositionLocalProvider(
             LocalQuoteLook provides quoteLook,
             LocalOpenMessage provides open,
@@ -89,6 +94,7 @@ fun ShowcaseScreen(
                 verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4),
             ) {
                 val shown = single?.let { page?.line(it) }
+                if (shown == null) top?.invoke()
                 when {
                     shown != null -> Whole(shown)
                     state.loading && page == null -> Tertiary(w.loading)
