@@ -161,6 +161,14 @@ interface SociumWords {
     val staffAdmins: String
     val staffRemove: String
     val staffAdd: String
+
+    // Лента канала (СЦ3).
+    val channelFeed: String
+    val channelAbout: String
+    val channelEmpty: String
+    val channelPostHint: String
+    val channelPublish: String
+    fun channelComments(n: Int): String
 }
 
 object RussianSociumWords : SociumWords {
@@ -306,6 +314,12 @@ object RussianSociumWords : SociumWords {
     override val staffAdmins = "Админы"
     override val staffRemove = "Снять"
     override val staffAdd = "Добавить"
+    override val channelFeed = "Лента канала"
+    override val channelAbout = "О канале"
+    override val channelEmpty = "Записей пока нет"
+    override val channelPostHint = "Новая запись"
+    override val channelPublish = "Опубликовать"
+    override fun channelComments(n: Int) = if (n > 0) "Комментарии: $n" else "Комментировать"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -451,6 +465,12 @@ object EnglishSociumWords : SociumWords {
     override val staffAdmins = "Admins"
     override val staffRemove = "Remove"
     override val staffAdd = "Add"
+    override val channelFeed = "Channel feed"
+    override val channelAbout = "About"
+    override val channelEmpty = "No posts yet"
+    override val channelPostHint = "New post"
+    override val channelPublish = "Publish"
+    override fun channelComments(n: Int) = if (n > 0) "Comments: $n" else "Comment"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -596,4 +616,10 @@ object SpanishSociumWords : SociumWords {
     override val staffAdmins = "Administradores"
     override val staffRemove = "Quitar"
     override val staffAdd = "Añadir"
+    override val channelFeed = "Publicaciones del canal"
+    override val channelAbout = "Acerca de"
+    override val channelEmpty = "Aún no hay publicaciones"
+    override val channelPostHint = "Nueva publicación"
+    override val channelPublish = "Publicar"
+    override fun channelComments(n: Int) = if (n > 0) "Comentarios: $n" else "Comentar"
 }

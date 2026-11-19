@@ -181,6 +181,39 @@ class InvitesOverHttp(
         false
     }
 
+    /** Лента канала (СЦ3): последние 50 записей, новые сверху; `null` — нет связи или канал закрыт. */
+    suspend fun channelPosts(channelId: String): List<io.tima.domain.chat.ChannelFeedPost>? = try {
+        val r = client.get(route.api("/api/v1/channels/$channelId/posts?limit=50")) { header("Authorization", "Bearer ${token()}") }
+        if (r.status != HttpStatusCode.OK) null else r.jsonBody()?.get("posts")?.jsonArrayOrNull()?.mapNotNull { e ->
+            val o = e.jsonObjectOrNull() ?: return@mapNotNull null
+            io.tima.domain.chat.ChannelFeedPost(
+                postId = o.long("post_id") ?: return@mapNotNull null,
+                authorId = o.str("author_id").orEmpty(),
+                text = o.str("text").orEmpty(),
+                atMs = o.long("created_at_unix_ms") ?: 0L,
+                comments = o.int("comments") ?: 0,
+                commentsClosed = o.bool("comments_closed") ?: false,
+            )
+        }?.sortedByDescending { it.postId }
+    } catch (_: Throwable) {
+        null
+    }
+
+    /** Запись в канал текстом (СЦ3): пишут владелец и модератор; уровень 0 — всем подписчикам. */
+    suspend fun channelPublish(channelId: String, text: String): Boolean = try {
+        client.post(route.api("/api/v1/channels/$channelId/posts")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {
+                put("text", JsonPrimitive(text))
+                put("nodes", kotlinx.serialization.json.JsonArray(emptyList()))
+                put("level", JsonPrimitive(0))
+            }.toString())
+        }.status.value in 200..299
+    } catch (_: Throwable) {
+        false
+    }
+
     /** Число участников (группа) или подписчиков (канал, сообщество) — шапка страницы (§4б п. 9). */
     suspend fun counts(kind: EntityKind, ids: List<String>): Map<String, Int> = try {
         if (ids.isEmpty()) emptyMap() else {

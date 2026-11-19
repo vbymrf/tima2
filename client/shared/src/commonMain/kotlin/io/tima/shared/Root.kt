@@ -4079,7 +4079,7 @@ private fun App(
                                 lookOf = sociumLook,
                                 ownColor = communityView.ownColor?.let { androidx.compose.ui.graphics.Color(it.toULong() shl 32) },
                                 // Канал — пока окном «Описание» с его записями уровня 0; лента канала — К5.
-                                onOpenChannel = { ch -> where = Where.Showcase("channel", ch.channelId, ch.title) },
+                                onOpenChannel = { ch -> where = Where.ChannelFeed(ch.channelId, ch.title) },
                                 countOf = { groupId -> noticeCounts.chat(groupId, null) },
                                 onOpen = { where = Where.Chat(it.groupId, it.title) },
                                 onNew = { where = Where.NewGroup },
@@ -4563,6 +4563,36 @@ private fun App(
                         onAccept = { on -> scope.launch { network.threads.setAccepts(kind, current.id, on); tick++ } },
                         onOpen = { row -> where = Where.Thread(current.kind, current.id, current.title, row.userId) },
                         onBack = { where = Where.Nothing },
+                    )
+                }
+            }
+
+            is Where.ChannelFeed -> {
+                {
+                    // Лента канала (СЦ3): записи, «Комментарии», «О канале»; пишут владелец и модератор.
+                    var posts by remember(current) { mutableStateOf<List<io.tima.domain.chat.ChannelFeedPost>?>(null) }
+                    var tick by remember(current) { mutableStateOf(0) }
+                    LaunchedEffect(current, tick) { posts = network.invites.channelPosts(current.channelId) }
+                    val role = roleOf("channel", current.channelId)
+                    io.tima.feature.group.ChannelFeedScreen(
+                        title = current.title,
+                        posts = posts,
+                        time = { ms -> if (ms > 0) sociumTime(ms) else "" },
+                        onComments = { p -> where = Where.Comments(current.channelId, p.postId) },
+                        onAbout = { where = Where.Showcase("channel", current.channelId, current.title) },
+                        onPublish = if (role == io.tima.domain.chat.GroupRole.Owner || role == io.tima.domain.chat.GroupRole.Moderator || role == io.tima.domain.chat.GroupRole.Admin) {
+                            { text ->
+                                scope.launch {
+                                    val ok = network.invites.channelPublish(current.channelId, text)
+                                    Journal.note(LogCode.NAV, "запись в канал", "вышло" to ok)
+                                    tick++
+                                }
+                            }
+                        } else {
+                            null
+                        },
+                        onBack = { where = Where.Nothing },
+                        avatarPicture = entityAvatars["channel:${current.channelId}"]?.let { "tima-media://$it" },
                     )
                 }
             }
