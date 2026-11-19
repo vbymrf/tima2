@@ -327,6 +327,97 @@ private val STRIP = 4.dp
 /** Поля пузыря слева и справа: подкладка выходит на них — во всю ширину пузыря (заказчик 2026-10-20). */
 data class BubbleInset(val start: androidx.compose.ui.unit.Dp, val end: androidx.compose.ui.unit.Dp)
 
+/**
+ * Чужое сообщение группы **без пузыря** — эмоджи, фото и файлы без текста (заказчик 2026-11-19): чей он, иначе не
+ * видно. Аватар стоит там же, где у пузыря при выбранном «Виде» ([look]): «свободно» — за скруглением, «у края» —
+ * у края экрана, «имя в аватаре» — в колонке; но сам, без строки имени, верхом к верху содержимого. Картинка есть —
+ * она; нет — имя мелко в квадрате, одинаково для всех трёх видов. Пузыри своего вида не меняют.
+ *
+ * Содержимое — справа от аватара, если помещается в строку; нет — строкой ниже, от левого края пузырей этого вида.
+ * [showAvatar] `false` — продолжение серии: аватара нет, отступ тот же.
+ */
+@Composable
+fun BareAuthorRow(
+    look: AvatarLook,
+    author: String?,
+    avatar: String?,
+    avatarImage: ImageBitmap?,
+    showAvatar: Boolean,
+    onAvatar: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val colors = Tima.colors
+    val scale = LocalTextScale.current
+    val nameLine = with(LocalDensity.current) { AUTHOR_SIZE.toDp() } * 1.35f
+    val avatarSide = REPLY_GAP - 1.dp + BUBBLE_TOP + nameLine + 1.dp
+    val inside = look == AvatarLook.Inside
+    // По горизонтали — от левого края пузырей этого вида, как в [Bubble].
+    val avatarLeft = when (look) {
+        AvatarLook.Free -> AVATAR_LEFT
+        AvatarLook.Edge -> EDGE_GAP - FEED_PADDING
+        AvatarLook.Inside -> -(avatarSide + EDGE_GAP)
+    }
+    // Где начинается содержимое справа: за аватаром и зазором; у «имени в аватаре» — колонка уже отведена.
+    val besideX = if (inside) 0.dp else (avatarLeft + avatarSide + EDGE_GAP * 3).coerceAtLeast(0.dp)
+    androidx.compose.ui.layout.Layout(
+        modifier = modifier.fillMaxWidth()
+            .then(if (inside) Modifier.padding(start = EDGE_GAP + avatarSide + EDGE_GAP - FEED_PADDING) else Modifier),
+        content = {
+            if (showAvatar) {
+                val shape = RoundedCornerShape(TimaShapes.square)
+                Box(
+                    modifier = Modifier
+                        .size(avatarSide)
+                        .background(color = colors.author, shape = shape)
+                        .border(1.dp, colors.border, shape)
+                        .clip(shape)
+                        .then(if (onAvatar != null) Modifier.clickable(onClick = onAvatar) else Modifier),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when {
+                        avatarImage != null -> Image(
+                            bitmap = avatarImage,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                        !author.isNullOrBlank() -> Caption(
+                            text = author,
+                            modifier = Modifier.padding(horizontal = 1.dp),
+                            fontSize = INSIDE_SIZE / scale,
+                            weight = FontWeight.Bold,
+                            color = colors.text,
+                            maxLines = 3,
+                            textAlign = TextAlign.Center,
+                        )
+                        else -> Caption(text = avatar.orEmpty(), fontSize = TimaType.sz4 / scale, weight = FontWeight.ExtraBold, color = colors.text)
+                    }
+                }
+            }
+            Box { content() }
+        },
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val avatarPlace = if (showAvatar) measurables.first().measure(loose) else null
+        val body = measurables.last()
+        val beside = besideX.roundToPx()
+        val left = avatarLeft.roundToPx()
+        val room = (constraints.maxWidth - beside).coerceAtLeast(0)
+        // Помещается рядом — справа; нет — строкой ниже (под аватаром), во всю ширину.
+        // Замер ширины у содержимого с `SubcomposeLayout` (вложения) невозможен — тогда строкой ниже.
+        val wants = runCatching { body.maxIntrinsicWidth(constraints.maxHeight) }.getOrNull()
+        val fits = wants != null && wants <= room
+        val bodyPlace = body.measure(loose.copy(maxWidth = if (fits) room else constraints.maxWidth))
+        val avatarH = avatarPlace?.height ?: 0
+        val height = if (fits) maxOf(avatarH, bodyPlace.height) else avatarH + EDGE_GAP.roundToPx() * 2 + bodyPlace.height
+        layout(constraints.maxWidth, height) {
+            avatarPlace?.place(left, 0)
+            if (fits) bodyPlace.place(beside, 0) else bodyPlace.place(0, avatarH + EDGE_GAP.roundToPx() * 2)
+        }
+    }
+}
+
 /** Поля пузыря, в котором стоит содержимое; вне пузыря — нулевые. */
 val LocalBubbleInset = androidx.compose.runtime.staticCompositionLocalOf { BubbleInset(0.dp, 0.dp) }
 

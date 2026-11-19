@@ -682,11 +682,28 @@ internal fun Reply(
         val emoji = line.text?.takeIf { line.rich == null && !line.deleted && isEmojiOnly(it) }
         val rich = line.rich
         androidx.compose.runtime.CompositionLocalProvider(LocalBubbleTap provides bubbleTap, LocalTimeTap provides timeTap) {
+        // Чужое в группе без пузыря — с аватаром без имени на месте аватара пузырей (заказчик 2026-11-19): иначе
+        // не видно, кто прислал эмоджи или фото. Продолжение серии — без аватара, с тем же отступом.
+        val bare: @Composable (@Composable () -> Unit) -> Unit = { body ->
+            if (!line.outgoing && author != null) {
+                io.tima.core.ui.BareAuthorRow(
+                    look = avatarLook,
+                    author = author,
+                    avatar = letter,
+                    avatarImage = face,
+                    showAvatar = !continuation,
+                    onAvatar = line.senderId?.let { who -> onAuthor?.let { open -> { open(who) } } },
+                    modifier = Modifier.testTag(BARE_AUTHOR_TAG),
+                ) { OutsideBubble(line, body) }
+            } else {
+                OutsideBubble(line, body)
+            }
+        }
         if (rich != null && !line.deleted && rich.isOutside()) {
             // Фото без текста и файлы — вне пузыря (Решения §2).
-            OutsideBubble(line) { AttachmentsView(rich) }
+            bare { AttachmentsView(rich) }
         } else if (emoji != null) {
-            OutsideBubble(line) { Caption(emoji.trim(), fontSize = 44.sp) }
+            bare { Caption(emoji.trim(), fontSize = 44.sp) }
         } else {
             Bubbled(
                 line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, line.serverId in lostKeys,
@@ -776,6 +793,9 @@ internal val LocalBubbleTap = androidx.compose.runtime.staticCompositionLocalOf<
 
 /** Нажатие по дате и времени — меню действий с сообщением (заказчик 2026-10-20). */
 internal val LocalTimeTap = androidx.compose.runtime.staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/** Метка строки «без пузыря с аватаром» (заказчик 2026-11-19). */
+const val BARE_AUTHOR_TAG = "chat:bare-author"
 
 /**
  * Сообщение вне пузыря (Решения §2): эмоджи, фото без текста, файл. Сторона — как у пузыря, под
