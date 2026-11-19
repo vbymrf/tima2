@@ -1,0 +1,65 @@
+package api
+
+import (
+	"context"
+	"testing"
+
+	"tima/server/internal/store"
+)
+
+// Аватар сущности (doc_mig/ПЛАН-(СЦ)-СОЦИУМА.md, СЦ5): своё завершённое медиа, ставят владелец и админ.
+func TestАватарСущности(t *testing.T) {
+	ts, srv := setup(t)
+	ctx := context.Background()
+	owner := registerDevice(t, ts, "+79990008701")
+	member := registerDevice(t, ts, "+79990008702")
+	group := makeGroup(t, ts, owner.token, "public")
+	community := makeCommunity(t, ts, owner, "Клуб")
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/groups/"+group+"/members", map[string]any{"user_id": member.userID}, nil); code != 201 {
+		t.Fatalf("участник: %d", code)
+	}
+	mine, err := srv.Store.CreateMedia(ctx, store.Media{OwnerID: owner.userID, Mime: "image/jpeg", SizeBytes: 10, ChunkCount: 1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	theirs, err := srv.Store.CreateMedia(ctx, store.Media{OwnerID: member.userID, Mime: "image/jpeg", SizeBytes: 10, ChunkCount: 1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Незавершённое — не ставится.
+	if code := postAuthed(t, ts, owner.token, "PUT", "/api/v1/groups/"+group+"/avatar", map[string]any{"media_id": mine.MediaID}, nil); code != 403 {
+		t.Fatalf("незавершённое: ждали 403, пришло %d", code)
+	}
+	for _, m := range []struct{ id, who string }{{mine.MediaID, owner.userID}, {theirs.MediaID, member.userID}} {
+		if err := srv.Store.CompleteMedia(ctx, m.id, m.who, 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Участник без роли — не ставит; чужое медиа — не ставится.
+	if code := postAuthed(t, ts, member.token, "PUT", "/api/v1/groups/"+group+"/avatar", map[string]any{"media_id": theirs.MediaID}, nil); code != 403 {
+		t.Fatalf("участник ставит: ждали 403, пришло %d", code)
+	}
+	if code := postAuthed(t, ts, owner.token, "PUT", "/api/v1/groups/"+group+"/avatar", map[string]any{"media_id": theirs.MediaID}, nil); code != 403 {
+		t.Fatalf("чужое медиа: ждали 403, пришло %d", code)
+	}
+	// Своё — и группе, и сообществу.
+	for _, path := range []string{"/api/v1/groups/" + group, "/api/v1/communities/" + community} {
+		if code := postAuthed(t, ts, owner.token, "PUT", path+"/avatar", map[string]any{"media_id": mine.MediaID}, nil); code != 200 {
+			t.Fatalf("%s: %d", path, code)
+		}
+	}
+	var got struct {
+		Avatars map[string]string `json:"avatars"`
+	}
+	if code := postAuthed(t, ts, member.token, "POST", "/api/v1/entities/avatars", map[string]any{"kind": "group", "ids": []string{group}}, &got); code != 200 || got.Avatars[group] != mine.MediaID {
+		t.Fatalf("аватары: %d %+v", code, got)
+	}
+	// Снять.
+	if code := postAuthed(t, ts, owner.token, "PUT", "/api/v1/groups/"+group+"/avatar", map[string]any{"media_id": ""}, nil); code != 200 {
+		t.Fatalf("снять: %d", code)
+	}
+	got.Avatars = nil
+	if code := postAuthed(t, ts, member.token, "POST", "/api/v1/entities/avatars", map[string]any{"kind": "group", "ids": []string{group}}, &got); code != 200 || got.Avatars[group] != "" {
+		t.Fatalf("после снятия: %d %+v", code, got)
+	}
+}
