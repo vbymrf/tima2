@@ -4703,6 +4703,7 @@ private fun App(
                         // вовсе, а не «есть, но отвергается».
                         onLink = if (communityState.owner) store::link else null,
                         onUnlink = if (communityState.owner) store::unlink else null,
+                        onAbout = { where = Where.Showcase("community", current.communityId, communityState.title) },
                     )
                 }
             }

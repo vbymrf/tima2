@@ -170,6 +170,7 @@ interface SociumWords {
     val channelPostHint: String
     val channelPublish: String
     fun channelComments(n: Int): String
+    val communityAbout: String
 }
 
 object RussianSociumWords : SociumWords {
@@ -322,6 +323,7 @@ object RussianSociumWords : SociumWords {
     override val staffAdd = "Добавить"
     override val channelFeed = "Лента канала"
     override val channelAbout = "О канале"
+    override val communityAbout = "О сообществе"
     override val channelEmpty = "Записей пока нет"
     override val channelPostHint = "Новая запись"
     override val channelPublish = "Опубликовать"
@@ -474,6 +476,7 @@ object EnglishSociumWords : SociumWords {
     override val staffAdd = "Add"
     override val channelFeed = "Channel feed"
     override val channelAbout = "About"
+    override val communityAbout = "About"
     override val channelEmpty = "No posts yet"
     override val channelPostHint = "New post"
     override val channelPublish = "Publish"
@@ -626,6 +629,7 @@ object SpanishSociumWords : SociumWords {
     override val staffAdd = "Añadir"
     override val channelFeed = "Publicaciones del canal"
     override val channelAbout = "Acerca de"
+    override val communityAbout = "Acerca de"
     override val channelEmpty = "Aún no hay publicaciones"
     override val channelPostHint = "Nueva publicación"
     override val channelPublish = "Publicar"

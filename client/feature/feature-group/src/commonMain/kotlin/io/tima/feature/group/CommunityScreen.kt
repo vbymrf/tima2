@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import io.tima.core.ui.Avatar
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
@@ -52,6 +53,11 @@ fun CommunityScreen(
     onLink: ((CommunityItem) -> Unit)? = null,
     /** Вынуть обратно: элемент снова становится отдельным. */
     onUnlink: ((CommunityItem) -> Unit)? = null,
+    /**
+     * «О сообществе» — страница с вкладками (ПЛАН-(СЦ) СЦ4): звуковые чаты, «Управление», роли. Без неё до них из
+     * окна сообщества было не добраться (живой взгляд 2026-11-19 на 259).
+     */
+    onAbout: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words
@@ -60,6 +66,16 @@ fun CommunityScreen(
             title = state.title.ifBlank { words.communities.community },
             onBack = onBack,
             caption = caption(state),
+            right = onAbout?.let { about ->
+                {
+                    io.tima.core.ui.Button(
+                        words.socium.communityAbout,
+                        onClick = about,
+                        kind = io.tima.core.ui.ButtonKind.Quiet,
+                        modifier = Modifier.testTag("community:about"),
+                    )
+                }
+            },
         )
 
         Column(
