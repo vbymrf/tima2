@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -122,18 +125,23 @@ fun CallsScreen(
      * «Видео», «Групповой». `null` — звонить нечем, кнопки нет.
      */
     onNewCall: (() -> Unit)? = null,
+    /** Строки и отступы — «Вид» окна «Телефон» (ПЛАН-(ВС) ВС1). */
+    list: io.tima.core.ui.ListLook = io.tima.core.ui.ListLook.DEFAULT,
+    /** Объединять звонки подряд с одним человеком (ПЛАН-(ВС) ВС2). */
+    merge: Boolean = false,
 ) {
+    androidx.compose.runtime.CompositionLocalProvider(io.tima.core.ui.LocalListLook provides list) {
     Box(modifier.fillMaxSize()) {
         if (onNewCall != null) {
             io.tima.core.ui.WithCluster(
                 // Кнопка окна — по «Вкладкам окон» (заказчик 2026-10-24).
                 cluster = { ProvidePlace(TextPlace.TABS) { io.tima.core.ui.Button(label = Tima.words.chat.call, onClick = onNewCall, modifier = Modifier.testTag(CALLS_NEW_TAG)) } },
             ) {
-                ProvidePlace(TextPlace.LISTS) { Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf) }
+                ProvidePlace(TextPlace.LISTS) { Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf, merge) }
             }
         } else {
             // Журнал — список, как «Чаты» и «Контакты» (заказчик 2026-10-24).
-            ProvidePlace(TextPlace.LISTS) { Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf) }
+            ProvidePlace(TextPlace.LISTS) { Records(records, me, personOf, look, faceOf, onCallAgain, onOpen, onFace, offline, groupOf, flagged, kindOf, merge) }
         }
         note?.let {
             Caption(
@@ -148,6 +156,7 @@ fun CallsScreen(
                 color = Tima.colors.surface,
             )
         }
+    }
     }
 }
 
@@ -165,6 +174,7 @@ private fun Records(
     groupOf: (CallRecord) -> GroupCallLine?,
     flagged: (CallRecord) -> Boolean,
     kindOf: (CallRecord) -> PersonKind,
+    merge: Boolean = false,
 ) {
     val words = Tima.words.callLog
     val ring = Tima.colors.activity
@@ -175,23 +185,23 @@ private fun Records(
         )
         return
     }
-    LazyColumn(Modifier.fillMaxSize().testTag(CALLS_LIST_TAG)) {
-        items(records, key = { it.callId }) { record ->
+    // Строка звонка — одна на одиночный и объединённый (ПЛАН-(ВС) ВС2): `count` больше одного — вместо стрелки число.
+    val row: @Composable (CallRecord, Int, (() -> Unit)?) -> Unit = { record, count, onRow ->
             val group = groupOf(record)
             // У группового — создатель звонка: его имя и телефон во второй и третьей строке.
             val who = personOf(record)
             val outcome = record.outcome(me)
             ListLine(
-                onClick = onOpen?.let { { it(record) } },
+                onClick = onRow,
                 left = {
                     val outline = if (flagged(record)) Modifier.outlined(ring) else Modifier
                     val tap = outline.then(onFace?.let { open -> Modifier.clickable { open(record) } } ?: Modifier)
                     if (group != null) {
                         // Аватар создателя и «ГЗ» поверх; картинки нет — одно «ГЗ», как в «Чатах».
                         val badge = Tima.words.groupCall.badge
-                        Avatar(letters = badge, picture = group.face, overlay = badge, modifier = tap)
+                        Avatar(letters = badge, picture = group.face, overlay = badge, modifier = tap, size = io.tima.core.ui.LocalListLook.current.avatar)
                     } else {
-                        Avatar(letters = who.letter(), picture = faceOf(record), modifier = tap)
+                        Avatar(letters = who.letter(), picture = faceOf(record), modifier = tap, size = io.tima.core.ui.LocalListLook.current.avatar)
                     }
                 },
                 middle = {
@@ -220,7 +230,8 @@ private fun Records(
                             horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            CallArrow(record.outgoing(me), arrowColor(outcome, record.outgoing(me)))
+                            // Объединённые (ПЛАН-(ВС) ВС2): вместо стрелки — сколько звонков в строке, в сером кружке.
+                            if (count > 1) RunCount(count) else CallArrow(record.outgoing(me), arrowColor(outcome, record.outgoing(me)))
                             // Строка — цветом текста темы (чёрный или белый); выделено только
                             // слово «пропущенный» (заказчик 2026-10-08). Стрелка — своим цветом.
                             //
@@ -255,9 +266,57 @@ private fun Records(
                     }
                 },
             )
+    }
+    // Объединение звонков подряд (ПЛАН-(ВС) ВС2): нажатие на строку раскрывает звонки, на значок — звонит, как всегда.
+    var opened by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(emptySet<String>()) }
+    LazyColumn(Modifier.fillMaxSize().testTag(CALLS_LIST_TAG)) {
+        if (!merge) {
+            items(records, key = { it.callId }) { record -> row(record, 1, onOpen?.let { { it(record) } }) }
+        } else {
+            for (run in mergeRuns(records, me)) {
+                val head = run.first()
+                val toggle = { opened = if (head.callId in opened) opened - head.callId else opened + head.callId }
+                item(key = head.callId) { row(head, run.size, if (run.size > 1) toggle else onOpen?.let { { it(head) } }) }
+                if (run.size > 1 && head.callId in opened) {
+                    items(run.drop(1), key = { it.callId }) { record -> row(record, 1, onOpen?.let { { it(record) } }) }
+                }
+            }
         }
     }
 }
+
+/**
+ * Звонки подряд с одним человеком — или одной группой — одной пачкой (ПЛАН-(ВС) ВС2, заказчик 2026-11-20): соседние
+ * строки журнала, любые — входящие, исходящие, пропущенные. Порядок журнала сохраняется, новые сверху.
+ */
+internal fun mergeRuns(records: List<CallRecord>, me: String): List<List<CallRecord>> {
+    val runs = mutableListOf<MutableList<CallRecord>>()
+    for (record in records) {
+        val last = runs.lastOrNull()
+        if (last != null && runKey(last.first(), me) == runKey(record, me)) last += record else runs += mutableListOf(record)
+    }
+    return runs
+}
+
+private fun runKey(record: CallRecord, me: String): String =
+    if (record.groupId.isNotEmpty()) "g:" + record.groupId else "p:" + (if (record.initiatorId == me) record.peerId else record.initiatorId)
+
+/** Сколько звонков в объединённой строке — серый кружок вместо стрелки. */
+@Composable
+private fun RunCount(count: Int) {
+    androidx.compose.foundation.layout.Box(
+        Modifier.defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
+            .background(Tima.colors.quiet, androidx.compose.foundation.shape.CircleShape)
+            .padding(horizontal = 5.dp)
+            .testTag(CALLS_RUN_TAG),
+        contentAlignment = Alignment.Center,
+    ) {
+        Caption("$count", fontSize = TimaType.sz6, weight = FontWeight.SemiBold, color = Tima.colors.text, lineOne = true)
+    }
+}
+
+/** Число объединённых звонков — для сценариев. */
+const val CALLS_RUN_TAG = "calls:run"
 
 /**
  * Цвет стрелки по исходу (заказчик 2026-10-08): пропущенный — оранжевым, как его слово;

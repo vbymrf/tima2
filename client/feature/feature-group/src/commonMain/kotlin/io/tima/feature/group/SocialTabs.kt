@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import io.tima.core.ui.TextPlace
 import io.tima.core.ui.ProvidePlace
@@ -75,7 +76,9 @@ fun CatalogTab(
     val words = Tima.words.social
     androidx.compose.runtime.CompositionLocalProvider(io.tima.core.ui.LocalListLook provides list) {
     ProvidePlace(TextPlace.LISTS) {
-    Column(modifier.fillMaxSize()) {
+    // Пауза порядка после прокрутки (ПЛАН-(ВС) ВС3): листаете — строки стоят, новое не поднимает сущность наверх.
+    val calm = io.tima.core.ui.rememberCalmOrder()
+    Column(modifier.fillMaxSize().nestedScroll(calm.connection)) {
         state.trouble?.let { Trouble(it, Modifier.padding(TimaSpacing.about4)) }
 
         // Сообщества — первыми и одной группой строк: контейнер стоит выше того, что в
@@ -130,7 +133,7 @@ fun CatalogTab(
             }
         }
 
-        val mine = state.mine.sortedByDescending { lookOf("group", it.groupId).atMs ?: 0L }
+        val mine = calm.order(state.mine.sortedByDescending { lookOf("group", it.groupId).atMs ?: 0L }) { it.groupId }
         val line: @Composable (GroupInfo) -> Unit = { group ->
             GroupLine(group, onOpen, countOf(group.groupId), onShowcase, look = lookOf("group", group.groupId), ownColor = ownColor)
         }

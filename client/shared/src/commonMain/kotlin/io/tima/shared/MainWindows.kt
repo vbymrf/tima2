@@ -666,6 +666,9 @@ internal fun PhoneWindow(
                         }
                     },
                     me = myUserId,
+                    // «Вид разделов и списка» окна «Телефон»: аватар по строкам, отступы, объединение (ПЛАН-(ВС) ВС1–ВС2).
+                    list = book.view.listLook(),
+                    merge = book.view.mergeCalls,
                     personOf = personOfCall,
                     faceOf = faceOfCall,
                     look = look,

@@ -136,14 +136,19 @@ fun BookViewScreen(
                 right = { Tertiary("›", lineOne = true) },
             )
         }
-        if (withSections) ListLine(
+        // У «Звонков» разделов нет, а список есть: страница — только со «Списком» (ПЛАН-(ВС) ВС1).
+        if (withSections || withList) ListLine(
             onClick = { onOpen(ViewPage.Sections) },
             middle = {
                 Column {
-                    Name(if (withList) words.sectionsListLook else words.sectionsLook)
+                    Name(sectionsPageTitle(withSections, withList))
                     Tertiary(
-                        (if (view.folders) words.folders else words.menu) + " · " +
-                            (if (view.icons) words.labelsIcons else words.labelsNames),
+                        if (withSections) {
+                            (if (view.folders) words.folders else words.menu) + " · " +
+                                (if (view.icons) words.labelsIcons else words.labelsNames)
+                        } else {
+                            if (view.listLook().three) words.listThree else words.listTwo
+                        },
                         lineOne = true,
                     )
                 }
@@ -300,14 +305,24 @@ fun SectionsLookPage(
     onChange: (BookView) -> Unit,
     modifier: Modifier = Modifier,
     forPeople: Boolean = true,
-    /** Раздел «Список» — строки и отступы «Чатов» (`forPeople`) или «Каталога» (заказчик 2026-11-20). */
+    /** Раздел «Список» — строки и отступы окна «Телефон» (`forPeople`) или «Каталога» (заказчик 2026-11-20). */
     withList: Boolean = false,
+    /** Части про разделы; `false` — у «Звонков», где разделов нет: страница только со «Списком». */
+    withSectionsPart: Boolean = true,
 ) {
     val list = view.listLook().takeIf { withList }
     val words = Tima.words.book
     val colors = Tima.colors
     Column(modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
         SectionTitle(words.lookSample)
+        if (!withSectionsPart && list != null) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4)
+                    .clip(RoundedCornerShape(TimaShapes.square)).background(colors.functional),
+            ) { SampleLine(forPeople, list) }
+            ListPart(view, list, forPeople, onChange)
+            return@Column
+        }
         val tabs = listOf(
             SectionTab(if (view.folders && view.icons) ALL_SECTION else "", words.everyone, 0),
             SectionTab("work", words.sampleSectionWork, 2),
@@ -365,43 +380,71 @@ fun SectionsLookPage(
             }
         }
 
-        // «Список» (заказчик 2026-11-20): строки и отступы краёв списка этого окна — «Чатов» или «Каталога». Отступ
-        // только уменьшается: 100% — прежний, он же наибольший.
-        if (list != null) {
-            SectionTitle(words.listTitle)
-            Choice(words.listTwo, if (forPeople) words.listTwoChats else words.listTwoCatalog, !list.three, LIST_TWO_TAG) {
-                onChange(view.copy(listLines = 2))
-            }
-            Choice(words.listThree, if (forPeople) words.listThreeChats else words.listThreeCatalog, list.three, LIST_THREE_TAG) {
-                onChange(view.copy(listLines = 3))
-            }
-            SectionTitle(words.padStartTitle)
-            Percents(list.startPercent, LIST_PAD_START_TAG) { onChange(view.copy(padStart = it)) }
-            SectionTitle(words.padEndTitle)
-            Percents(list.endPercent, LIST_PAD_END_TAG) { onChange(view.copy(padEnd = it)) }
-        }
+        if (list != null) ListPart(view, list, forPeople, onChange)
     }
 }
 
-/** Метки раздела «Список» — для сценариев; у процентов к метке добавляется число: `list:pad-start:80`. */
+/** Заголовок страницы разделов: с разделами и списком, только разделы, только список («Звонки»). */
+@Composable
+private fun sectionsPageTitle(withSections: Boolean, withList: Boolean): String {
+    val words = Tima.words.book
+    return when {
+        withSections && withList -> words.sectionsListLook
+        withSections -> words.sectionsLook
+        else -> words.listLook
+    }
+}
+
+/**
+ * «Список» (заказчик 2026-11-20): строки, отступы краёв, пауза порядка; у окна «Телефон» — ещё объединение звонков.
+ * Отступ только уменьшается: 100% — прежний, он же наибольший.
+ */
+@Composable
+private fun ListPart(view: BookView, list: io.tima.core.ui.ListLook, forPeople: Boolean, onChange: (BookView) -> Unit) {
+    val words = Tima.words.book
+    SectionTitle(words.listTitle)
+    Choice(words.listTwo, if (forPeople) words.listTwoChats else words.listTwoCatalog, !list.three, LIST_TWO_TAG) {
+        onChange(view.copy(listLines = 2))
+    }
+    Choice(words.listThree, if (forPeople) words.listThreeChats else words.listThreeCatalog, list.three, LIST_THREE_TAG) {
+        onChange(view.copy(listLines = 3))
+    }
+    SectionTitle(words.padStartTitle)
+    Steps(io.tima.core.ui.ListLook.PERCENTS, list.startPercent, LIST_PAD_START_TAG, { "$it%" }) { onChange(view.copy(padStart = it)) }
+    SectionTitle(words.padEndTitle)
+    Steps(io.tima.core.ui.ListLook.PERCENTS, list.endPercent, LIST_PAD_END_TAG, { "$it%" }) { onChange(view.copy(padEnd = it)) }
+    SectionTitle(words.pauseTitle)
+    Tertiary(words.pauseAbout, modifier = Modifier.padding(horizontal = TimaSpacing.about4))
+    Steps(io.tima.core.ui.ListLook.PAUSES, list.pauseSeconds, LIST_PAUSE_TAG, { if (it == 0) words.pauseOff else "$it" }) {
+        onChange(view.copy(rankPause = it))
+    }
+    // Объединение звонков — у окна «Телефон»: журнал звонков только там.
+    if (forPeople) {
+        SectionTitle(words.callsTitle)
+        Check(words.mergeCalls, words.mergeCallsAbout, view.mergeCalls) { onChange(view.copy(mergeCalls = it)) }
+    }
+}
+
+/** Метки раздела «Список» — для сценариев; у рядов к метке добавляется число: `list:pad-start:80`, `list:pause:0`. */
 const val LIST_TWO_TAG = "list:two"
 const val LIST_THREE_TAG = "list:three"
 const val LIST_PAD_START_TAG = "list:pad-start"
 const val LIST_PAD_END_TAG = "list:pad-end"
+const val LIST_PAUSE_TAG = "list:pause"
 
-/** Проценты отступа одним рядом: выбранный — выделен. */
+/** Ряд значений одной строкой: выбранное — выделено. */
 @Composable
-private fun Percents(chosen: Int, tag: String, onPick: (Int) -> Unit) {
+private fun Steps(values: List<Int>, chosen: Int, tag: String, label: @Composable (Int) -> String, onPick: (Int) -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
     ) {
-        for (percent in io.tima.core.ui.ListLook.PERCENTS) {
+        for (value in values) {
             io.tima.core.ui.Chip(
-                label = "$percent%",
-                kind = if (percent == chosen) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Quiet,
-                onClick = { onPick(percent) },
-                modifier = Modifier.testTag("$tag:$percent"),
+                label = label(value),
+                kind = if (value == chosen) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Quiet,
+                onClick = { onPick(value) },
+                modifier = Modifier.testTag("$tag:$value"),
             )
         }
     }
@@ -644,8 +687,9 @@ private fun SampleLine(forPeople: Boolean, list: io.tima.core.ui.ListLook? = nul
                     Name(name)
                     if (!forPeople) Tertiary(words.sampleGroupAbout, lineOne = true)
                     if (forPeople || list.three) {
+                        // Длинное — чтобы «три строки» было видно в образце (заказчик 2026-11-20).
                         Caption(
-                            androidx.compose.ui.text.AnnotatedString(words.sampleMessage),
+                            androidx.compose.ui.text.AnnotatedString(words.sampleMessageLong),
                             fontSize = TimaType.sz5,
                             color = Tima.colors.text2,
                             maxLines = if (forPeople && list.three) 2 else 1,
@@ -839,7 +883,7 @@ fun BookViewSheet(
                                 ledger && pointersLedger != null -> words.pointersLedgerTitle
                                 ledger -> words.ledgerTitle
                                 list != null -> words.roster(list)
-                                current == ViewPage.Sections -> if (withList) words.sectionsListLook else words.sectionsLook
+                                current == ViewPage.Sections -> sectionsPageTitle(withSections, withList)
                                 current == ViewPage.Person -> words.showPersonAs
                                 else -> words.view
                             },
@@ -894,7 +938,7 @@ fun BookViewSheet(
                         personOf = personOf,
                     )
                 }
-                page == ViewPage.Sections -> SectionsLookPage(view, onChange, scrolling, forPeople, withList)
+                page == ViewPage.Sections -> SectionsLookPage(view, onChange, scrolling, forPeople, withList, withSections)
                 page == ViewPage.Person -> PersonLookPage(view, onChange, scrolling, forPeople)
                 else -> BookViewScreen(
                     view = view,

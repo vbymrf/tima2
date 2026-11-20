@@ -56,6 +56,8 @@ kotlin {
         // Компоненты общие, так что расхождение с макетом видно и здесь.
         jvmTest.dependencies {
             implementation(projects.test.testUi)
+            // Пауза порядка (ПЛАН-(ВС) ВС3) — проверка по виртуальному времени.
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

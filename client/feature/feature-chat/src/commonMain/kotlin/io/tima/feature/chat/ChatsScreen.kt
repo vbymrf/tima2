@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
@@ -246,10 +247,12 @@ private fun List(
 ) {
     // Места правого края — мерятся раз на экран, а не невидимым образцом в каждой строке.
     val edges = rememberEdgeSlots()
+    // Пауза порядка после прокрутки (ПЛАН-(ВС) ВС3): листаете — строки стоят, новое не поднимает переписку наверх.
+    val calm = io.tima.core.ui.rememberCalmOrder()
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().nestedScroll(calm.connection),
     ) {
-        items(chats, key = { it.chatId }) { chat ->
+        items(calm.order(chats) { it.chatId }, key = { it.chatId }) { chat ->
             ChatLine(
                 chat, personOf(chat), faceOf(chat), look, countOf?.invoke(chat) ?: chat.unread, edges,
                 onClick = { onOpen(chat) }, tag = tagOf(chat), call = callGroupOf(chat),

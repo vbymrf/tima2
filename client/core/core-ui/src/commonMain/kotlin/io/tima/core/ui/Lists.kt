@@ -12,6 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 
 /**
  * Строка списка: **линия снизу, без карточки и без фона**.
@@ -33,7 +36,13 @@ import androidx.compose.ui.unit.dp
  * @param endPercent то же у правого края.
  */
 @androidx.compose.runtime.Immutable
-data class ListLook(val lines: Int = 2, val startPercent: Int = 100, val endPercent: Int = 100) {
+data class ListLook(
+    val lines: Int = 2,
+    val startPercent: Int = 100,
+    val endPercent: Int = 100,
+    /** Пауза порядка после прокрутки, секунды (ПЛАН-(ВС) ВС3); 0 — без паузы. Вне окон с «Видом» — без паузы. */
+    val pauseSeconds: Int = 0,
+) {
     val three: Boolean get() = lines >= 3
 
     /** Две строки — обычный аватар (42), три — крупный (56), одинаково в «Чатах» и «Каталоге». */
@@ -41,15 +50,82 @@ data class ListLook(val lines: Int = 2, val startPercent: Int = 100, val endPerc
 
     companion object {
         val PERCENTS = listOf(100, 90, 80, 70, 60, 50)
+        val PAUSES = listOf(0, 5, 10, 20, 30, 60)
+
+        /** Вне окон с «Видом» — прежний вид: отступы полные, паузы нет. */
         val DEFAULT = ListLook()
 
-        /** Сохранённое — в допустимое: чужое число строк — две, процент вне шага — прежний отступ. */
-        fun of(lines: Int?, startPercent: Int?, endPercent: Int?) = ListLook(
+        /** Умолчания окна с «Видом» (ПЛАН-(ВС) 3, 6): слева 70%, пауза 10 с. */
+        const val START_DEFAULT = 70
+        const val PAUSE_DEFAULT = 10
+
+        /** Сохранённое — в допустимое: чужое число строк — две, процент или пауза вне ряда — умолчание окна. */
+        fun of(lines: Int?, startPercent: Int?, endPercent: Int?, pauseSeconds: Int? = null) = ListLook(
             lines = if (lines == 3) 3 else 2,
-            startPercent = startPercent?.takeIf { it in PERCENTS } ?: 100,
+            startPercent = startPercent?.takeIf { it in PERCENTS } ?: START_DEFAULT,
             endPercent = endPercent?.takeIf { it in PERCENTS } ?: 100,
+            pauseSeconds = pauseSeconds?.takeIf { it in PAUSES } ?: PAUSE_DEFAULT,
         )
     }
+}
+
+/**
+ * Пауза порядка списка после прокрутки (ПЛАН-(ВС) ВС3, заказчик 2026-11-20): пока человек листает и ещё
+ * [ListLook.pauseSeconds] после последнего движения, строки стоят на местах — новое сообщение обновляет строку, но не
+ * поднимает её. Потом список встаёт по порядку. Движение ловится вложенной прокруткой: [connection] вешается на
+ * родителя списка, и годится любой список внутри — ленивый, с разделами, гармошка.
+ */
+@androidx.compose.runtime.Stable
+class CalmOrder internal constructor(private val pauseMs: Long, private val scope: kotlinx.coroutines.CoroutineScope) {
+    private var frozen by androidx.compose.runtime.mutableStateOf<List<Any>?>(null)
+    private var shown: List<Any> = emptyList()
+    private var release: kotlinx.coroutines.Job? = null
+
+    val connection = object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+        override fun onPostScroll(
+            consumed: androidx.compose.ui.geometry.Offset,
+            available: androidx.compose.ui.geometry.Offset,
+            source: androidx.compose.ui.input.nestedscroll.NestedScrollSource,
+        ): androidx.compose.ui.geometry.Offset {
+            if (consumed.y != 0f) moved()
+            return androidx.compose.ui.geometry.Offset.Zero
+        }
+    }
+
+    /** Список сдвинулся: заморозить порядок, если ещё не заморожен, и отсчитать паузу заново. */
+    fun moved() {
+        if (pauseMs <= 0) return
+        if (frozen == null) frozen = shown
+        release?.cancel()
+        release = scope.launch {
+            kotlinx.coroutines.delay(pauseMs)
+            frozen = null
+        }
+    }
+
+    /**
+     * Строки в показываемом порядке: во время паузы — как стояли (новые — сверху, ушедшие — убраны), иначе — как есть.
+     * Звать один раз на список; разные списки одного экрана — каждый со своим ключом.
+     */
+    fun <T> order(items: List<T>, key: (T) -> Any): List<T> {
+        val stood = frozen
+        val result = if (stood == null) {
+            items
+        } else {
+            val at = HashMap<Any, Int>(stood.size).apply { stood.forEachIndexed { i, k -> put(k, i) } }
+            val (known, fresh) = items.partition { key(it) in at }
+            fresh + known.sortedBy { at[key(it)] }
+        }
+        shown = shown.filterNot { k -> items.any { key(it) == k } } + result.map(key)
+        return result
+    }
+}
+
+/** Пауза порядка по «Виду» списка; без паузы — порядок как есть. */
+@Composable
+fun rememberCalmOrder(look: ListLook = LocalListLook.current): CalmOrder {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    return androidx.compose.runtime.remember(look.pauseSeconds, scope) { CalmOrder(look.pauseSeconds * 1000L, scope) }
 }
 
 /** Вид строк списка там, где он задан: «Чаты» и «Каталог». В остальных списках — прежний. */

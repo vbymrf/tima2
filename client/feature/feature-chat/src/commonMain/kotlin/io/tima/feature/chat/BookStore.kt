@@ -302,11 +302,15 @@ data class BookView(
      * краёв в процентах прежнего. См. [io.tima.core.ui.ListLook].
      */
     val listLines: Int = 2,
-    val padStart: Int = 100,
+    val padStart: Int = io.tima.core.ui.ListLook.START_DEFAULT,
     val padEnd: Int = 100,
+    /** Пауза порядка после прокрутки, секунды (ПЛАН-(ВС) ВС3); 0 — выключена. */
+    val rankPause: Int = io.tima.core.ui.ListLook.PAUSE_DEFAULT,
+    /** «Звонки»: соседние звонки с одним человеком — одной строкой (ПЛАН-(ВС) ВС2); только у вида окна «Телефон». */
+    val mergeCalls: Boolean = false,
 ) {
     /** Вид строк списка этого окна. */
-    fun listLook(): io.tima.core.ui.ListLook = io.tima.core.ui.ListLook.of(listLines, padStart, padEnd)
+    fun listLook(): io.tima.core.ui.ListLook = io.tima.core.ui.ListLook.of(listLines, padStart, padEnd, rankPause)
 
     /** Как называть человека: порядок и галки одним значением для строк списков. */
     fun look(): PersonLook = PersonLook(
@@ -367,6 +371,8 @@ data class BookView(
         settings.put("$prefix.$LIST_LINES", listLines.toString())
         settings.put("$prefix.$PAD_START", padStart.toString())
         settings.put("$prefix.$PAD_END", padEnd.toString())
+        settings.put("$prefix.$RANK_PAUSE", rankPause.toString())
+        if (prefix == BOOK) settings.put("$prefix.$MERGE_CALLS", mergeCalls.toString())
     }
 
     companion object {
@@ -392,6 +398,8 @@ data class BookView(
         private const val LIST_LINES = "list_lines"
         private const val PAD_START = "list_pad_start"
         private const val PAD_END = "list_pad_end"
+        private const val RANK_PAUSE = "list_rank_pause"
+        private const val MERGE_CALLS = "merge_calls"
         private const val FOLDERS = "folders"
         private const val MENU = "menu"
 
@@ -433,8 +441,15 @@ data class BookView(
                     saved["$prefix.$LIST_LINES"]?.toIntOrNull(),
                     saved["$prefix.$PAD_START"]?.toIntOrNull(),
                     saved["$prefix.$PAD_END"]?.toIntOrNull(),
+                    saved["$prefix.$RANK_PAUSE"]?.toIntOrNull(),
                 )
-                view.copy(listLines = list.lines, padStart = list.startPercent, padEnd = list.endPercent)
+                view.copy(
+                    listLines = list.lines,
+                    padStart = list.startPercent,
+                    padEnd = list.endPercent,
+                    rankPause = list.pauseSeconds,
+                    mergeCalls = saved["$prefix.$MERGE_CALLS"] == "true",
+                )
             }
         }
     }

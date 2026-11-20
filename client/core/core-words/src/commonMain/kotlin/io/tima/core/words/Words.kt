@@ -732,6 +732,14 @@ interface BookWords {
     val listThreeCatalog: String
     val padStartTitle: String
     val padEndTitle: String
+    val listLook: String
+    val pauseTitle: String
+    val pauseAbout: String
+    val pauseOff: String
+    val callsTitle: String
+    val mergeCalls: String
+    val mergeCallsAbout: String
+    val sampleMessageLong: String
 
     // Пункт «Разделы» и экран управления набором.
     /** Пояснение к «Общему» в управлении разделами (заказчик 2026-09-19). */
@@ -3657,12 +3665,20 @@ object RussianWords : Words {
         override val listTitle = "Список"
         override val listTwo = "Две строки"
         override val listThree = "Три строки"
-        override val listTwoChats = "имя и сообщение одной строкой"
-        override val listThreeChats = "имя и сообщение на двух строках, аватар крупнее"
+        override val listTwoChats = "обычный аватар; в «Чатах» сообщение одной строкой"
+        override val listThreeChats = "крупный аватар; в «Чатах» сообщение на двух строках, в «Контактах» — ещё ник"
         override val listTwoCatalog = "название, вид и положение"
         override val listThreeCatalog = "третьей строкой — последнее сообщение, аватар крупнее"
-        override val padStartTitle = "Отступ слева"
-        override val padEndTitle = "Отступ справа"
+        override val padStartTitle = "Отступ слева от аватара"
+        override val padEndTitle = "Отступ справа от даты"
+        override val listLook = "Вид списка"
+        override val pauseTitle = "Пауза порядка после прокрутки, с"
+        override val pauseAbout = "пока листаете и ещё столько секунд строки не переставляются"
+        override val pauseOff = "Выкл"
+        override val callsTitle = "Звонки"
+        override val mergeCalls = "Объединять звонки подряд"
+        override val mergeCallsAbout = "соседние звонки с одним человеком — одной строкой с числом"
+        override val sampleMessageLong = "Привет! Собираемся в семь у входа в парк, потом к реке. Возьми, пожалуйста, плед и термос — вечером будет прохладно"
 
         override val commonSectionAbout = "сюда попадают все, кому раздел не выбран; убрать нельзя"
         override val sectionsItem = "Разделы"

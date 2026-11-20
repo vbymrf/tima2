@@ -175,6 +175,7 @@ fun BookScreen(
                                 Avatar(
                                     letters = who.letter(),
                                     picture = faceOf(person),
+                                    size = io.tima.core.ui.LocalListLook.current.avatar,
                                     modifier = if (onFace != null) {
                                         Modifier.clickable { onFace(person) }
                                     } else {
@@ -187,18 +188,25 @@ fun BookScreen(
                                     // Первая строка — имя, ник, имя пользователя по «Виду»
                                     // (галки через запятую, иначе первое, что есть); вторая
                                     // — всегда телефон (решение заказчика 2026-09-18).
-                                    Name(who.line(state.view.look(), PERSON_FIRST_LINE) ?: words.nameless)
+                                    val first = who.line(state.view.look(), PERSON_FIRST_LINE)
+                                    Name(first ?: words.nameless)
                                     // Вторая строка — номер, а у кого его нет — ник (Л0).
                                     // Довод про кегль переносится на ник целиком: его так же
                                     // читают и так же называют вслух. Пустая строка на этом
                                     // месте была бы хуже всего — она выглядит как потеря.
+                                    val second = person.phone.ifBlank { who.nick?.let { "@$it" }.orEmpty() }
                                     Caption(
-                                        person.phone.ifBlank { who.nick?.let { "@$it" }.orEmpty() },
+                                        second,
                                         fontSize = TimaType.sz6 * 1.3f,
                                         weight = FontWeight.SemiBold,
                                         color = colors.text3,
                                         lineOne = true,
                                     )
+                                    // Три строки (ПЛАН-(ВС) ВС1): третьей — ник или имя пользователя, то, чего нет выше.
+                                    // Нечего показать — строки две.
+                                    if (io.tima.core.ui.LocalListLook.current.three) {
+                                        thirdLine(who, first, second)?.let { Tertiary(it, lineOne = true) }
+                                    }
                                 }
                             },
                             right = when {
@@ -227,7 +235,8 @@ fun BookScreen(
                         )
     }
     // Книга — та же группа «списки», что и чаты: строка обрезается и обязана быть
-    // одной высоты.
+    // одной высоты. Строки и отступы — «Вид разделов и списка» окна «Телефон» (ПЛАН-(ВС) ВС1).
+    androidx.compose.runtime.CompositionLocalProvider(io.tima.core.ui.LocalListLook provides state.view.listLook()) {
     ProvidePlace(TextPlace.LISTS) {
     // Box поверх колонки: «＋» без строки поиска становится плавающей кнопкой в правом
     // нижнем углу — там же, где «написать» в списке чатов.
@@ -378,6 +387,7 @@ fun BookScreen(
         }
     }
     }
+    }
 }
 
 /**
@@ -481,12 +491,23 @@ private fun cardKey(group: BookGroup, name: String): String =
  * Звонка в строке нет намеренно: карточка и появляется потому, что звонить «Саше» из
  * одной строки нельзя — непонятно, которому.
  */
+/**
+ * Третья строка контакта (ПЛАН-(ВС) ВС1): ник или имя пользователя — первое, чего нет в первых двух строках; `null` —
+ * показать нечего.
+ */
+internal fun thirdLine(who: ChatPerson, first: String?, second: String): String? =
+    listOfNotNull(who.nick?.takeIf { it.isNotBlank() }?.let { "@$it" }, who.userName?.takeIf { it.isNotBlank() })
+        .firstOrNull { candidate ->
+            val bare = candidate.removePrefix("@")
+            candidate != second && first?.contains(bare) != true
+        }
+
 @Composable
 private fun CardLine(card: BookRow.Card, onClick: () -> Unit) {
     val words = Tima.words.book
     ListLine(
         onClick = onClick,
-        left = { Avatar(letters = card.name.take(1).uppercase()) },
+        left = { Avatar(letters = card.name.take(1).uppercase(), size = io.tima.core.ui.LocalListLook.current.avatar) },
         middle = {
             Column {
                 Name(card.name)
