@@ -752,7 +752,14 @@ class Environment private constructor(
     /** Очередь исходящих: одна на приложение, потому что одна на базу. */
     // Время написания — по часам сервера (беда 2026-10-29: часы ПК спешили, и его сообщения вставали «в будущее»);
     // сроки повторов — по часам устройства, с ними сравнивает цикл отправки.
-    val queue: Outbox = Outbox(SqlOutboxStore(db, cipher), nowMs = { msNow() }, stampMs = { io.tima.core.network.ServerClock.now() })
+    val queue: Outbox = Outbox(
+        SqlOutboxStore(db, cipher, onUnreadable = { key ->
+            // Беда 2026-11-20: строка очереди под чужим ключом покоя — отложена, а не роняет приложение.
+            Journal.trouble(LogCode.QUEUE_UNREADABLE, "строка очереди не открывается ключом покоя — отложена", "запись" to key.take(8))
+        }),
+        nowMs = { msNow() },
+        stampMs = { io.tima.core.network.ServerClock.now() },
+    )
 
     /**
      * Машина входящих. Одна на приложение по той же причине: одна база.

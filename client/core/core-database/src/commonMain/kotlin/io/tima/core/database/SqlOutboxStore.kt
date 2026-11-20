@@ -26,6 +26,11 @@ class SqlOutboxStore(
      * шифрования» тут не бывает — ровно так обещание и теряется.
      */
     private val cipher: FieldCipher,
+    /**
+     * Нашлась запись, тело которой не открывается ключом покоя (беда 2026-11-20): номер записи. Запись уже
+     * отложена — «мёртвая» с причиной [UNREADABLE]; здесь — только сказать журналу.
+     */
+    private val onUnreadable: (String) -> Unit = {},
 ) : OutboxStore {
 
     private val q get() = db.messagesQueries
@@ -60,23 +65,55 @@ class SqlOutboxStore(
     }
 
     override fun byDedupKey(dedupKey: String): OutboxEntry? =
-        q.byDedupKey(dedupKey).executeAsOneOrNull()?.toEntry()
+        q.byDedupKey(dedupKey).executeAsOneOrNull()?.readable()
 
-    override fun nextQueued(nowMs: Long): OutboxEntry? =
-        q.nextQueued(OutboxState.QUEUED.ordinal.toLong(), nowMs).executeAsOneOrNull()?.toEntry()
+    // Нечитаемая запись откладывается, и выбор повторяется: иначе очередь вставала бы на ней навсегда.
+    override fun nextQueued(nowMs: Long): OutboxEntry? = firstReadable {
+        q.nextQueued(OutboxState.QUEUED.ordinal.toLong(), nowMs).executeAsOneOrNull()
+    }
 
-    override fun nextQueued(chatId: String, nowMs: Long): OutboxEntry? =
-        q.nextQueuedInChat(chatId, OutboxState.QUEUED.ordinal.toLong(), nowMs)
-            .executeAsOneOrNull()?.toEntry()
+    override fun nextQueued(chatId: String, nowMs: Long): OutboxEntry? = firstReadable {
+        q.nextQueuedInChat(chatId, OutboxState.QUEUED.ordinal.toLong(), nowMs).executeAsOneOrNull()
+    }
 
     override fun claimSealed(): OutboxEntry? = db.transactionWithResult {
-        val row = q.nextSealed(OutboxState.SEALED.ordinal.toLong()).executeAsOneOrNull()
-            ?: return@transactionWithResult null
         // Выбор и перевод — в одной транзакции: между ними нельзя оказаться, иначе
         // два вызова возьмут одну запись и сообщение уйдёт дважды.
-        val claimed = row.toEntry().copy(state = OutboxState.SENDING)
+        val entry = firstReadable { q.nextSealed(OutboxState.SEALED.ordinal.toLong()).executeAsOneOrNull() }
+            ?: return@transactionWithResult null
+        val claimed = entry.copy(state = OutboxState.SENDING)
         writeState(claimed)
         claimed
+    }
+
+    /** Первая читаемая из того, что отдаёт [next]; нечитаемые по пути откладываются. Предел — от круга. */
+    private fun firstReadable(next: () -> Messages?): OutboxEntry? {
+        repeat(MAX_SKIPS) {
+            val row = next() ?: return null
+            row.readable()?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Запись — или `null`, если тело не открывается ключом покоя: база (или эта строка) записана чужим ключом.
+     * Прежде здесь было громкое падение — пустое тело ушло бы на сервер как сообщение. Отправлять его по-прежнему
+     * нельзя, но и ронять приложение незачем (беда 2026-11-20: переход на аккаунт с такой строкой ронял приложение
+     * при каждом проходе очереди): строка становится «мёртвой» с причиной [UNREADABLE] и остаётся в базе.
+     */
+    private fun Messages.readable(): OutboxEntry? {
+        if (cipher.open(body_enc) != null) return toEntry()
+        q.updateState(
+            state = OutboxState.DEAD.ordinal.toLong(),
+            attempts = attempts,
+            next_attempt_at = next_attempt_at,
+            sealed_epoch = sealed_epoch,
+            server_id = server_id,
+            fail_reason = UNREADABLE,
+            dedup_key = dedup_key,
+        )
+        onUnreadable(dedup_key)
+        return null
     }
 
     override fun update(entry: OutboxEntry) = writeState(entry)
@@ -94,7 +131,7 @@ class SqlOutboxStore(
         state = OutboxState.QUEUED.ordinal.toLong(),
         state_ = OutboxState.SEALED.ordinal.toLong(),
         state__ = OutboxState.SENDING.ordinal.toLong(),
-    ).executeAsList().map { it.toEntry() }
+    ).executeAsList().mapNotNull { it.readable() }
 
     private fun writeState(entry: OutboxEntry) {
         q.updateState(
@@ -150,6 +187,12 @@ class SqlOutboxStore(
 
     private companion object {
         private val byOrdinal = OutboxState.entries.associateBy { it.ordinal.toLong() }
+
+        /** Причина «мёртвой» строки, тело которой не открывается ключом покоя (беда 2026-11-20). */
+        const val UNREADABLE = "unreadable_body"
+
+        /** Сколько нечитаемых отложить за один выбор, прежде чем сказать «нечего» — от круга. */
+        const val MAX_SKIPS = 50
 
         /**
          * Число из базы в состояние.
