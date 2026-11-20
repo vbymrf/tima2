@@ -902,10 +902,21 @@ internal fun accountRows(
  * ведёт на вход — там и QR, и номер телефона.
  */
 @Composable
-internal fun RevokedDevice(onAgain: () -> Unit, reason: String = "", deleteAt: Long? = null) {
+internal fun RevokedDevice(
+    onAgain: () -> Unit,
+    reason: String = "",
+    deleteAt: Long? = null,
+    /** «Читать переписки» — открыть аккаунт только для чтения (2026-11-20); `null` — кнопки нет. */
+    onRead: (() -> Unit)? = null,
+    /** «Удалить с телефона» — после подтверждения (2026-11-20); `null` — кнопки нет. */
+    onForget: (() -> Unit)? = null,
+) {
     val words = Tima.words.auth
+    // Личность уже удалена (срок прошёл) — прямо: восстановить нельзя, можно войти заново по номеру (заказчик 2026-11-20).
+    val gone = deleteAt != null && deleteAt <= kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+    var asking by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     // Причина (ДУ9, ДУ11) — тексты §2б; проигравшей стороне — выбор «бороться» или «новый аккаунт».
-    val text = when (reason) {
+    val text = if (gone) words.identityGone(deleteAt?.let(::reregDate)?.substringBefore(' ').orEmpty()) else when (reason) {
         "reregistered" -> words.revokedReregistered
         "disputed" -> words.revokedDisputed
         "rereg_not_confirmed" -> words.reregNewLost(deleteAt?.let(::reregDate).orEmpty())
@@ -922,12 +933,25 @@ internal fun RevokedDevice(onAgain: () -> Unit, reason: String = "", deleteAt: L
     ) {
         io.tima.core.ui.Caption(words.revokedTitle, weight = androidx.compose.ui.text.font.FontWeight.ExtraBold)
         io.tima.core.ui.Secondary(text ?: words.revokedAbout)
-        if (lost) {
+        if (gone) {
+            io.tima.core.ui.Button(label = words.signInByPhone, onClick = onAgain, modifier = Modifier.fillMaxWidth())
+        } else if (lost) {
             // Обе дороги начинаются со входа: бороться — тем же номером, новый аккаунт — другим.
             io.tima.core.ui.Button(label = words.reregFight, onClick = onAgain, modifier = Modifier.fillMaxWidth())
             io.tima.core.ui.Button(label = words.reregNewAccount, onClick = onAgain, kind = io.tima.core.ui.ButtonKind.Quiet, modifier = Modifier.fillMaxWidth())
         } else {
             io.tima.core.ui.Button(label = words.signInAgain, onClick = onAgain, modifier = Modifier.fillMaxWidth())
+        }
+        onRead?.let { read ->
+            io.tima.core.ui.Button(label = words.readChats, onClick = read, kind = io.tima.core.ui.ButtonKind.Quiet, modifier = Modifier.fillMaxWidth().testTag("revoked:read"))
+        }
+        onForget?.let { forget ->
+            if (!asking) {
+                io.tima.core.ui.Button(label = words.forgetHere, onClick = { asking = true }, kind = io.tima.core.ui.ButtonKind.Quiet, modifier = Modifier.fillMaxWidth().testTag("revoked:forget"))
+            } else {
+                io.tima.core.ui.Secondary(words.forgetHereAsk)
+                io.tima.core.ui.Button(label = words.forgetHere, onClick = forget, kind = io.tima.core.ui.ButtonKind.Dangerous, modifier = Modifier.fillMaxWidth().testTag("revoked:forget-yes"))
+            }
         }
     }
 }

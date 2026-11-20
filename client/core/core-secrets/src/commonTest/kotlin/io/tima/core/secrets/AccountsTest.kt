@@ -113,4 +113,20 @@ class AccountsTest {
 
         assertEquals("d-новое", accounts.relinked("u-1"))
     }
+
+    @Test
+    fun потерянный_вход_запоминается_снимается_и_уходит_с_аккаунтом() {
+        // Заказчик 2026-11-20: сервер отказал «устройство отозвано» — запоминаем, больше не опрашиваем.
+        accounts.remember(Account(userId = "u-1"), session("u-1"), ByteArray(32) { 1 })
+        accounts.remember(Account(userId = "u-2"), session("u-2"), ByteArray(32) { 2 })
+        kotlin.test.assertNull(accounts.lost("u-1"))
+        accounts.markLost("u-1", "rereg_not_confirmed", 1_700L, 2_000L)
+        kotlin.test.assertEquals(AccountLost("rereg_not_confirmed", 1_700L, 2_000L), accounts.lost("u-1"))
+        kotlin.test.assertNull(accounts.lost("u-2"), "отметка у одного аккаунта")
+        accounts.clearLost("u-1")
+        kotlin.test.assertNull(accounts.lost("u-1"), "вход снова жив — отметки нет")
+        accounts.markLost("u-1", "disputed", 0L, 3_000L)
+        accounts.forget("u-1")
+        kotlin.test.assertNull(accounts.lost("u-1"), "забытый аккаунт уносит и отметку")
+    }
 }

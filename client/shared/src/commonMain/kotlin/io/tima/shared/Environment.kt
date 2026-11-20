@@ -168,6 +168,17 @@ class Entry private constructor(
     /** Кто сейчас. */
     fun currentAccount(): String? = accounts.current()
 
+    /** Вход аккаунта потерян (заказчик 2026-11-20); `null` — жив или не проверялся. */
+    fun lostOf(userId: String): io.tima.core.secrets.AccountLost? = accounts.lost(userId)
+
+    /** Запомнить, что вход потерян: сервер ответил «устройство отозвано». */
+    fun markLost(userId: String, reason: String, deleteAt: Long?) {
+        if (accounts.lost(userId) == null) {
+            Journal.note(LogCode.ACCOUNT_OUT, "вход аккаунта потерян — запомнено", "почему" to reason.ifBlank { "не сказано" })
+        }
+        accounts.markLost(userId, reason, deleteAt ?: 0L, nowMillis())
+    }
+
     /**
      * Сколько у аккаунта неотправленного (Д11, путь Б, смягчение 2).
      *
@@ -257,9 +268,13 @@ class Entry private constructor(
             when (val r = DeviceTokenApi(link.route, link.client).renew(session.userId, session.deviceId, issuedAt, signature)) {
                 is io.tima.core.network.DeviceTokenResult.Renewed -> {
                     rememberSession(session.copy(accessToken = r.accessToken))
+                    accounts.clearLost(userId)
                     true
                 }
-                is io.tima.core.network.DeviceTokenResult.Revoked -> false
+                is io.tima.core.network.DeviceTokenResult.Revoked -> {
+                    markLost(userId, r.reason, r.deleteAt)
+                    false
+                }
                 else -> null
             }
         } finally {
@@ -273,6 +288,8 @@ class Entry private constructor(
      * в [aliveOnServer]. `null` — не узнали: число не показывается.
      */
     suspend fun newsOf(userId: String): Int? {
+        // Вход потерян — не опрашивать: сервер ответит тем же отказом (заказчик 2026-11-20, три 401 на realme).
+        if (accounts.lost(userId) != null) return null
         val store = accounts.store(userId)
         val session = store.session() ?: return null
         val secret = store.deviceSecret() ?: return null
@@ -282,8 +299,12 @@ class Entry private constructor(
             val bytes = io.tima.core.network.deviceTokenSigningBytes(session.userId, session.deviceId, issuedAt)
             val signature = io.tima.core.encryption.DeviceTokenSignerOverKodium(io.tima.core.encryption.deviceIdentityFrom(secret)).sign(bytes)
                 ?: return null
-            val renewed = DeviceTokenApi(link.route, link.client).renew(session.userId, session.deviceId, issuedAt, signature)
-                as? io.tima.core.network.DeviceTokenResult.Renewed ?: return null
+            val answer = DeviceTokenApi(link.route, link.client).renew(session.userId, session.deviceId, issuedAt, signature)
+            if (answer is io.tima.core.network.DeviceTokenResult.Revoked) {
+                markLost(userId, answer.reason, answer.deleteAt)
+                return null
+            }
+            val renewed = answer as? io.tima.core.network.DeviceTokenResult.Renewed ?: return null
             rememberSession(session.copy(accessToken = renewed.accessToken))
             io.tima.core.network.NewsOverHttp(link.route, link.client) { renewed.accessToken }.messages()
         } catch (e: Throwable) {

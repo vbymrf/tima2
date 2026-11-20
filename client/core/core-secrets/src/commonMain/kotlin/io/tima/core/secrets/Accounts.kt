@@ -137,6 +137,7 @@ class Accounts(private val vault: SecretVault) {
         store(userId).clear()
         vault.remove(pendingAlias(userId))
         vault.remove(cardAlias(userId))
+        vault.remove(lostAlias(userId))
         val remaining = all().filterNot { it.userId == userId }
         write(remaining)
         if (current() == userId) {
@@ -170,6 +171,28 @@ class Accounts(private val vault: SecretVault) {
         vault.put(cardAlias(userId), line.encodeToByteArray())
     }
 
+    /**
+     * Вход потерян (заказчик 2026-11-20): сервер на продление ответил «устройство отозвано». Запоминается — такой
+     * аккаунт больше не опрашивается, а в переключателе и при открытии говорит, что случилось. [reason] — слово сервера
+     * («disputed», «rereg_not_confirmed»…), [deleteAt] — когда удаляется (удалена) личность, мс, 0 — не сказано.
+     */
+    fun markLost(userId: String, reason: String, deleteAt: Long, now: Long) {
+        val line = listOf(reason.replace(FIELD, " "), deleteAt.toString(), now.toString()).joinToString(FIELD)
+        vault.put(lostAlias(userId), line.encodeToByteArray())
+    }
+
+    /** Вход снова жив (продление прошло) — отметка снимается. */
+    fun clearLost(userId: String) {
+        vault.remove(lostAlias(userId))
+    }
+
+    /** Отметка о потерянном входе; `null` — вход жив или не проверялся. */
+    fun lost(userId: String): AccountLost? {
+        val parts = vault.get(lostAlias(userId))?.decodeToString()?.split(FIELD) ?: return null
+        if (parts.size != 3) return null
+        return AccountLost(parts[0], parts[1].toLongOrNull() ?: 0L, parts[2].toLongOrNull() ?: 0L)
+    }
+
     private fun write(list: List<Account>) {
         vault.put(LIST, list.joinToString("\n") { it.write() }.encodeToByteArray())
     }
@@ -193,8 +216,12 @@ class Accounts(private val vault: SecretVault) {
         fun pendingAlias(userId: String) = SecretAlias("accounts.pending.v1.$userId")
         fun relinkedAlias(userId: String) = SecretAlias("accounts.relinked.v1.$userId")
         fun cardAlias(userId: String) = SecretAlias("accounts.card.v1.$userId")
+        fun lostAlias(userId: String) = SecretAlias("accounts.lost.v1.$userId")
     }
 }
+
+/** Потерянный вход аккаунта: почему (слово сервера), когда удаляется личность, когда узнали; мс. */
+data class AccountLost(val reason: String, val deleteAt: Long, val at: Long)
 
 /**
  * Строка списка аккаунтов.

@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.ImageBitmap
@@ -133,6 +134,8 @@ fun WindowSwitchingScreen(
      * непрочитанное окон, у остальных — новое, что ждёт их на сервере. Нет записи — числа нет.
      */
     news: Map<String, Int> = emptyMap(),
+    /** Аккаунты с потерянным входом (2026-11-20): бледный аватар и «вход потерян», чисел нет. */
+    lost: Set<String> = emptySet(),
     /**
      * «Завести виртуальный аккаунт» (Д11).
      *
@@ -207,7 +210,7 @@ fun WindowSwitchingScreen(
             // Аккаунты — сеткой аватаров под окнами (И1): видны все сразу, переход — одним
             // нажатием. Есть и при одном аккаунте: там же «Добавить».
             if (accounts.isNotEmpty()) {
-                AccountsGrid(accounts, currentAccount, unsent, news, onAccount, onNewAccount)
+                AccountsGrid(accounts, currentAccount, unsent, news, onAccount, onNewAccount, lost)
             }
 
             if (onSettings != null) {
@@ -374,6 +377,7 @@ private fun AccountsGrid(
     news: Map<String, Int>,
     onAccount: (String) -> Unit,
     onNew: (() -> Unit)?,
+    lost: Set<String> = emptySet(),
 ) {
     val words = Tima.words.switching
     Column(
@@ -389,7 +393,7 @@ private fun AccountsGrid(
                         slot == ADD_SLOT && onNew != null -> AddCell(words.addAccount, m, onNew)
                         else -> {
                             val (userId, label) = accounts[slot]
-                            AccountCell(label, userId == current, news[userId] ?: 0, unsent[userId] ?: 0, m) { if (userId != current) onAccount(userId) }
+                            AccountCell(label, userId == current, news[userId] ?: 0, unsent[userId] ?: 0, m, lost = userId in lost) { if (userId != current) onAccount(userId) }
                         }
                     }
                 }
@@ -417,9 +421,12 @@ internal fun accountSlots(accounts: Int, add: Boolean): List<List<Int?>> {
 internal const val ADD_SLOT = -1
 
 @Composable
-private fun AccountCell(label: String, current: Boolean, received: Int, waiting: Int, modifier: Modifier, onClick: () -> Unit) {
+private fun AccountCell(label: String, current: Boolean, received: Int, waiting: Int, modifier: Modifier, lost: Boolean = false, onClick: () -> Unit) {
     val colors = Tima.colors
-    Column(modifier.clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier.clickable(onClick = onClick).then(if (lost) Modifier.alpha(0.45f) else Modifier),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Box {
             Box(
                 if (current) Modifier.border(FRAME, colors.navigation, RoundedCornerShape(TimaShapes.smallSquare + FRAME)).padding(FRAME)
@@ -432,6 +439,7 @@ private fun AccountCell(label: String, current: Boolean, received: Int, waiting:
             if (waiting > 0) Counter(waiting, Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp), green = true)
         }
         Caption(label, fontSize = TimaType.sz6, weight = FontWeight.Bold, lineOne = true, textAlign = TextAlign.Center)
+        if (lost) Caption(Tima.words.auth.lostShort, fontSize = TimaType.sz6, color = colors.alarm, lineOne = true, textAlign = TextAlign.Center)
     }
 }
 

@@ -673,14 +673,40 @@ private fun Inside(
     // Отключённое устройство (А3): вместо вечных `401` — экран «отключено» и вход заново.
     val noRevoke = remember { kotlinx.coroutines.flow.MutableStateFlow(false) }
     val revoked by (assembled.network.tokenKeeper?.revoked ?: noRevoke).collectAsState()
+    // Вход потерян (заказчик 2026-11-20): запомнить у аккаунта, предложить читать переписки, войти заново или удалить с
+    // телефона. «Читать» — приложение как есть, но писать нельзя: вместо строки ввода — «Только чтение — вход потерян».
+    var readingLost by remember(current.session.userId) { mutableStateOf(false) }
+    val lostWords = Tima.words.auth
     if (revoked) {
         // Канал с отозванным токеном переподнимался раз в 20 с впустую (ПК, 2026-09-30):
         // отпускаем его сразу, не дожидаясь «Войти снова».
         LaunchedEffect(Unit) { ChannelHost.release() }
         val why by (assembled.network.tokenKeeper?.revokedWhy ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) }).collectAsState()
-        RevokedDevice(onAgain = signOut, reason = why?.reason.orEmpty(), deleteAt = why?.deleteAt)
-        ScreenMarks(PlaceCode.DEVICE_REVOKED, PopupCode.NONE)
-        return
+        LaunchedEffect(why) { entry.markLost(current.session.userId, why?.reason.orEmpty(), why?.deleteAt) }
+        if (!readingLost) {
+            RevokedDevice(
+                onAgain = signOut,
+                reason = why?.reason.orEmpty(),
+                deleteAt = why?.deleteAt,
+                onRead = { readingLost = true },
+                onForget = {
+                    ChannelHost.release()
+                    Journal.note(LogCode.ACCOUNT_OUT, "аккаунт с потерянным входом удалён с телефона")
+                    entry.forget(current.session.userId)
+                    device = entry.created()
+                },
+            )
+            ScreenMarks(PlaceCode.DEVICE_REVOKED, PopupCode.NONE)
+            return
+        }
+    }
+    DisposableEffect(revoked && readingLost) {
+        io.tima.feature.chat.ReadOnlyMode.lost.value = if (revoked && readingLost) {
+            io.tima.feature.chat.ReadOnlyMode.Lost(lostWords.readOnlyNote, lostWords.signInByPhone, signOut)
+        } else {
+            null
+        }
+        onDispose { io.tima.feature.chat.ReadOnlyMode.lost.value = null }
     }
 
     // Пин-код этого аккаунта (ПЛАН-(ПН)): замок при запуске, после 5 минут в фоне (PinGate) и при
@@ -743,6 +769,7 @@ private fun Inside(
         accounts = entry.accountList(),
         cardOf = entry::cardOf,
         newsOf = entry::newsOf,
+        lostOf = { entry.lostOf(it) != null },
         onCard = { name, phone, nickname -> entry.noteCard(current.session.userId, name, phone, nickname) },
         unsent = unsent,
         // Число оставляет тот аккаунт, что открыт: чужую очередь не прочитать — её база
@@ -951,6 +978,8 @@ private fun App(
     onCard: (name: String, phone: String, nickname: String) -> Unit = { _, _, _ -> },
     /** Сколько нового у неоткрытого аккаунта — спрашивается сервер его входом; `null` — не узнали. */
     newsOf: suspend (String) -> Int? = { null },
+    /** Вход аккаунта потерян (2026-11-20) — в переключателе бледно и «вход потерян». */
+    lostOf: (String) -> Boolean = { false },
     onSwitchAccount: (String) -> Unit = {},
     /** Выйти из аккаунта на этом устройстве (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А4). */
     onSignOut: () -> Unit = {},
@@ -3349,6 +3378,8 @@ private fun App(
             // Аккаунты — здесь же: это единственное место, где человек видит, от чьего
             // лица он в приложении, и менять это надо там же, где смотрят.
             accounts = accountTitles,
+            // Потерянный вход (2026-11-20) — бледно и «вход потерян»; такие не опрашиваются.
+            lost = remember(windowSwitcher, accountNews) { accounts.map { it.userId }.filter { lostOf(it) }.toSet() },
             currentAccount = session.userId,
             unsent = unsent,
             // У текущего — непрочитанное окон: оно уже посчитано для чисел на окнах выше.

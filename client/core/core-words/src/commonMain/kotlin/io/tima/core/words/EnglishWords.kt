@@ -1939,6 +1939,15 @@ object EnglishWords : Words {
         override val revokedTitle = "This device was disconnected from the account"
         override val revokedAbout = "The server no longer recognises this device. Sign in again: with a QR code from a phone already signed in, or with your phone number"
         override val signInAgain = "Sign in again"
+        override fun identityGone(date: String) =
+            "This account's identity was deleted" + (if (date.isNotBlank()) " $date" else "") +
+                ". It can't be restored; you can sign in again with your phone number as a new identity"
+        override val signInByPhone = "Sign in again by phone"
+        override val readChats = "Read chats"
+        override val readOnlyNote = "Read only — sign-in lost"
+        override val forgetHere = "Remove from this phone"
+        override val forgetHereAsk = "Remove the account from this phone? Its chats and keys on this phone will be erased"
+        override val lostShort = "sign-in lost"
         override val returnTitle = "Return previous account"
         override fun returnTo(name: String) = "Return: $name"
         override val listTimedOut = "The list did not arrive in 20 seconds"

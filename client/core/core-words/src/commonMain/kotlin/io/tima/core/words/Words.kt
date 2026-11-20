@@ -2138,6 +2138,14 @@ interface AuthWords {
     val revokedTitle: String
     val revokedAbout: String
     val signInAgain: String
+    // Потерянный вход (2026-11-20): удалённая личность, только чтение, удалить с телефона.
+    fun identityGone(date: String): String
+    val signInByPhone: String
+    val readChats: String
+    val readOnlyNote: String
+    val forgetHere: String
+    val forgetHereAsk: String
+    val lostShort: String
     val returnTitle: String
     fun returnTo(name: String): String
     val listTimedOut: String
@@ -4634,6 +4642,15 @@ object RussianWords : Words {
         override val revokedTitle = "Это устройство отключено от аккаунта"
         override val revokedAbout = "Сервер больше не признаёт это устройство. Войдите снова: по QR-коду с телефона, где вы уже вошли, или по номеру телефона"
         override val signInAgain = "Войти снова"
+        override fun identityGone(date: String) =
+            "Личность этого аккаунта удалена" + (if (date.isNotBlank()) " $date" else "") +
+                ". Восстановить нельзя, можно войти заново по номеру — это будет новая личность"
+        override val signInByPhone = "Войти заново по номеру"
+        override val readChats = "Читать переписки"
+        override val readOnlyNote = "Только чтение — вход потерян"
+        override val forgetHere = "Удалить с телефона"
+        override val forgetHereAsk = "Удалить аккаунт с этого телефона? Его переписки и ключи на телефоне сотрутся"
+        override val lostShort = "вход потерян"
         override val returnTitle = "Вернуть прежний аккаунт"
         override fun returnTo(name: String) = "Вернуть: $name"
         override val listTimedOut = "Список не пришёл за 20 секунд"

@@ -1938,6 +1938,15 @@ object SpanishWords : Words {
         override val revokedTitle = "Este dispositivo fue desconectado de la cuenta"
         override val revokedAbout = "El servidor ya no reconoce este dispositivo. Vuelve a entrar: con un código QR desde un teléfono con sesión iniciada o con tu número"
         override val signInAgain = "Volver a entrar"
+        override fun identityGone(date: String) =
+            "La identidad de esta cuenta fue eliminada" + (if (date.isNotBlank()) " $date" else "") +
+                ". No se puede restaurar; puede volver a entrar con su número como una identidad nueva"
+        override val signInByPhone = "Volver a entrar por número"
+        override val readChats = "Leer los chats"
+        override val readOnlyNote = "Solo lectura — acceso perdido"
+        override val forgetHere = "Quitar de este teléfono"
+        override val forgetHereAsk = "¿Quitar la cuenta de este teléfono? Se borrarán sus chats y claves en el teléfono"
+        override val lostShort = "acceso perdido"
         override val returnTitle = "Recuperar la cuenta anterior"
         override fun returnTo(name: String) = "Recuperar: $name"
         override val listTimedOut = "La lista no llegó en 20 segundos"

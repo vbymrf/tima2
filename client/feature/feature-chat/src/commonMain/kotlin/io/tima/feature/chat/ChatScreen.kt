@@ -95,6 +95,9 @@ const val CALL_BUTTON_TAG: String = "chat:call"
  * (PH-42 навыка телефонов, 2026-10-09).
  */
 const val CHAT_INPUT_TAG: String = "chat:input"
+
+/** Строка «только чтение» вместо ввода — вход аккаунта потерян (2026-11-20). */
+const val READ_ONLY_TAG: String = "chat:read-only"
 const val CHAT_SEND_TAG: String = "chat:send"
 
 /**
@@ -508,6 +511,18 @@ fun ChatScreen(
             EditBar(onCancel = onEditCancel)
         }
 
+        // Вход аккаунта потерян (заказчик 2026-11-20) — только чтение: вместо строки ввода — почему и «Войти».
+        val lost = ReadOnlyMode.lost.value
+        if (lost != null) {
+            androidx.compose.foundation.layout.Row(
+                Modifier.fillMaxWidth().padding(TimaSpacing.about3).testTag(READ_ONLY_TAG),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            ) {
+                io.tima.core.ui.Secondary(lost.note, Modifier.weight(1f))
+                io.tima.core.ui.Button(lost.signIn, onClick = lost.onSignIn, kind = io.tima.core.ui.ButtonKind.Quiet)
+            }
+        } else
         // Выбора уровня над строкой нет (Решения §9): быстрая отправка — −1 или 2, другой — в
         // редакторе. Круг по-прежнему приходит параметром — его покажет и сменит редактор.
         InputLine(
