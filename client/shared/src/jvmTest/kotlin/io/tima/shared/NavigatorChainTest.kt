@@ -111,6 +111,19 @@ class NavigatorChainTest {
         assertEquals(аня, nav.where, "из вкладки — туда, откуда вошли, а не на прежнюю вкладку")
     }
 
+    /** ПЛАН-(ВС) 16: «Подписчики» канала — вкладка страницы, как «Участники» у группы. */
+    @Test
+    fun подписчики_канала_вкладка_страницы() {
+        nav.where = Where.ChannelFeed("k", "Новости")
+        nav.open(Where.Showcase("channel", "k", "Новости"))
+        nav.switchTab(Where.Subscribers("k", "Новости"))
+        assertEquals(Where.Subscribers("k", "Новости"), nav.where)
+        nav.close()
+        assertEquals(Where.ChannelFeed("k", "Новости"), nav.where, "из «Подписчиков» — в ленту канала")
+        assertTrue(Where.Subscribers("k", "Новости").swipesWindows)
+        assertEquals("channel.subscribers", whereCode(Where.Subscribers("k", "Новости")))
+    }
+
     /** М21 (2026-11-20): свайп между окнами — из открытой сущности, но не из формы. */
     @Test
     fun свайп_внутри_сущности_но_не_в_форме() {

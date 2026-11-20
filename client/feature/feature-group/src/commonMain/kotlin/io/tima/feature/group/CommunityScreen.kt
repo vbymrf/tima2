@@ -60,6 +60,8 @@ fun CommunityScreen(
     onAbout: (() -> Unit)? = null,
     /** Аудиочаты сообщества — внизу списка, после каналов и групп (ПЛАН-(ВС) 14); `null` — их нет. */
     voice: (@Composable () -> Unit)? = null,
+    /** «⋮» сообщества — раздел каталога и уведомления (ПЛАН-(ВС) 15); `null` — кнопки нет. */
+    onMenu: (() -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words
@@ -68,14 +70,17 @@ fun CommunityScreen(
             title = state.title.ifBlank { words.communities.community },
             onBack = onBack,
             caption = caption(state),
-            right = onAbout?.let { about ->
-                {
-                    io.tima.core.ui.Button(
-                        words.socium.communityAbout,
-                        onClick = about,
-                        kind = io.tima.core.ui.ButtonKind.Quiet,
-                        modifier = Modifier.testTag("community:about"),
-                    )
+            right = {
+                androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    onAbout?.let { about ->
+                        io.tima.core.ui.Button(
+                            words.socium.communityAbout,
+                            onClick = about,
+                            kind = io.tima.core.ui.ButtonKind.Quiet,
+                            modifier = Modifier.testTag("community:about"),
+                        )
+                    }
+                    onMenu?.let { io.tima.core.ui.IconButton(glyph = "⋮", onClick = it, modifier = Modifier.testTag("community:menu")) }
                 }
             },
         )

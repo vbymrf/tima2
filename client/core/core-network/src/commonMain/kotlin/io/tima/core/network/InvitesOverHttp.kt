@@ -259,6 +259,28 @@ class InvitesOverHttp(
         emptyMap()
     }
 
+    /** Подписчики канала (ПЛАН-(ВС) 16): номера, владелец, модераторы; нет прав или связи — `null`. */
+    suspend fun channelSubscribers(channelId: String): ChannelSubscribers? = try {
+        val r = client.get(route.api(path(EntityKind.Channel, channelId) + "/subscribers")) {
+            header("Authorization", "Bearer ${token()}")
+        }
+        if (r.status != HttpStatusCode.OK) null else r.jsonBody()?.let { body ->
+            fun ids(key: String) = (body[key] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
+            ChannelSubscribers(ids("subscribers"), (body["owner_id"] as? JsonPrimitive)?.content.orEmpty(), ids("moderators"))
+        }
+    } catch (_: Throwable) {
+        null
+    }
+
+    /** Исключить подписчика (ПЛАН-(ВС) 16): владелец и модераторы; модератора — только владелец. */
+    suspend fun removeSubscriber(channelId: String, userId: String): Boolean = try {
+        client.delete(route.api(path(EntityKind.Channel, channelId) + "/subscribers/" + userId)) {
+            header("Authorization", "Bearer ${token()}")
+        }.status == HttpStatusCode.NoContent
+    } catch (_: Throwable) {
+        false
+    }
+
     /** Описания сущностей вида (ПЛАН-(ВС) 10–11): номер → описание; у кого описания нет и без связи — пусто. */
     suspend fun abouts(kind: EntityKind, ids: List<String>): Map<String, String> = try {
         if (ids.isEmpty()) emptyMap() else {
@@ -316,3 +338,6 @@ class InvitesOverHttp(
         )
     }
 }
+
+/** Подписчики канала (ПЛАН-(ВС) 16): кто подписан, кто владелец, кто модератор. */
+data class ChannelSubscribers(val subscribers: List<String>, val ownerId: String, val moderators: List<String>)

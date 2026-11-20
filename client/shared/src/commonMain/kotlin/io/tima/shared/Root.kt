@@ -2005,14 +2005,16 @@ private fun App(
     }
     val pageTabBar: @Composable (String, String, String, io.tima.feature.group.PageTab) -> Unit = { kind, id, title, now ->
         io.tima.feature.group.EntityTabsBar(
-            tabs = io.tima.feature.group.pageTabs(roleOf(kind, id), hasMembers = kind == "group"),
+            // «Подписчики» у канала (ПЛАН-(ВС) 16): видят владелец и модераторы — те же, кому видны вкладки.
+            tabs = io.tima.feature.group.pageTabs(roleOf(kind, id), hasMembers = kind == "group" || kind == "channel"),
             current = now,
+            subscribers = kind == "channel",
             onTab = { tab ->
                 Journal.note(LogCode.NAV, "вкладка страницы", "вкладка" to tab.name)
                 navigator.switchTab(
                     when (tab) {
                         io.tima.feature.group.PageTab.About -> Where.Showcase(kind, id, title)
-                        io.tima.feature.group.PageTab.Members -> Where.Members(id, title)
+                        io.tima.feature.group.PageTab.Members -> if (kind == "channel") Where.Subscribers(id, title) else Where.Members(id, title)
                         io.tima.feature.group.PageTab.Manage -> Where.Manage(kind, id, title)
                     },
                 )
@@ -4783,7 +4785,11 @@ private fun App(
                     }
                     val communityState by store.state.collectAsState()
                     LaunchedEffect(current) { store.refresh() }
+                    // «⋮» сообщества (ПЛАН-(ВС) 15): раздел каталога и уведомления, как у канала.
+                    var communityMenu by remember(current) { mutableStateOf(false) }
+                    Box(Modifier.fillMaxSize()) {
                     CommunityScreen(
+                        onMenu = { communityMenu = true },
                         state = communityState,
                         onBack = { where = Where.Nothing },
                         // После подписки — и список Социума: иначе страница сообщества говорила «Не подписан» (живьём 2026-11-19).
@@ -4827,6 +4833,20 @@ private fun App(
                         onUnlink = if (communityState.owner) store::unlink else null,
                         onAbout = { where = Where.Showcase("community", current.communityId, communityState.title) },
                     )
+                    if (communityMenu) {
+                        val key = "community:${current.communityId}"
+                        io.tima.feature.chat.ChatMenuSheet(
+                            sections = communityShelves,
+                            currentSection = entitySections[key].orEmpty(),
+                            onMoveTo = { sectionId -> moveEntityTo(key, sectionId) },
+                            onClose = { communityMenu = false },
+                            group = true,
+                            notifyOff = assembled.liveStates?.let { key in mutedAll },
+                            onNotifyOff = assembled.liveStates?.let { l -> { off: Boolean -> l.mute("community", current.communityId, off) } },
+                            title = Tima.words.socium.communitySettings,
+                        )
+                    }
+                    }
                 }
             }
 
@@ -5667,6 +5687,51 @@ private fun App(
                         scope = scope,
                         onBack = { where = Where.Nothing },
                         onCreated = { groupId, title -> where = Where.Chat(groupId, title) },
+                    )
+                }
+            }
+
+            is Where.Subscribers -> {
+                {
+                    // Подписчики канала (ПЛАН-(ВС) 16): владелец и модераторы видят и исключают; модератора — владелец.
+                    var got by remember(current) { mutableStateOf<io.tima.core.network.ChannelSubscribers?>(null) }
+                    var loaded by remember(current) { mutableStateOf(false) }
+                    var tick by remember(current) { mutableStateOf(0) }
+                    LaunchedEffect(current, tick) {
+                        got = network.invites.channelSubscribers(current.channelId)
+                        loaded = true
+                        got?.let { people.want(it.subscribers) }
+                    }
+                    val me = session.userId
+                    val socialWords = Tima.words.social
+                    val list = got
+                    io.tima.feature.group.SubscribersScreen(
+                        title = current.title,
+                        tabs = { pageTabBar("channel", current.channelId, current.title, io.tima.feature.group.PageTab.Members) },
+                        people = if (!loaded) emptyList() else list?.let { s ->
+                            val iOwn = s.ownerId == me
+                            s.subscribers.map { uid ->
+                                val moderator = uid in s.moderators
+                                io.tima.feature.group.SubscriberLine(
+                                    userId = uid,
+                                    name = if (uid == me) Tima.words.socium.you else peopleCards[uid]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: uid.take(8),
+                                    role = when {
+                                        uid == s.ownerId -> socialWords.owner
+                                        moderator -> socialWords.moderator
+                                        else -> ""
+                                    },
+                                    excludable = uid != s.ownerId && uid != me && (!moderator || iOwn),
+                                )
+                            }.sortedBy { if (it.role.isEmpty()) 1 else 0 }
+                        },
+                        onExclude = { uid ->
+                            scope.launch {
+                                val ok = network.invites.removeSubscriber(current.channelId, uid)
+                                Journal.note(LogCode.NAV, "подписчик исключён", "вышло" to ok)
+                                tick++
+                            }
+                        },
+                        onBack = { where = Where.Nothing },
                     )
                 }
             }

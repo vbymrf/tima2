@@ -44,6 +44,12 @@ interface SociumWords {
     // Вкладки страницы (вариант В).
     val tabAbout: String
     val tabMembers: String
+
+    /** Вкладка канала «Подписчики» и исключение (ПЛАН-(ВС) 16). */
+    val tabSubscribers: String
+    val excludeSubscriber: String
+    val excludeSure: String
+    val subscribersNone: String
     val tabManage: String
     val write: String
     val share: String
@@ -172,6 +178,9 @@ interface SociumWords {
 
     /** Лист «⋮» канала (ПЛАН-(ВС) 16). */
     val channelSettings: String
+
+    /** Лист «⋮» сообщества (ПЛАН-(ВС) 15). */
+    val communitySettings: String
     val channelEmpty: String
     val channelPostHint: String
     val channelPublish: String
@@ -212,6 +221,10 @@ object RussianSociumWords : SociumWords {
     override val showLevels = "Показывать уровень сообщений"
     override val tabAbout = "О сущности"
     override val tabMembers = "Участники"
+    override val tabSubscribers = "Подписчики"
+    override val excludeSubscriber = "Исключить"
+    override val excludeSure = "Точно исключить?"
+    override val subscribersNone = "Подписчиков пока нет"
     override val tabManage = "Управление"
     override val write = "Написать"
     override val share = "Поделиться"
@@ -333,6 +346,7 @@ object RussianSociumWords : SociumWords {
     override val channelFeed = "Лента канала"
     override val channelAbout = "О канале"
     override val channelSettings = "Настройки канала"
+    override val communitySettings = "Настройки сообщества"
     override val communityAbout = "О сообществе"
     override val rowSubscribed = "подписан"
     override val channelEmpty = "Записей пока нет"
@@ -372,6 +386,10 @@ object EnglishSociumWords : SociumWords {
     override val showLevels = "Show message levels"
     override val tabAbout = "About"
     override val tabMembers = "Members"
+    override val tabSubscribers = "Subscribers"
+    override val excludeSubscriber = "Remove"
+    override val excludeSure = "Remove for sure?"
+    override val subscribersNone = "No subscribers yet"
     override val tabManage = "Manage"
     override val write = "Write"
     override val share = "Share"
@@ -489,6 +507,7 @@ object EnglishSociumWords : SociumWords {
     override val channelFeed = "Channel feed"
     override val channelAbout = "About"
     override val channelSettings = "Channel settings"
+    override val communitySettings = "Community settings"
     override val communityAbout = "About"
     override val rowSubscribed = "subscribed"
     override val channelEmpty = "No posts yet"
@@ -528,6 +547,10 @@ object SpanishSociumWords : SociumWords {
     override val showLevels = "Mostrar nivel de mensajes"
     override val tabAbout = "Acerca de"
     override val tabMembers = "Miembros"
+    override val tabSubscribers = "Suscriptores"
+    override val excludeSubscriber = "Expulsar"
+    override val excludeSure = "¿Expulsar de verdad?"
+    override val subscribersNone = "Aún no hay suscriptores"
     override val tabManage = "Gestión"
     override val write = "Escribir"
     override val share = "Compartir"
@@ -645,6 +668,7 @@ object SpanishSociumWords : SociumWords {
     override val channelFeed = "Publicaciones del canal"
     override val channelAbout = "Acerca de"
     override val channelSettings = "Ajustes del canal"
+    override val communitySettings = "Ajustes de la comunidad"
     override val communityAbout = "Acerca de"
     override val rowSubscribed = "suscrito"
     override val channelEmpty = "Aún no hay publicaciones"

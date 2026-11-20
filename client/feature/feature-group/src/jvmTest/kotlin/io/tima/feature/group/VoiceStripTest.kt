@@ -17,3 +17,13 @@ class VoiceStripTest {
         assertTrue(on.difference(off) > 0.0, "микрофон выключен, а полоса та же")
     }
 }
+
+/** Вкладки страницы канала (ПЛАН-(ВС) 16): «Подписчики» видят владелец и модератор, подписчик — нет. */
+class ChannelTabsTest {
+    @Test
+    fun подписчики_у_владельца_и_модератора() {
+        assertTrue(PageTab.Members in pageTabs(io.tima.domain.chat.GroupRole.Owner, hasMembers = true))
+        assertTrue(PageTab.Members in pageTabs(io.tima.domain.chat.GroupRole.Moderator, hasMembers = true))
+        assertTrue(pageTabs(io.tima.domain.chat.GroupRole.Member, hasMembers = true).isEmpty(), "подписчику вкладок нет")
+    }
+}

@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,7 +51,10 @@ enum class PageTab(val tag: String) {
     Manage("page:tab:manage"),
 }
 
-/** Какие вкладки видит человек с этой ролью (§3): участники — у группы, управление — у владельца, админа, модератора. */
+/**
+ * Какие вкладки видит человек с этой ролью (§3): участники — у группы, подписчики — у канала (ПЛАН-(ВС) 16), управление —
+ * у владельца, админа, модератора.
+ */
 fun pageTabs(role: GroupRole?, hasMembers: Boolean): List<PageTab> {
     val staff = role == GroupRole.Owner || role == GroupRole.Admin || role == GroupRole.Moderator
     if (!staff) return emptyList()
@@ -58,14 +63,21 @@ fun pageTabs(role: GroupRole?, hasMembers: Boolean): List<PageTab> {
 
 /** Полоса вкладок страницы; пусто — полосы нет. */
 @Composable
-fun EntityTabsBar(tabs: List<PageTab>, current: PageTab, onTab: (PageTab) -> Unit, badge: Int = 0) {
+fun EntityTabsBar(
+    tabs: List<PageTab>,
+    current: PageTab,
+    onTab: (PageTab) -> Unit,
+    badge: Int = 0,
+    /** Канал: вкладка «Участники» зовётся «Подписчики» (ПЛАН-(ВС) 16). */
+    subscribers: Boolean = false,
+) {
     if (tabs.isEmpty()) return
     val w = Tima.words.socium
     Row(Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         for (tab in tabs) {
             val label = when (tab) {
                 PageTab.About -> w.tabAbout
-                PageTab.Members -> w.tabMembers
+                PageTab.Members -> if (subscribers) w.tabSubscribers else w.tabMembers
                 PageTab.Manage -> w.tabManage
             }
             Tab(label, current = tab == current, onClick = { onTab(tab) }, count = if (tab == PageTab.Manage) badge else 0, modifier = Modifier.testTag(tab.tag))
@@ -316,3 +328,63 @@ fun ManageMainScreen(
         }
     }
 }
+
+/** Метки «Подписчиков» — для сценариев. */
+object SubscribersTags {
+    const val ROW = "subscribers:row"
+    const val EXCLUDE = "subscribers:exclude"
+}
+
+/**
+ * «Подписчики» канала (ПЛАН-(ВС) 16, заказчик 2026-11-20): видят владелец и модераторы, исключать можно — владельца
+ * никто, модератора только владелец (то же правило на сервере). «Исключить» — двумя нажатиями: второе подтверждает.
+ */
+@Composable
+fun SubscribersScreen(
+    title: String,
+    tabs: @Composable () -> Unit,
+    /** (номер, имя, роль словом или пусто, можно ли исключить); `null` — ещё не пришли или нет прав. */
+    people: List<SubscriberLine>?,
+    onExclude: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    val w = Tima.words.socium
+    var asked by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
+        SubwindowHeader(title = title, onBack = onBack, caption = w.tabSubscribers, avatar = title.take(2).uppercase())
+        tabs()
+        when {
+            people == null -> Secondary(Tima.words.trouble.offline, Modifier.padding(TimaSpacing.about5))
+            people.isEmpty() -> Tertiary(w.subscribersNone, Modifier.padding(TimaSpacing.about5))
+            else -> androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize()) {
+                items(people.size, key = { people[it].userId }) { i ->
+                    val p = people[i]
+                    io.tima.core.ui.ListLine(
+                        modifier = Modifier.testTag(SubscribersTags.ROW),
+                        left = { io.tima.core.ui.Avatar(letters = p.name.take(1).uppercase()) },
+                        middle = {
+                            io.tima.core.ui.Name(p.name)
+                            if (p.role.isNotEmpty()) Tertiary(p.role, lineOne = true)
+                        },
+                        right = if (p.excludable) {
+                            {
+                                val sure = asked == p.userId
+                                Button(
+                                    if (sure) w.excludeSure else w.excludeSubscriber,
+                                    onClick = { if (sure) { asked = null; onExclude(p.userId) } else asked = p.userId },
+                                    kind = if (sure) io.tima.core.ui.ButtonKind.Dangerous else io.tima.core.ui.ButtonKind.Quiet,
+                                    modifier = Modifier.testTag(SubscribersTags.EXCLUDE),
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Строка «Подписчиков»: кто, как назвать, роль словом, можно ли исключить. */
+data class SubscriberLine(val userId: String, val name: String, val role: String, val excludable: Boolean)
