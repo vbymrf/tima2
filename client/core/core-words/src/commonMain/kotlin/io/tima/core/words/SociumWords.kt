@@ -171,6 +171,8 @@ interface SociumWords {
     val channelPublish: String
     fun channelComments(n: Int): String
     val communityAbout: String
+    /** Строка каталога: «подписан» — у канала и сообщества без роли (2026-11-20). */
+    val rowSubscribed: String
 }
 
 object RussianSociumWords : SociumWords {
@@ -324,6 +326,7 @@ object RussianSociumWords : SociumWords {
     override val channelFeed = "Лента канала"
     override val channelAbout = "О канале"
     override val communityAbout = "О сообществе"
+    override val rowSubscribed = "подписан"
     override val channelEmpty = "Записей пока нет"
     override val channelPostHint = "Новая запись"
     override val channelPublish = "Опубликовать"
@@ -477,6 +480,7 @@ object EnglishSociumWords : SociumWords {
     override val channelFeed = "Channel feed"
     override val channelAbout = "About"
     override val communityAbout = "About"
+    override val rowSubscribed = "subscribed"
     override val channelEmpty = "No posts yet"
     override val channelPostHint = "New post"
     override val channelPublish = "Publish"
@@ -630,6 +634,7 @@ object SpanishSociumWords : SociumWords {
     override val channelFeed = "Publicaciones del canal"
     override val channelAbout = "Acerca de"
     override val communityAbout = "Acerca de"
+    override val rowSubscribed = "suscrito"
     override val channelEmpty = "Aún no hay publicaciones"
     override val channelPostHint = "Nueva publicación"
     override val channelPublish = "Publicar"

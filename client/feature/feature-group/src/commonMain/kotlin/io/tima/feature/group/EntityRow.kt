@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -97,27 +98,37 @@ fun EntityRow(
                 }
             }
         },
+        // Две строки (заказчик 2026-11-20): название; значок вида с меткой рядом, положение и 🔕. Справа — сверху
+        // время или дата, снизу число новых. Текста последнего сообщения в строке нет.
         right = {
-            TypeIcon(type, 20.dp)
             Tertiary(look.time)
             if (look.fresh > 0) Fresh(look.fresh, on = !look.muted) else Spacer(Modifier.height(22.dp))
         },
         middle = {
             val own = role == GroupRole.Owner || role == GroupRole.Admin || role == GroupRole.Moderator
             Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, color = if (own) ownColor ?: colors.confirmed else colors.text, lineOne = true)
-            val element = look.element
-            val text = look.preview.orEmpty()
-            if (element != null) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    TypeIcon(EntityType(element.first, EntityReach.Personal), 14.dp)
-                    Caption(element.second, fontSize = TimaType.sz5, weight = FontWeight.SemiBold, lineOne = true)
-                }
-                Caption(text, fontSize = TimaType.sz5, color = if (look.live) colors.confirmed else colors.text2, lineOne = true)
-            } else {
-                Caption(text, fontSize = TimaType.sz5, color = if (look.live) colors.confirmed else colors.text2, maxLines = 2)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TypeIcon(type, 18.dp, markBeside = true)
+                Caption(standing(type, role), fontSize = TimaType.sz5, color = if (look.live) colors.confirmed else colors.text2, lineOne = true)
+                if (look.muted) Caption("🔕", fontSize = TimaType.sz5, lineOne = true)
             }
         },
     )
+}
+
+/**
+ * Положение в сущности одним словом: роль — «владелец», «админ», «модератор»; без роли — в группе «участник», в
+ * канале и сообществе «подписан». В каталоге только своё, поэтому «не участник» и «не подписан» здесь не бывает.
+ */
+@Composable
+private fun standing(type: EntityType, role: GroupRole?): String {
+    val w = Tima.words.social
+    return when (role) {
+        GroupRole.Owner -> w.owner
+        GroupRole.Admin -> w.admin
+        GroupRole.Moderator -> w.moderator
+        else -> if (type.kind == EntityKind.Group) w.member else Tima.words.socium.rowSubscribed
+    }
 }
 
 /** Число новых: оранжевое — уведомления включены, серое — выключены (§1.2, 1–2). */
@@ -138,10 +149,17 @@ private fun Fresh(howMany: Int, on: Boolean) {
  * справа — глобус у публичной, замок у секретной, у личной метки нет.
  */
 @Composable
-fun TypeIcon(type: EntityType, side: Dp, modifier: Modifier = Modifier) {
+fun TypeIcon(
+    type: EntityType,
+    side: Dp,
+    modifier: Modifier = Modifier,
+    /** Метку (глобус, замок) — справа от значка, а не поверх него (заказчик 2026-11-20); холст шире в полтора раза. */
+    markBeside: Boolean = false,
+) {
     val ink = Tima.colors.text2
     val mark = Tima.colors.text
-    Canvas(modifier.size(side)) {
+    val hasMark = type.secret || type.reach == EntityReach.Public
+    Canvas(modifier.size(width = if (markBeside && hasMark) side * 1.5f else side, height = side)) {
         val u = size.width / 16f
         val stroke = Stroke(width = 1.5f * u)
         when (type.kind) {
@@ -171,10 +189,14 @@ fun TypeIcon(type: EntityType, side: Dp, modifier: Modifier = Modifier) {
                 drawLine(ink, Offset(8f * u, 12.5f * u), Offset(8f * u, 15f * u), strokeWidth = 1.5f * u)
             }
         }
-        when {
-            type.secret -> lock(mark, u)
-            type.reach == EntityReach.Public -> globe(mark, u)
-            else -> Unit
+        // Метка рисуется в правом верхнем углу значка; «рядом» — та же фигура, сдвинутая за правый край значка.
+        val shift = if (markBeside) 7.8f * u else 0f
+        translate(left = shift) {
+            when {
+                type.secret -> lock(mark, u)
+                type.reach == EntityReach.Public -> globe(mark, u)
+                else -> Unit
+            }
         }
     }
 }
