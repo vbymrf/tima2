@@ -160,7 +160,8 @@ fun TypeIcon(
     val mark = Tima.colors.text
     val hasMark = type.secret || type.reach == EntityReach.Public
     Canvas(modifier.size(width = if (markBeside && hasMark) side * 1.5f else side, height = side)) {
-        val u = size.width / 16f
+        // Мера — по высоте: при метке рядом холст шире, а значок того же размера (по ширине он раздувался в 1,5 раза).
+        val u = size.height / 16f
         val stroke = Stroke(width = 1.5f * u)
         when (type.kind) {
             EntityKind.Group -> {
