@@ -1947,6 +1947,7 @@ object SpanishWords : Words {
         override val forgetHere = "Quitar de este teléfono"
         override val forgetHereAsk = "¿Quitar la cuenta de este teléfono? Se borrarán sus chats y claves en el teléfono"
         override val lostShort = "acceso perdido"
+        override val otherAccount = "Otra cuenta"
         override val returnTitle = "Recuperar la cuenta anterior"
         override fun returnTo(name: String) = "Recuperar: $name"
         override val listTimedOut = "La lista no llegó en 20 segundos"

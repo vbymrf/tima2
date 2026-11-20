@@ -2146,6 +2146,7 @@ interface AuthWords {
     val forgetHere: String
     val forgetHereAsk: String
     val lostShort: String
+    val otherAccount: String
     val returnTitle: String
     fun returnTo(name: String): String
     val listTimedOut: String
@@ -4651,6 +4652,7 @@ object RussianWords : Words {
         override val forgetHere = "Удалить с телефона"
         override val forgetHereAsk = "Удалить аккаунт с этого телефона? Его переписки и ключи на телефоне сотрутся"
         override val lostShort = "вход потерян"
+        override val otherAccount = "Другой аккаунт"
         override val returnTitle = "Вернуть прежний аккаунт"
         override fun returnTo(name: String) = "Вернуть: $name"
         override val listTimedOut = "Список не пришёл за 20 секунд"

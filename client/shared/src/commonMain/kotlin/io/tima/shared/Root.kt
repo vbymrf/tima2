@@ -697,6 +697,20 @@ private fun Inside(
                 reason = reason,
                 deleteAt = deleteAt,
                 onRead = { readingLost = true },
+                others = entry.accountList().filter { it.userId != current.session.userId }.map { other ->
+                    val card = entry.cardOf(other.userId)
+                    Triple(
+                        other.userId,
+                        io.tima.domain.account.AccountTitle.of(card?.name.orEmpty(), card?.nickname?.ifBlank { null } ?: other.nickname, other.userId),
+                        entry.lostOf(other.userId) != null,
+                    )
+                },
+                onOther = { userId ->
+                    ChannelHost.release()
+                    Journal.note(LogCode.ACCOUNT_BACK, "с экрана «вход потерян» — на другой аккаунт")
+                    entry.switchAccount(userId)
+                    device = entry.created()
+                },
                 onForget = {
                     ChannelHost.release()
                     Journal.note(LogCode.ACCOUNT_OUT, "аккаунт с потерянным входом удалён с телефона")

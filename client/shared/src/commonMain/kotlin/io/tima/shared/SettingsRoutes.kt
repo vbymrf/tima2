@@ -910,11 +910,15 @@ internal fun RevokedDevice(
     onRead: (() -> Unit)? = null,
     /** «Удалить с телефона» — после подтверждения (2026-11-20); `null` — кнопки нет. */
     onForget: (() -> Unit)? = null,
+    /** Другие аккаунты телефона: номер, подпись, вход потерян ли (2026-11-20). Пусто — кнопки «Другой аккаунт» нет. */
+    others: List<Triple<String, String, Boolean>> = emptyList(),
+    onOther: (String) -> Unit = {},
 ) {
     val words = Tima.words.auth
     // Личность уже удалена (срок прошёл) — прямо: восстановить нельзя, можно войти заново по номеру (заказчик 2026-11-20).
     val gone = deleteAt != null && deleteAt <= kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
     var asking by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var choosing by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     // Причина (ДУ9, ДУ11) — тексты §2б; проигравшей стороне — выбор «бороться» или «новый аккаунт».
     val text = if (gone) words.identityGone(deleteAt?.let(::reregDate)?.substringBefore(' ').orEmpty()) else when (reason) {
         "reregistered" -> words.revokedReregistered
@@ -944,6 +948,22 @@ internal fun RevokedDevice(
         }
         onRead?.let { read ->
             io.tima.core.ui.Button(label = words.readChats, onClick = read, kind = io.tima.core.ui.ButtonKind.Quiet, modifier = Modifier.fillMaxWidth().testTag("revoked:read"))
+        }
+        // «Другой аккаунт» (заказчик 2026-11-20): уйти отсюда на другой аккаунт телефона одним выбором — прежде путь
+        // был только через «Войти заново» и «Вернуть прежний аккаунт».
+        if (others.isNotEmpty()) {
+            if (!choosing) {
+                io.tima.core.ui.Button(label = words.otherAccount, onClick = { choosing = true }, kind = io.tima.core.ui.ButtonKind.Quiet, modifier = Modifier.fillMaxWidth().testTag("revoked:other"))
+            } else {
+                for ((id, label, lostToo) in others) {
+                    io.tima.core.ui.Button(
+                        label = if (lostToo) "$label · ${words.lostShort}" else label,
+                        onClick = { onOther(id) },
+                        kind = io.tima.core.ui.ButtonKind.Quiet,
+                        modifier = Modifier.fillMaxWidth().testTag("revoked:account"),
+                    )
+                }
+            }
         }
         onForget?.let { forget ->
             if (!asking) {

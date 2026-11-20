@@ -1948,6 +1948,7 @@ object EnglishWords : Words {
         override val forgetHere = "Remove from this phone"
         override val forgetHereAsk = "Remove the account from this phone? Its chats and keys on this phone will be erased"
         override val lostShort = "sign-in lost"
+        override val otherAccount = "Another account"
         override val returnTitle = "Return previous account"
         override fun returnTo(name: String) = "Return: $name"
         override val listTimedOut = "The list did not arrive in 20 seconds"
