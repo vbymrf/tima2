@@ -256,9 +256,24 @@ try {
     $failed = @()
     foreach ($t in $targets) {
         Note "→ $($t.Model) ($($t.Id))"
-        $out = & $adb @server -s $t.Id install -r $apk 2>&1
+        # Телефон будится, пока идёт установка (2026-11-20): Samsung с погасшим экраном принял пакет за 19 с и
+        # 24,5 мин держал установку («Have install standby»), пока не проснулся, — работа adb по Wi-Fi его не будит.
+        # Один раз разбудить мало: передача по Wi-Fi идёт около минуты, а экран гаснет через 30 с. Поэтому
+        # установка — фоновой задачей, а телефону раз в 10 с «проснуться» (KEYCODE_WAKEUP только будит и
+        # ничего не переключает; настройки телефона не трогаются).
+        $job = Start-Job -ScriptBlock {
+            param($adbPath, $serverArgs, $id, $apkPath)
+            & $adbPath @serverArgs -s $id install -r $apkPath 2>&1
+        } -ArgumentList $adb, $server, $t.Id, $apk
+        while ($job.State -eq 'Running') {
+            $null = & $adb @server -s $t.Id shell input keyevent KEYCODE_WAKEUP 2>&1
+            $null = Wait-Job $job -Timeout 10
+        }
+        $out = Receive-Job $job 2>&1
+        Remove-Job $job -Force
         $text = ($out | Out-String).Trim()
-        if ($LASTEXITCODE -ne 0 -or $text -notmatch 'Success') {
+        # Код выхода из фоновой задачи не доходит — решает ответ adb: «Success» или нет.
+        if ($text -notmatch 'Success') {
             Bad '   не поставилось:'
             # PowerShell приписывает к строке чужой программы своё оформление
             # ошибки: «At …ps1:248 char:16», подчёркивание плюсами, CategoryInfo.
