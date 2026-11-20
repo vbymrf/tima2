@@ -1,9 +1,7 @@
 package io.tima.shared
 
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * События звонка от приёмника к окну — **каждое, по порядку** (Redmi, отчёт FTPB,
@@ -21,18 +19,36 @@ import kotlinx.coroutines.flow.receiveAsFlow
  * окно пересобрано: повтор старого «звонит» поднял бы входящий по давно кончившемуся
  * звонку. Несъеденное ждёт окна — открыли приложение по уведомлению, и события приходят
  * по порядку, а не последнее из них.
+ *
+ * **Снимается после разбора, а не до** (отчёт PMJW, 2026-11-20). Прежде здесь был канал: окно забирало событие, а
+ * продолжение окна вставало в очередь главного потока. Пересоздай система окно в этот миг — работа окна отменена, и
+ * событие **пропало**: у канала без `onUndeliveredElement` так и задумано. Входящий терялся целиком — уведомление стоит,
+ * строки «входящий звонок» в журнале нет, через 44 с звонок пропущенный. Теперь очередь — список: окно берёт первое,
+ * разбирает и снимает в одном шаге без приостановки; отменённое окно снять не успевает, и событие достаётся новому.
  */
 class CallPings {
 
-    private val queue = Channel<String>(capacity = CAPACITY, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val pending = MutableStateFlow<List<String>>(emptyList())
 
     /** Событие строкой: `callId|from|kind` для входящего, `слово|callId|значение` для прочих. */
     fun send(ping: String) {
-        queue.trySend(ping)
+        pending.update { (it + ping).takeLast(CAPACITY) }
     }
 
-    /** Читает один получатель — окно. Каждое событие достаётся ему один раз. */
-    val pings: Flow<String> = queue.receiveAsFlow()
+    /**
+     * Разбирать события по порядку, пока жив вызывающий. Читает один получатель — окно; каждое событие достаётся ему один
+     * раз. [handle] не приостанавливается: снятие идёт после него в том же шаге — между «взял» и «снял» отмены нет.
+     */
+    suspend fun each(handle: (String) -> Unit) {
+        pending.collect {
+            while (true) {
+                val head = pending.value.firstOrNull() ?: break
+                handle(head)
+                // По тождеству: пока разбирали, переполнение могло вытеснить это событие — тогда снимать нечего.
+                pending.update { if (it.firstOrNull() === head) it.drop(1) else it }
+            }
+        }
+    }
 
     private companion object {
         /**

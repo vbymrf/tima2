@@ -1586,7 +1586,7 @@ private fun App(
     // события звонка разбираются здесь (заполняется по списку, см. `groupTitleOf`).
     val groupTitles = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
     LaunchedEffect(assembled) {
-        assembled.callPings.pings.collect { callPing ->
+        assembled.callPings.each { callPing ->
             val parts = callPing.split("|")
             when {
                 // **Сверяем, о каком звонке речь.** Раньше любой кадр `call.state` клал нашу
