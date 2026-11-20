@@ -277,8 +277,15 @@ func livekitWebhook(deps callsDeps) http.HandlerFunc {
 				case "CLIENT_INITIATED":
 					endDirectByRoom(deps, r.Context(), callID, userID)
 				default:
+					if !waitsForReturn(reason) {
+						// Убрала служба — возврата не будет (LiveKit: isExpectedToResume=false). Обычно звонок уже закрыт
+						// тем, кто закрыл комнату, и закрывать нечего; открыт — закрываем сразу.
+						log.Printf("личный звонок %s: %s убран из комнаты (LiveKit: %s) — ждать некого", short(callID), short(userID), reason)
+						endDirectByRoom(deps, r.Context(), callID, userID)
+						break
+					}
 					room := ev.Room.Name
-					deps.away.left(callID, userID, at, func(when time.Time) {
+					deps.away.left(callID, userID, reason, at, func(when time.Time) {
 						// «Вошёл заново» мог прийти раньше «вышел» — тогда возврата мы не увидели; спросить комнату.
 						if inRoom(deps, room, userID) {
 							log.Printf("личный звонок %s: %s в комнате — звонок идёт", short(callID), short(userID))

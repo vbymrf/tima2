@@ -123,3 +123,46 @@ func TestRedialWhileAwayClosesOldCall(t *testing.T) {
 		t.Fatalf("прежний звонок: %s, завершил %s", st, by)
 	}
 }
+
+// TestServiceRemovalDoesNotWait — участника убрала служба (комната удалена, участник убран, комната закрыта):
+// возврата не будет, ждать некого — звонок закрывается сразу. Обрыв связи по-прежнему ждёт (заказчик 2026-11-20).
+func TestServiceRemovalDoesNotWait(t *testing.T) {
+	was := awayWait
+	awayWait = time.Hour
+	t.Cleanup(func() { awayWait = was })
+	ts, srv := setup(t)
+	withCalls(srv)
+	for i, reason := range []any{"ROOM_DELETED", "PARTICIPANT_REMOVED", "ROOM_CLOSED", 5} {
+		a := registerDevice(t, ts, "+7999007710"+string(rune('0'+i)))
+		b := registerDevice(t, ts, "+7999007720"+string(rune('0'+i)))
+		call := answeredCall(t, ts, a, b)
+		roomEvent(t, ts, "participant_left", call.Room, b, reason, time.Now())
+		if st, _, _ := callState(t, srv, call.CallID); st != "ended" {
+			t.Fatalf("%v: звонок ждёт возврата убранного службой: %s", reason, st)
+		}
+	}
+	// Обрыв сигнала и сбой состояния — ждём, как при смене сети.
+	for i, reason := range []any{"SIGNAL_CLOSE", "STATE_MISMATCH", "JOIN_FAILURE", 9} {
+		a := registerDevice(t, ts, "+7999007730"+string(rune('0'+i)))
+		b := registerDevice(t, ts, "+7999007740"+string(rune('0'+i)))
+		call := answeredCall(t, ts, a, b)
+		roomEvent(t, ts, "participant_left", call.Room, b, reason, time.Now())
+		if st, _, _ := callState(t, srv, call.CallID); st != "answered" {
+			t.Fatalf("%v: обрыв связи закрыл звонок без ожидания: %s", reason, st)
+		}
+	}
+}
+
+func TestDisconnectReasonNames(t *testing.T) {
+	for raw, want := range map[string]string{
+		`"ROOM_DELETED"`: "ROOM_DELETED", `5`: "ROOM_DELETED", `"5"`: "ROOM_DELETED", `9`: "SIGNAL_CLOSE",
+		`0`: "", `null`: "", `""`: "", `"UNKNOWN_REASON"`: "", `"MEDIA_FAILURE"`: "MEDIA_FAILURE", `15`: "15",
+	} {
+		if got := disconnectReason([]byte(raw)); got != want {
+			t.Errorf("%s → %q, ждали %q", raw, got, want)
+		}
+	}
+	if waitsForReturn("ROOM_DELETED") || !waitsForReturn("") || !waitsForReturn("15") {
+		t.Fatal("кого ждать — не то")
+	}
+}

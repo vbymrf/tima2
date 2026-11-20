@@ -44,7 +44,7 @@ type awayCalls struct {
 func newAwayCalls() *awayCalls { return &awayCalls{m: map[string]*awayEntry{}} }
 
 // left — ушёл не сам: ждём; не вернулся за [awayWait] — [end] с моментом ухода.
-func (a *awayCalls) left(callID, userID string, at time.Time, end func(at time.Time)) {
+func (a *awayCalls) left(callID, userID, reason string, at time.Time, end func(at time.Time)) {
 	if a == nil {
 		end(at)
 		return
@@ -64,11 +64,11 @@ func (a *awayCalls) left(callID, userID string, at time.Time, end func(at time.T
 		}
 		delete(a.m, callID)
 		a.mu.Unlock()
-		log.Printf("личный звонок %s: %s не вернулся за %v — закрываю", short(callID), short(userID), awayWait)
+		log.Printf("личный звонок %s: %s не вернулся за %v (LiveKit: %s) — закрываю", short(callID), short(userID), awayWait, reasonWord(reason))
 		end(at)
 	})
 	a.m[callID] = e
-	log.Printf("личный звонок %s: %s вышел не сам — жду возврата %v", short(callID), short(userID), awayWait)
+	log.Printf("личный звонок %s: %s вышел не сам (LiveKit: %s) — жду возврата %v", short(callID), short(userID), reasonWord(reason), awayWait)
 }
 
 // back — ушедший вошёл снова: звонок идёт.
@@ -173,16 +173,49 @@ func inRoom(deps callsDeps, room, userID string) bool {
 }
 
 // disconnectReason — причина ухода из вебхука: LiveKit пишет перечисление именем (protojson), на всякий
-// случай принимается и номер. Пусто — причины нет.
+// случай принимается и номер (`livekit.DisconnectReason`). Пусто — причины нет.
 func disconnectReason(raw json.RawMessage) string {
 	s := strings.Trim(strings.TrimSpace(string(raw)), `"`)
-	switch s {
-	case "1":
-		return "CLIENT_INITIATED"
-	case "2":
-		return "DUPLICATE_IDENTITY"
-	case "", "0", "null":
+	if name, ok := disconnectNames[s]; ok {
+		return name
+	}
+	if s == "null" || s == "UNKNOWN_REASON" {
 		return ""
 	}
 	return s
+}
+
+var disconnectNames = map[string]string{
+	"": "", "0": "",
+	"1": "CLIENT_INITIATED", "2": "DUPLICATE_IDENTITY", "3": "SERVER_SHUTDOWN", "4": "PARTICIPANT_REMOVED",
+	"5": "ROOM_DELETED", "6": "STATE_MISMATCH", "7": "JOIN_FAILURE", "8": "MIGRATION", "9": "SIGNAL_CLOSE",
+	"10": "ROOM_CLOSED",
+}
+
+// ── КОГО ЖДАТЬ ─────────────────────────────────────────────────────────────────
+//
+// Ожидание заводилось ради обрыва связи (беда 2026-11-15) — и только его. Причины, где участника убрала сама
+// служба, возврата не обещают: LiveKit так и пишет — «SERVICE_REQUEST_DELETE_ROOM, isExpectedToResume: false».
+// Прежде всё, кроме «вышел сам» и «замена подключения», шло в одну корзину «вышел не сам — жду», и после
+// «Отклонить» (комнату закрывает `/end`) журнал сервера писал обрыв, которого не было (заказчик 2026-11-20:
+// «делай а и б»).
+//
+// Не ждём: комната удалена по запросу (`ROOM_DELETED` — наш `/end`, срок вызова), участник убран по запросу
+// (`PARTICIPANT_REMOVED`), комната закрыта (`ROOM_CLOSED`). Ждём — всё остальное: обрыв сигнала, сбой состояния и
+// входа, перезапуск или переезд LiveKit, причина неизвестна или нова. Ошибиться в сторону «ждать» дешевле: лишние
+// 20 с открытого звонка против оборванного разговора.
+func waitsForReturn(reason string) bool {
+	switch reason {
+	case "ROOM_DELETED", "PARTICIPANT_REMOVED", "ROOM_CLOSED":
+		return false
+	}
+	return true
+}
+
+// reasonWord — причина для журнала: словами LiveKit, «нет» — если он её не прислал.
+func reasonWord(reason string) string {
+	if reason == "" {
+		return "нет"
+	}
+	return reason
 }
