@@ -5046,6 +5046,9 @@ private fun App(
                                 if (newTitle != null || newAbout != null) {
                                     ok = network.invites.setAbout(kind, current.id, newTitle, newAbout)
                                     if (ok && newAbout != null) aboutWas = newAbout
+                                    // Строки каталога берут описания тем же проходом, что аватары, — перезапросить
+                                    // (живьём на 272: после «Сохранить» строка показывала прежнее описание).
+                                    if (ok) avatarsTick++
                                 }
                                 if (secret != wasSecret) ok = network.invites.set(kind, current.id, secret) && ok
                                 Journal.note(LogCode.NAV, "управление: основное", "вышло" to ok)
