@@ -97,12 +97,16 @@ func closeUnanswered(deps callsDeps, callID, callerID, calleeID string) {
 	if err != nil || call.State != "ringing" {
 		return // закрыли сами — так и должно быть почти всегда
 	}
+	// Сначала закрыть, потом объявлять — и только если закрыли мы: в ту же секунду мог прийти `/end` («Отклонить»), и
+	// второе «кончился» другим словом легло бы поверх первого (2026-11-20).
+	if !closeCall(deps, ctx, callID, "missed", "", time.Time{}) {
+		return
+	}
 	if rooms := deps.rooms(); rooms != nil {
 		if err := rooms.DeleteRoom(ctx, call.Room); err != nil {
 			log.Printf("closeUnanswered: комната %s не закрылась: %v", call.Room, err)
 		}
 	}
-	_ = deps.store.SetCallState(ctx, callID, "missed", "")
 	deps.notifier.CallChange(ctx, callerID, callID, "missed", "")
 	deps.notifier.CallChange(ctx, calleeID, callID, "missed", "")
 }

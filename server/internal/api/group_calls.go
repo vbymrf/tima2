@@ -361,7 +361,9 @@ func endDirectAt(deps callsDeps, ctx context.Context, callID, userID string, at 
 	if call.State == "ringing" {
 		state = "missed"
 	}
-	_ = deps.store.SetCallState(ctx, callID, state, userID, at)
+	if !closeCall(deps, ctx, callID, state, userID, at) {
+		return // закрыл другой путь — он и объявил
+	}
 	change := endChange(call, userID, state)
 	deps.notifier.CallChange(ctx, call.InitiatorID, callID, change, "")
 	if call.PeerID != "" {

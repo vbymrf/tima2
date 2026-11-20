@@ -84,8 +84,18 @@ type callsDeps struct {
 	notifier *Notifier
 	// Личные звонки, где ждут возврата ушедшего (беда 2026-11-15, `call_away.go`).
 	away *awayCalls
-	// Встречный вызов (2026-11-20); nil — хранилище не наше (встречный тогда идёт прежним путём, «занят»).
+	// Встречный вызов и закрытие с ответом «закрыл ли я» (2026-11-20); nil — хранилище не наше: встречный идёт прежним
+	// путём («занят»), конец пишется без ответа.
 	crossing *store.CallCrossing
+}
+
+// closeCall — закрыть звонок, если он ещё открыт; `true` — закрыл этот вызов, и объявлять сторонам — ему.
+func closeCall(deps callsDeps, ctx context.Context, callID, state, by string, at time.Time) bool {
+	if deps.crossing == nil {
+		return deps.store.SetCallState(ctx, callID, state, by, at) == nil
+	}
+	closed, err := deps.crossing.Close(ctx, callID, state, by, at)
+	return err == nil && closed
 }
 
 func (deps callsDeps) issuer() *calls.Issuer    { return deps.livekit().Issuer }

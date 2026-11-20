@@ -247,6 +247,34 @@ func (s *Store) SetCallState(ctx context.Context, callID, state, endedBy string,
 	return err
 }
 
+// setCallStateTold — то же, что [Store.SetCallState], и сказать, **изменила ли запись строку**. Нужна тому, кто после
+// записи объявляет конец сторонам: из двух одновременных концов объявлять вправе только записавший (2026-11-20).
+func setCallStateTold(ctx context.Context, s *Store, callID, state, endedBy string, at time.Time) (bool, error) {
+	col := ""
+	switch state {
+	case "answered":
+		col = ", answered_at = now()"
+	case "ended", "missed", "busy", "lost":
+		col = ", ended_at = COALESCE($4::timestamptz, now())"
+	}
+	var by, when any
+	if endedBy != "" {
+		by = endedBy
+	}
+	if !at.IsZero() {
+		when = at
+	}
+	args := []any{callID, state, by}
+	if strings.Contains(col, "$4") {
+		args = append(args, when)
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE calls SET state = $2`+col+`, ended_by = COALESCE(ended_by, $3::uuid)
+		 WHERE call_id = $1 AND state IN ('ringing', 'answered')`,
+		args...)
+	return tag.RowsAffected() > 0, err
+}
+
 // CallRow — строка журнала звонков: всё, что нужно показать, и ничего сверх.
 //
 // Отдельным типом от Call намеренно. `Call` — звонок, каким его ведёт сигналинг: имя

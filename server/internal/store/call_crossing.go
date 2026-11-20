@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -55,4 +56,14 @@ func (c CallCrossing) Ringing(ctx context.Context, from, to string) (string, err
 		return "", nil
 	}
 	return id, err
+}
+
+// Close — закрыть звонок, если он ещё открыт; `true` — закрыл именно этот вызов.
+//
+// Конец звонка приходит двумя путями сразу: `/end` того, кто положил трубку, и вебхук LiveKit об ушедшем — комнату
+// закрыл тот же `/end`. Оба читали «звонит», оба писали и **оба объявляли** сторонам. Запись условная и вторая строку
+// не меняла, а объявление уходило: realme отклонил вызов — `declined`, следом `cancelled` от вебхука, и у отклонившего
+// встало «пропущенный» (2026-11-20). Объявляет только тот, чья запись закрыла звонок.
+func (c CallCrossing) Close(ctx context.Context, callID, state, endedBy string, at time.Time) (bool, error) {
+	return setCallStateTold(ctx, c.s, callID, state, endedBy, at)
 }

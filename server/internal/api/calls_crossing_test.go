@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
+
+	"tima/server/internal/store"
 )
 
 // Встречный вызов (заказчик 2026-11-20: «соединяем»; отчёты 47H7, DZKC, LF57).
@@ -95,5 +98,46 @@ func TestLateBusyKeepsAnswered(t *testing.T) {
 	// Настоящий конец разговора по-прежнему кладёт.
 	if code := postAuthed(t, ts, b.token, "POST", "/api/v1/calls/"+start.CallID+"/end", nil, &end); code != 200 || end.State != "ended" {
 		t.Fatalf("конец разговора: %d %q", code, end.State)
+	}
+}
+
+// TestDeclineRacesRoomLeft — «Отклонить» и вебхук об уходе звонящего в одну секунду: конец объявляется один.
+//
+// 2026-11-20, realme: `/end` закрыл комнату, LiveKit выбросил звонящего, вебхук о его уходе прочёл «звонит» и закрыл
+// звонок вторым словом — `cancelled` поверх `declined`. Для принимающего `cancelled` — пропущенный, и у отклонившего
+// встало «пропущенный звонок».
+func TestDeclineRacesRoomLeft(t *testing.T) {
+	ts, srv := setupWithCalls(t)
+	deps := callsDeps{store: srv.Store, livekit: srv.livekitSettings, notifier: srv.notifier(), away: newAwayCalls()}
+	c := store.CallCrossingOf(srv.Store)
+	deps.crossing = &c
+	for round := 0; round < 10; round++ {
+		caller := registerDevice(t, ts, fmt.Sprintf("+7999000011%d", round))
+		callee := registerDevice(t, ts, fmt.Sprintf("+7999000012%d", round))
+		var start crossStart
+		if code := postAuthed(t, ts, caller.token, "POST", "/api/v1/calls",
+			map[string]string{"peer_id": callee.userID, "kind": "audio"}, &start); code != 201 {
+			t.Fatalf("вызов: %d", code)
+		}
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			postAuthed(t, ts, callee.token, "POST", "/api/v1/calls/"+start.CallID+"/end", nil, nil)
+		}()
+		go func() {
+			defer wg.Done()
+			endDirectByRoom(deps, context.Background(), start.CallID, caller.userID)
+		}()
+		wg.Wait()
+		ends := 0
+		for _, ch := range changesOf(updatesOf(t, ts, callee.token, 0), start.CallID) {
+			if ch == "declined" || ch == "cancelled" || ch == "missed" || ch == "ended" {
+				ends++
+			}
+		}
+		if ends != 1 {
+			t.Fatalf("круг %d: концов у принимающего %d: %v", round, ends, changesOf(updatesOf(t, ts, callee.token, 0), start.CallID))
+		}
 	}
 }

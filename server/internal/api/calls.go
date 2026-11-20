@@ -391,24 +391,25 @@ func endCall(deps callsDeps) http.HandlerFunc {
 			_ = json.NewEncoder(w).Encode(map[string]any{"call_id": callID, "state": call.State})
 			return
 		}
-		// Закрываем комнату НА САМОМ ДЕЛЕ. Без этого «завершить» меняло состояние у нас
-		// и рассылало уведомление, а комната жила до empty_timeout: клиент, который
-		// уведомление не получил или проигнорировал, продолжал публиковать звук.
-		if err := deps.rooms().DeleteRoom(r.Context(), call.Room); err != nil {
-			log.Printf("endCall: комната %s не закрылась: %v", call.Room, err)
-		}
 		// Кто положил трубку — сведение, которого в базе не было: `/end` зовут обе
 		// стороны, и без имени первого «отменил» и «отклонил» неразличимы. Ж4.
 		// Обеим сторонам, а не только «другой»: у кладущего трубку могут быть ещё
 		// устройства, и звонящий десктоп должен узнать, что звонок кончился на телефоне.
 		// Уже закрытый звонок второй раз не пишется и не объявляется.
-		if open {
-			_ = deps.store.SetCallState(r.Context(), callID, state, id.UserID)
+		if open && closeCall(deps, r.Context(), callID, state, id.UserID, time.Time{}) {
 			change := endChange(call, id.UserID, state)
 			deps.notifier.CallChange(r.Context(), call.InitiatorID, callID, change, "")
 			if call.PeerID != "" {
 				deps.notifier.CallChange(r.Context(), call.PeerID, callID, change, "")
 			}
+		}
+		// Закрываем комнату НА САМОМ ДЕЛЕ. Без этого «завершить» меняло состояние у нас
+		// и рассылало уведомление, а комната жила до empty_timeout: клиент, который
+		// уведомление не получил или проигнорировал, продолжал публиковать звук.
+		// **После записи конца** (2026-11-20): закрытая комната выбрасывает собеседника, и вебхук о его уходе, увидев
+		// звонок ещё открытым, закрывал его вторым словом — «cancelled» поверх «declined», у отклонившего «пропущенный».
+		if err := deps.rooms().DeleteRoom(r.Context(), call.Room); err != nil {
+			log.Printf("endCall: комната %s не закрылась: %v", call.Room, err)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"call_id": callID, "state": state})
