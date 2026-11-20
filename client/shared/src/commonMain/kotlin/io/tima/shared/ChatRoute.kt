@@ -527,6 +527,15 @@ internal fun Chat(
         if (seen != wasSeen) Journal.note(LogCode.STATES, if (seen) "переписка видна — прочитано" else "переписка не видна", "чат" to chatId.take(8))
         wasSeen = seen
     }
+    // Ушли с экрана переписки — её больше не видят. Без этого store, живущий на общем `scope`, оставался со
+    // «вижу» и отмечал прочитанным всё, что приходило в эту переписку потом: уведомление снималось через
+    // 20–30 мс с причиной «просмотрена» (заказчик 2026-11-20, Samsung: «уведомление снимается сразу как приходит»).
+    DisposableEffect(store) {
+        onDispose {
+            store.seen(false)
+            Journal.note(LogCode.STATES, "переписка закрыта — не видна", "чат" to chatId.take(8))
+        }
+    }
     LaunchedEffect(superDraft) {
         superDraft?.let { doc ->
             store.composeSuper(doc)
