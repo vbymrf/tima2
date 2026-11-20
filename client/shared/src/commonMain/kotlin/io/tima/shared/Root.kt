@@ -672,7 +672,11 @@ private fun Inside(
 
     // Отключённое устройство (А3): вместо вечных `401` — экран «отключено» и вход заново.
     val noRevoke = remember { kotlinx.coroutines.flow.MutableStateFlow(false) }
-    val revoked by (assembled.network.tokenKeeper?.revoked ?: noRevoke).collectAsState()
+    val revokedLive by (assembled.network.tokenKeeper?.revoked ?: noRevoke).collectAsState()
+    // Вход уже известен как потерянный (отметка с прошлого отказа) — экран сразу, до сети: иначе приложение успевало
+    // поднять окна и фоновые циклы чужой базы (realme 2026-11-20: переход на такой аккаунт уронил приложение).
+    val knownLost = remember(current.session.userId) { entry.lostOf(current.session.userId) }
+    val revoked = revokedLive || knownLost != null
     // Вход потерян (заказчик 2026-11-20): запомнить у аккаунта, предложить читать переписки, войти заново или удалить с
     // телефона. «Читать» — приложение как есть, но писать нельзя: вместо строки ввода — «Только чтение — вход потерян».
     var readingLost by remember(current.session.userId) { mutableStateOf(false) }
@@ -682,12 +686,14 @@ private fun Inside(
         // отпускаем его сразу, не дожидаясь «Войти снова».
         LaunchedEffect(Unit) { ChannelHost.release() }
         val why by (assembled.network.tokenKeeper?.revokedWhy ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) }).collectAsState()
-        LaunchedEffect(why) { entry.markLost(current.session.userId, why?.reason.orEmpty(), why?.deleteAt) }
+        LaunchedEffect(why) { why?.let { entry.markLost(current.session.userId, it.reason, it.deleteAt) } }
+        val reason = why?.reason ?: knownLost?.reason.orEmpty()
+        val deleteAt = why?.deleteAt ?: knownLost?.deleteAt?.takeIf { it > 0 }
         if (!readingLost) {
             RevokedDevice(
                 onAgain = signOut,
-                reason = why?.reason.orEmpty(),
-                deleteAt = why?.deleteAt,
+                reason = reason,
+                deleteAt = deleteAt,
                 onRead = { readingLost = true },
                 onForget = {
                     ChannelHost.release()
@@ -770,6 +776,8 @@ private fun Inside(
         cardOf = entry::cardOf,
         newsOf = entry::newsOf,
         lostOf = { entry.lostOf(it) != null },
+        // Только чтение (вход потерян): фоновых циклов нет — отправлять нечем, а очередь может быть нечитаемой.
+        readOnly = revoked && readingLost,
         onCard = { name, phone, nickname -> entry.noteCard(current.session.userId, name, phone, nickname) },
         unsent = unsent,
         // Число оставляет тот аккаунт, что открыт: чужую очередь не прочитать — её база
@@ -980,6 +988,8 @@ private fun App(
     newsOf: suspend (String) -> Int? = { null },
     /** Вход аккаунта потерян (2026-11-20) — в переключателе бледно и «вход потерян». */
     lostOf: (String) -> Boolean = { false },
+    /** Аккаунт открыт только для чтения (вход потерян): без фоновых циклов отправки и сверки. */
+    readOnly: Boolean = false,
     onSwitchAccount: (String) -> Unit = {},
     /** Выйти из аккаунта на этом устройстве (ПЛАН-(А)-ВЫХОДА-ИЗ-АККАУНТА.md, А4). */
     onSignOut: () -> Unit = {},
@@ -2370,7 +2380,7 @@ private fun App(
     // Очередь убыла — сообщение ушло, сеть поднята: копия аккаунта уходит в тот же момент,
     // если в ней есть неотданное (ЖУ9). Иначе — в конце сессии.
     var pendingBefore by remember { mutableStateOf(-1) }
-    BackgroundLoops(assembled, platform, changeSign = listState, onPending = { howMany ->
+    if (!readOnly) BackgroundLoops(assembled, platform, changeSign = listState, onPending = { howMany ->
         if (pendingBefore > howMany) accountCopy.sessionEnded()
         pendingBefore = howMany
         onPending(howMany)
