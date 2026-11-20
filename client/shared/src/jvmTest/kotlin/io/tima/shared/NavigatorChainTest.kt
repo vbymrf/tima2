@@ -97,6 +97,17 @@ class NavigatorChainTest {
         assertEquals(listOf<Where>(аня), nav.chain(), "новая переписка не остаётся под открытой")
     }
 
+    /** М21 (2026-11-20): свайп между окнами — из открытой сущности, но не из формы. */
+    @Test
+    fun свайп_внутри_сущности_но_не_в_форме() {
+        assertTrue(аня.swipesWindows, "из переписки свайп ведёт в соседнее окно")
+        assertTrue(Where.Community("c").swipesWindows)
+        assertTrue(Where.Showcase("group", "g", "Г").swipesWindows)
+        assertFalse(Where.Nothing.swipesWindows, "у списка свой жест — в оправе окна")
+        assertFalse(Where.NewGroup.swipesWindows, "черновое — форма")
+        assertFalse(Where.Settings(SettingsItem.entries.first()).swipesWindows, "настройки — форма")
+    }
+
     @Test
     fun свайп_в_точку_переключатель_в_начало() {
         nav.where = аня

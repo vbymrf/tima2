@@ -67,6 +67,11 @@ fun Stage(
     rail: (@Composable (Layout) -> Unit)? = null,
     /** Подокно: чат, пост, слайд. `null` — ничего не выбрано. */
     main: (@Composable () -> Unit)? = null,
+    /**
+     * Что ещё повесить на подокно телефона — свайп между окнами внутри сущности (ПЛАН-(МП) М21, 2026-11-20). На широком
+     * формате подокно стоит рядом со списком, и жест там не вешается.
+     */
+    mainModifier: Modifier = Modifier,
     /** Страница объекта. Показывается только на ПК. */
     panel: (@Composable () -> Unit)? = null,
     /** Что показать в главной области, пока ничего не выбрано. */
@@ -101,7 +106,7 @@ fun Stage(
             if (layout.phone) {
                 // Перерисовка, а не полосы: выбранное подокно занимает окно целиком, и
                 // пустого состояния на телефоне не бывает вовсе — там список и есть экран.
-                Box(Modifier.fillMaxSize()) { (main ?: column)() }
+                Box(Modifier.fillMaxSize().then(if (main != null) mainModifier else Modifier)) { (main ?: column)() }
                 return@CompositionLocalProvider
             }
 

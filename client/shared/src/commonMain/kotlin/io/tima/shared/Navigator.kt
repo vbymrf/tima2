@@ -232,6 +232,17 @@ internal val Where.transient: Boolean
     get() = this == Where.New || this == Where.NewGroup || this == Where.NewVirtual ||
         this is Where.Link || this is Where.Certify || this is Where.Transfer
 
+/**
+ * Свайп между окнами внутри сущности (ПЛАН-(МП) М21, заказчик 2026-11-20): из открытой переписки, страницы, сообщества
+ * палец переводит в соседнее окно, как из списка; цепочка окна остаётся, и свайп назад возвращает ту же сущность на том
+ * же месте. Не у форм (управление, приглашение, настройки, черновые): там горизонталь у полей, и уход посреди правки
+ * терял бы её.
+ */
+internal val Where.swipesWindows: Boolean
+    get() = this is Where.Chat || this is Where.Thread || this is Where.Comments || this is Where.Person ||
+        this is Where.Community || this is Where.ChannelFeed || this is Where.Showcase || this is Where.Voice ||
+        this is Where.Members
+
 /** Что открыто в главной области. Вся навигация верхнего уровня — эти три случая. */
 internal sealed interface Where {
     /** Ничего: на телефоне это список, на широком формате — пустая главная область. */

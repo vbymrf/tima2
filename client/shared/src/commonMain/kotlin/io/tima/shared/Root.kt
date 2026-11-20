@@ -3710,6 +3710,17 @@ private fun App(
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
     Stage(
         modifier = Modifier.fillMaxSize(),
+        // Свайп внутри сущности (ПЛАН-(МП) М21): после содержимого — у переписки свои горизонтальные жесты (перемотка
+        // голосовых, выделение текста), и решают они первыми.
+        mainModifier = if (where.swipesWindows) {
+            Modifier.windowSwipe(
+                onLeft = { switchWindow(InSide.Next) },
+                onRight = { switchWindow(InSide.Previous) },
+                beforeContent = false,
+            )
+        } else {
+            Modifier
+        },
         sizes = StageSizes(
             railCaption = when (stageStored[STAGE_RAIL]) {
                 RAIL_CAPTIONS -> true
