@@ -264,11 +264,15 @@ fun ManageScreen(
 /** Метки «Основного» — для сценариев. */
 object ManageMainTags {
     const val TITLE = "manage:main:title"
+    const val ABOUT = "manage:main:about"
     const val SECRET = "manage:main:secret"
     const val SAVE = "manage:main:save"
 }
 
-/** «Управление → Основное» (СЦ5): название (у группы) и «секретная». Аватар — когда будет ручка сервера. */
+/**
+ * «Управление → Основное» (СЦ5): аватар, название, описание, «секретная». Название и описание — у всех видов с
+ * 2026-11-20 (ПЛАН-(ВС) 10); прежде название правилось только у группы, описания не было.
+ */
 @Composable
 fun ManageMainScreen(
     title: String,
@@ -276,6 +280,9 @@ fun ManageMainScreen(
     renamable: Boolean,
     saved: Boolean?,
     onTitle: (String) -> Unit,
+    /** Описание; `null` — поля нет. */
+    about: String? = null,
+    onAbout: (String) -> Unit = {},
     onSecret: (Boolean) -> Unit,
     onSave: () -> Unit,
     onBack: () -> Unit,
@@ -288,6 +295,7 @@ fun ManageMainScreen(
         Column(Modifier.padding(TimaSpacing.about5), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4)) {
             avatar?.invoke()
             if (renamable) io.tima.core.ui.Field(title, onTitle, modifier = Modifier.testTag(ManageMainTags.TITLE), hint = w.titleHint, sentences = true)
+            if (about != null) io.tima.core.ui.Field(about, onAbout, modifier = Modifier.testTag(ManageMainTags.ABOUT), hint = w.aboutHint, sentences = true)
             Row(
                 Modifier.fillMaxWidth().clickable { onSecret(!secret) }.testTag(ManageMainTags.SECRET),
                 verticalAlignment = Alignment.CenterVertically,

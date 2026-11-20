@@ -206,6 +206,9 @@ func listStates(st StatesStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := auth.FromContext(r.Context())
 		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+		// `preview=0` — текст последнего не слать (ПЛАН-(ВС) 9, заказчик 2026-11-20: «последнее сообщение для Социума не
+		// запрашиваем, пока не войдёшь»). Параметр необязательный: без него — как было.
+		withPreview := r.URL.Query().Get("preview") != "0"
 		rows, top, err := st.ListStates(r.Context(), id.UserID, after)
 		if err != nil {
 			log.Printf("listStates %s: %v", id.UserID, err)
@@ -224,8 +227,11 @@ func listStates(st StatesStore) http.HandlerFunc {
 				m["user_id"], m["online"], m["until_ms"], m["last_seen_ms"] = s.PeerID, s.Online, s.UntilMs, s.LastSeenMs
 			case "top":
 				m["entity_kind"], m["entity_id"], m["top_id"], m["top_at_ms"], m["unread"] = s.EntityKind, s.ChatID, s.TopID, s.TopAtMs, s.Unread
-				// Текст последнего (ПЛАН-(СЦ) СЦ3): строка Социума показывает его до входа.
-				m["preview"] = s.Preview
+				// Текст последнего (ПЛАН-(СЦ) СЦ3): строка Социума показывала его до входа; с ПЛАН-(ВС) клиент его не
+				// просит (`preview=0`).
+				if withPreview {
+					m["preview"] = s.Preview
+				}
 			case "notify":
 				m["entity_kind"], m["entity_id"], m["off"] = s.EntityKind, s.ChatID, s.Off
 			}

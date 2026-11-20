@@ -59,7 +59,12 @@ data class RowLook(
     val live: Boolean = false,
     /** Аватар сущности — `tima-media://<номер>` (СЦ5); `null` — буквы. */
     val picture: String? = null,
+    /** Описание сущности (ПЛАН-(ВС) 8, 10) — вторая и третья строки; `null` или пусто — описания нет. */
+    val about: String? = null,
 )
+
+/** Описание в строке Социума (ПЛАН-(ВС) 8) — для сценариев. */
+const val SOCIAL_ROW_ABOUT_TAG = "social:row:about"
 
 /** Метка строки Социума — для сценариев; нужная строка — по названию внутри. */
 const val SOCIAL_ROW_TAG = "social:row"
@@ -98,42 +103,43 @@ fun EntityRow(
                 }
             }
         },
-        // Две строки (заказчик 2026-11-20): название; значок вида с меткой рядом, положение и 🔕. Справа — сверху
-        // время или дата, снизу число новых. Текст последнего сообщения — только третьей строкой, если «Вид» каталога
-        // выбрал три строки (заказчик 2026-11-20, «Вид разделов и списка»).
+        // ПЛАН-(ВС) 7–9 (заказчик 2026-11-20): первая строка — ярлычок вида и название (цвет своей роли); вторая и третья —
+        // описание (две строки «Вида» — одной строкой, три — на двух); 🔕 — в конце последней строки. Положения
+        // («владелец», «подписан») и текста последнего сообщения в строке нет. Справа — время последнего уведомления
+        // и число новых.
         right = {
             Tertiary(look.time)
             if (look.fresh > 0) Fresh(look.fresh, on = !look.muted) else Spacer(Modifier.height(22.dp))
         },
         middle = {
             val own = role == GroupRole.Owner || role == GroupRole.Admin || role == GroupRole.Moderator
-            Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, color = if (own) ownColor ?: colors.confirmed else colors.text, lineOne = true)
+            val about = look.about?.trim()?.takeIf { it.isNotEmpty() }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 TypeIcon(type, 18.dp, markBeside = true)
-                Caption(standing(type, role), fontSize = TimaType.sz5, color = if (look.live) colors.confirmed else colors.text2, lineOne = true)
-                if (look.muted) Caption("🔕", fontSize = TimaType.sz5, lineOne = true)
+                Caption(
+                    title,
+                    fontSize = TimaType.sz4,
+                    weight = FontWeight.Bold,
+                    color = if (own) ownColor ?: colors.confirmed else colors.text,
+                    lineOne = true,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (look.muted && about == null) Caption("🔕", fontSize = TimaType.sz5, lineOne = true)
             }
-            // Пустая строка, а не её отсутствие: строки списка одной высоты, пока сообщений нет.
-            if (io.tima.core.ui.LocalListLook.current.three) {
-                Caption(look.preview?.takeIf { it.isNotBlank() } ?: " ", fontSize = TimaType.sz5, color = colors.text2, lineOne = true)
+            if (about != null) {
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Caption(
+                        androidx.compose.ui.text.AnnotatedString(about),
+                        fontSize = TimaType.sz5,
+                        color = colors.text2,
+                        maxLines = if (io.tima.core.ui.LocalListLook.current.three) 2 else 1,
+                        modifier = Modifier.weight(1f, fill = false).testTag(SOCIAL_ROW_ABOUT_TAG),
+                    )
+                    if (look.muted) Caption("🔕", fontSize = TimaType.sz5, lineOne = true)
+                }
             }
         },
     )
-}
-
-/**
- * Положение в сущности одним словом: роль — «владелец», «админ», «модератор»; без роли — в группе «участник», в
- * канале и сообществе «подписан». В каталоге только своё, поэтому «не участник» и «не подписан» здесь не бывает.
- */
-@Composable
-private fun standing(type: EntityType, role: GroupRole?): String {
-    val w = Tima.words.social
-    return when (role) {
-        GroupRole.Owner -> w.owner
-        GroupRole.Admin -> w.admin
-        GroupRole.Moderator -> w.moderator
-        else -> if (type.kind == EntityKind.Group) w.member else Tima.words.socium.rowSubscribed
-    }
 }
 
 /** Число новых: оранжевое — уведомления включены, серое — выключены (§1.2, 1–2). */

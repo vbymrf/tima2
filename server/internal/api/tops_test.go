@@ -74,6 +74,12 @@ func TestПостКаналаВершинойАНеКопией(t *testing.T) {
 	if top.Preview != "пост В" {
 		t.Fatalf("текст последнего у вершины: %q", top.Preview)
 	}
+	// `preview=0` (ПЛАН-(ВС) 9): вершина та же, текста нет — Социум не просит последнее до входа.
+	var bare statesPage
+	getAuthed(t, ts, reader.token, "/api/v1/users/me/states?after=0&preview=0", &bare)
+	if b := topOf(t, bare, ch); b == nil || b.TopID != post.PostID || b.Unread != 3 || b.Preview != "" {
+		t.Fatalf("вершина без текста не та: %+v", b)
+	}
 	// У автора своё новым не считается — вершины нет вовсе.
 	var mine statesPage
 	getAuthed(t, ts, owner.token, "/api/v1/users/me/states?after=0", &mine)

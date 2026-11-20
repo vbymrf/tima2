@@ -59,7 +59,8 @@ class StatesOverHttp(
     private val token: () -> String,
 ) {
     suspend fun page(after: Long): StatesPage? = try {
-        val response = client.get(route.api("/api/v1/users/me/states?after=$after")) {
+        // `preview=0` — текст последнего не нужен (ПЛАН-(ВС) 9): строка Социума его не показывает, пока не войдёшь.
+        val response = client.get(route.api("/api/v1/users/me/states?after=$after&preview=0")) {
             header("Authorization", "Bearer ${token()}")
         }
         if (response.status != HttpStatusCode.OK) {

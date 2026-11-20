@@ -259,6 +259,37 @@ class InvitesOverHttp(
         emptyMap()
     }
 
+    /** Описания сущностей вида (ПЛАН-(ВС) 10–11): номер → описание; у кого описания нет и без связи — пусто. */
+    suspend fun abouts(kind: EntityKind, ids: List<String>): Map<String, String> = try {
+        if (ids.isEmpty()) emptyMap() else {
+            val r = client.post(route.api("/api/v1/entities/about")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("kind", JsonPrimitive(kind.wire))
+                    put("ids", kotlinx.serialization.json.JsonArray(ids.take(500).map { JsonPrimitive(it) }))
+                }.toString())
+            }
+            r.jsonBody()?.get("about")?.jsonObjectOrNull()?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.content?.let { k to it } }?.toMap().orEmpty()
+        }
+    } catch (_: Throwable) {
+        emptyMap()
+    }
+
+    /** Название и описание (ПЛАН-(ВС) 10): `null` — поле не меняется; пустое описание — описания нет. */
+    suspend fun setAbout(kind: EntityKind, id: String, title: String?, about: String?): Boolean = try {
+        client.put(route.api(path(kind, id) + "/about")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {
+                title?.let { put("title", JsonPrimitive(it)) }
+                about?.let { put("about", JsonPrimitive(it)) }
+            }.toString())
+        }.status == HttpStatusCode.OK
+    } catch (_: Throwable) {
+        false
+    }
+
     /** Переименовать группу (ПЛАН-(СЦ) СЦ5, «Основное»): тем же PATCH, что прочие настройки. */
     suspend fun rename(groupId: String, title: String): Boolean = try {
         client.patch(route.api(path(EntityKind.Group, groupId))) {

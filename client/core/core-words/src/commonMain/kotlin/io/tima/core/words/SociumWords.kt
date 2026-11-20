@@ -88,6 +88,9 @@ interface SociumWords {
     val manageDanger: String
     val manageDangerAbout: String
     val titleHint: String
+
+    /** Описание сущности в «Основном» (ПЛАН-(ВС) 10): открытое, может отсутствовать. */
+    val aboutHint: String
     val save: String
     val saved: String
 
@@ -245,6 +248,7 @@ object RussianSociumWords : SociumWords {
     override val manageDanger = "Опасное"
     override val manageDangerAbout = "передать владение, удалить"
     override val titleHint = "Название"
+    override val aboutHint = "Описание — видно всем, можно оставить пустым"
     override val save = "Сохранить"
     override val saved = "Сохранено"
     override val deleteEntity = "Удалить"
@@ -403,6 +407,7 @@ object EnglishSociumWords : SociumWords {
     override val manageDanger = "Danger zone"
     override val manageDangerAbout = "transfer ownership, delete"
     override val titleHint = "Title"
+    override val aboutHint = "Description — visible to everyone, may be left empty"
     override val save = "Save"
     override val saved = "Saved"
     override val deleteEntity = "Delete"
@@ -557,6 +562,7 @@ object SpanishSociumWords : SociumWords {
     override val manageDanger = "Zona peligrosa"
     override val manageDangerAbout = "transferir la propiedad, eliminar"
     override val titleHint = "Nombre"
+    override val aboutHint = "Descripción — visible para todos, puede quedar vacía"
     override val save = "Guardar"
     override val saved = "Guardado"
     override val deleteEntity = "Eliminar"

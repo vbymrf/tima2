@@ -1970,11 +1970,11 @@ private fun App(
         val localAt = local?.atMs ?: 0L
         val topAt = top?.atMs ?: 0L
         val at = maxOf(localAt, topAt).takeIf { it > 0 }
-        val preview = if (topAt > localAt && !top?.preview.isNullOrBlank()) top?.preview else local?.preview ?: top?.preview
         // Удаление назначено (СЦ14) — строка говорит об этом вместо последнего сообщения.
         val dying = socialState.mine.firstOrNull { it.groupId == id }?.deleteAtMs
+        // Текста последнего в строке каталога нет (ПЛАН-(ВС) 9): `preview` несёт только срок удаления (СЦ14).
         io.tima.feature.group.RowLook(
-            preview = dying?.let { wordsNowSocium.willBeDeleted(sociumTime(it, 0L)) } ?: preview,
+            preview = dying?.let { wordsNowSocium.willBeDeleted(sociumTime(it, 0L)) },
             atMs = at, time = at?.let(::sociumTime).orEmpty(), muted = "group:$id" in mutedAll,
         )
     }
@@ -2027,19 +2027,26 @@ private fun App(
     // Аватары сущностей (СЦ5) — одним запросом на вид при входе в Социум и после смены.
     var avatarsTick by remember { mutableStateOf(0) }
     var entityAvatars by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var entityAbouts by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(socialState.mine.size, socialState.channels.size, socialState.communities.size, avatarsTick) {
         val all = mutableMapOf<String, String>()
         all += network.invites.avatars(io.tima.domain.chat.EntityKind.Group, socialState.mine.map { it.groupId }).mapKeys { "group:${it.key}" }
         all += network.invites.avatars(io.tima.domain.chat.EntityKind.Channel, socialState.channels.map { it.channelId }).mapKeys { "channel:${it.key}" }
         all += network.invites.avatars(io.tima.domain.chat.EntityKind.Community, socialState.communities.map { it.communityId }).mapKeys { "community:${it.key}" }
         entityAvatars = all
+        // Описания строк каталога (ПЛАН-(ВС) 8, 10) — тем же проходом: открытые, как названия.
+        val abouts = mutableMapOf<String, String>()
+        abouts += network.invites.abouts(io.tima.domain.chat.EntityKind.Group, socialState.mine.map { it.groupId }).mapKeys { "group:${it.key}" }
+        abouts += network.invites.abouts(io.tima.domain.chat.EntityKind.Channel, socialState.channels.map { it.channelId }).mapKeys { "channel:${it.key}" }
+        abouts += network.invites.abouts(io.tima.domain.chat.EntityKind.Community, socialState.communities.map { it.communityId }).mapKeys { "community:${it.key}" }
+        entityAbouts = abouts
     }
     val sociumLookBare: (String, String) -> io.tima.feature.group.RowLook = { kind, id ->
         if (kind == "channel") {
             val top = sociumTops["channel:$id"]
             val at = top?.atMs?.takeIf { it > 0 }
             io.tima.feature.group.RowLook(
-                preview = top?.preview, atMs = at, time = at?.let(::sociumTime).orEmpty(),
+                atMs = at, time = at?.let(::sociumTime).orEmpty(),
                 fresh = top?.unread ?: 0, muted = "channel:$id" in mutedAll,
             )
         } else if (kind == "community") {
@@ -2056,7 +2063,15 @@ private fun App(
         }
     }
     val sociumLook: (String, String) -> io.tima.feature.group.RowLook = { kind, id ->
-        sociumLookBare(kind, id).copy(picture = entityAvatars["$kind:$id"]?.let { "tima-media://$it" })
+        sociumLookBare(kind, id).let { look ->
+            // Срок удаления (СЦ14) — вместо описания: он важнее того, о чём сущность.
+            val dying = if (kind == "group") look.preview else null
+            look.copy(
+                picture = entityAvatars["$kind:$id"]?.let { "tima-media://$it" },
+                about = dying ?: entityAbouts["$kind:$id"],
+                preview = null,
+            )
+        }
     }
     // Отметки и «печатает» для списка «Чаты» (ПЛАН-(ОП)); секунды — чтобы «печатает» гасло само.
     val liveReceipts by (assembled.liveStates?.receipts ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyMap<String, io.tima.feature.chat.ChatReceipt>()) }).collectAsState()
@@ -4908,6 +4923,14 @@ private fun App(
                     val wasSecret = typeOf(current.kind, current.id).secret
                     var title by remember(current) { mutableStateOf(current.title) }
                     var secret by remember(current) { mutableStateOf(wasSecret) }
+                    // Описание (ПЛАН-(ВС) 10): с сервера при входе; что было — чтобы не слать неизменённое.
+                    var about by remember(current) { mutableStateOf("") }
+                    var aboutWas by remember(current) { mutableStateOf("") }
+                    LaunchedEffect(current) {
+                        val got = network.invites.abouts(kind, listOf(current.id))[current.id].orEmpty()
+                        about = got
+                        aboutWas = got
+                    }
                     var saved by remember(current) { mutableStateOf<Boolean?>(null) }
                     // Аватар (СЦ5): выбор, обрезка квадратом, JPEG через медиа и «PUT …/avatar».
                     var cropping by remember(current) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
@@ -4951,15 +4974,21 @@ private fun App(
                         },
                         title = title,
                         secret = secret,
-                        renamable = kind == io.tima.domain.chat.EntityKind.Group,
+                        renamable = true,
                         saved = saved,
                         onTitle = { title = it; saved = null },
+                        about = about,
+                        onAbout = { about = it; saved = null },
                         onSecret = { secret = it; saved = null },
                         onSave = {
                             scope.launch {
                                 var ok = true
-                                if (kind == io.tima.domain.chat.EntityKind.Group && title.isNotBlank() && title != current.title) {
-                                    ok = network.invites.rename(current.id, title.trim())
+                                // Название и описание — одной ручкой у всех видов (ПЛАН-(ВС) 10).
+                                val newTitle = title.trim().takeIf { it.isNotBlank() && it != current.title }
+                                val newAbout = about.trim().takeIf { it != aboutWas.trim() }
+                                if (newTitle != null || newAbout != null) {
+                                    ok = network.invites.setAbout(kind, current.id, newTitle, newAbout)
+                                    if (ok && newAbout != null) aboutWas = newAbout
                                 }
                                 if (secret != wasSecret) ok = network.invites.set(kind, current.id, secret) && ok
                                 Journal.note(LogCode.NAV, "управление: основное", "вышло" to ok)
