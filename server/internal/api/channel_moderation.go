@@ -33,6 +33,9 @@ type ModerationStore interface {
 	DeleteChannelPost(ctx context.Context, channelID string, postID uint64, actorID string) error
 	SetChannelModerator(ctx context.Context, channelID, ownerID, userID string, on bool) error
 	ChannelModerators(ctx context.Context, channelID string) ([]string, error)
+	// Подписчики (ПЛАН-(ВС) 16, заказчик 2026-11-20): видят владелец и модераторы, исключать можно.
+	SubscriberIDs(ctx context.Context, channelID string) ([]string, error)
+	Unsubscribe(ctx context.Context, channelID, userID string) error
 }
 
 var _ ModerationStore = (*store.Store)(nil)
@@ -45,6 +48,8 @@ func RegisterChannelModeration(mux *http.ServeMux, st ModerationStore, requireDe
 	mux.HandleFunc("GET /api/v1/channels/{channelID}/moderators", requireDevice(listModerators(st)))
 	mux.HandleFunc("POST /api/v1/channels/{channelID}/moderators", requireDevice(addModerator(st)))
 	mux.HandleFunc("DELETE /api/v1/channels/{channelID}/moderators/{userID}", requireDevice(removeModerator(st)))
+	mux.HandleFunc("GET /api/v1/channels/{channelID}/subscribers", requireDevice(listSubscribers(st)))
+	mux.HandleFunc("DELETE /api/v1/channels/{channelID}/subscribers/{userID}", requireDevice(removeSubscriber(st)))
 }
 
 // answerModeration — общий разбор ответа хранилища.
@@ -167,6 +172,97 @@ func removeModerator(st ModerationStore) http.HandlerFunc {
 			return
 		}
 		noteEntityRole(r, st, "channel", r.PathValue("channelID"), r.PathValue("userID"), "member")
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// channelStaff — владелец канала и его модераторы; ok — спрашивающий из них.
+func channelStaff(ctx context.Context, st ModerationStore, channelID, userID string) (owner string, moderators []string, ok bool, err error) {
+	ch, err := st.GetChannel(ctx, channelID)
+	if err != nil {
+		return "", nil, false, err
+	}
+	moderators, err = st.ChannelModerators(ctx, channelID)
+	if err != nil {
+		return "", nil, false, err
+	}
+	return ch.OwnerID, moderators, ch.OwnerID == userID || listHas(moderators, userID), nil
+}
+
+// listSubscribers — GET /channels/{id}/subscribers: подписчики, владелец и модераторы (ПЛАН-(ВС) 16). Видят только
+// владелец и модераторы: список людей канала — сведение управления, а не ленты.
+func listSubscribers(st ModerationStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		channelID := r.PathValue("channelID")
+		owner, moderators, ok, err := channelStaff(r.Context(), st, channelID, id.UserID)
+		if errors.Is(err, store.ErrChannelNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "канал не найден")
+			return
+		} else if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if !ok {
+			writeErr(w, http.StatusForbidden, "not_allowed", "подписчиков видят владелец канала и модераторы")
+			return
+		}
+		ids, err := st.SubscriberIDs(r.Context(), channelID)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if ids == nil {
+			ids = []string{}
+		}
+		if moderators == nil {
+			moderators = []string{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"subscribers": ids, "owner_id": owner, "moderators": moderators})
+	}
+}
+
+// removeSubscriber — DELETE /channels/{id}/subscribers/{userID}: исключить подписчика. Исключают владелец и модераторы;
+// владельца — никто; модератора — только владелец (вместе с подпиской снимается и роль).
+func removeSubscriber(st ModerationStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, _ := auth.FromContext(r.Context())
+		channelID, target := r.PathValue("channelID"), r.PathValue("userID")
+		owner, moderators, ok, err := channelStaff(r.Context(), st, channelID, id.UserID)
+		if errors.Is(err, store.ErrChannelNotFound) {
+			writeErr(w, http.StatusNotFound, "not_found", "канал не найден")
+			return
+		} else if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		switch {
+		case !ok:
+			writeErr(w, http.StatusForbidden, "not_allowed", "исключают владелец канала и модераторы")
+			return
+		case target == owner:
+			writeErr(w, http.StatusForbidden, "owner", "владельца канала исключить нельзя")
+			return
+		case listHas(moderators, target) && id.UserID != owner:
+			writeErr(w, http.StatusForbidden, "moderator", "модератора исключает только владелец")
+			return
+		}
+		if listHas(moderators, target) {
+			if err := st.SetChannelModerator(r.Context(), channelID, owner, target, false); err != nil {
+				log.Printf("removeSubscriber: роль: %v", err)
+			}
+		}
+		if err := st.Unsubscribe(r.Context(), channelID, target); err != nil {
+			log.Printf("removeSubscriber: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
+		if s, isStore := st.(*store.Store); isStore {
+			if err := store.RoleLogOf(s).Note(r.Context(), "channel", channelID, id.UserID, target, "remove", ""); err != nil {
+				log.Printf("журнал ролей: %v", err)
+			}
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
