@@ -24,6 +24,37 @@ import androidx.compose.ui.unit.dp
  * Прошлая редакция делала обратное — карточка на серой подложке, — и тогда список из
  * двадцати чатов был двадцатью карточками, каждая из которых просила внимания.
  */
+/**
+ * Вид строк списка «Чатов» и «Каталога» Социума — раздел «Список» страницы «Вид разделов и списка» (заказчик
+ * 2026-11-20). Свой у каждого окна, как и разделы; вне этих двух списков — умолчание, то есть прежний вид.
+ *
+ * @param lines строк в строке списка: 2 — как было; 3 — сообщение получает ещё строку, аватар крупнее.
+ * @param startPercent отступ у левого края от прежнего, в процентах: 100 — прежний (он же наибольший), шаг 10, до 50.
+ * @param endPercent то же у правого края.
+ */
+@androidx.compose.runtime.Immutable
+data class ListLook(val lines: Int = 2, val startPercent: Int = 100, val endPercent: Int = 100) {
+    val three: Boolean get() = lines >= 3
+
+    /** Две строки — обычный аватар (42), три — крупный (56), одинаково в «Чатах» и «Каталоге». */
+    val avatar: AvatarSize get() = if (three) AvatarSize.Row else AvatarSize.Normal
+
+    companion object {
+        val PERCENTS = listOf(100, 90, 80, 70, 60, 50)
+        val DEFAULT = ListLook()
+
+        /** Сохранённое — в допустимое: чужое число строк — две, процент вне шага — прежний отступ. */
+        fun of(lines: Int?, startPercent: Int?, endPercent: Int?) = ListLook(
+            lines = if (lines == 3) 3 else 2,
+            startPercent = startPercent?.takeIf { it in PERCENTS } ?: 100,
+            endPercent = endPercent?.takeIf { it in PERCENTS } ?: 100,
+        )
+    }
+}
+
+/** Вид строк списка там, где он задан: «Чаты» и «Каталог». В остальных списках — прежний. */
+val LocalListLook = androidx.compose.runtime.staticCompositionLocalOf { ListLook.DEFAULT }
+
 @Composable
 fun ListLine(
     modifier: Modifier = Modifier,
@@ -41,6 +72,7 @@ fun ListLine(
     middle: @Composable () -> Unit,
 ) {
     val colors = Tima.colors
+    val edges = LocalListLook.current
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -59,7 +91,13 @@ fun ListLine(
             }
             // Поле сверху и снизу — половина прежнего (заказчик 2026-09-19: «уменьши
             // отступы между контактами в два раза, и далее везде по этому принципу»).
-            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3 / 2),
+            // Края — по «Виду» списка (заказчик 2026-11-20): прежний отступ и есть наибольший.
+            .padding(
+                start = TimaSpacing.about4 * (edges.startPercent / 100f),
+                end = TimaSpacing.about4 * (edges.endPercent / 100f),
+                top = TimaSpacing.about3 / 2,
+                bottom = TimaSpacing.about3 / 2,
+            ),
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
         verticalAlignment = Alignment.CenterVertically,
     ) {

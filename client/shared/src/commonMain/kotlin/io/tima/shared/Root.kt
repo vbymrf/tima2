@@ -2657,6 +2657,7 @@ private fun App(
                 communitySectionsScreen = true
             },
             forPeople = false,
+            withList = true,
         )
         ScreenMarks(place, PopupCode.COMMUNITY_VIEW)
         return
@@ -2821,6 +2822,8 @@ private fun App(
             // У журнала звонков разделов нет: предлагать их там значило бы обещать
             // несуществующее.
             withSections = phoneTab != WindowTab.Calls,
+            // «Список» — строки и отступы «Чатов» (заказчик 2026-11-20).
+            withList = true,
             // Списки — только у контактов: в журнале звонков книги нет, и вход в неё
             // оттуда вёл бы в чужое окно.
             everyone = if (phoneTab == WindowTab.Calls) emptyList() else bookState.everyone,
@@ -4140,6 +4143,7 @@ private fun App(
                                 state = socialState,
                                 lookOf = sociumLook,
                                 ownColor = communityView.ownColor?.let { androidx.compose.ui.graphics.Color(it.toULong() shl 32) },
+                                list = communityView.listLook(),
                                 // Канал — пока окном «Описание» с его записями уровня 0; лента канала — К5.
                                 onOpenChannel = { ch -> where = Where.ChannelFeed(ch.channelId, ch.title) },
                                 countOf = { groupId -> noticeCounts.chat(groupId, null) },

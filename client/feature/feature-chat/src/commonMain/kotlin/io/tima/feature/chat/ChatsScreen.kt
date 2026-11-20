@@ -122,12 +122,15 @@ fun ChatsScreen(
     mutedOf: (ChatSummary) -> Boolean = { false },
     /** Кто собеседник личной переписки для меня: в книге, незнакомый, заблокирован (2026-10-08). */
     kindOf: (ChatSummary) -> PersonKind = { PersonKind.Known },
+    /** Строки и отступы списка — «Вид разделов и списка» окна «Телефон» (заказчик 2026-11-20). */
+    list: io.tima.core.ui.ListLook = io.tima.core.ui.ListLook.DEFAULT,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
     // Список чатов — группа «списки» (ПЛАН-(Ш)-ШРИФТОВ Ш3). Строки здесь ОБРЕЗАЮТСЯ, и
     // это решение: иначе от чужого длинного имени растёт строка и список перестаёт
     // быть списком. Поэтому и ручка своя, отдельная от сообщений в переписке.
+    androidx.compose.runtime.CompositionLocalProvider(io.tima.core.ui.LocalListLook provides list) {
     ProvidePlace(TextPlace.LISTS) {
     Column(modifier.fillMaxSize().background(colors.surface)) {
         // ── ШАПКИ ЗДЕСЬ БОЛЬШЕ НЕТ ───────────────────────────────────────────
@@ -174,6 +177,7 @@ fun ChatsScreen(
                 else -> List(state.chats, onOpen, personOf, faceOf, look, countOf, tagOf, callGroupOf, onFace, receiptOf, typingOf, mutedOf, kindOf)
             }
         }
+    }
     }
     }
 }
@@ -281,11 +285,12 @@ private fun ChatLine(
     left = {
         if (call != null) {
             val badge = Tima.words.groupCall.badge
-            Avatar(letters = badge, picture = call.face, overlay = badge)
+            Avatar(letters = badge, picture = call.face, overlay = badge, size = io.tima.core.ui.LocalListLook.current.avatar)
         } else {
             Avatar(
                 letters = who?.letter() ?: letters(chat),
                 picture = face,
+                size = io.tima.core.ui.LocalListLook.current.avatar,
                 modifier = if (onFace != null) Modifier.clickable(onClick = onFace) else Modifier,
             )
         }
@@ -337,6 +342,14 @@ private fun ChatLine(
         // Превью обрезается: иначе строка списка растёт от чужого длинного сообщения.
         if (typing) {
             Caption(Tima.words.chat.typing, fontSize = TimaType.sz5, color = Tima.colors.navigation, lineOne = true)
+        } else if (io.tima.core.ui.LocalListLook.current.three) {
+            // Три строки (заказчик 2026-11-20): имя и сообщение на двух строках.
+            Caption(
+                androidx.compose.ui.text.AnnotatedString(preview(chat, Tima.words.chat, Tima.words.groupCall.title)),
+                fontSize = TimaType.sz5,
+                color = Tima.colors.text2,
+                maxLines = 2,
+            )
         } else {
             Secondary(preview(chat, Tima.words.chat, Tima.words.groupCall.title), lineOne = true)
         }

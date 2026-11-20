@@ -588,6 +588,7 @@ internal fun PhoneWindow(
                 typingOf = typingOfChat,
                 mutedOf = { chat -> "chat:${chat.chatId}" in mutedKeys },
                 kindOf = kindOfChat,
+                list = book.view.listLook(),
             )
 
             WindowTab.Contacts -> {

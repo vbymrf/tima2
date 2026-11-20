@@ -78,7 +78,7 @@ fun EntityRow(
     look: RowLook,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    avatar: @Composable () -> Unit = { Avatar(letters = title.take(2).uppercase(), size = io.tima.core.ui.AvatarSize.Row) },
+    avatar: @Composable () -> Unit = { Avatar(letters = title.take(2).uppercase(), size = io.tima.core.ui.LocalListLook.current.avatar) },
     /** Цвет названия у своей роли; `null` — цвет темы `confirmed` (зелёный, по умолчанию). */
     ownColor: Color? = null,
 ) {
@@ -99,7 +99,8 @@ fun EntityRow(
             }
         },
         // Две строки (заказчик 2026-11-20): название; значок вида с меткой рядом, положение и 🔕. Справа — сверху
-        // время или дата, снизу число новых. Текста последнего сообщения в строке нет.
+        // время или дата, снизу число новых. Текст последнего сообщения — только третьей строкой, если «Вид» каталога
+        // выбрал три строки (заказчик 2026-11-20, «Вид разделов и списка»).
         right = {
             Tertiary(look.time)
             if (look.fresh > 0) Fresh(look.fresh, on = !look.muted) else Spacer(Modifier.height(22.dp))
@@ -111,6 +112,10 @@ fun EntityRow(
                 TypeIcon(type, 18.dp, markBeside = true)
                 Caption(standing(type, role), fontSize = TimaType.sz5, color = if (look.live) colors.confirmed else colors.text2, lineOne = true)
                 if (look.muted) Caption("🔕", fontSize = TimaType.sz5, lineOne = true)
+            }
+            // Пустая строка, а не её отсутствие: строки списка одной высоты, пока сообщений нет.
+            if (io.tima.core.ui.LocalListLook.current.three) {
+                Caption(look.preview?.takeIf { it.isNotBlank() } ?: " ", fontSize = TimaType.sz5, color = colors.text2, lineOne = true)
             }
         },
     )

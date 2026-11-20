@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import io.tima.core.words.SocialWords
 import io.tima.core.ui.TextPlace
 import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Avatar
@@ -70,8 +69,11 @@ fun CatalogTab(
     ownColor: androidx.compose.ui.graphics.Color? = null,
     /** Открыть канал (ПЛАН-(СЦ) СЦ3). `null` — каналов в «Каталоге» нет. */
     onOpenChannel: ((io.tima.domain.chat.ChannelInfo) -> Unit)? = null,
+    /** Строки и отступы списка — «Вид разделов и списка» Социума (заказчик 2026-11-20). */
+    list: io.tima.core.ui.ListLook = io.tima.core.ui.ListLook.DEFAULT,
 ) {
     val words = Tima.words.social
+    androidx.compose.runtime.CompositionLocalProvider(io.tima.core.ui.LocalListLook provides list) {
     ProvidePlace(TextPlace.LISTS) {
     Column(modifier.fillMaxSize()) {
         state.trouble?.let { Trouble(it, Modifier.padding(TimaSpacing.about4)) }
@@ -96,7 +98,7 @@ fun CatalogTab(
                         Avatar(
                             letters = community.title.take(2).uppercase(),
                             picture = lookOf("community", community.communityId).picture,
-                            size = io.tima.core.ui.AvatarSize.Row,
+                            size = io.tima.core.ui.LocalListLook.current.avatar,
                             modifier = showcaseClick(onShowcase) { it("community", community.communityId, community.title) },
                         )
                     },
@@ -120,7 +122,7 @@ fun CatalogTab(
                         Avatar(
                             letters = channel.title.take(2).uppercase(),
                             picture = lookOf("channel", channel.channelId).picture,
-                            size = io.tima.core.ui.AvatarSize.Row,
+                            size = io.tima.core.ui.LocalListLook.current.avatar,
                             modifier = showcaseClick(onShowcase) { it("channel", channel.channelId, channel.title) },
                         )
                     },
@@ -158,6 +160,7 @@ fun CatalogTab(
         }
     }
     }
+    }
 }
 
 /**
@@ -173,19 +176,19 @@ fun GroupLine(
     look: RowLook = RowLook(),
     ownColor: androidx.compose.ui.graphics.Color? = null,
 ) {
-    val words = Tima.words.social
     EntityRow(
         title = group.title,
         type = group.type,
         role = group.myRole,
-        look = look.copy(fresh = howMany, preview = look.preview?.takeIf { it.isNotBlank() } ?: roleWord(group, words)),
+        // Положение — второй строкой у самой строки; третья, если выбрана, — только сообщение (2026-11-20).
+        look = look.copy(fresh = howMany),
         onClick = { onOpen(group) },
         ownColor = ownColor,
         avatar = {
             Avatar(
                 letters = group.title.take(2).uppercase(),
                 picture = look.picture,
-                size = io.tima.core.ui.AvatarSize.Row,
+                size = io.tima.core.ui.LocalListLook.current.avatar,
                 modifier = showcaseClick(onShowcase) { it("group", group.groupId, group.title) },
             )
         },
@@ -278,14 +281,6 @@ private fun EmptyTab(title: String, about: String) {
         Secondary(about)
     }
 }
-
-private fun roleWord(group: GroupInfo, words: SocialWords): String =
-    when (group.myRole.name.lowercase()) {
-        "owner" -> words.youOwner
-        "admin" -> words.youAdmin
-        "moderator" -> words.youModerator
-        else -> words.youMember
-    }
 
 /** Метка аватара, открывающего «Описание» (СЦЕНАРИИ-ПО-ОКНАМ.md). */
 const val SHOWCASE_AVATAR_TAG = "social:showcase"

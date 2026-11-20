@@ -959,6 +959,17 @@ object SpanishWords : Words {
         override val tileNormal = "Normales"
         override val tileLarge = "Grandes"
 
+        override val sectionsListLook = "Aspecto de secciones y lista"
+        override val listTitle = "Lista"
+        override val listTwo = "Dos líneas"
+        override val listThree = "Tres líneas"
+        override val listTwoChats = "nombre y mensaje en una línea"
+        override val listThreeChats = "nombre y mensaje en dos líneas, avatar más grande"
+        override val listTwoCatalog = "título, tipo y papel"
+        override val listThreeCatalog = "último mensaje en la tercera línea, avatar más grande"
+        override val padStartTitle = "Margen izquierdo"
+        override val padEndTitle = "Margen derecho"
+
         override val commonSectionAbout = "aquí van todos los que no tienen sección; no se puede quitar"
         override val sectionsItem = "Secciones"
         override val sectionsItemAbout = "crear, renombrar, ordenar, quitar"

@@ -90,6 +90,8 @@ fun BookViewScreen(
      * назван человек, а имя у звонившего такое же, как в книге (заказчик 2026-09-19).
      */
     withSections: Boolean = true,
+    /** Есть ли у окна раздел «Список» (строки и отступы) — у «Телефона» (чаты) и «Социума» (каталог), 2026-11-20. */
+    withList: Boolean = false,
     /** Открыть подокно списка (Л5). `null` — списков в «Виде» не будет. */
     onOpenList: ((BookRoster) -> Unit)? = null,
     /** Сколько человек в списке — числом справа от его имени. */
@@ -138,7 +140,7 @@ fun BookViewScreen(
             onClick = { onOpen(ViewPage.Sections) },
             middle = {
                 Column {
-                    Name(words.sectionsLook)
+                    Name(if (withList) words.sectionsListLook else words.sectionsLook)
                     Tertiary(
                         (if (view.folders) words.folders else words.menu) + " · " +
                             (if (view.icons) words.labelsIcons else words.labelsNames),
@@ -293,7 +295,15 @@ fun BookListPage(
  * Образец — те же строки и плитки, что на вкладке, на выдуманных разделах.
  */
 @Composable
-fun SectionsLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Modifier = Modifier, forPeople: Boolean = true) {
+fun SectionsLookPage(
+    view: BookView,
+    onChange: (BookView) -> Unit,
+    modifier: Modifier = Modifier,
+    forPeople: Boolean = true,
+    /** Раздел «Список» — строки и отступы «Чатов» (`forPeople`) или «Каталога» (заказчик 2026-11-20). */
+    withList: Boolean = false,
+) {
+    val list = view.listLook().takeIf { withList }
     val words = Tima.words.book
     val colors = Tima.colors
     Column(modifier.fillMaxWidth().padding(vertical = TimaSpacing.about2), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about1)) {
@@ -320,12 +330,12 @@ fun SectionsLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Mod
                 )
                 view.folders -> Column {
                     SectionHeader(tabs[1], count = 3, fresh = 1, open = true, onClick = {})
-                    SampleLine(forPeople)
+                    SampleLine(forPeople, list)
                     SectionHeader(tabs[2], count = 2, fresh = 0, open = false, onClick = {})
                 }
                 else -> Column {
                     SectionsRow(tabs, chosen = "work", icons = view.icons, onPick = {}, newIn = { if (it == "work") 1 else 0 })
-                    SampleLine(forPeople)
+                    SampleLine(forPeople, list)
                 }
             }
         }
@@ -353,6 +363,46 @@ fun SectionsLookPage(view: BookView, onChange: (BookView) -> Unit, modifier: Mod
                     onClick = { onChange(view.copy(tileSize = size)) },
                 )
             }
+        }
+
+        // «Список» (заказчик 2026-11-20): строки и отступы краёв списка этого окна — «Чатов» или «Каталога». Отступ
+        // только уменьшается: 100% — прежний, он же наибольший.
+        if (list != null) {
+            SectionTitle(words.listTitle)
+            Choice(words.listTwo, if (forPeople) words.listTwoChats else words.listTwoCatalog, !list.three, LIST_TWO_TAG) {
+                onChange(view.copy(listLines = 2))
+            }
+            Choice(words.listThree, if (forPeople) words.listThreeChats else words.listThreeCatalog, list.three, LIST_THREE_TAG) {
+                onChange(view.copy(listLines = 3))
+            }
+            SectionTitle(words.padStartTitle)
+            Percents(list.startPercent, LIST_PAD_START_TAG) { onChange(view.copy(padStart = it)) }
+            SectionTitle(words.padEndTitle)
+            Percents(list.endPercent, LIST_PAD_END_TAG) { onChange(view.copy(padEnd = it)) }
+        }
+    }
+}
+
+/** Метки раздела «Список» — для сценариев; у процентов к метке добавляется число: `list:pad-start:80`. */
+const val LIST_TWO_TAG = "list:two"
+const val LIST_THREE_TAG = "list:three"
+const val LIST_PAD_START_TAG = "list:pad-start"
+const val LIST_PAD_END_TAG = "list:pad-end"
+
+/** Проценты отступа одним рядом: выбранный — выделен. */
+@Composable
+private fun Percents(chosen: Int, tag: String, onPick: (Int) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4),
+        horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about1),
+    ) {
+        for (percent in io.tima.core.ui.ListLook.PERCENTS) {
+            io.tima.core.ui.Chip(
+                label = "$percent%",
+                kind = if (percent == chosen) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Quiet,
+                onClick = { onPick(percent) },
+                modifier = Modifier.testTag("$tag:$percent"),
+            )
         }
     }
 }
@@ -575,9 +625,37 @@ private fun io.tima.core.words.BookWords.fieldAbout(field: PersonField): String 
 
 /** Строка образца: у контактов — человек с телефоном, у сообществ — группа с описанием. */
 @Composable
-private fun SampleLine(forPeople: Boolean) {
+private fun SampleLine(forPeople: Boolean, list: io.tima.core.ui.ListLook? = null) {
     val words = Tima.words.book
     val name = if (forPeople) words.samplePersonShort else words.sampleGroup
+    // Образец списка (2026-11-20): строка «Чатов» или «Каталога» с выбранными строками и отступами.
+    if (list != null) {
+        androidx.compose.runtime.CompositionLocalProvider(io.tima.core.ui.LocalListLook provides list) {
+            ListLine(
+                onClick = {},
+                left = {
+                    Avatar(
+                        letters = name.split(' ').take(if (forPeople) 1 else 2).joinToString("") { it.take(1) }.uppercase(),
+                        size = list.avatar,
+                    )
+                },
+                right = { Tertiary("12:40", lineOne = true) },
+                middle = {
+                    Name(name)
+                    if (!forPeople) Tertiary(words.sampleGroupAbout, lineOne = true)
+                    if (forPeople || list.three) {
+                        Caption(
+                            androidx.compose.ui.text.AnnotatedString(words.sampleMessage),
+                            fontSize = TimaType.sz5,
+                            color = Tima.colors.text2,
+                            maxLines = if (forPeople && list.three) 2 else 1,
+                        )
+                    }
+                },
+            )
+        }
+        return
+    }
     ListLine(
         onClick = {},
         // Буквы — из самого имени: у человека первая, у группы — первые двух слов.
@@ -592,8 +670,9 @@ private fun SampleLine(forPeople: Boolean) {
 }
 
 @Composable
-private fun Choice(title: String, hint: String, chosen: Boolean, onClick: () -> Unit) {
+private fun Choice(title: String, hint: String, chosen: Boolean, tag: String? = null, onClick: () -> Unit) {
     ListLine(
+        modifier = if (tag != null) Modifier.testTag(tag) else Modifier,
         onClick = onClick,
         middle = {
             Column {
@@ -678,6 +757,8 @@ fun BookViewSheet(
     forPeople: Boolean = true,
     /** Есть ли у списка разделы; `false` — у журнала звонков. */
     withSections: Boolean = true,
+    /** Раздел «Список» на странице разделов — у «Чатов» и «Каталога» (заказчик 2026-11-20). */
+    withList: Boolean = false,
     /**
      * Вся книга, включая убранных и заблокированных — для подокон списков (Л5). Пусто —
      * списков в «Виде» не будет вовсе: пустые входы хуже отсутствующих.
@@ -758,7 +839,7 @@ fun BookViewSheet(
                                 ledger && pointersLedger != null -> words.pointersLedgerTitle
                                 ledger -> words.ledgerTitle
                                 list != null -> words.roster(list)
-                                current == ViewPage.Sections -> words.sectionsLook
+                                current == ViewPage.Sections -> if (withList) words.sectionsListLook else words.sectionsLook
                                 current == ViewPage.Person -> words.showPersonAs
                                 else -> words.view
                             },
@@ -813,7 +894,7 @@ fun BookViewSheet(
                         personOf = personOf,
                     )
                 }
-                page == ViewPage.Sections -> SectionsLookPage(view, onChange, scrolling, forPeople)
+                page == ViewPage.Sections -> SectionsLookPage(view, onChange, scrolling, forPeople, withList)
                 page == ViewPage.Person -> PersonLookPage(view, onChange, scrolling, forPeople)
                 else -> BookViewScreen(
                     view = view,
@@ -823,6 +904,7 @@ fun BookViewSheet(
                     forPeople = forPeople,
                     onOpen = { page = it },
                     withSections = withSections,
+                    withList = withList,
                     onOpenList = if (everyone.isEmpty()) null else ({ roster = it }),
                     countIn = { r -> everyone.count { r.holds(it) } },
                     // Журнал есть и при пустой книге (заказчик 2026-10-08: «журнал контактов

@@ -721,6 +721,18 @@ interface BookWords {
     val tileNormal: String
     val tileLarge: String
 
+    // «Вид разделов и списка»: строки и отступы списка «Чатов» и «Каталога» (заказчик 2026-11-20).
+    val sectionsListLook: String
+    val listTitle: String
+    val listTwo: String
+    val listThree: String
+    val listTwoChats: String
+    val listThreeChats: String
+    val listTwoCatalog: String
+    val listThreeCatalog: String
+    val padStartTitle: String
+    val padEndTitle: String
+
     // Пункт «Разделы» и экран управления набором.
     /** Пояснение к «Общему» в управлении разделами (заказчик 2026-09-19). */
     val commonSectionAbout: String
@@ -3640,6 +3652,17 @@ object RussianWords : Words {
         override val tileSmall = "Мелкие"
         override val tileNormal = "Обычные"
         override val tileLarge = "Крупные"
+
+        override val sectionsListLook = "Вид разделов и списка"
+        override val listTitle = "Список"
+        override val listTwo = "Две строки"
+        override val listThree = "Три строки"
+        override val listTwoChats = "имя и сообщение одной строкой"
+        override val listThreeChats = "имя и сообщение на двух строках, аватар крупнее"
+        override val listTwoCatalog = "название, вид и положение"
+        override val listThreeCatalog = "третьей строкой — последнее сообщение, аватар крупнее"
+        override val padStartTitle = "Отступ слева"
+        override val padEndTitle = "Отступ справа"
 
         override val commonSectionAbout = "сюда попадают все, кому раздел не выбран; убрать нельзя"
         override val sectionsItem = "Разделы"

@@ -297,7 +297,17 @@ data class BookView(
     val order: List<PersonField> = PersonField.entries,
     /** Как показывать незнакомого (заказчик 2026-10-08); по умолчанию — имя цветом. */
     val stranger: io.tima.domain.chat.StrangerLook = io.tima.domain.chat.StrangerLook.Tinted,
+    /**
+     * Строки списка — «Чатов» у вида контактов, «Каталога» у вида сообществ (заказчик 2026-11-20): 2 или 3, отступы
+     * краёв в процентах прежнего. См. [io.tima.core.ui.ListLook].
+     */
+    val listLines: Int = 2,
+    val padStart: Int = 100,
+    val padEnd: Int = 100,
 ) {
+    /** Вид строк списка этого окна. */
+    fun listLook(): io.tima.core.ui.ListLook = io.tima.core.ui.ListLook.of(listLines, padStart, padEnd)
+
     /** Как называть человека: порядок и галки одним значением для строк списков. */
     fun look(): PersonLook = PersonLook(
         order = order,
@@ -354,6 +364,9 @@ data class BookView(
         if (prefix == COMMUNITY) settings.put("$prefix.$AVATAR", avatarLook.name.lowercase())
         if (prefix == COMMUNITY) settings.put("$prefix.$OWN_COLOR", ownColor?.toString().orEmpty())
         if (prefix == BOOK) settings.put("$prefix.$STRANGER", stranger.wire)
+        settings.put("$prefix.$LIST_LINES", listLines.toString())
+        settings.put("$prefix.$PAD_START", padStart.toString())
+        settings.put("$prefix.$PAD_END", padEnd.toString())
     }
 
     companion object {
@@ -374,6 +387,11 @@ data class BookView(
         /** Цвет названия своей роли в строке Социума (ПЛАН-(СЦ) СЦ3). */
         private const val OWN_COLOR = "own_color"
         private const val STRANGER = "stranger_look"
+
+        /** Строки и отступы списка (заказчик 2026-11-20). */
+        private const val LIST_LINES = "list_lines"
+        private const val PAD_START = "list_pad_start"
+        private const val PAD_END = "list_pad_end"
         private const val FOLDERS = "folders"
         private const val MENU = "menu"
 
@@ -410,7 +428,14 @@ data class BookView(
                     ?: io.tima.core.ui.AvatarLook.Free,
                 ownColor = saved["$prefix.$OWN_COLOR"]?.toLongOrNull(),
                 stranger = io.tima.domain.chat.StrangerLook.byWire(saved["$prefix.$STRANGER"]) ?: io.tima.domain.chat.StrangerLook.Tinted,
-            )
+            ).let { view ->
+                val list = io.tima.core.ui.ListLook.of(
+                    saved["$prefix.$LIST_LINES"]?.toIntOrNull(),
+                    saved["$prefix.$PAD_START"]?.toIntOrNull(),
+                    saved["$prefix.$PAD_END"]?.toIntOrNull(),
+                )
+                view.copy(listLines = list.lines, padStart = list.startPercent, padEnd = list.endPercent)
+            }
         }
     }
 }

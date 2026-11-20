@@ -959,6 +959,17 @@ object EnglishWords : Words {
         override val tileNormal = "Normal"
         override val tileLarge = "Large"
 
+        override val sectionsListLook = "Sections and list look"
+        override val listTitle = "List"
+        override val listTwo = "Two lines"
+        override val listThree = "Three lines"
+        override val listTwoChats = "name and message on one line"
+        override val listThreeChats = "name and message on two lines, larger avatar"
+        override val listTwoCatalog = "title, type and role"
+        override val listThreeCatalog = "last message on the third line, larger avatar"
+        override val padStartTitle = "Left margin"
+        override val padEndTitle = "Right margin"
+
         override val commonSectionAbout = "everyone without a section lands here; cannot be removed"
         override val sectionsItem = "Sections"
         override val sectionsItemAbout = "create, rename, reorder, remove"
