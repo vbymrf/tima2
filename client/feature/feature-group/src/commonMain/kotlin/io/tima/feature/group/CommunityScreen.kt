@@ -58,6 +58,8 @@ fun CommunityScreen(
      * окна сообщества было не добраться (живой взгляд 2026-11-19 на 259).
      */
     onAbout: (() -> Unit)? = null,
+    /** Аудиочаты сообщества — внизу списка, после каналов и групп (ПЛАН-(ВС) 14); `null` — их нет. */
+    voice: (@Composable () -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words
@@ -109,7 +111,7 @@ fun CommunityScreen(
             }
         }
 
-        if (state.loaded && state.items.isEmpty()) {
+        if (state.loaded && state.items.isEmpty() && voice == null) {
             Secondary(
                 words.communities.emptyInside,
                 modifier = Modifier.padding(horizontal = TimaSpacing.about4),
@@ -117,8 +119,11 @@ fun CommunityScreen(
             return@Column
         }
 
+        // Внутри сообщества — по типу, а не по времени (ПЛАН-(ВС) 14, заказчик 2026-11-20): каналы, группы, внизу
+        // аудиочаты; внутри типа — как отдал сервер.
+        val ordered = state.items.sortedBy { if (it.kind == io.tima.domain.chat.CommunityKinds.CHANNEL) 0 else 1 }
         LazyColumn(Modifier.fillMaxSize()) {
-            items(state.items, key = { it.kind + it.id }) { item ->
+            items(ordered, key = { it.kind + it.id }) { item ->
                 ListLine(
                     onClick = { onOpenItem(item) },
                     left = { Avatar(letters = item.title.take(2).uppercase()) },
@@ -135,6 +140,8 @@ fun CommunityScreen(
                     },
                 )
             }
+
+            voice?.let { slot -> item(key = "voice") { androidx.compose.foundation.layout.Box(Modifier.padding(TimaSpacing.about4)) { slot() } } }
 
             // «Внести своё» — только у владельца и в конце списка: сначала то, что уже
             // связано, потом то, что можно связать. Строкой сказано главное: переписка и

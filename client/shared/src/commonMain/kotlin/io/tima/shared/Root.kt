@@ -2020,6 +2020,17 @@ private fun App(
         )
     }
     val levelsShown = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    // Раздел каталога у канала и сообщества (ПЛАН-(ВС) 15) — «вид:номер» → раздел; у группы раздел в базе переписки.
+    val entitySections = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
+    LaunchedEffect(environment) {
+        environment.settings.all().collect { saved ->
+            for ((k, v) in saved) if (k.startsWith(ENTITY_SECTION)) entitySections[k.removePrefix(ENTITY_SECTION)] = v
+        }
+    }
+    val moveEntityTo: (String, String) -> Unit = { key, section ->
+        entitySections[key] = section
+        scope.launch { runCatching { environment.settings.put(ENTITY_SECTION + key, section) } }
+    }
     LaunchedEffect(environment) {
         val saved = runCatching { environment.settings.all().first() }.getOrDefault(emptyMap())
         for ((k, v) in saved) if (k.startsWith(PAGE_LEVELS)) levelsShown[k.removePrefix(PAGE_LEVELS)] = v == "1"
@@ -4189,7 +4200,14 @@ private fun App(
                                         line = line,
                                         view = communityView,
                                         sections = communityShelves,
-                                        sectionOf = sectionOfGroup,
+                                        // Группа — её раздел в базе (`chats.section_id`); канал и сообщество — в настройках
+                                        // устройства (ПЛАН-(ВС) 15): переписки у них нет.
+                                        sectionOf = { entry ->
+                                            when (entry) {
+                                                is io.tima.feature.group.CatalogEntry.Group -> sectionOfGroup(entry.group.groupId)
+                                                else -> entitySections[entry.key].orEmpty()
+                                            }
+                                        },
                                         chosen = catalogSection,
                                         onChoose = { catalogSection = it },
                                         collapsed = catalogCollapsed,
@@ -4762,7 +4780,27 @@ private fun App(
                                 } else {
                                     Where.Showcase("group", item.id, item.title)
                                 }
+                            } else if (item.kind == CommunityKinds.CHANNEL) {
+                                // Канал внутри сообщества — его лента, как из каталога (ПЛАН-(ВС) 13).
+                                where = Where.ChannelFeed(item.id, item.title)
                             }
+                        },
+                        // Аудиочаты — внизу состава (ПЛАН-(ВС) 14); создавать — на «О сообществе».
+                        voice = if (voice != null) {
+                            {
+                                var rooms by remember(current) { mutableStateOf<List<io.tima.core.network.VoiceChatInfo>>(emptyList()) }
+                                LaunchedEffect(current) { rooms = network.voiceChats.list(current.communityId).orEmpty() }
+                                if (rooms.isNotEmpty()) {
+                                    io.tima.feature.group.VoiceRoomsList(
+                                        rooms = rooms.map { it.roomId to it.title },
+                                        count = { rid -> rooms.firstOrNull { it.roomId == rid }?.present?.size ?: 0 },
+                                        onEnter = { rid, t -> where = Where.Voice(rid, t, current.communityId) },
+                                        onCreate = null,
+                                    )
+                                }
+                            }
+                        } else {
+                            null
                         },
                         // Вносить и вынимать может владелец: у остальных кнопок нет
                         // вовсе, а не «есть, но отвергается».
@@ -5743,6 +5781,9 @@ private const val CALLS_NOTE_MS = 2_500L
 
 /** Галочка «Показывать уровень сообщений» сущности — на устройстве (ПЛАН-(СЦ) §1.7, 2): ключ «вид:номер». */
 internal const val PAGE_LEVELS = "page.levels."
+
+/** Раздел каталога у канала и сообщества (ПЛАН-(ВС) 15): ключ — «вид:номер». */
+internal const val ENTITY_SECTION = "social.section."
 
 /**
  * Что предлагает сервер этой платформе.

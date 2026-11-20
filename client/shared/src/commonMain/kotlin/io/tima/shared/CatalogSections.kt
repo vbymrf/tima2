@@ -39,12 +39,12 @@ import io.tima.feature.chat.sectionTabs
  */
 @Composable
 fun CatalogSectioned(
-    groups: List<GroupInfo>,
-    line: @Composable (GroupInfo) -> Unit,
+    groups: List<io.tima.feature.group.CatalogEntry>,
+    line: @Composable (io.tima.feature.group.CatalogEntry) -> Unit,
     view: BookView,
     sections: List<Section>,
-    /** Раздел группы по её идентификатору; пусто — общий. */
-    sectionOf: (String) -> String,
+    /** Раздел строки (группа, канал, сообщество — ПЛАН-(ВС) 15); пусто — общий. */
+    sectionOf: (io.tima.feature.group.CatalogEntry) -> String,
     chosen: String,
     onChoose: (String) -> Unit,
     collapsed: Set<String>,
@@ -58,10 +58,10 @@ fun CatalogSectioned(
 ) {
     val words = Tima.words.book
     val tabs = sectionTabs(sections, common, words, allKey = ALL_SECTION)
-    fun inSection(key: String): List<GroupInfo> = when (key) {
+    fun inSection(key: String): List<io.tima.feature.group.CatalogEntry> = when (key) {
         "", ALL_SECTION -> groups
-        COMMON_SECTION -> groups.filter { sectionOf(it.groupId).isEmpty() }
-        else -> groups.filter { sectionOf(it.groupId) == key }
+        COMMON_SECTION -> groups.filter { sectionOf(it).isEmpty() }
+        else -> groups.filter { sectionOf(it) == key }
     }
     val tiles = view.folders && view.icons
     val accordion = view.folders && !view.icons
@@ -94,7 +94,7 @@ fun CatalogSectioned(
                     )
                 }
                 if (tab.id in collapsed) continue
-                items(inside, key = { it.groupId }) { line(it) }
+                items(inside, key = { it.key }) { line(it) }
             }
         }
 
@@ -109,7 +109,7 @@ fun CatalogSectioned(
                     )
                 }
             }
-            items(inSection(chosen), key = { it.groupId }) { line(it) }
+            items(inSection(chosen), key = { it.key }) { line(it) }
         }
     }
 }
