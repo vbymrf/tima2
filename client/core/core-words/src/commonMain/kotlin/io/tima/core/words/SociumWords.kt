@@ -169,6 +169,9 @@ interface SociumWords {
     // Лента канала (СЦ3).
     val channelFeed: String
     val channelAbout: String
+
+    /** Лист «⋮» канала (ПЛАН-(ВС) 16). */
+    val channelSettings: String
     val channelEmpty: String
     val channelPostHint: String
     val channelPublish: String
@@ -329,6 +332,7 @@ object RussianSociumWords : SociumWords {
     override val staffAdd = "Добавить"
     override val channelFeed = "Лента канала"
     override val channelAbout = "О канале"
+    override val channelSettings = "Настройки канала"
     override val communityAbout = "О сообществе"
     override val rowSubscribed = "подписан"
     override val channelEmpty = "Записей пока нет"
@@ -484,6 +488,7 @@ object EnglishSociumWords : SociumWords {
     override val staffAdd = "Add"
     override val channelFeed = "Channel feed"
     override val channelAbout = "About"
+    override val channelSettings = "Channel settings"
     override val communityAbout = "About"
     override val rowSubscribed = "subscribed"
     override val channelEmpty = "No posts yet"
@@ -639,6 +644,7 @@ object SpanishSociumWords : SociumWords {
     override val staffAdd = "Añadir"
     override val channelFeed = "Publicaciones del canal"
     override val channelAbout = "Acerca de"
+    override val channelSettings = "Ajustes del canal"
     override val communityAbout = "Acerca de"
     override val rowSubscribed = "suscrito"
     override val channelEmpty = "Aún no hay publicaciones"

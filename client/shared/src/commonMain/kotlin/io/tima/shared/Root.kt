@@ -4656,6 +4656,10 @@ private fun App(
                     var tick by remember(current) { mutableStateOf(0) }
                     LaunchedEffect(current, tick) { posts = network.invites.channelPosts(current.channelId) }
                     val role = roleOf("channel", current.channelId)
+                    // «⋮» канала (ПЛАН-(ВС) 16): разделы каталога и уведомления — как у группы, без группового звонка и
+                    // «Моего цвета».
+                    var channelMenu by remember(current) { mutableStateOf(false) }
+                    Box(Modifier.fillMaxSize()) {
                     io.tima.feature.group.ChannelFeedScreen(
                         title = current.title,
                         posts = posts,
@@ -4675,7 +4679,22 @@ private fun App(
                         },
                         onBack = { where = Where.Nothing },
                         avatarPicture = entityAvatars["channel:${current.channelId}"]?.let { "tima-media://$it" },
+                        onMenu = { channelMenu = true },
                     )
+                    if (channelMenu) {
+                        val key = "channel:${current.channelId}"
+                        io.tima.feature.chat.ChatMenuSheet(
+                            sections = communityShelves,
+                            currentSection = entitySections[key].orEmpty(),
+                            onMoveTo = { sectionId -> moveEntityTo(key, sectionId) },
+                            onClose = { channelMenu = false },
+                            group = true,
+                            notifyOff = assembled.liveStates?.let { key in mutedAll },
+                            onNotifyOff = assembled.liveStates?.let { l -> { off: Boolean -> l.mute("channel", current.channelId, off) } },
+                            title = Tima.words.socium.channelSettings,
+                        )
+                    }
+                    }
                 }
             }
 

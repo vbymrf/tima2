@@ -84,6 +84,8 @@ fun ChatMenuSheet(
      */
     notifyOff: Boolean? = null,
     onNotifyOff: ((Boolean) -> Unit)? = null,
+    /** Заголовок листа; `null` — «Настройки группы» или «Настройки переписки» (канал — свой, ПЛАН-(ВС) 16). */
+    title: String? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -115,7 +117,7 @@ fun ChatMenuSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f)) {
-                    ProvidePlace(TextPlace.HEADERS) { Name(if (group) words.groupSettings else words.chatSettings) }
+                    ProvidePlace(TextPlace.HEADERS) { Name(title ?: if (group) words.groupSettings else words.chatSettings) }
                 }
                 IconButton(glyph = "✕", onClick = onClose)
             }

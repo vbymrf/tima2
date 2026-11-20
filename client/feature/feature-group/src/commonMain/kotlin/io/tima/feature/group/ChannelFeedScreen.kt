@@ -32,6 +32,7 @@ import io.tima.domain.chat.ChannelFeedPost
 
 /** Метки ленты канала (ПЛАН-(СЦ) СЦ3). */
 object ChannelFeedTags {
+    const val MENU = "channel:menu"
     const val POST = "channel:post"
     const val COMMENTS = "channel:comments"
     const val ABOUT = "channel:about"
@@ -55,6 +56,8 @@ fun ChannelFeedScreen(
     onPublish: ((String) -> Unit)?,
     onBack: () -> Unit,
     avatarPicture: String? = null,
+    /** «⋮» канала — разделы и уведомления, как у группы (ПЛАН-(ВС) 16); `null` — кнопки нет. */
+    onMenu: (() -> Unit)? = null,
 ) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
@@ -64,7 +67,12 @@ fun ChannelFeedScreen(
             caption = w.channelFeed,
             avatar = title.take(2).uppercase(),
             avatarPicture = avatarPicture,
-            right = { Button(w.channelAbout, onClick = onAbout, kind = ButtonKind.Quiet, modifier = Modifier.testTag(ChannelFeedTags.ABOUT)) },
+            right = {
+                androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Button(w.channelAbout, onClick = onAbout, kind = ButtonKind.Quiet, modifier = Modifier.testTag(ChannelFeedTags.ABOUT))
+                    onMenu?.let { io.tima.core.ui.IconButton(glyph = "⋮", onClick = it, modifier = Modifier.testTag(ChannelFeedTags.MENU)) }
+                }
+            },
         )
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             when {
