@@ -359,7 +359,8 @@ fun BareAuthorRow(
         AvatarLook.Inside -> -(avatarSide + EDGE_GAP)
     }
     // Где начинается содержимое справа: за аватаром и зазором; у «имени в аватаре» — колонка уже отведена.
-    val besideX = if (inside) 0.dp else (avatarLeft + avatarSide + EDGE_GAP * 3).coerceAtLeast(0.dp)
+    // Зазор от аватара до содержимого — 18 (заказчик 2026-11-20: «в три раза больше» прежних 6).
+    val besideX = if (inside) BARE_GAP - EDGE_GAP else (avatarLeft + avatarSide + BARE_GAP).coerceAtLeast(0.dp)
     androidx.compose.ui.layout.Layout(
         modifier = modifier.fillMaxWidth()
             .then(if (inside) Modifier.padding(start = EDGE_GAP + avatarSide + EDGE_GAP - FEED_PADDING) else Modifier),
@@ -435,6 +436,9 @@ private val FEED_PADDING = TimaSpacing.about3
 
 /** От края экрана до аватара «у края» и вокруг колонки аватаров. */
 private val EDGE_GAP = 2.dp
+
+/** Зазор от аватара до содержимого без пузыря (заказчик 2026-11-20: втрое больше прежних 6). */
+private val BARE_GAP = 18.dp
 
 /** Мелкий текст в квадрате аватара («имя в аватаре»). */
 private val INSIDE_SIZE = 7.sp
