@@ -61,7 +61,27 @@ class ChannelService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Строка переднего плана ставится ПЕРВОЙ и немедленно: Android даёт на это
         // несколько секунд, и опоздание — не «служба без строки», а падение.
-        raise()
+        //
+        // ── ОТКАЗ ВЫЙТИ НА ПЕРЕДНИЙ ПЛАН — НЕ ПАДЕНИЕ (отчёт PXDZ, 2026-11-07) ──────
+        //
+        // С Android 12 служба, которую система подняла заново сама (`START_STICKY`, намерения
+        // нет), из фона на передний план выйти не вправе: `startForeground` бросает
+        // `ForegroundServiceStartNotAllowedException`, и без перехвата это закрывало
+        // приложение («Unable to start service … with null»). Перехват был только у
+        // [start] — подъёма из окна. Отказ законен: служба тихо уходит и не просит
+        // перезапуска, канал поднимет окно при открытии.
+        val raised = runCatching { raise() }.exceptionOrNull()
+        if (raised != null) {
+            if (raised !is IllegalStateException) throw raised
+            Journal.trouble(
+                LogCode.NET_CHANNEL,
+                "служба не вышла на передний план — система не дала, служба остановлена",
+                "запуск" to if (intent == null) "системой заново" else "намерением",
+                "почему" to raised.javaClass.simpleName,
+            )
+            stopSelf()
+            return START_NOT_STICKY
+        }
         // Без намерения служба приходит только в одном случае: система убила процесс и
         // подняла её заново (`START_STICKY`). Это и отличает смерть от тишины (ВЗ0в).
         BackgroundWatch.serviceStarted(bySystem = intent == null)
