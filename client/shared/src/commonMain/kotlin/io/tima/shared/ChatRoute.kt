@@ -496,14 +496,22 @@ internal fun Chat(
     // а уведомления снимались через 3 секунды: у отправителя зелёные галочки, у получателя — уведомление.
     val readEffects = remember(chatId, notices, live) {
         io.tima.domain.chat.ReadEffects { id, upTo ->
-            notices?.viewed(id, "просмотрена")
-            seenUpTo(environment, id)
-            live?.read(id, upTo)
+            // Вторая защита (беда 2026-11-20): «прочитано» — только если эта переписка сейчас на экране. Иначе ни снятия
+            // уведомлений, ни отметки своим устройствам, ни «прочитано» собеседнику: одно событие — одно правило.
+            if (notices == null || notices.onScreen(id)) {
+                notices?.viewed(id, "просмотрена")
+                seenUpTo(environment, id)
+                live?.read(id, upTo)
+            } else {
+                Journal.note(LogCode.NOTICE, "прочитано не отмечено: переписки нет на экране", "чат" to id.take(8))
+            }
         }
     }
-    // Store живёт столько, сколько открыта переписка: ключ по chatId, чтобы при переходе в
-    // другую он пересоздался, а не показал реплики предыдущей.
-    val store = remember(chatId) {
+    // Store — из реестра (беда 2026-11-20): один на переписку, со счётом ссылок. Экран берёт его и при уходе
+    // отпускает; простаивающий минуту останавливается — его наблюдатели больше не читают базу. Прежде store
+    // заводился при каждом открытии, и его наблюдатели жили до конца процесса.
+    val storeKey = "$myUserId/$chatId"
+    val store = remember(storeKey) { io.tima.feature.chat.ChatStores.registry.acquire(storeKey) {
         ChatAssembly.store(
             chatId = chatId, group = group, environment = environment, network = network, scope = scope,
             myDeviceId = myDeviceId, myUserId = myUserId, peerUser = peerUser, community = community,
@@ -512,7 +520,7 @@ internal fun Chat(
             pins = pins, pinMay = pinMay, setSuper = setSuper, finder = finder,
             readEffects = readEffects,
         )
-    }
+    } }
     // Запомненная на странице галочка уровня (ПЛАН-(СЦ) §1.7, 2) — при каждом входе, а не только первом.
     LaunchedEffect(chatId, circlesInitial) { if (group) store.circlesShown(circlesInitial) }
     // Вид группы — первым: от него зависит, нужен ли ей ключ (заказчик 2026-10-21).
@@ -533,7 +541,8 @@ internal fun Chat(
     DisposableEffect(store) {
         onDispose {
             store.seen(false)
-            Journal.note(LogCode.STATES, "переписка закрыта — не видна", "чат" to chatId.take(8))
+            io.tima.feature.chat.ChatStores.registry.release(storeKey, scope)
+            Journal.note(LogCode.STATES, "переписка закрыта — не видна", "чат" to chatId.take(8), "store живых" to io.tima.feature.chat.ChatStores.registry.size)
         }
     }
     LaunchedEffect(superDraft) {

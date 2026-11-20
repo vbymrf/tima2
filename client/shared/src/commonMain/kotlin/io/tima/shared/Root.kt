@@ -676,6 +676,8 @@ private fun Inside(
     // Вход уже известен как потерянный (отметка с прошлого отказа) — экран сразу, до сети: иначе приложение успевало
     // поднять окна и фоновые циклы чужой базы (realme 2026-11-20: переход на такой аккаунт уронил приложение).
     val knownLost = remember(current.session.userId) { entry.lostOf(current.session.userId) }
+    // Сменился аккаунт — store переписок прежнего не нужны никому (реестр, беда 2026-11-20).
+    LaunchedEffect(current.session.userId) { io.tima.feature.chat.ChatStores.registry.clearExcept(current.session.userId + "/") }
     val revoked = revokedLive || knownLost != null
     // Вход потерян (заказчик 2026-11-20): запомнить у аккаунта, предложить читать переписки, войти заново или удалить с
     // телефона. «Читать» — приложение как есть, но писать нельзя: вместо строки ввода — «Только чтение — вход потерян».

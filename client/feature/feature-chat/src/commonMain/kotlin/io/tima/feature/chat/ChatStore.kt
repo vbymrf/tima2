@@ -326,13 +326,34 @@ class ChatStore(
         return true
     }
 
+    /**
+     * Наблюдение за перепиской — лента из базы, закреплённое, имена и лица — своей работой, подчинённой общей
+     * (беда 2026-11-20 «уведомление снимается сразу»). [stop] останавливает только её: команды — черновик, отправка,
+     * удаление — идут в общей области и доживают до конца, даже когда экран ушёл.
+     */
+    private val watch = kotlinx.coroutines.SupervisorJob(scope.coroutineContext[kotlinx.coroutines.Job])
+    private val watching = kotlinx.coroutines.CoroutineScope(scope.coroutineContext + watch)
+
+    /**
+     * Перестать наблюдать: экран ушёл и реестр [ChatStores] отпустил переписку. Без этого каждое открытие оставляло
+     * живого наблюдателя до конца процесса, и каждое новое сообщение перечитывалось столько раз, сколько раз
+     * переписку открывали. Заодно — «не вижу»: прочитанным ничего больше не отмечается.
+     */
+    fun stop() {
+        seenNow = false
+        watch.cancel()
+    }
+
+    /** Наблюдение остановлено — такой store больше не отдаётся экрану. */
+    val stopped: Boolean get() = watch.isCancelled
+
     init {
         // Закреплённое — с сервера при открытии и событием потом; полоса читает общий снимок.
         pins?.let { board ->
             _state.value = _state.value.copy(pinMay = pinMay)
             scope.launch { runCatching { withContext(io) { board.refresh(chatId, _state.value.group) } } }
-            scope.launch { board.pinned.collect { _state.value = _state.value.copy(pinned = it[chatId] ?: 0L) } }
-            scope.launch {
+            watching.launch { board.pinned.collect { _state.value = _state.value.copy(pinned = it[chatId] ?: 0L) } }
+            watching.launch {
                 board.boards.collect { all ->
                     val b = all[chatId]
                     _state.value = _state.value.copy(pinnedIds = b?.ids.orEmpty(), pinTitle = b?.title.orEmpty())
@@ -371,7 +392,7 @@ class ChatStore(
             faces?.let { album ->
                 _state.value = _state.value.copy(faces = _state.value.faces + (who to album.face(who)?.let(::decodeImage)))
             }
-        }?.launchIn(scope)
+        }?.launchIn(watching)
         // Список приходит потоком: обновление от самой базы, а не по нажатию. Значит
         // пришедшее сообщение и смена состояния отправки появляются на экране сами.
         val pageFlow = observe.pages(chatId, limit)
@@ -462,7 +483,7 @@ class ChatStore(
             }
         // С чего открыть (ПЛАН-(МП) М2): первое непрочитанное — оно узнаётся до отметки «прочитано»; нет — где
         // остановились; нет и его — внизу. Лента сразу дорастает до него.
-        scope.launch {
+        watching.launch {
             val unread = withContext(io) { runCatching { observe.firstUnread(chatId) }.getOrDefault(0L) }
             val saved = if (unread > 0) 0L else withContext(io) { runCatching { places?.load(chatId) ?: 0L }.getOrDefault(0L) }
             val at = if (unread > 0) unread else saved
