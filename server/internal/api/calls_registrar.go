@@ -84,6 +84,8 @@ type callsDeps struct {
 	notifier *Notifier
 	// Личные звонки, где ждут возврата ушедшего (беда 2026-11-15, `call_away.go`).
 	away *awayCalls
+	// Встречный вызов (2026-11-20); nil — хранилище не наше (встречный тогда идёт прежним путём, «занят»).
+	crossing *store.CallCrossing
 }
 
 func (deps callsDeps) issuer() *calls.Issuer    { return deps.livekit().Issuer }
@@ -107,6 +109,10 @@ func RegisterCalls(
 	requireDevice Middleware,
 ) {
 	deps := callsDeps{store: st, livekit: livekit, notifier: n, away: newAwayCalls()}
+	if s, ok := st.(*store.Store); ok {
+		c := store.CallCrossingOf(s)
+		deps.crossing = &c
+	}
 
 	mux.HandleFunc("POST /api/v1/calls", requireDevice(startCall(deps)))
 	mux.HandleFunc("GET /api/v1/calls", requireDevice(listCalls(deps)))

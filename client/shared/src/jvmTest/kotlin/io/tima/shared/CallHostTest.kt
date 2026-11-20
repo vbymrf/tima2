@@ -556,6 +556,32 @@ class CallHostTest {
         assertEquals(2, calls.answers, "новый звонок не принялся")
     }
 
+    /**
+     * Встречный вызов (заказчик 2026-11-20: «соединяем»; отчёты 47H7, DZKC, LF57): звоню Ане, ответа на набор ещё нет, а
+     * её вызов уже пришёл — сервер вводит меня в её звонок. Её вызов не кладётся «занят»; вызов третьего — кладётся.
+     */
+    @Test
+    fun встречный_вызов_не_кладётся_занятым() = runTest {
+        val door = CompletableDeferred<CallStep>()
+        val ended = mutableListOf<Pair<String, Boolean>>()
+        val calls = object : Calls {
+            override suspend fun start(peerId: String, video: Boolean): CallStep = door.await()
+            override suspend fun answer(callId: String): CallStep = CallStep.Refused("нет")
+            override suspend fun end(callId: String, busy: Boolean): Boolean { ended += callId to busy; return true }
+        }
+        val host = host(calls)
+        host.start(peerId = "u-1", peerName = "Аня", video = false)
+        host.ring(callId = "её", fromId = "u-1", fromName = "Аня", video = false)
+        assertTrue(ended.isEmpty(), "встречный вызов положен: $ended")
+        assertFalse(host.incoming, "набор стал входящим")
+
+        host.ring(callId = "третий", fromId = "u-2", fromName = "Борис", video = false)
+        assertEquals(listOf("третий" to true), ended, "вызов третьего во время набора не сказал «занят»")
+
+        door.complete(CallStep.Door(CallDoor(callId = "её", room = "комната", url = "wss://х", token = "жетон")))
+        assertEquals("Аня", host.peer)
+    }
+
     /** Сигналинг, который считает ответы. */
     private class CountingCalls : Calls {
         var answers = 0

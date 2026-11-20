@@ -56,6 +56,26 @@ func startCall(deps callsDeps) http.HandlerFunc {
 		// Звонок, где ждут возврата одного из этих двоих (или самого звонящего), закрывается сразу: человек
 		// явно не в нём, и «занят» на всё ожидание было бы неправдой (беда 2026-11-15, `call_away.go`).
 		settleAway(deps, r.Context(), id.UserID, req.PeerID)
+		// ── ВСТРЕЧНЫЙ ВЫЗОВ — СОЕДИНИТЬ, А НЕ «ЗАНЯТ» ──────────────────────────
+		//
+		// Собеседник уже звонит мне — и я набираю его. Прежде проверка ниже видела его вызов и отвечала «занят»
+		// обоим (отчёты 47H7, DZKC, LF57, 2026-10-26). Заказчик 2026-11-20: «соединяем». Второй вызов не
+		// заводится: набравший входит в первый как ответивший — так делают телефоны.
+		//
+		// Проверка и заведение — под замком пары: иначе два нажатия в одну секунду оба не видят встречного и
+		// заводят по звонку. Беда замка (база недоступна) звонок не отнимает — идём прежним путём.
+		if deps.crossing != nil {
+			if unlock, err := deps.crossing.Lock(r.Context(), id.UserID, req.PeerID); err == nil {
+				defer unlock()
+			}
+			if callID, err := deps.crossing.Ringing(r.Context(), req.PeerID, id.UserID); err == nil && callID != "" {
+				if call, err := deps.store.GetCall(r.Context(), callID); err == nil {
+					log.Printf("звонок %s: встречный вызов — %s входит ответившим", callID[:8], id.UserID[:8])
+					answerWith(deps, w, r, call, id, http.StatusCreated)
+					return
+				}
+			}
+		}
 		if busy, err := deps.store.HasLiveCall(r.Context(), req.PeerID); err == nil && busy {
 			writeErr(w, http.StatusConflict, "busy", "собеседник занят другим звонком")
 			return
@@ -119,27 +139,40 @@ func answerCall(deps callsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "not_callee", "ответить может только вызываемый")
 			return
 		}
-		token, err := deps.issuer().Token(call.Room, callIdentity(id), true, callTokenTTL, time.Now())
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
-			return
-		}
-		_ = deps.store.SetCallState(r.Context(), callID, "answered", "")
-		// ── ОСТАЛЬНЫЕ УСТРОЙСТВА ОТВЕТИВШЕГО ───────────────────────────────
-		//
-		// Вызов звонит на ВСЕХ устройствах человека. Ответил телефон — десктоп обязан
-		// замолчать, а не звонить сорок пять секунд и класть трубку живому разговору.
-		//
-		// Раньше для этого было отдельное слово `taken` адресно соседям. Теперь изменение
-		// одно — `answered` с ответившим устройством, — а «взяли здесь или на другом»
-		// ответ ленты говорит каждому спрашивающему сам (`here`).
-		deps.notifier.CallChange(r.Context(), id.UserID, callID, "answered", id.DeviceID)
-		deps.notifier.CallChange(r.Context(), call.InitiatorID, callID, "answered", "")
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"room": call.Room, "url": deps.livekitURL(), "token": token, "video": deps.video(),
-		})
+		answerWith(deps, w, r, call, id, http.StatusOK)
 	}
+}
+
+// answerWith — ответить на звонок: токен комнаты, состояние answered, сказать обеим сторонам. Зовут «Принять» и
+// встречный вызов (`startCall`); у второго ответ — 201 с `call_id` и `crossed`, как у заведённого звонка.
+func answerWith(deps callsDeps, w http.ResponseWriter, r *http.Request, call store.Call, id auth.Identity, status int) {
+	callID := call.CallID
+	token, err := deps.issuer().Token(call.Room, callIdentity(id), true, callTokenTTL, time.Now())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal", "не выдался токен")
+		return
+	}
+	_ = deps.store.SetCallState(r.Context(), callID, "answered", "")
+	// ── ОСТАЛЬНЫЕ УСТРОЙСТВА ОТВЕТИВШЕГО ───────────────────────────────
+	//
+	// Вызов звонит на ВСЕХ устройствах человека. Ответил телефон — десктоп обязан
+	// замолчать, а не звонить сорок пять секунд и класть трубку живому разговору.
+	//
+	// Раньше для этого было отдельное слово `taken` адресно соседям. Теперь изменение
+	// одно — `answered` с ответившим устройством, — а «взяли здесь или на другом»
+	// ответ ленты говорит каждому спрашивающему сам (`here`).
+	deps.notifier.CallChange(r.Context(), id.UserID, callID, "answered", id.DeviceID)
+	deps.notifier.CallChange(r.Context(), call.InitiatorID, callID, "answered", "")
+	w.Header().Set("Content-Type", "application/json")
+	body := map[string]any{"room": call.Room, "url": deps.livekitURL(), "token": token, "video": deps.video()}
+	if status == http.StatusCreated {
+		// Новые поля: клиент без них видит обычный заведённый звонок и входит в ту же комнату.
+		body["call_id"] = callID
+		body["crossed"] = true
+		body["kind"] = call.Kind
+	}
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 // ── Аудио-чаты (постоянные голосовые комнаты) ──
@@ -349,6 +382,14 @@ func endCall(deps callsDeps) http.HandlerFunc {
 		// произвольное слово от клиента стало бы состоянием, которого сервер не заводил.
 		if r.URL.Query().Get("reason") == "busy" && call.State == "ringing" {
 			state = "busy"
+		}
+		// «Занят» на уже отвеченном — опоздавший отказ, а не конец разговора: вызов звонил на всех устройствах, ответило
+		// другое (или вошёл встречный, 2026-11-20), а этот, занятый своим, только теперь сказал «занят». Закрыть по
+		// нему значило бы положить трубку живому разговору.
+		if r.URL.Query().Get("reason") == "busy" && call.State == "answered" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"call_id": callID, "state": call.State})
+			return
 		}
 		// Закрываем комнату НА САМОМ ДЕЛЕ. Без этого «завершить» меняло состояние у нас
 		// и рассылало уведомление, а комната жила до empty_timeout: клиент, который
