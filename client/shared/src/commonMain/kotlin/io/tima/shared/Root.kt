@@ -1951,10 +1951,13 @@ private fun App(
         val vst = voiceState
         VoiceStripSlot.current = if (voice != null && vst?.inside == true && where !is Where.Voice) {
             {
+                // Сколько в чате: собеседники движка и я (ПЛАН-(ВС) ВС5).
+                val others by voice.peers.collectAsState()
                 io.tima.feature.group.VoiceStrip(
                     title = vst.title, allowMute = vst.chat?.allowMute ?: true, mic = vst.mic,
                     onOpen = { vst.chat?.let { c -> where = Where.Voice(c.roomId, vst.title, c.communityId) } },
                     onMic = voice::mic, onLeave = voice::leave,
+                    count = others.size + 1,
                 )
             }
         } else {
@@ -2006,11 +2009,13 @@ private fun App(
             current = now,
             onTab = { tab ->
                 Journal.note(LogCode.NAV, "вкладка страницы", "вкладка" to tab.name)
-                where = when (tab) {
-                    io.tima.feature.group.PageTab.About -> Where.Showcase(kind, id, title)
-                    io.tima.feature.group.PageTab.Members -> Where.Members(id, title)
-                    io.tima.feature.group.PageTab.Manage -> Where.Manage(kind, id, title)
-                }
+                navigator.switchTab(
+                    when (tab) {
+                        io.tima.feature.group.PageTab.About -> Where.Showcase(kind, id, title)
+                        io.tima.feature.group.PageTab.Members -> Where.Members(id, title)
+                        io.tima.feature.group.PageTab.Manage -> Where.Manage(kind, id, title)
+                    },
+                )
             },
         )
     }

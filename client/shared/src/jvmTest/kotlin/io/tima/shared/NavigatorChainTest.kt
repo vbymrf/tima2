@@ -97,6 +97,20 @@ class NavigatorChainTest {
         assertEquals(listOf<Where>(аня), nav.chain(), "новая переписка не остаётся под открытой")
     }
 
+    /** ПЛАН-(ВС) 17 (2026-11-20): вкладки страницы — одно место; «назад» с любой выходит из сущности, а не листает их. */
+    @Test
+    fun назад_со_вкладки_сущности_выходит_из_неё() {
+        nav.where = аня
+        nav.open(Where.Showcase("group", "g", "Дача"))
+        nav.switchTab(Where.Members("g", "Дача"))
+        nav.switchTab(Where.Manage("group", "g", "Дача"))
+        nav.open(Where.ManageMain("group", "g", "Дача"))
+        nav.close()
+        assertEquals(Where.Manage("group", "g", "Дача"), nav.where, "из «Основного» — в «Управление»")
+        nav.close()
+        assertEquals(аня, nav.where, "из вкладки — туда, откуда вошли, а не на прежнюю вкладку")
+    }
+
     /** М21 (2026-11-20): свайп между окнами — из открытой сущности, но не из формы. */
     @Test
     fun свайп_внутри_сущности_но_не_в_форме() {

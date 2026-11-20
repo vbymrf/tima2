@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,6 +46,10 @@ object VoiceTags {
     const val HOST = "voice:host"
     const val TEXT = "voice:text"
     const val STRIP = "voice:strip"
+
+    /** Кнопки полосы аудиочата (ПЛАН-(ВС) ВС5): микрофон и выход. */
+    const val STRIP_MIC = "voice:strip:mic"
+    const val STRIP_LEAVE = "voice:strip:leave"
     const val CREATE = "voice:create"
     const val ROOM = "voice:room"
     const val NAME = "voice:name"
@@ -117,18 +122,62 @@ fun VoiceChatScreen(
     }
 }
 
-/** Полоса звукового чата поверх окон, пока человек в чате (§1.8, 4): нажатие — окно чата. */
+/**
+ * Полоса звукового чата поверх окон, пока человек в чате (§1.8, 4): нажатие — окно чата.
+ *
+ * С 2026-11-20 (ПЛАН-(ВС) ВС5, заказчик: «увеличить размер, сделать кнопки в виде иконок; панель узкая, её не видно
+ * сверху») — высотой строки списка в три строки: значок аудиочата, название и «в чате N», справа две круглые кнопки —
+ * микрофон (перечёркнут, когда выключен) и красная трубка выхода. Прежде — строка мелкого текста с надписями.
+ */
 @Composable
-fun VoiceStrip(title: String, allowMute: Boolean, mic: Boolean, onOpen: () -> Unit, onMic: (Boolean) -> Unit, onLeave: () -> Unit) {
+fun VoiceStrip(
+    title: String,
+    allowMute: Boolean,
+    mic: Boolean,
+    onOpen: () -> Unit,
+    onMic: (Boolean) -> Unit,
+    onLeave: () -> Unit,
+    /** Сколько в чате, со мной; `null` — не знаем, строки «в чате» нет. */
+    count: Int? = null,
+) {
     val w = Tima.words.socium
+    val ink = Tima.colors.onAccent
     Row(
-        Modifier.fillMaxWidth().background(Tima.colors.confirmed).clickable(onClick = onOpen).padding(horizontal = TimaSpacing.about4, vertical = 6.dp).testTag(VoiceTags.STRIP),
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).background(Tima.colors.confirmed).clickable(onClick = onOpen)
+            .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2).testTag(VoiceTags.STRIP),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
     ) {
-        Caption(w.voiceChat + ": " + title, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = Tima.colors.onAccent, lineOne = true, modifier = Modifier.weight(1f))
-        if (allowMute) Caption(if (mic) w.micOff else w.micOn, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = Tima.colors.onAccent, modifier = Modifier.clickable { onMic(!mic) })
-        Caption(w.leave, fontSize = TimaType.sz5, weight = FontWeight.Bold, color = Tima.colors.onAccent, modifier = Modifier.clickable(onClick = onLeave))
+        Box(
+            Modifier.size(44.dp).background(ink.copy(alpha = 0.22f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            TypeIcon(io.tima.domain.chat.EntityType(io.tima.domain.chat.EntityKind.Voice, io.tima.domain.chat.EntityReach.Public), 26.dp)
+        }
+        Column(Modifier.weight(1f)) {
+            Caption(title, fontSize = TimaType.sz4, weight = FontWeight.Bold, color = ink, lineOne = true)
+            Caption(
+                if (count != null) w.voiceChat + " · " + w.voiceInside(count) else w.voiceChat,
+                fontSize = TimaType.sz5,
+                color = ink,
+                lineOne = true,
+            )
+        }
+        if (allowMute) {
+            io.tima.core.ui.IconButton(
+                glyph = if (mic) "🎤" else "🔇",
+                onClick = { onMic(!mic) },
+                live = mic,
+                modifier = Modifier.testTag(VoiceTags.STRIP_MIC),
+            )
+        }
+        io.tima.core.ui.IconButton(
+            glyph = "📞",
+            onClick = onLeave,
+            background = Tima.colors.alarm,
+            colorGlyph = ink,
+            modifier = Modifier.testTag(VoiceTags.STRIP_LEAVE),
+        )
     }
 }
 

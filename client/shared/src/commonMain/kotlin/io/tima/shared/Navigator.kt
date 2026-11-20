@@ -91,6 +91,18 @@ internal class Navigator(
         note("открыто", listOf("как" to by.code, "что" to whereCode(target), "звеньев" to next.size))
     }
 
+    /**
+     * Вкладка страницы сущности (ПЛАН-(ВС) 17, заказчик 2026-11-20): «О сущности», «Участники», «Управление» — одно место,
+     * а не цепочка. Переход по вкладкам заменяет звенья страницы этой сущности, и «назад» с любой вкладки выходит туда,
+     * откуда вошли (каталог, сообщество, переписка), а не листает вкладки обратно.
+     */
+    fun switchTab(target: Where) {
+        val id = target.pageOf ?: return open(target)
+        val next = (chain().dropLastWhile { it.pageOf == id } + target).takeLast(LIMIT)
+        chains[window] = next
+        note("вкладка", listOf("что" to whereCode(target), "звеньев" to next.size))
+    }
+
     /** Закрыть верхнее звено окна. Пустая цепочка — ничего. */
     fun close() {
         val chain = chain()
@@ -242,6 +254,17 @@ internal val Where.swipesWindows: Boolean
     get() = this is Where.Chat || this is Where.Thread || this is Where.Comments || this is Where.Person ||
         this is Where.Community || this is Where.ChannelFeed || this is Where.Showcase || this is Where.Voice ||
         this is Where.Members
+
+/** Чья это страница сущности (вкладка или подокно управления) — номер сущности; `null` — не страница. */
+internal val Where.pageOf: String?
+    get() = when (this) {
+        is Where.Showcase -> id
+        is Where.Members -> groupId
+        is Where.Manage -> id
+        is Where.ManageMain -> id
+        is Where.Roles -> id
+        else -> null
+    }
 
 /** Что открыто в главной области. Вся навигация верхнего уровня — эти три случая. */
 internal sealed interface Where {
