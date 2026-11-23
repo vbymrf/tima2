@@ -46,4 +46,18 @@ class NavigatorTest {
         )
         for ((where, code) in codes) assertEquals(code, whereCode(where), "код у $where")
     }
+
+    @Test
+    fun открытое_ниже_по_цепочке_возвращает_к_нему_а_не_углубляет() {
+        // Отчёт QV7K (2026-11-23): переписка → страница → Управление → Сообщения → переписка — по кругу, цепочка росла.
+        val nav = Navigator(mutableStateOf(Window.Social))
+        nav.open(Where.Chat("g", "gruppa"))
+        nav.open(Where.Showcase("group", "g", "gruppa"))
+        nav.open(Where.Manage("group", "g", "gruppa"))
+        nav.open(Where.ManageMessages("group", "g", "gruppa"))
+        nav.open(Where.Chat("g", "gruppa"))
+        assertEquals(Where.Chat("g", "gruppa"), nav.where)
+        nav.back()
+        assertEquals(Where.Nothing, nav.where, "«Назад» из переписки — туда, откуда в неё вошли, а не по кругу")
+    }
 }

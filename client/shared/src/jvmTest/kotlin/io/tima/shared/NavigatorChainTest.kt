@@ -32,16 +32,17 @@ class NavigatorChainTest {
     }
 
     @Test
-    fun повтор_подряд_не_даёт_звена_а_не_подряд_даёт() {
+    fun повтор_подряд_не_даёт_звена_а_не_подряд_возвращает_наверх() {
         nav.where = аня
         nav.where = Where.Chat("c-аня", "Аня", jumpTo = 7)
         assertEquals(1, nav.chain().size, "та же переписка подряд — звено заменено")
         nav.where = петя
         nav.where = дача
         nav.where = аня
-        assertEquals(listOf("c-аня", "u-петя", "g-дача", "c-аня"), nav.chain().map { (it as? Where.Chat)?.chatId ?: (it as Where.Person).userId })
-        assertTrue(nav.back()); assertTrue(nav.back()); assertTrue(nav.back())
-        assertEquals("c-аня", (nav.where as Where.Chat).chatId, "«назад» — обратным путём")
+        // М20 с 2026-11-23 (отчёт QV7K): уже открытое ниже — возврат к нему, глубины нет.
+        assertEquals(listOf("c-аня"), nav.chain().map { (it as? Where.Chat)?.chatId ?: (it as Where.Person).userId })
+        assertTrue(nav.back())
+        assertEquals(Where.Nothing, nav.where, "«назад» — туда, откуда вошли в Аню")
     }
 
     @Test

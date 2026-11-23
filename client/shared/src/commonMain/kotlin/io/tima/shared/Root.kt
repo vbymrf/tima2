@@ -6071,17 +6071,81 @@ private fun App(
                     }
                     val role = roleOf(current.kind, current.id)
                     val failedWord = Tima.words.showcase.superFailed
-                    val toChat: (io.tima.domain.chat.ShowcaseDraft) -> Unit = { d ->
-                        superDraft = current.id to d
-                        where = Where.Chat(current.id, current.title)
+                    // Группа (отчёт QV7K, заказчик 2026-11-23: «Назад» из редактора — на сущность, которая его открыла):
+                    // редактор здесь же, сообщение уходит той же очередью отправки, что из переписки (подпись автора),
+                    // без перехода в переписку. Номер с сервера ждём в фоне — тогда суперсообщение и замена прежнего.
+                    val showcaseSend = remember(current) {
+                        io.tima.domain.chat.SendComposed(
+                            queue = environment.queue,
+                            bodies = io.tima.core.encryption.ComposedBodiesOverKodium,
+                            keys = io.tima.core.outbox.UuidDedupKeys,
+                            continuations = environment.continuations,
+                        )
                     }
+                    val numberOf: suspend (String) -> Long = { key ->
+                        var n = 0L
+                        val until = msNow() + 90_000
+                        while (n <= 0 && msNow() < until) {
+                            n = environment.chatLines(current.id, 300).firstOrNull { it.dedupKey == key }?.serverId ?: 0L
+                            if (n <= 0) kotlinx.coroutines.delay(1_000)
+                        }
+                        n
+                    }
+                    val groupSend: (io.tima.domain.chat.ShowcaseDraft) -> Boolean = { d ->
+                        when (val r = showcaseSend.send(current.id, d.doc.copy(level = 0), 0)) {
+                            is io.tima.domain.chat.ComposedResult.Queued, is io.tima.domain.chat.ComposedResult.ContinuationFirst -> {
+                                scope.launch {
+                                    var key = (r as? io.tima.domain.chat.ComposedResult.Queued)?.dedupKey
+                                    if (r is io.tima.domain.chat.ComposedResult.ContinuationFirst) {
+                                        // Продолжение ушло первым — основное с подкладкой на его номер (Решения §11.3).
+                                        val cont = numberOf(r.dedupKey)
+                                        key = if (cont > 0) {
+                                            (showcaseSend.sendMain(current.id, r.main, "group", cont, 0) as? io.tima.domain.chat.ComposedResult.Queued)?.dedupKey
+                                        } else {
+                                            null
+                                        }
+                                    }
+                                    val n = key?.let { numberOf(it) } ?: 0L
+                                    if (n > 0 && d.replaces > 0) network.removal.delete(current.id, d.replaces, true)
+                                    val superOk = n > 0 && (!d.asSuper || assembled.receiver.showcase.setSuper(of, n))
+                                    Journal.note(LogCode.SHOWCASE, "управление: группа", "номер" to (n > 0), "супер" to d.asSuper, "замена" to (d.replaces > 0), "вышло" to superOk)
+                                    tick++
+                                }
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    var groupDraft by remember(current) { mutableStateOf<io.tima.domain.chat.ShowcaseDraft?>(null) }
+                    val toChat: (io.tima.domain.chat.ShowcaseDraft) -> Unit = { d -> groupDraft = d }
                     val blank = io.tima.domain.chat.ComposedDoc(items = listOf(io.tima.domain.chat.ComposedItem.Text("")), level = 0)
                     val ed = editing
-                    DisposableEffect(ed != null) {
-                        if (ed != null) SystemBack.inner = { editing = null; notice = null; true }
+                    val gd = groupDraft
+                    DisposableEffect(ed != null || gd != null) {
+                        if (ed != null || gd != null) SystemBack.inner = { editing = null; groupDraft = null; notice = null; true }
                         onDispose { SystemBack.inner = null }
                     }
-                    if (ed != null) {
+                    if (gd != null) {
+                        val model = remember(gd) { io.tima.feature.chat.EditorModel(gd.doc, io.tima.core.encryption.TypedOverQuickMarkdown) }
+                        io.tima.feature.chat.EditorScreen(
+                            model = model,
+                            levels = listOf(io.tima.domain.chat.MessageCircle.Everyone),
+                            defaultLevel = 0,
+                            preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
+                            problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
+                            onBack = { groupDraft = null; notice = null },
+                            onSend = { sent ->
+                                if (groupSend(gd.copy(doc = sent))) {
+                                    groupDraft = null
+                                    notice = null
+                                } else {
+                                    notice = failedWord
+                                }
+                            },
+                            notice = notice,
+                            title = if (gd.replaces > 0) Tima.words.socium.editingTitle else null,
+                        )
+                    } else if (ed != null) {
                         val model = remember(ed) { io.tima.feature.chat.EditorModel(ed.first, io.tima.core.encryption.TypedOverQuickMarkdown) }
                         io.tima.feature.chat.EditorScreen(
                             model = model,

@@ -81,9 +81,14 @@ internal class Navigator(
         if (target == Where.Nothing) return close()
         val chain = chain()
         val top = chain.lastOrNull()
+        // Окно уже открыто ниже по цепочке — вернуться наверх к нему, отрезав всё после (заказчик 2026-11-23, отчёт QV7K:
+        // «нужно выходить наверх, а не входить вглубь»). Иначе круг «переписка → страница → Управление → Сообщения →
+        // переписка» наращивал цепочку, и «Назад» ходил по тем же окнам по кругу.
+        val earlier = chain.dropLast(1).indexOfLast { it.sameAs(target) }
         val next = when {
             top != null && top.sameAs(target) -> chain.dropLast(1) + target
             chain.size >= 2 && chain[chain.size - 2].sameAs(target) -> chain.dropLast(1)
+            earlier >= 0 -> chain.take(earlier) + target
             top != null && top.transient -> chain.dropLast(1) + target
             else -> (chain + target).takeLast(LIMIT)
         }
