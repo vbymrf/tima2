@@ -95,6 +95,7 @@ interface SociumWords {
     val slowOff: String
     val editingTitle: String
     val saveEdit: String
+    val commentsWord: String
     val superHides: String
     val settingsTitle: String
     val channelMore: String
@@ -330,6 +331,7 @@ object RussianSociumWords : SociumWords {
     override val slowOff = "выкл"
     override val editingTitle = "Правка сообщения"
     override val saveEdit = "Сохранить"
+    override val commentsWord = "Комментарии"
     override val superHides = "Суперсообщение скрывает остальные сообщения уровня 0, если оно есть"
     override val settingsTitle = "Настройки"
     override val channelMore = "Ещё"
@@ -561,6 +563,7 @@ object EnglishSociumWords : SociumWords {
     override val slowOff = "off"
     override val editingTitle = "Editing message"
     override val saveEdit = "Save"
+    override val commentsWord = "Comments"
     override val superHides = "A super message hides the other level 0 messages, if there is one"
     override val settingsTitle = "Settings"
     override val channelMore = "More"
@@ -788,6 +791,7 @@ object SpanishSociumWords : SociumWords {
     override val slowOff = "no"
     override val editingTitle = "Editando mensaje"
     override val saveEdit = "Guardar"
+    override val commentsWord = "Comentarios"
     override val superHides = "El supermensaje oculta los demás mensajes de nivel 0, si existe"
     override val settingsTitle = "Ajustes"
     override val channelMore = "Más"

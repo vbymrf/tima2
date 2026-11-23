@@ -4617,7 +4617,8 @@ private fun App(
                     }
                     val chatId = "thread:" + current.kind + ":" + current.id + ":" + current.userId
                     val lines = remember(page) {
-                        page?.messages.orEmpty().map { m ->
+                        // От новых к старым — как у переписки (лента снизу вверх).
+                        page?.messages.orEmpty().sortedByDescending { it.messageId }.map { m ->
                             val d = io.tima.core.encryption.TextBodyCodec.decodeLine(m.body)
                             entityLine(chatId, m.messageId, d?.text?.takeIf { it.isNotBlank() } ?: m.preview, d?.rich, m.fromEntity == asEntity, m.atMs, m.authorId)
                         }
@@ -4727,7 +4728,8 @@ private fun App(
                     val list = posts.orEmpty()
                     val byId = remember(list) { list.associateBy { it.postId } }
                     val lines = remember(list) {
-                        list.sortedBy { it.postId }.map { p ->
+                        // От новых к старым — как у переписки (лента снизу вверх).
+                        list.sortedByDescending { it.postId }.map { p ->
                             entityLine("channel:" + current.channelId, p.postId, p.text, channelRich(p), false, p.atMs, p.authorId, replies = p.comments, level = p.level)
                         }
                     }
@@ -4752,7 +4754,8 @@ private fun App(
                             onHeader = { where = Where.Showcase("channel", current.channelId, current.title) },
                             onMore = { channelMenu = true },
                             threadLabel = { line ->
-                                byId[line.serverId]?.takeIf { !it.commentsClosed || it.comments > 0 }?.let { w.channelComments(it.comments) }
+                                // «Комментарии · N» (§1.13, 6): обсуждение открыто или комментарии есть.
+                                byId[line.serverId]?.takeIf { !it.commentsClosed || it.comments > 0 }?.let { w.commentsWord + " · " + it.comments }
                             },
                             onThread = { postId -> where = Where.Comments(current.channelId, postId) },
                             banner = if (list.size >= shown) ({
@@ -6078,7 +6081,8 @@ private fun App(
                     val superId = p?.superId ?: 0L
                     val superLine = p?.lines?.firstOrNull { it.serverId == superId && superId > 0 }
                     val lines = remember(p) {
-                        p?.lines.orEmpty().filterNot { it.onlyContinuation }.sortedBy { it.atMs }.map {
+                        // Экран переписки ждёт строки от новых к старым (лента снизу вверх).
+                        p?.lines.orEmpty().filterNot { it.onlyContinuation }.sortedByDescending { it.atMs }.map {
                             entityLine("showcase:" + current.id, it.serverId, it.line.text, it.line.rich, true, it.atMs, it.senderId, level = 0)
                         }
                     }
