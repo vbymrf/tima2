@@ -1,6 +1,10 @@
 package io.tima.shared
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -285,4 +289,27 @@ internal class GroupLevelZeroSink(
     }
 
     override fun said(text: String) = onSaid(text)
+}
+
+/** Одно действие листом снизу — «Заблокировать человека» в «⋮» ленты с сущностью у команды (СЦ26). */
+@Composable
+internal fun OneActionSheet(title: String, action: String, onAction: () -> Unit, onClose: () -> Unit) {
+    val colors = io.tima.core.ui.Tima.colors
+    Box(
+        Modifier.fillMaxSize()
+            .background(colors.text.copy(alpha = 0.45f))
+            .clickable(onClick = onClose),
+        contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
+    ) {
+        androidx.compose.foundation.layout.Column(
+            Modifier.fillMaxWidth().background(colors.surface).clickable(enabled = false) {},
+        ) {
+            io.tima.core.ui.ListLine(middle = { io.tima.core.ui.Secondary(title) }, right = { io.tima.core.ui.IconButton(glyph = "✕", onClick = onClose) })
+            io.tima.core.ui.ListLine(
+                modifier = Modifier.testTag(io.tima.feature.group.ThreadTags.BLOCK),
+                onClick = onAction,
+                middle = { io.tima.core.ui.Name(action) },
+            )
+        }
+    }
 }

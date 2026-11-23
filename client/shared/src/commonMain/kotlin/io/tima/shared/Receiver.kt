@@ -1122,8 +1122,17 @@ class Receiver(
             return io.tima.domain.chat.ShowcasePage(
                 raw.superId,
                 raw.open.mapNotNull { item ->
-                    io.tima.core.encryption.ComposedBodiesOverKodium.readOpen(item.nodes, item.markup)
-                        ?.let { io.tima.domain.chat.ShowcaseLine(item.id, item.authorId, it, doc = io.tima.core.encryption.ComposedBodiesOverKodium.openDoc(item.nodes, item.markup)) }
+                    // Тело документом (СЦ25) — им и показ, и правка; нет — узлы и разметка.
+                    val fromBody = item.body?.let { codec.decodeLine(it) }
+                    (fromBody ?: io.tima.core.encryption.ComposedBodiesOverKodium.readOpen(item.nodes, item.markup))
+                        ?.let {
+                            io.tima.domain.chat.ShowcaseLine(
+                                item.id, item.authorId, it,
+                                doc = item.body?.let { b -> runCatching { codec.editDoc(b, emptyList()) }.getOrNull() }
+                                    ?: io.tima.core.encryption.ComposedBodiesOverKodium.openDoc(item.nodes, item.markup),
+                                atMs = item.atMs,
+                            )
+                        }
                 },
             )
         }
@@ -1143,6 +1152,7 @@ class Receiver(
             io.tima.domain.chat.ShowcaseLine(
                 o.frame.messageId, o.frame.senderId, line, onlyContinuation = o.frame.onlyContinuation,
                 doc = runCatching { codec.editDoc(o.body, mine) }.getOrNull(),
+                atMs = o.frame.placedAtMs,
             )
         }
         return io.tima.domain.chat.ShowcasePage(raw.superId, lines)

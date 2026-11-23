@@ -14,6 +14,8 @@ data class ShowcaseLine(
     val onlyContinuation: Boolean = false,
     /** Документ редактора — для «Править» в «Управление → Сообщения» (СЦ18); `null` — не выразить. */
     val doc: ComposedDoc? = null,
+    /** Когда написано — время пузыря в «Управление → Сообщения» (СЦ25); 0 — не знаем. */
+    val atMs: Long = 0,
 )
 
 /**

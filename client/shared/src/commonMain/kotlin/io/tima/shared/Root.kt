@@ -4571,12 +4571,14 @@ private fun App(
 
             is Where.Thread -> {
                 {
+                    // «Написать» и «Обращения» (§1.9, СЦ15) — вид переписки и та же панель, что в ней (СЦ26, §1.13, 5).
                     val kind = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Group
                     val asEntity = current.userId.isNotEmpty()
                     var page by remember(current) { mutableStateOf<io.tima.domain.chat.ThreadPage?>(null) }
                     var tick by remember(current) { mutableStateOf(0) }
-                    var input by remember(current) { mutableStateOf("") }
                     var outcome by remember(current) { mutableStateOf<io.tima.domain.chat.ThreadStep?>(null) }
+                    var said by remember(current) { mutableStateOf<String?>(null) }
+                    var blockAsk by remember(current) { mutableStateOf(false) }
                     LaunchedEffect(current, tick) {
                         val got = if (asEntity) network.threads.withPerson(kind, current.id, current.userId) else network.threads.mineWith(kind, current.id)
                         page = got
@@ -4585,14 +4587,19 @@ private fun App(
                             if (asEntity) network.threads.readAs(kind, current.id, current.userId, last) else network.threads.read(got!!.kind, got.entityId, last)
                         }
                     }
-                    val textOf: (io.tima.domain.chat.ThreadMessage) -> String = { m ->
-                        io.tima.core.encryption.TextBodyCodec.decodeLine(m.body)?.text?.takeIf { it.isNotBlank() } ?: m.preview
+                    val w = Tima.words.socium
+                    val offlineWord = Tima.words.trouble.offline
+                    val stepWord: (io.tima.domain.chat.ThreadStep?) -> String? = { st ->
+                        when (st) {
+                            io.tima.domain.chat.ThreadStep.NotAccepting -> w.notAccepting
+                            io.tima.domain.chat.ThreadStep.Blocked -> w.threadBlocked
+                            io.tima.domain.chat.ThreadStep.PeopleLimit -> w.peopleLimit
+                            io.tima.domain.chat.ThreadStep.Offline -> offlineWord
+                            is io.tima.domain.chat.ThreadStep.Refused -> st.reason
+                            else -> null
+                        }
                     }
-                    // Единая модель отправки (СЦ17, §1.10, 4; §1.9, 8–9): тело — тот же документ, что в переписке группы;
-                    // файлы закрыты своим ключом, ключ — в теле. Сквозного шифрования у ленты нет (СЦ15).
-                    var busy by remember(current) { mutableStateOf(false) }
-                    var editorDoc by remember(current) { mutableStateOf<io.tima.domain.chat.ComposedDoc?>(null) }
-                    val sendBody: suspend (ByteArray, String) -> io.tima.domain.chat.ThreadStep = { body, preview ->
+                    val post: suspend (ByteArray, String) -> Boolean = { body, preview ->
                         val p = page
                         val step = if (asEntity) {
                             network.threads.writeAs(kind, current.id, current.userId, body, preview)
@@ -4602,106 +4609,53 @@ private fun App(
                         Journal.note(LogCode.NAV, "лента сущности: отправлено", "как" to if (asEntity) "entity" else "user", "итог" to (step::class.simpleName ?: "?"))
                         outcome = step
                         if (step == io.tima.domain.chat.ThreadStep.Sent) tick++
-                        step
+                        step == io.tima.domain.chat.ThreadStep.Sent
                     }
                     val uploads = remember(current) { SealedUploads({ network.media }) }
-                    val photoWord = Tima.words.socium.threadPhoto
-                    val pickPhotos = io.tima.core.media.rememberPhotosPicker(10) { picked ->
-                        if (picked.isEmpty()) return@rememberPhotosPicker
-                        scope.launch {
-                            busy = true
-                            val sent = picked.mapNotNull { img ->
-                                val bmp = io.tima.core.media.decodeImage(img.bytes) ?: return@mapNotNull null
-                                val prep = io.tima.core.media.PhotoPrep.fit(bmp)
-                                val (id, key) = uploads.upload(prep.full, "image/jpeg", null, null) ?: return@mapNotNull null
-                                io.tima.domain.chat.OutMedia(id, key, "image/jpeg", prep.width, prep.height, prep.full.size.toLong())
-                            }
-                            if (sent.isNotEmpty()) sendBody(io.tima.core.encryption.AttachmentBodiesOverKodium.album(sent), photoWord)
-                            else outcome = io.tima.domain.chat.ThreadStep.Offline
-                            busy = false
+                    val sink = remember(current) {
+                        BodySink(scope, uploads, current.kind, current.id, w.threadPhoto, w.contentVoice, offlineWord, { said = it }, post)
+                    }
+                    val chatId = "thread:" + current.kind + ":" + current.id + ":" + current.userId
+                    val lines = remember(page) {
+                        page?.messages.orEmpty().map { m ->
+                            val d = io.tima.core.encryption.TextBodyCodec.decodeLine(m.body)
+                            entityLine(chatId, m.messageId, d?.text?.takeIf { it.isNotBlank() } ?: m.preview, d?.rich, m.fromEntity == asEntity, m.atMs, m.authorId)
                         }
                     }
-                    val pickFile = io.tima.core.media.rememberFilePicker(io.tima.core.media.FileKind.ANY) { f ->
-                        if (f == null) return@rememberFilePicker
-                        scope.launch {
-                            busy = true
-                            val up = uploads.upload(f.bytes, f.mime, null, null)
-                            if (up != null) {
-                                val m = io.tima.domain.chat.OutMedia(up.first, up.second, f.mime, size = f.bytes.size.toLong(), name = f.name)
-                                sendBody(io.tima.core.encryption.AttachmentBodiesOverKodium.file(m), f.name)
-                            } else {
-                                outcome = io.tima.domain.chat.ThreadStep.Offline
-                            }
-                            busy = false
-                        }
-                    }
-                    val doc = editorDoc
-                    DisposableEffect(doc != null) {
-                        if (doc != null) SystemBack.inner = { editorDoc = null; true }
-                        onDispose { SystemBack.inner = null }
-                    }
-                    if (doc != null) {
-                        val model = remember(doc) { io.tima.feature.chat.EditorModel(doc, io.tima.core.encryption.TypedOverQuickMarkdown) }
-                        io.tima.feature.chat.EditorScreen(
-                            model = model,
-                            levels = emptyList(),
-                            defaultLevel = 0,
-                            preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
-                            problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
-                            onBack = { editorDoc = null },
-                            onSend = { sentDoc ->
-                                val body = io.tima.core.encryption.ComposedBodiesOverKodium.encode(sentDoc, null)
-                                if (body != null) {
-                                    val preview = io.tima.core.encryption.ComposedBodiesOverKodium.content(sentDoc).displayText().take(120)
-                                    scope.launch { if (sendBody(body, preview) == io.tima.domain.chat.ThreadStep.Sent) editorDoc = null }
-                                }
+                    val personName = peopleCards[current.userId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: current.userId.take(8)
+                    Box(Modifier.fillMaxSize()) {
+                        EntityChat(
+                            title = if (asEntity) personName else current.title,
+                            caption = if (asEntity) current.title else w.threadAbout,
+                            lines = lines,
+                            environment = environment,
+                            uploads = uploads,
+                            scope = scope,
+                            sink = sink,
+                            sendText = { text -> post(io.tima.core.encryption.TextBodyCodec.encodeTyped(text), text.take(120)) },
+                            sendDoc = { doc ->
+                                val body = io.tima.core.encryption.ComposedBodiesOverKodium.encode(doc, null)
+                                body != null && post(body, io.tima.core.encryption.ComposedBodiesOverKodium.content(doc).displayText().take(120))
                             },
+                            onBack = { where = Where.Nothing },
+                            onHeader = { where = if (asEntity) Where.Person(current.userId) else Where.Showcase(current.kind, current.id, current.title) },
+                            // Команда: «Заблокировать человека» — в «⋮» шапки (§1.13, макет).
+                            onMore = if (asEntity) ({ blockAsk = true }) else null,
+                            notice = said ?: stepWord(outcome),
                         )
-                    } else io.tima.feature.group.ThreadScreen(
-                        content = { m ->
-                            val decoded = remember(m.messageId) { io.tima.core.encryption.TextBodyCodec.decodeLine(m.body) }
-                            val rich = decoded?.rich
-                            if (rich != null && (rich.media.isNotEmpty() || rich.blocks.size > 1)) {
-                                io.tima.feature.chat.RichBody(rich)
-                            } else {
-                                io.tima.core.ui.Caption(decoded?.text?.takeIf { it.isNotBlank() } ?: m.preview, fontSize = io.tima.core.ui.TimaType.sz4)
-                            }
-                        },
-                        onPhotos = pickPhotos,
-                        onFile = pickFile,
-                        onEditor = { editorDoc = io.tima.domain.chat.ComposedDoc(items = listOf(io.tima.domain.chat.ComposedItem.Text(input))) },
-                        busy = busy,
-                        title = if (asEntity) (peopleCards[current.userId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: current.userId.take(8)) else current.title,
-                        caption = if (asEntity) current.title else Tima.words.socium.threadAbout,
-                        messages = page?.messages.orEmpty(),
-                        asEntity = asEntity,
-                        text = textOf,
-                        authorName = { id -> peopleCards[id]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: id.take(8) },
-                        time = { ms -> if (ms > 0) sociumTime(ms) else "" },
-                        input = input,
-                        onInput = { input = it; outcome = null },
-                        onSend = {
-                            val text = input.trim()
-                            scope.launch {
-                                val step = sendBody(io.tima.core.encryption.TextBodyCodec.encodeTyped(text), text.take(120))
-                                if (step == io.tima.domain.chat.ThreadStep.Sent) input = ""
-                            }
-                        },
-                        outcome = outcome,
-                        onBack = { where = Where.Nothing },
-                        extra = {
-                            val p = page
-                            if (asEntity && p != null) {
-                                io.tima.core.ui.Button(
-                                    if (p.blocked) Tima.words.socium.unblockPerson else Tima.words.socium.blockPerson,
-                                    onClick = { scope.launch { network.threads.block(kind, current.id, current.userId, !p.blocked); tick++ } },
-                                    kind = io.tima.core.ui.ButtonKind.Quiet,
-                                    modifier = androidx.compose.ui.Modifier.padding(horizontal = io.tima.core.ui.TimaSpacing.about4),
-                                )
-                            }
-                            // У человека состояние ленты — в подокне «Уведомления» страницы (СЦ16), не здесь.
-                        },
-                    )
+                        val p = page
+                        if (blockAsk && p != null) {
+                            OneActionSheet(
+                                title = personName,
+                                action = if (p.blocked) w.unblockPerson else w.blockPerson,
+                                onAction = {
+                                    blockAsk = false
+                                    scope.launch { network.threads.block(kind, current.id, current.userId, !p.blocked); tick++ }
+                                },
+                                onClose = { blockAsk = false },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -4728,12 +4682,14 @@ private fun App(
 
             is Where.ChannelFeed -> {
                 {
-                    // Лента канала (СЦ3, СЦ22): сохранённое на устройстве — сразу, новое — с сервера; пришедший отрезок
-                    // заменяет сохранённый (удалённое уходит). «Ещё» — старше показанного, тоже сохраняется.
-                    // Пишут владелец, админ, модератор; запись — тем же документом, что сообщение (фото, файлы).
+                    // Лента канала как переписка (СЦ27, §1.13, 6; §1.14, 4): записи пузырями, та же панель у команды; шапка ведёт
+                    // на страницу канала, как у группы («О канале» нет); «Комментарии · N» под записью. Хранится на
+                    // устройстве (СЦ22): сохранённое — сразу, пришедший отрезок заменяет сохранённый.
                     var posts by remember(current) { mutableStateOf<List<io.tima.domain.chat.ChannelFeedPost>?>(null) }
                     var tick by remember(current) { mutableStateOf(0) }
                     var shown by remember(current) { mutableStateOf(50) }
+                    var said by remember(current) { mutableStateOf<String?>(null) }
+                    var editor by remember(current) { mutableStateOf<EditorRequest?>(null) }
                     val cache = environment.socialCache
                     val keep: suspend (List<io.tima.domain.chat.ChannelFeedPost>, Long) -> Unit = { got, before ->
                         val from = got.minOfOrNull { it.postId } ?: 0L
@@ -4748,131 +4704,114 @@ private fun App(
                             keep(got, 0L)
                             posts = cache.posts(current.channelId, shown).mapNotNull { io.tima.core.network.channelPostOf(it.third) }.ifEmpty { got }
                         } else if (saved.isEmpty()) {
-                            posts = null
+                            posts = emptyList()
                         }
                         Journal.note(LogCode.NAV, "лента канала", "сохранено" to saved.size, "с сервера" to (got?.size ?: -1))
                     }
                     val role = roleOf("channel", current.channelId)
                     val staffHere = role == io.tima.domain.chat.GroupRole.Owner || role == io.tima.domain.chat.GroupRole.Moderator || role == io.tima.domain.chat.GroupRole.Admin
-                    var busy by remember(current) { mutableStateOf(false) }
-                    var editorDoc by remember(current) { mutableStateOf<io.tima.domain.chat.ComposedDoc?>(null) }
-                    val uploads = remember(current) { SealedUploads({ network.media }) }
-                    val photoWord = Tima.words.socium.threadPhoto
-                    val publishBody: suspend (ByteArray, String) -> Unit = { body, text ->
-                        val ok = network.invites.channelPublish(current.channelId, text, body = body)
-                        Journal.note(LogCode.NAV, "запись в канал", "тело" to true, "вышло" to ok)
+                    val w = Tima.words.socium
+                    val offlineWord = Tima.words.trouble.offline
+                    val of = io.tima.domain.chat.ShowcaseOf("channel", current.channelId)
+                    val publish: suspend (ByteArray?, String) -> Boolean = { body, text ->
+                        val ok = network.invites.channelPublish(current.channelId, text, body = body, nodes = listOf(text))
+                        Journal.note(LogCode.NAV, "запись в канал", "тело" to (body != null), "вышло" to ok)
                         tick++
+                        ok
                     }
-                    val pickPhotos = io.tima.core.media.rememberPhotosPicker(10) { picked ->
-                        if (picked.isEmpty()) return@rememberPhotosPicker
-                        scope.launch {
-                            busy = true
-                            val sent = picked.mapNotNull { img ->
-                                val bmp = io.tima.core.media.decodeImage(img.bytes) ?: return@mapNotNull null
-                                val prep = io.tima.core.media.PhotoPrep.fit(bmp)
-                                val (id, key) = uploads.upload(prep.full, "image/jpeg", null, null) ?: return@mapNotNull null
-                                io.tima.domain.chat.OutMedia(id, key, "image/jpeg", prep.width, prep.height, prep.full.size.toLong())
-                            }
-                            if (sent.isNotEmpty()) publishBody(io.tima.core.encryption.AttachmentBodiesOverKodium.album(sent), "")
-                            busy = false
-                        }
+                    val uploads = remember(current) { SealedUploads({ network.media }) }
+                    val sink = remember(current) {
+                        BodySink(scope, uploads, "channel", current.channelId, w.threadPhoto, w.contentVoice, offlineWord, { said = it }) { body, preview -> publish(body, preview) }
                     }
-                    val pickFile = io.tima.core.media.rememberFilePicker(io.tima.core.media.FileKind.ANY) { f ->
-                        if (f == null) return@rememberFilePicker
-                        scope.launch {
-                            busy = true
-                            uploads.upload(f.bytes, f.mime, null, null)?.let { (id, key) ->
-                                val m = io.tima.domain.chat.OutMedia(id, key, f.mime, size = f.bytes.size.toLong(), name = f.name)
-                                publishBody(io.tima.core.encryption.AttachmentBodiesOverKodium.file(m), f.name)
-                            }
-                            busy = false
-                        }
-                    }
-                    val docNow = editorDoc
-                    DisposableEffect(docNow != null) {
-                        if (docNow != null) SystemBack.inner = { editorDoc = null; true }
-                        onDispose { SystemBack.inner = null }
-                    }
-                    if (docNow != null) {
-                        val model = remember(docNow) { io.tima.feature.chat.EditorModel(docNow, io.tima.core.encryption.TypedOverQuickMarkdown) }
-                        io.tima.feature.chat.EditorScreen(
-                            model = model,
-                            levels = emptyList(),
-                            defaultLevel = 1,
-                            preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
-                            problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
-                            onBack = { editorDoc = null },
-                            onSend = { sentDoc ->
-                                val body = io.tima.core.encryption.ComposedBodiesOverKodium.encode(sentDoc, null)
-                                if (body != null) {
-                                    val text = io.tima.core.encryption.ComposedBodiesOverKodium.content(sentDoc).displayText()
-                                    scope.launch {
-                                        publishBody(body, text)
-                                        editorDoc = null
-                                    }
-                                }
-                            },
-                        )
-                    } else {
-                    // «⋮» канала (ПЛАН-(ВС) 16): разделы каталога и уведомления — как у группы, без группового звонка и
-                    // «Моего цвета».
                     var channelMenu by remember(current) { mutableStateOf(false) }
+                    val list = posts.orEmpty()
+                    val byId = remember(list) { list.associateBy { it.postId } }
+                    val lines = remember(list) {
+                        list.sortedBy { it.postId }.map { p ->
+                            entityLine("channel:" + current.channelId, p.postId, p.text, channelRich(p), false, p.atMs, p.authorId, replies = p.comments, level = p.level)
+                        }
+                    }
                     Box(Modifier.fillMaxSize()) {
-                    io.tima.feature.group.ChannelFeedScreen(
-                        title = current.title,
-                        posts = posts,
-                        time = { ms -> if (ms > 0) sociumTime(ms) else "" },
-                        onComments = { p -> where = Where.Comments(current.channelId, p.postId) },
-                        onAbout = { where = Where.Showcase("channel", current.channelId, current.title) },
-                        onPublish = if (staffHere) {
-                            { text ->
-                                scope.launch {
-                                    val ok = network.invites.channelPublish(current.channelId, text, nodes = listOf(text))
-                                    Journal.note(LogCode.NAV, "запись в канал", "вышло" to ok)
-                                    tick++
-                                }
-                            }
-                        } else {
-                            null
-                        },
-                        onBack = { where = Where.Nothing },
-                        avatarPicture = entityAvatars["channel:${current.channelId}"]?.let { "tima-media://$it" },
-                        onMenu = { channelMenu = true },
-                        content = { p ->
-                            val rich = remember(p.postId, p.bodyB64, p.markup) { channelRich(p) }
-                            if (rich != null && (rich.media.isNotEmpty() || rich.blocks.size > 1)) {
-                                io.tima.feature.chat.RichBody(rich)
-                            } else {
-                                io.tima.core.ui.Name(rich?.let { p.text.ifBlank { "…" } } ?: p.text)
-                            }
-                        },
-                        onMore = {
-                            scope.launch {
-                                val oldest = posts?.minOfOrNull { it.postId } ?: return@launch
-                                val older = network.invites.channelPosts(current.channelId, before = oldest)
-                                if (older != null) keep(older, oldest)
-                                shown += 50
-                            }
-                        },
-                        onPhotos = if (staffHere) pickPhotos else null,
-                        onFile = if (staffHere) pickFile else null,
-                        onEditor = if (staffHere) ({ editorDoc = io.tima.domain.chat.ComposedDoc(items = listOf(io.tima.domain.chat.ComposedItem.Text(""))) }) else null,
-                        busy = busy,
-                    )
-                    if (channelMenu) {
-                        val key = "channel:${current.channelId}"
-                        io.tima.feature.chat.ChatMenuSheet(
-                            sections = communityShelves,
-                            currentSection = entitySections[key].orEmpty(),
-                            onMoveTo = { sectionId -> moveEntityTo(key, sectionId) },
-                            onClose = { channelMenu = false },
-                            group = true,
-                            notifyOff = assembled.liveStates?.let { key in mutedAll },
-                            onNotifyOff = assembled.liveStates?.let { l -> { off: Boolean -> l.mute("channel", current.channelId, off) } },
-                            title = Tima.words.socium.channelSettings,
+                        EntityChat(
+                            title = current.title,
+                            caption = typeOf("channel", current.channelId).let { t ->
+                                if (t.secret) w.secretChannel else if (t.reach == io.tima.domain.chat.EntityReach.Public) w.publicChannel else w.channel
+                            },
+                            lines = lines,
+                            environment = environment,
+                            uploads = uploads,
+                            scope = scope,
+                            sink = sink,
+                            sendText = { text -> publish(io.tima.core.encryption.TextBodyCodec.encodeTyped(text), text) },
+                            sendDoc = { d ->
+                                val body = io.tima.core.encryption.ComposedBodiesOverKodium.encode(d, null)
+                                body != null && publish(body, io.tima.core.encryption.ComposedBodiesOverKodium.content(d).displayText())
+                            },
+                            onBack = { where = Where.Nothing },
+                            canWrite = staffHere,
+                            onHeader = { where = Where.Showcase("channel", current.channelId, current.title) },
+                            onMore = { channelMenu = true },
+                            threadLabel = { line ->
+                                byId[line.serverId]?.takeIf { !it.commentsClosed || it.comments > 0 }?.let { w.channelComments(it.comments) }
+                            },
+                            onThread = { postId -> where = Where.Comments(current.channelId, postId) },
+                            banner = if (list.size >= shown) ({
+                                io.tima.core.ui.Button(
+                                    w.channelMore,
+                                    onClick = {
+                                        scope.launch {
+                                            val oldest = list.minOfOrNull { it.postId } ?: return@launch
+                                            network.invites.channelPosts(current.channelId, before = oldest)?.let { keep(it, oldest) }
+                                            shown += 50
+                                        }
+                                    },
+                                    kind = io.tima.core.ui.ButtonKind.Quiet,
+                                    modifier = androidx.compose.ui.Modifier.padding(horizontal = io.tima.core.ui.TimaSpacing.about3).testTag(io.tima.feature.group.ChannelFeedTags.MORE),
+                                )
+                            }) else null,
+                            menu = if (staffHere) ({ line ->
+                                val p = byId[line.serverId]
+                                val own = p?.authorId == session.userId
+                                EntityMenu(
+                                    own = own,
+                                    onEdit = p?.takeIf { own }?.let { post ->
+                                        val doc = post.bodyB64.takeIf { it.isNotEmpty() }?.let { b ->
+                                            runCatching {
+                                                io.tima.core.encryption.TextBodyCodec.editDoc(
+                                                    kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT_OPTIONAL).decode(b), emptyList(),
+                                                )
+                                            }.getOrNull()
+                                        } ?: io.tima.core.encryption.ComposedBodiesOverKodium.openDoc(post.nodes, post.markup)
+                                        doc?.let { d0 ->
+                                            {
+                                                editor = EditorRequest(d0, title = w.editingTitle) { d ->
+                                                    val text = io.tima.core.encryption.ComposedBodiesOverKodium.content(d).displayText()
+                                                    network.showcase.editOpen(of, post.postId, io.tima.domain.chat.OpenBody(text, listOf(text), ""),
+                                                        io.tima.core.encryption.ComposedBodiesOverKodium.encode(d, null)).also { tick++ }
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onDelete = { scope.launch { network.showcase.deleteOpen(of, line.serverId); tick++ } },
+                                )
+                            }) else null,
+                            editorRequest = editor,
+                            onEditorClosed = { editor = null },
+                            notice = said,
                         )
-                    }
-                    }
+                        if (channelMenu) {
+                            val key = "channel:${current.channelId}"
+                            io.tima.feature.chat.ChatMenuSheet(
+                                sections = communityShelves,
+                                currentSection = entitySections[key].orEmpty(),
+                                onMoveTo = { sectionId -> moveEntityTo(key, sectionId) },
+                                onClose = { channelMenu = false },
+                                group = true,
+                                notifyOff = assembled.liveStates?.let { key in mutedAll },
+                                onNotifyOff = assembled.liveStates?.let { l -> { off: Boolean -> l.mute("channel", current.channelId, off) } },
+                                title = Tima.words.socium.channelSettings,
+                            )
+                        }
                     }
                 }
             }
@@ -6052,28 +5991,22 @@ private fun App(
 
             is Where.ManageMessages -> {
                 {
-                    // «Управление → Сообщения» (СЦ18, §1.10, 6–9): суперсообщение и уровень 0 пишут владелец, админ,
-                    // модератор. У группы новое и правка уходят из переписки (подпись автора); у канала и сообщества —
-                    // редактор здесь, открытыми узлами.
+                    // «Управление → Сообщения» (СЦ18, СЦ25; §1.13, 2–4): вид переписки и та же панель — сообщение уровня 0
+                    // пишется здесь же. «Написать суперсообщение» — над панелью; есть суперсообщение — серая и правит его.
+                    // Правка суперсообщения группы — новым сообщением, прежнее остаётся уровнем 0 (§1.13, 4).
                     val of = io.tima.domain.chat.ShowcaseOf(current.kind, current.id)
                     val group = current.kind == "group"
                     var page by remember(current) { mutableStateOf<io.tima.domain.chat.ShowcasePage?>(null) }
-                    var failed by remember(current) { mutableStateOf(false) }
                     var tick by remember(current) { mutableStateOf(0) }
                     var notice by remember(current) { mutableStateOf<String?>(null) }
-                    // Черновик здесь (канал, сообщество): документ, ставить ли суперсообщением, номер правимого (0 — новое).
-                    var editing by remember(current) { mutableStateOf<Triple<io.tima.domain.chat.ComposedDoc, Boolean, Long>?>(null) }
+                    var editor by remember(current) { mutableStateOf<EditorRequest?>(null) }
                     var slow by remember(current) { mutableStateOf<Int?>(null) }
-                    LaunchedEffect(current, tick) {
-                        val p = runCatching { assembled.receiver.showcase.page(of) }.getOrNull()
-                        page = p
-                        failed = p == null
-                    }
+                    LaunchedEffect(current, tick) { page = runCatching { assembled.receiver.showcase.page(of) }.getOrNull() }
                     val role = roleOf(current.kind, current.id)
-                    val failedWord = Tima.words.showcase.superFailed
-                    // Группа (отчёт QV7K, заказчик 2026-11-23: «Назад» из редактора — на сущность, которая его открыла):
-                    // редактор здесь же, сообщение уходит той же очередью отправки, что из переписки (подпись автора),
-                    // без перехода в переписку. Номер с сервера ждём в фоне — тогда суперсообщение и замена прежнего.
+                    val w = Tima.words.socium
+                    val failWord = Tima.words.showcase.superFailed
+                    val uploads = remember(current) { SealedUploads({ network.media }) }
+                    // Группа — очередью отправки, как из переписки (подпись автора); номер с сервера ждём в фоне.
                     val showcaseSend = remember(current) {
                         io.tima.domain.chat.SendComposed(
                             queue = environment.queue,
@@ -6097,18 +6030,13 @@ private fun App(
                                 scope.launch {
                                     var key = (r as? io.tima.domain.chat.ComposedResult.Queued)?.dedupKey
                                     if (r is io.tima.domain.chat.ComposedResult.ContinuationFirst) {
-                                        // Продолжение ушло первым — основное с подкладкой на его номер (Решения §11.3).
                                         val cont = numberOf(r.dedupKey)
-                                        key = if (cont > 0) {
-                                            (showcaseSend.sendMain(current.id, r.main, "group", cont, 0) as? io.tima.domain.chat.ComposedResult.Queued)?.dedupKey
-                                        } else {
-                                            null
-                                        }
+                                        key = if (cont > 0) (showcaseSend.sendMain(current.id, r.main, "group", cont, 0) as? io.tima.domain.chat.ComposedResult.Queued)?.dedupKey else null
                                     }
                                     val n = key?.let { numberOf(it) } ?: 0L
                                     if (n > 0 && d.replaces > 0) network.removal.delete(current.id, d.replaces, true)
-                                    val superOk = n > 0 && (!d.asSuper || assembled.receiver.showcase.setSuper(of, n))
-                                    Journal.note(LogCode.SHOWCASE, "управление: группа", "номер" to (n > 0), "супер" to d.asSuper, "замена" to (d.replaces > 0), "вышло" to superOk)
+                                    val ok = n > 0 && (!d.asSuper || assembled.receiver.showcase.setSuper(of, n))
+                                    Journal.note(LogCode.SHOWCASE, "управление: группа", "номер" to (n > 0), "супер" to d.asSuper, "замена" to (d.replaces > 0), "вышло" to ok)
                                     tick++
                                 }
                                 true
@@ -6116,118 +6044,151 @@ private fun App(
                             else -> false
                         }
                     }
-                    var groupDraft by remember(current) { mutableStateOf<io.tima.domain.chat.ShowcaseDraft?>(null) }
-                    val toChat: (io.tima.domain.chat.ShowcaseDraft) -> Unit = { d -> groupDraft = d }
-                    val blank = io.tima.domain.chat.ComposedDoc(items = listOf(io.tima.domain.chat.ComposedItem.Text("")), level = 0)
-                    val ed = editing
-                    val gd = groupDraft
-                    DisposableEffect(ed != null || gd != null) {
-                        if (ed != null || gd != null) SystemBack.inner = { editing = null; groupDraft = null; notice = null; true }
-                        onDispose { SystemBack.inner = null }
+                    // Канал и сообщество — открыто, телом документом (0091, 0092): номер сразу.
+                    val addOpen: suspend (ByteArray?, io.tima.domain.chat.OpenBody) -> Long? = { body, open ->
+                        val id = if (current.kind == "channel") network.showcase.addChannel(current.id, open, body) else network.showcase.addCommunity(current.id, open, body)
+                        tick++
+                        id
                     }
-                    if (gd != null) {
-                        val model = remember(gd) { io.tima.feature.chat.EditorModel(gd.doc, io.tima.core.encryption.TypedOverQuickMarkdown) }
-                        io.tima.feature.chat.EditorScreen(
-                            model = model,
-                            levels = listOf(io.tima.domain.chat.MessageCircle.Everyone),
-                            defaultLevel = 0,
-                            preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
-                            problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
-                            onBack = { groupDraft = null; notice = null },
-                            onSend = { sent ->
-                                if (groupSend(gd.copy(doc = sent))) {
-                                    groupDraft = null
-                                    notice = null
-                                } else {
-                                    notice = failedWord
+                    val openOf: (io.tima.domain.chat.ComposedDoc) -> Pair<ByteArray?, io.tima.domain.chat.OpenBody> = { d ->
+                        val text = io.tima.core.encryption.ComposedBodiesOverKodium.content(d).displayText()
+                        io.tima.core.encryption.ComposedBodiesOverKodium.encode(d, null) to
+                            (io.tima.core.encryption.ComposedBodiesOverKodium.open(d) ?: io.tima.domain.chat.OpenBody(text, listOf(text), ""))
+                    }
+                    val sink = remember(current) {
+                        if (group) {
+                            GroupLevelZeroSink(
+                                scope, current.id,
+                                io.tima.domain.chat.SendAttachments(
+                                    queue = environment.queue,
+                                    uploads = uploads,
+                                    bodies = io.tima.core.encryption.AttachmentBodiesOverKodium,
+                                    keys = io.tima.core.outbox.UuidDedupKeys,
+                                ),
+                                { notice = it }, failWord,
+                            )
+                        } else {
+                            BodySink(scope, uploads, current.kind, current.id, w.threadPhoto, w.contentVoice, failWord, { notice = it }) { body, preview ->
+                                addOpen(body, io.tima.domain.chat.OpenBody(preview, listOf(preview), "")) != null
+                            }
+                        }
+                    }
+                    val p = page
+                    val superId = p?.superId ?: 0L
+                    val superLine = p?.lines?.firstOrNull { it.serverId == superId && superId > 0 }
+                    val lines = remember(p) {
+                        p?.lines.orEmpty().filterNot { it.onlyContinuation }.sortedBy { it.atMs }.map {
+                            entityLine("showcase:" + current.id, it.serverId, it.line.text, it.line.rich, true, it.atMs, it.senderId, level = 0)
+                        }
+                    }
+                    // «Написать суперсообщение»: нет — черновик с подкладками остальных; есть — правка существующего.
+                    val writeSuper: () -> Unit = {
+                        val existing = superLine?.doc
+                        val doc = (existing ?: p?.superDraft(current.kind, current.id) ?: io.tima.domain.chat.ComposedDoc(items = listOf(io.tima.domain.chat.ComposedItem.Text("")))).copy(level = 0)
+                        editor = EditorRequest(doc, title = if (existing != null) w.editingTitle else null) { d ->
+                            when {
+                                group -> groupSend(io.tima.domain.chat.ShowcaseDraft(d, asSuper = true))
+                                existing != null -> {
+                                    val (body, open) = openOf(d)
+                                    network.showcase.editOpen(of, superId, open, body).also { tick++ }
                                 }
-                            },
-                            notice = notice,
-                            title = if (gd.replaces > 0) Tima.words.socium.editingTitle else null,
-                        )
-                    } else if (ed != null) {
-                        val model = remember(ed) { io.tima.feature.chat.EditorModel(ed.first, io.tima.core.encryption.TypedOverQuickMarkdown) }
-                        io.tima.feature.chat.EditorScreen(
-                            model = model,
-                            levels = listOf(io.tima.domain.chat.MessageCircle.Everyone),
-                            defaultLevel = 0,
-                            preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
-                            problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
-                            onBack = { editing = null; notice = null },
-                            onSend = { sent ->
-                                val body = io.tima.core.encryption.ComposedBodiesOverKodium.open(sent)
-                                scope.launch {
-                                    val ok = when {
-                                        body == null -> false
-                                        ed.third > 0 -> network.showcase.editOpen(of, ed.third, body)
-                                        else -> {
-                                            val id = if (current.kind == "channel") network.showcase.addChannel(current.id, body) else network.showcase.addCommunity(current.id, body)
-                                            id != null && (!ed.second || assembled.receiver.showcase.setSuper(of, id))
+                                else -> {
+                                    val (body, open) = openOf(d)
+                                    val id = addOpen(body, open)
+                                    id != null && assembled.receiver.showcase.setSuper(of, id).also { tick++ }
+                                }
+                            }
+                        }
+                    }
+                    EntityChat(
+                        title = w.manageMessages,
+                        caption = current.title,
+                        lines = lines,
+                        environment = environment,
+                        uploads = uploads,
+                        scope = scope,
+                        sink = sink,
+                        sendText = { text ->
+                            val doc = io.tima.domain.chat.ComposedDoc(items = listOf(io.tima.domain.chat.ComposedItem.Text(text)), level = 0)
+                            if (group) groupSend(io.tima.domain.chat.ShowcaseDraft(doc, asSuper = false))
+                            else addOpen(io.tima.core.encryption.TextBodyCodec.encodeTyped(text), io.tima.domain.chat.OpenBody(text, listOf(text), "")) != null
+                        },
+                        sendDoc = { d ->
+                            if (group) groupSend(io.tima.domain.chat.ShowcaseDraft(d.copy(level = 0), asSuper = false))
+                            else openOf(d).let { (body, open) -> addOpen(body, open) != null }
+                        },
+                        onBack = { where = Where.Nothing },
+                        filesByLink = group,
+                        aboveInput = {
+                            androidx.compose.foundation.layout.Column(
+                                androidx.compose.ui.Modifier.fillMaxWidth().padding(horizontal = io.tima.core.ui.TimaSpacing.about3, vertical = io.tima.core.ui.TimaSpacing.about2),
+                                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+                            ) {
+                                io.tima.core.ui.Button(
+                                    w.writeSuper,
+                                    onClick = writeSuper,
+                                    kind = if (superLine != null) io.tima.core.ui.ButtonKind.Quiet else io.tima.core.ui.ButtonKind.Action,
+                                    modifier = androidx.compose.ui.Modifier.testTag(io.tima.feature.group.ManageMessagesTags.WRITE_SUPER),
+                                )
+                                io.tima.core.ui.Tertiary(w.superHides)
+                                if (current.kind == "channel" && (role == io.tima.domain.chat.GroupRole.Owner || role == io.tima.domain.chat.GroupRole.Admin)) {
+                                    io.tima.core.ui.Tertiary(w.slowModeComments)
+                                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+                                        for (sec in io.tima.feature.group.SLOW_STEPS) {
+                                            io.tima.core.ui.Chip(
+                                                w.slowLabel(sec),
+                                                kind = if (sec == slow) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Neutral,
+                                                onClick = {
+                                                    slow = sec
+                                                    scope.launch { if (!network.invites.setChannelSlowMode(current.id, sec)) slow = null }
+                                                },
+                                                modifier = androidx.compose.ui.Modifier.testTag(io.tima.feature.group.ManageMessagesTags.SLOW),
+                                            )
                                         }
                                     }
-                                    Journal.note(LogCode.SHOWCASE, "управление: сообщение", "вид" to current.kind, "правка" to (ed.third > 0), "супер" to ed.second, "вышло" to ok)
-                                    if (ok) {
-                                        editing = null
-                                        notice = null
+                                }
+                            }
+                        },
+                        menu = { line ->
+                            val id = line.serverId
+                            val l = p?.line(id)
+                            val own = l?.senderId == session.userId
+                            EntityMenu(
+                                own = own,
+                                onEdit = l?.doc?.takeIf { own }?.let { doc ->
+                                    {
+                                        editor = EditorRequest(doc.copy(level = 0), title = w.editingTitle) { d ->
+                                            if (group) {
+                                                // Суперсообщение — новым, прежнее остаётся (§1.13, 4); обычное — заменой.
+                                                groupSend(io.tima.domain.chat.ShowcaseDraft(d, asSuper = id == superId, replaces = if (id == superId) 0 else id))
+                                            } else {
+                                                val (body, open) = openOf(d)
+                                                network.showcase.editOpen(of, id, open, body).also { tick++ }
+                                            }
+                                        }
+                                    }
+                                },
+                                onDelete = {
+                                    scope.launch {
+                                        val ok = if (group) network.removal.delete(current.id, id, true) == io.tima.domain.chat.DeleteStep.Done else network.showcase.deleteOpen(of, id)
+                                        Journal.note(LogCode.SHOWCASE, "управление: удалить", "вид" to current.kind, "вышло" to ok)
                                         tick++
-                                    } else {
-                                        notice = failedWord
                                     }
-                                }
-                            },
-                            notice = notice,
-                            title = if (ed.third > 0) Tima.words.socium.editingTitle else null,
-                        )
-                    } else {
-                        val p = page
-                        io.tima.feature.group.ManageMessagesScreen(
-                            title = current.title,
-                            rows = if (failed) null else p?.lines?.filterNot { it.onlyContinuation }?.map { l ->
-                                io.tima.feature.group.ShowcaseRow(l.serverId, l.line.text, l.serverId == p.superId, editable = l.senderId == session.userId && l.doc != null)
-                            }?.reversed() ?: emptyList(),
-                            onWriteSuper = {
-                                val draft = p?.superDraft(current.kind, current.id) ?: blank
-                                if (group) toChat(io.tima.domain.chat.ShowcaseDraft(draft, asSuper = true)) else editing = Triple(draft, true, 0L)
-                            },
-                            onWriteZero = {
-                                if (group) toChat(io.tima.domain.chat.ShowcaseDraft(blank, asSuper = false)) else editing = Triple(blank, false, 0L)
-                            },
-                            onEdit = { id ->
-                                p?.line(id)?.doc?.let { doc ->
-                                    if (group) {
-                                        toChat(io.tima.domain.chat.ShowcaseDraft(doc.copy(level = 0), asSuper = id == p.superId, replaces = id))
-                                    } else {
-                                        editing = Triple(doc.copy(level = 0), false, id)
+                                },
+                                onSuper = {
+                                    scope.launch {
+                                        val ok = assembled.receiver.showcase.setSuper(of, if (id == superId) 0L else id)
+                                        Journal.note(LogCode.SHOWCASE, "управление: суперсообщение", "вид" to current.kind, "вышло" to ok)
+                                        tick++
                                     }
-                                }
-                            },
-                            onDelete = { id ->
-                                scope.launch {
-                                    val ok = if (group) network.removal.delete(current.id, id, true) == io.tima.domain.chat.DeleteStep.Done else network.showcase.deleteOpen(of, id)
-                                    Journal.note(LogCode.SHOWCASE, "управление: удалить", "вид" to current.kind, "вышло" to ok)
-                                    tick++
-                                }
-                            },
-                            onSuper = { id, on ->
-                                scope.launch {
-                                    val ok = assembled.receiver.showcase.setSuper(of, if (on) id else 0L)
-                                    Journal.note(LogCode.SHOWCASE, "управление: суперсообщение", "вид" to current.kind, "поставить" to on, "вышло" to ok)
-                                    tick++
-                                }
-                            },
-                            slowMode = if (current.kind == "channel" && (role == io.tima.domain.chat.GroupRole.Owner || role == io.tima.domain.chat.GroupRole.Admin)) slow ?: -1 else null,
-                            onSlowMode = { sec ->
-                                slow = sec
-                                scope.launch {
-                                    val ok = network.invites.setChannelSlowMode(current.id, sec)
-                                    Journal.note(LogCode.NAV, "медленный режим канала", "секунд" to sec, "вышло" to ok)
-                                    if (!ok) slow = null
-                                }
-                            },
-                            notice = notice,
-                            onBack = { where = Where.Nothing },
-                        )
-                    }
+                                },
+                                superNow = id == superId,
+                            )
+                        },
+                        editorRequest = editor,
+                        onEditorClosed = { editor = null },
+                        notice = notice,
+                    )
                 }
             }
 

@@ -117,6 +117,7 @@ class ShowcaseOverHttp(
     private val client: HttpClient,
     private val token: () -> String,
 ) {
+    private val b64 = kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT_OPTIONAL)
 
     /** Выдача как есть: суперсообщение и сырые сообщения. `null` — сеть или отказ. */
     class Raw(
@@ -127,7 +128,15 @@ class ShowcaseOverHttp(
         val open: List<OpenItem>,
     )
 
-    class OpenItem(val id: Long, val authorId: String?, val nodes: List<String>, val markup: String)
+    class OpenItem(
+        val id: Long,
+        val authorId: String?,
+        val nodes: List<String>,
+        val markup: String,
+        /** Тело документом (СЦ22, СЦ25): фото, файлы; пусто — только узлы и разметка. */
+        val body: ByteArray? = null,
+        val atMs: Long = 0,
+    )
 
     private fun base(of: ShowcaseOf) = when (of.kind) {
         "channel" -> "/api/v1/channels/${of.id}"
@@ -157,7 +166,8 @@ class ShowcaseOverHttp(
             val nodes = o["nodes"]?.jsonArrayOrNull().orEmpty().mapNotNull { n -> runCatching { (n as JsonPrimitive).content }.getOrNull() }
             // Разметка приходит объектом JSON (сервер кладёт её как есть); строкой — то же самое.
             val markup = o["markup"]?.let { m -> (m as? JsonPrimitive)?.content ?: m.toString() }.orEmpty()
-            OpenItem(id, o.str("author_id"), nodes, markup)
+            val body = o.str("body")?.takeIf { it.isNotEmpty() }?.let { runCatching { b64.decode(it) }.getOrNull() }
+            OpenItem(id, o.str("author_id"), nodes, markup, body, o.long("created_at_unix_ms") ?: 0L)
         }
         return Raw(superId, emptyList(), open)
     }
@@ -166,7 +176,7 @@ class ShowcaseOverHttp(
      * Новое сообщение описания сообщества — открытыми узлами и разметкой (суперсообщение из
      * редактора, ЗО5). Номер сообщения; `null` — сеть или отказ (`showcase_full` — уже 50).
      */
-    suspend fun addCommunity(communityId: String, body: io.tima.domain.chat.OpenBody): Long? {
+    suspend fun addCommunity(communityId: String, body: io.tima.domain.chat.OpenBody, doc: ByteArray? = null): Long? {
         val response = try {
             client.post(route.api("/api/v1/communities/$communityId/messages")) {
                 header("Authorization", "Bearer ${token()}")
@@ -176,6 +186,7 @@ class ShowcaseOverHttp(
                         put("text", JsonPrimitive(body.text.ifBlank { " " }))
                         put("nodes", JsonArray(body.nodes.map(::JsonPrimitive)))
                         if (body.markup.isNotEmpty()) put("markup", JsonPrimitive(body.markup))
+                        doc?.let { put("body", JsonPrimitive(b64.encode(it))) }
                     }.toString(),
                 )
             }
@@ -187,7 +198,7 @@ class ShowcaseOverHttp(
     }
 
     /** Сообщение уровня 0 в канал (СЦ18): запись открытыми узлами; номер записи, `null` — сеть или отказ. */
-    suspend fun addChannel(channelId: String, body: io.tima.domain.chat.OpenBody): Long? {
+    suspend fun addChannel(channelId: String, body: io.tima.domain.chat.OpenBody, doc: ByteArray? = null): Long? {
         val response = try {
             client.post(route.api("/api/v1/channels/$channelId/posts")) {
                 header("Authorization", "Bearer ${token()}")
@@ -197,6 +208,7 @@ class ShowcaseOverHttp(
                         put("text", JsonPrimitive(body.text.ifBlank { " " }))
                         put("nodes", JsonArray(body.nodes.map(::JsonPrimitive)))
                         if (body.markup.isNotEmpty()) put("markup", JsonPrimitive(body.markup))
+                        doc?.let { put("body", JsonPrimitive(b64.encode(it))) }
                         put("level", JsonPrimitive(0))
                     }.toString(),
                 )
@@ -209,7 +221,7 @@ class ShowcaseOverHttp(
     }
 
     /** Правка своего сообщения описания канала или сообщества (СЦ18): `PATCH`; у группы правка идёт из переписки. */
-    suspend fun editOpen(of: ShowcaseOf, serverId: Long, body: io.tima.domain.chat.OpenBody): Boolean = try {
+    suspend fun editOpen(of: ShowcaseOf, serverId: Long, body: io.tima.domain.chat.OpenBody, doc: ByteArray? = null): Boolean = try {
         val path = if (of.kind == "channel") "/posts/$serverId" else "/messages/$serverId"
         client.patch(route.api(base(of) + path)) {
             header("Authorization", "Bearer ${token()}")
@@ -219,6 +231,7 @@ class ShowcaseOverHttp(
                     put("text", JsonPrimitive(body.text.ifBlank { " " }))
                     put("nodes", JsonArray(body.nodes.map(::JsonPrimitive)))
                     if (body.markup.isNotEmpty()) put("markup", JsonPrimitive(body.markup))
+                    doc?.let { put("body", JsonPrimitive(b64.encode(it))) }
                 }.toString(),
             )
         }.status == HttpStatusCode.NoContent
