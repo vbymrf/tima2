@@ -176,7 +176,8 @@ fun EntityAboutTop(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             onJoin?.let { Button(Tima.words.showcase.let { s -> if (group) s.join else s.subscribe }, onClick = it, modifier = Modifier.testTag(PageTags.JOIN)) }
             onWrite?.let { Button(w.write, onClick = it, kind = if (onJoin != null) ButtonKind.Quiet else ButtonKind.Action, modifier = Modifier.testTag(PageTags.WRITE)) }
-            onNotify?.let { Button(Tima.words.socium.notifyTitle, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.NOTIFY)) }
+            // «Настройки» (§1.14, 2): уведомления, сообщения от сущности, «Показывать уровень сообщений».
+            onNotify?.let { Button(Tima.words.socium.settingsTitle, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.NOTIFY)) }
             onShare?.let { Button(w.share, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.SHARE)) }
             onLeave?.let { Button(w.leave, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.LEAVE)) }
         }
@@ -191,6 +192,8 @@ fun EntityAboutTop(
             }
         }
         extra?.invoke()
+        // Разделитель под кнопками — дальше описание (СЦ28, §1.13, 8).
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.line))
     }
 }
 

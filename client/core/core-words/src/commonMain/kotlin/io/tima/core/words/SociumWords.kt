@@ -220,6 +220,13 @@ interface SociumWords {
 
     /** Медленный режим (СЦ21): «30 с», «5 мин», «1 ч»; 0 — «выкл». */
     fun slowLabel(sec: Int): String
+
+    /**
+     * «Настройки» страницы (ПЛАН-(СЦ) §1.14, 3): разделы видом сущности вместо слова «сущность». [kind] — group, channel,
+     * community; [personal] — личная (не публичная); [secret] — секретная.
+     */
+    fun notifyIn(kind: String, personal: Boolean, secret: Boolean): String
+    fun messagesFrom(kind: String, personal: Boolean, secret: Boolean): String
     fun subscribersCount(n: Int): String
     val you: String
     val staffModerators: String
@@ -287,7 +294,7 @@ object RussianSociumWords : SociumWords {
     override val wordOff = "Выключены"
     override val wordSilent = "Без уведомления"
     override val wordBlocked = "Заблокированы"
-    override val notifyThreadHint = "Заблокированы — сущность не сможет вам писать, а вы ей сможете"
+    override val notifyThreadHint = "Заблокированы — вам отсюда писать не смогут, а вы сможете"
     override val notifyEntityNeedsJoin = "Доступно после вступления или подписки"
     override val messagesBlockedMark = "сообщения заблокированы"
     override val tabContent = "Содержимое"
@@ -442,6 +449,16 @@ object RussianSociumWords : SociumWords {
     }
     override val staffNobody = "Пока никого"
     override fun membersCount(n: Int) = "участников: $n"
+    override fun notifyIn(kind: String, personal: Boolean, secret: Boolean) = "Уведомления в " + when (kind) {
+        "channel" -> if (secret) "секретном канале" else if (personal) "канале" else "публичном канале"
+        "community" -> if (secret) "секретном сообществе" else "сообществе"
+        else -> if (secret) "секретной группе" else if (personal) "личной группе" else "публичной группе"
+    }
+    override fun messagesFrom(kind: String, personal: Boolean, secret: Boolean) = "Сообщения от " + when (kind) {
+        "channel" -> if (secret) "секретного канала" else if (personal) "канала" else "публичного канала"
+        "community" -> if (secret) "секретного сообщества" else "сообщества"
+        else -> if (secret) "секретной группы" else if (personal) "личной группы" else "публичной группы"
+    } + " мне"
     override fun slowLabel(sec: Int) = when {
         sec <= 0 -> slowOff
         sec < 60 -> "$sec с"
@@ -508,7 +525,7 @@ object EnglishSociumWords : SociumWords {
     override val wordOff = "Off"
     override val wordSilent = "Without notification"
     override val wordBlocked = "Blocked"
-    override val notifyThreadHint = "Blocked — they cannot write to you, but you still can write to them"
+    override val notifyThreadHint = "Blocked — they cannot write to you from here, but you still can write to them"
     override val notifyEntityNeedsJoin = "Available after joining or subscribing"
     override val messagesBlockedMark = "messages blocked"
     override val tabContent = "Content"
@@ -659,6 +676,16 @@ object EnglishSociumWords : SociumWords {
         else -> action
     }
     override fun membersCount(n: Int) = "members: $n"
+    override fun notifyIn(kind: String, personal: Boolean, secret: Boolean) = "Notifications in the " + when (kind) {
+        "channel" -> if (secret) "secret channel" else if (personal) "channel" else "public channel"
+        "community" -> if (secret) "secret community" else "community"
+        else -> if (secret) "secret group" else if (personal) "personal group" else "public group"
+    }
+    override fun messagesFrom(kind: String, personal: Boolean, secret: Boolean) = "Messages to me from the " + when (kind) {
+        "channel" -> if (secret) "secret channel" else if (personal) "channel" else "public channel"
+        "community" -> if (secret) "secret community" else "community"
+        else -> if (secret) "secret group" else if (personal) "personal group" else "public group"
+    }
     override fun slowLabel(sec: Int) = when {
         sec <= 0 -> slowOff
         sec < 60 -> "$sec s"
@@ -876,6 +903,16 @@ object SpanishSociumWords : SociumWords {
         else -> action
     }
     override fun membersCount(n: Int) = "miembros: $n"
+    override fun notifyIn(kind: String, personal: Boolean, secret: Boolean) = "Notificaciones en " + when (kind) {
+        "channel" -> if (secret) "el canal secreto" else if (personal) "el canal" else "el canal público"
+        "community" -> if (secret) "la comunidad secreta" else "la comunidad"
+        else -> if (secret) "el grupo secreto" else if (personal) "el grupo personal" else "el grupo público"
+    }
+    override fun messagesFrom(kind: String, personal: Boolean, secret: Boolean) = "Mensajes para mí de " + when (kind) {
+        "channel" -> if (secret) "el canal secreto" else if (personal) "el canal" else "el canal público"
+        "community" -> if (secret) "la comunidad secreta" else "la comunidad"
+        else -> if (secret) "el grupo secreto" else if (personal) "el grupo personal" else "el grupo público"
+    }
     override fun slowLabel(sec: Int) = when {
         sec <= 0 -> slowOff
         sec < 60 -> "$sec s"

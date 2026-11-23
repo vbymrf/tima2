@@ -5104,7 +5104,8 @@ private fun App(
                                     null
                                 },
                                 avatarPicture = entityAvatars["$kind:$id"]?.let { "tima-media://$it" },
-                                showLevels = if (inside && kind == "group") levelsShown["$kind:$id"] == true else null,
+                                // «Показывать уровень сообщений» — в «Настройках» (§1.14, 2).
+                                showLevels = null,
                                 onShowLevels = { on ->
                                     levelsShown["$kind:$id"] = on
                                     scope.launch { runCatching { environment.settings.put(PAGE_LEVELS + "$kind:$id", if (on) "1" else "0") } }
@@ -6226,6 +6227,14 @@ private fun App(
                         },
                         threadOfCommunity = page?.let { it.kind != kind || it.entityId != current.id } ?: false,
                         onBack = { where = Where.Nothing },
+                        // Разделы видом сущности (§1.14, 3).
+                        entitySection = typeOf(current.kind, current.id).let { t -> Tima.words.socium.notifyIn(current.kind, t.reach != io.tima.domain.chat.EntityReach.Public, t.secret) },
+                        threadSection = typeOf(current.kind, current.id).let { t -> Tima.words.socium.messagesFrom(current.kind, t.reach != io.tima.domain.chat.EntityReach.Public, t.secret) },
+                        showLevels = if (inside && current.kind == "group") levelsShown["group:${current.id}"] == true else null,
+                        onShowLevels = { on ->
+                            levelsShown["group:${current.id}"] = on
+                            scope.launch { runCatching { environment.settings.put(PAGE_LEVELS + "group:${current.id}", if (on) "1" else "0") } }
+                        },
                     )
                 }
             }

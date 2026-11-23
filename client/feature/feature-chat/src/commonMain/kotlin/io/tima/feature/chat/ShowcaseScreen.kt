@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -102,8 +104,13 @@ fun ShowcaseScreen(
                     else -> when (val view = page.view()) {
                         ShowcaseView.Empty -> Tertiary(w.empty)
                         is ShowcaseView.Super -> Whole(view.line)
-                        is ShowcaseView.Feed -> view.lines.forEach { Whole(it) }
-                        is ShowcaseView.List -> view.lines.forEach { line ->
+                        // Между сообщениями уровня 0 — разделитель (СЦ28, §1.13, 8).
+                        is ShowcaseView.Feed -> view.lines.forEachIndexed { i, it ->
+                            if (i > 0) androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(1.dp).background(Tima.colors.line))
+                            Whole(it)
+                        }
+                        is ShowcaseView.List -> view.lines.forEachIndexed { i, line ->
+                            if (i > 0) androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(1.dp).background(Tima.colors.line))
                             Caption(
                                 line.line.text,
                                 modifier = Modifier.fillMaxWidth().clickable { single = line.serverId }.testTag(ShowcaseTags.ITEM),

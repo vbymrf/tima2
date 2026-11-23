@@ -293,7 +293,7 @@ internal class GroupLevelZeroSink(
 
 /** Одно действие листом снизу — «Заблокировать человека» в «⋮» ленты с сущностью у команды (СЦ26). */
 @Composable
-internal fun OneActionSheet(title: String, action: String, onAction: () -> Unit, onClose: () -> Unit) {
+internal fun OneActionSheet(title: String, action: String, onAction: () -> Unit, onClose: () -> Unit) = io.tima.core.ui.ProvidePlace(io.tima.core.ui.TextPlace.MENU) {
     val colors = io.tima.core.ui.Tima.colors
     Box(
         Modifier.fillMaxSize()
