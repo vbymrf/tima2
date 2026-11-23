@@ -210,6 +210,9 @@ interface SociumWords {
     fun roleLogAction(action: String, detail: String, mine: Boolean = false): String
     val staffNobody: String
     fun membersCount(n: Int): String
+
+    /** Медленный режим (СЦ21): «30 с», «5 мин», «1 ч»; 0 — «выкл». */
+    fun slowLabel(sec: Int): String
     fun subscribersCount(n: Int): String
     val you: String
     val staffModerators: String
@@ -425,6 +428,12 @@ object RussianSociumWords : SociumWords {
     }
     override val staffNobody = "Пока никого"
     override fun membersCount(n: Int) = "участников: $n"
+    override fun slowLabel(sec: Int) = when {
+        sec <= 0 -> slowOff
+        sec < 60 -> "$sec с"
+        sec < 3600 -> "${sec / 60} мин"
+        else -> "${sec / 3600} ч"
+    }
     override fun subscribersCount(n: Int) = "подписчиков: $n"
     override val you = "Вы"
     override val staffModerators = "Модераторы"
@@ -629,6 +638,12 @@ object EnglishSociumWords : SociumWords {
         else -> action
     }
     override fun membersCount(n: Int) = "members: $n"
+    override fun slowLabel(sec: Int) = when {
+        sec <= 0 -> slowOff
+        sec < 60 -> "$sec s"
+        sec < 3600 -> "${sec / 60} min"
+        else -> "${sec / 3600} h"
+    }
     override fun subscribersCount(n: Int) = "subscribers: $n"
     override val you = "You"
     override val staffModerators = "Moderators"
@@ -833,6 +848,12 @@ object SpanishSociumWords : SociumWords {
         else -> action
     }
     override fun membersCount(n: Int) = "miembros: $n"
+    override fun slowLabel(sec: Int) = when {
+        sec <= 0 -> slowOff
+        sec < 60 -> "$sec s"
+        sec < 3600 -> "${sec / 60} min"
+        else -> "${sec / 3600} h"
+    }
     override fun subscribersCount(n: Int) = "suscriptores: $n"
     override val you = "Usted"
     override val staffModerators = "Moderadores"

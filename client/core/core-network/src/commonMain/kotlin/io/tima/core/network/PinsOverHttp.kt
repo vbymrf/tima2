@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -183,6 +184,54 @@ class ShowcaseOverHttp(
         }
         if (response.status != HttpStatusCode.Created) return null
         return response.jsonBody()?.long("message_id")
+    }
+
+    /** Сообщение уровня 0 в канал (СЦ18): запись открытыми узлами; номер записи, `null` — сеть или отказ. */
+    suspend fun addChannel(channelId: String, body: io.tima.domain.chat.OpenBody): Long? {
+        val response = try {
+            client.post(route.api("/api/v1/channels/$channelId/posts")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(
+                    buildJsonObject {
+                        put("text", JsonPrimitive(body.text.ifBlank { " " }))
+                        put("nodes", JsonArray(body.nodes.map(::JsonPrimitive)))
+                        if (body.markup.isNotEmpty()) put("markup", JsonPrimitive(body.markup))
+                        put("level", JsonPrimitive(0))
+                    }.toString(),
+                )
+            }
+        } catch (e: Throwable) {
+            return null
+        }
+        if (response.status != HttpStatusCode.Created) return null
+        return response.jsonBody()?.long("post_id")
+    }
+
+    /** Правка своего сообщения описания канала или сообщества (СЦ18): `PATCH`; у группы правка идёт из переписки. */
+    suspend fun editOpen(of: ShowcaseOf, serverId: Long, body: io.tima.domain.chat.OpenBody): Boolean = try {
+        val path = if (of.kind == "channel") "/posts/$serverId" else "/messages/$serverId"
+        client.patch(route.api(base(of) + path)) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("text", JsonPrimitive(body.text.ifBlank { " " }))
+                    put("nodes", JsonArray(body.nodes.map(::JsonPrimitive)))
+                    if (body.markup.isNotEmpty()) put("markup", JsonPrimitive(body.markup))
+                }.toString(),
+            )
+        }.status == HttpStatusCode.NoContent
+    } catch (e: Throwable) {
+        false
+    }
+
+    /** Удалить сообщение описания канала или сообщества (СЦ18); у группы — общим удалением сообщения. */
+    suspend fun deleteOpen(of: ShowcaseOf, serverId: Long): Boolean = try {
+        val path = if (of.kind == "channel") "/posts/$serverId" else "/messages/$serverId"
+        client.delete(route.api(base(of) + path)) { header("Authorization", "Bearer ${token()}") }.status == HttpStatusCode.NoContent
+    } catch (e: Throwable) {
+        false
     }
 
     suspend fun setSuper(of: ShowcaseOf, serverId: Long): Boolean {

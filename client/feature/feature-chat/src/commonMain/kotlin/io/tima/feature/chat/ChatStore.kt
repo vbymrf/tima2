@@ -217,6 +217,8 @@ class ChatStore(
      * части (Решения §11.3–§11.4). `null` — искать негде: показывается «Сообщение из другой переписки».
      */
     private val finder: MessageFinder? = null,
+    /** Удалить прежнее сообщение уровня 0, которое заменила правка из «Управление → Сообщения» (СЦ18). */
+    private val dropShowcase: (suspend (Long) -> Boolean)? = null,
 ) {
 
     /**
@@ -1129,11 +1131,17 @@ class ChatStore(
      * Суперсообщение описания (ПЛАН-(ЗО) ЗО5): редактор с подкладками всех сообщений уровня 0;
      * отправленное уходит уровнем 0 и, получив номер, ставится суперсообщением.
      */
-    fun composeSuper(doc: ComposedDoc) {
-        if (composer == null || setSuper == null) return
+    fun composeSuper(doc: ComposedDoc, asSuper: Boolean = true, replaces: Long = 0) {
+        if (composer == null || (asSuper && setSuper == null)) return
         superWanted = true
-        _state.value = _state.value.copy(editorOpen = true, composed = doc, level = 0, draft = "", notice = null)
+        superAsSuper = asSuper
+        superReplaces = replaces
+        _state.value = _state.value.copy(editorOpen = true, composed = doc.copy(level = 0), level = 0, draft = "", notice = null)
     }
+
+    /** Черновик описания (СЦ18): ставить ли суперсообщением и какое прежнее он заменяет. */
+    private var superAsSuper = true
+    private var superReplaces = 0L
 
     /** Суперсообщение ждёт отправки (`true`) или номера своего сообщения (ключ). */
     private var superWanted = false
@@ -1151,10 +1159,20 @@ class ChatStore(
 
     private fun superSent(lines: List<ChatLine>) {
         val key = superKey ?: return
-        val set = setSuper ?: return
         val number = lines.firstOrNull { it.dedupKey == key }?.serverId?.takeIf { it > 0 } ?: return
         superKey = null
+        val old = superReplaces
+        superReplaces = 0
+        val asSuper = superAsSuper
+        superAsSuper = true
         scope.launch {
+            // Правка из «Управления» (СЦ18): новое ушло — прежнее убирается.
+            if (old > 0) withContext(io) { dropShowcase?.invoke(old) }
+            val set = setSuper
+            if (!asSuper || set == null) {
+                _state.value = _state.value.copy(notice = ChatNotice.Said(words().showcase.sentToShowcase))
+                return@launch
+            }
             val ok = withContext(io) { set(number) }
             val w = words().showcase
             _state.value = _state.value.copy(notice = ChatNotice.Said(if (ok) w.superSet else w.superFailed))

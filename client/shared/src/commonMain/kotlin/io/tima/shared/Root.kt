@@ -1140,7 +1140,7 @@ private fun App(
     }
     // Суперсообщение группы из «Описания» (ПЛАН-(ЗО) ЗО5): переписка откроется с редактором, в
     // котором уже стоят подкладки всех сообщений уровня 0.
-    var superDraft by remember { mutableStateOf<Pair<String, io.tima.domain.chat.ComposedDoc>?>(null) }
+    var superDraft by remember { mutableStateOf<Pair<String, io.tima.domain.chat.ShowcaseDraft>?>(null) }
     // Фото, пересылаемое из просмотра в другую переписку (2026-10-18): номер переписки, файл, вид.
     var forwardItems by remember { mutableStateOf<Pair<String, List<io.tima.feature.chat.Forwarded>>?>(null) }
     // Куда человек ходил — второй вопрос правила журнала («что он делал»). Пишется смена,
@@ -4906,7 +4906,7 @@ private fun App(
                         },
                         // Группа — переписка с редактором; сообщество — редактор здесь же.
                         onGroupSuper = { doc ->
-                            superDraft = current.id to doc
+                            superDraft = current.id to io.tima.domain.chat.ShowcaseDraft(doc)
                             where = Where.Chat(current.id, current.title)
                         },
                         onBack = { where = Where.Nothing },
@@ -5018,7 +5018,7 @@ private fun App(
                                 io.tima.feature.group.ManageSection.Roles -> where = Where.Roles(current.kind, current.id, current.title)
                                 io.tima.feature.group.ManageSection.Requests -> if (current.kind == "group") where = Where.Members(current.id, current.title)
                                 io.tima.feature.group.ManageSection.Access -> where = Where.Access(current.id, current.title)
-                                io.tima.feature.group.ManageSection.Messages -> where = Where.Showcase(current.kind, current.id, current.title)
+                                io.tima.feature.group.ManageSection.Messages -> where = Where.ManageMessages(current.kind, current.id, current.title)
                                 io.tima.feature.group.ManageSection.Danger -> where = Where.Ownership(current.kind, current.id, current.title)
                                 io.tima.feature.group.ManageSection.Appeals -> where = Where.Appeals(current.kind, current.id, current.title)
                                 io.tima.feature.group.ManageSection.Voice -> Unit
@@ -5606,11 +5606,17 @@ private fun App(
                         } else {
                             null
                         },
-                        setSuper = if (socialState.mine.firstOrNull { it.groupId == current.chatId }?.myRole == io.tima.domain.chat.GroupRole.Owner) {
+                        // Суперсообщение ставят владелец, админ, модератор (ПЛАН-(СЦ) §1.10, 7).
+                        setSuper = if (socialState.mine.firstOrNull { it.groupId == current.chatId }?.myRole.let {
+                                it == io.tima.domain.chat.GroupRole.Owner || it == io.tima.domain.chat.GroupRole.Admin || it == io.tima.domain.chat.GroupRole.Moderator
+                            }
+                        ) {
                             { n -> assembled.receiver.showcase.setSuper(io.tima.domain.chat.ShowcaseOf("group", current.chatId), n) }
                         } else {
                             null
                         },
+                        // Правка уровня 0 из «Управления» (СЦ18): новое ушло — прежнее удаляется.
+                        dropShowcase = { n -> network.removal.delete(current.chatId, n, true) == io.tima.domain.chat.DeleteStep.Done },
                         superDraft = superDraft?.takeIf { it.first == current.chatId }?.second,
                         onSuperTaken = { superDraft = null },
                         finder = assembled.receiver.finder,
@@ -5809,7 +5815,116 @@ private fun App(
             }
 
             is Where.ManageMessages -> {
-                { where = Where.Nothing }
+                {
+                    // «Управление → Сообщения» (СЦ18, §1.10, 6–9): суперсообщение и уровень 0 пишут владелец, админ,
+                    // модератор. У группы новое и правка уходят из переписки (подпись автора); у канала и сообщества —
+                    // редактор здесь, открытыми узлами.
+                    val of = io.tima.domain.chat.ShowcaseOf(current.kind, current.id)
+                    val group = current.kind == "group"
+                    var page by remember(current) { mutableStateOf<io.tima.domain.chat.ShowcasePage?>(null) }
+                    var failed by remember(current) { mutableStateOf(false) }
+                    var tick by remember(current) { mutableStateOf(0) }
+                    var notice by remember(current) { mutableStateOf<String?>(null) }
+                    // Черновик здесь (канал, сообщество): документ, ставить ли суперсообщением, номер правимого (0 — новое).
+                    var editing by remember(current) { mutableStateOf<Triple<io.tima.domain.chat.ComposedDoc, Boolean, Long>?>(null) }
+                    var slow by remember(current) { mutableStateOf<Int?>(null) }
+                    LaunchedEffect(current, tick) {
+                        val p = runCatching { assembled.receiver.showcase.page(of) }.getOrNull()
+                        page = p
+                        failed = p == null
+                    }
+                    val role = roleOf(current.kind, current.id)
+                    val failedWord = Tima.words.showcase.superFailed
+                    val toChat: (io.tima.domain.chat.ShowcaseDraft) -> Unit = { d ->
+                        superDraft = current.id to d
+                        where = Where.Chat(current.id, current.title)
+                    }
+                    val blank = io.tima.domain.chat.ComposedDoc(items = listOf(io.tima.domain.chat.ComposedItem.Text("")), level = 0)
+                    val ed = editing
+                    if (ed != null) {
+                        val model = remember(ed) { io.tima.feature.chat.EditorModel(ed.first, io.tima.core.encryption.TypedOverQuickMarkdown) }
+                        io.tima.feature.chat.EditorScreen(
+                            model = model,
+                            levels = listOf(io.tima.domain.chat.MessageCircle.Everyone),
+                            defaultLevel = 0,
+                            preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
+                            problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
+                            onBack = { editing = null; notice = null },
+                            onSend = { sent ->
+                                val body = io.tima.core.encryption.ComposedBodiesOverKodium.open(sent)
+                                scope.launch {
+                                    val ok = when {
+                                        body == null -> false
+                                        ed.third > 0 -> network.showcase.editOpen(of, ed.third, body)
+                                        else -> {
+                                            val id = if (current.kind == "channel") network.showcase.addChannel(current.id, body) else network.showcase.addCommunity(current.id, body)
+                                            id != null && (!ed.second || assembled.receiver.showcase.setSuper(of, id))
+                                        }
+                                    }
+                                    Journal.note(LogCode.SHOWCASE, "управление: сообщение", "вид" to current.kind, "правка" to (ed.third > 0), "супер" to ed.second, "вышло" to ok)
+                                    if (ok) {
+                                        editing = null
+                                        notice = null
+                                        tick++
+                                    } else {
+                                        notice = failedWord
+                                    }
+                                }
+                            },
+                            notice = notice,
+                            title = if (ed.third > 0) Tima.words.socium.editingTitle else null,
+                        )
+                    } else {
+                        val p = page
+                        io.tima.feature.group.ManageMessagesScreen(
+                            title = current.title,
+                            rows = if (failed) null else p?.lines?.filterNot { it.onlyContinuation }?.map { l ->
+                                io.tima.feature.group.ShowcaseRow(l.serverId, l.line.text, l.serverId == p.superId, editable = l.senderId == session.userId && l.doc != null)
+                            }?.reversed() ?: emptyList(),
+                            onWriteSuper = {
+                                val draft = p?.superDraft(current.kind, current.id) ?: blank
+                                if (group) toChat(io.tima.domain.chat.ShowcaseDraft(draft, asSuper = true)) else editing = Triple(draft, true, 0L)
+                            },
+                            onWriteZero = {
+                                if (group) toChat(io.tima.domain.chat.ShowcaseDraft(blank, asSuper = false)) else editing = Triple(blank, false, 0L)
+                            },
+                            onEdit = { id ->
+                                p?.line(id)?.doc?.let { doc ->
+                                    if (group) {
+                                        toChat(io.tima.domain.chat.ShowcaseDraft(doc.copy(level = 0), asSuper = id == p.superId, replaces = id))
+                                    } else {
+                                        editing = Triple(doc.copy(level = 0), false, id)
+                                    }
+                                }
+                            },
+                            onDelete = { id ->
+                                scope.launch {
+                                    val ok = if (group) network.removal.delete(current.id, id, true) == io.tima.domain.chat.DeleteStep.Done else network.showcase.deleteOpen(of, id)
+                                    Journal.note(LogCode.SHOWCASE, "управление: удалить", "вид" to current.kind, "вышло" to ok)
+                                    tick++
+                                }
+                            },
+                            onSuper = { id, on ->
+                                scope.launch {
+                                    val ok = assembled.receiver.showcase.setSuper(of, if (on) id else 0L)
+                                    Journal.note(LogCode.SHOWCASE, "управление: суперсообщение", "вид" to current.kind, "поставить" to on, "вышло" to ok)
+                                    tick++
+                                }
+                            },
+                            slowMode = if (current.kind == "channel" && (role == io.tima.domain.chat.GroupRole.Owner || role == io.tima.domain.chat.GroupRole.Admin)) slow ?: -1 else null,
+                            onSlowMode = { sec ->
+                                slow = sec
+                                scope.launch {
+                                    val ok = network.invites.setChannelSlowMode(current.id, sec)
+                                    Journal.note(LogCode.NAV, "медленный режим канала", "секунд" to sec, "вышло" to ok)
+                                    if (!ok) slow = null
+                                }
+                            },
+                            notice = notice,
+                            onBack = { where = Where.Nothing },
+                        )
+                    }
+                }
             }
 
             is Where.NotifySettings -> {

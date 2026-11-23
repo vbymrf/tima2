@@ -101,13 +101,7 @@ internal fun ShowcaseWindow(
         action = if (member || top != null) null else (if (of.kind == "community") w.subscribe else w.join) to onJoin,
         tabs = tabs,
         top = top,
-        onSuper = if (owner && page != null && of.kind != "channel") {
-            {
-                val draft = page.superDraft(of.kind, of.id)
-                if (of.kind == "group") onGroupSuper(draft) else editing = draft
-            }
-        } else {
-            null
-        },
+        // Суперсообщение и уровень 0 пишутся из «Управление → Сообщения» (ПЛАН-(СЦ) СЦ18, §1.10, 6): здесь — только показ.
+        onSuper = null,
     )
 }

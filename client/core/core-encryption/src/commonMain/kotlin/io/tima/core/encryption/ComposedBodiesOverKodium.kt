@@ -73,6 +73,11 @@ object ComposedBodiesOverKodium : ComposedBodies {
         io.tima.domain.chat.DecodedLine(content.displayText(), RichMapper.from(content))
     }.getOrNull()
 
+    /** Открытое сообщение канала и сообщества — документом редактора, для «Править» (СЦ18); `null` — не выразить. */
+    fun openDoc(nodes: List<String>, markup: String): ComposedDoc? = runCatching {
+        ComposedFromContent.doc(MessageContent(nodes, markup.takeIf { it.isNotBlank() }?.let { io.tima.crypto.MarkupV2.decodeBody(it, nodes) }))
+    }.getOrNull()
+
     /** Содержимое сообщения из документа — для тела, проверки и показа. */
     fun content(doc: ComposedDoc): MessageContent {
         val a = Assembly()

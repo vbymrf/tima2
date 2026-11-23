@@ -1123,7 +1123,7 @@ class Receiver(
                 raw.superId,
                 raw.open.mapNotNull { item ->
                     io.tima.core.encryption.ComposedBodiesOverKodium.readOpen(item.nodes, item.markup)
-                        ?.let { io.tima.domain.chat.ShowcaseLine(item.id, item.authorId, it) }
+                        ?.let { io.tima.domain.chat.ShowcaseLine(item.id, item.authorId, it, doc = io.tima.core.encryption.ComposedBodiesOverKodium.openDoc(item.nodes, item.markup)) }
                 },
             )
         }
@@ -1140,7 +1140,10 @@ class Receiver(
         val lines = opened.filter { it.frame.editOf == 0L }.mapNotNull { o ->
             val mine = edits[o.frame.messageId].orEmpty().map { it.body }
             val line = (if (mine.isEmpty()) codec.decodeLine(o.body) else codec.decodeEdited(o.body, mine)) ?: return@mapNotNull null
-            io.tima.domain.chat.ShowcaseLine(o.frame.messageId, o.frame.senderId, line, onlyContinuation = o.frame.onlyContinuation)
+            io.tima.domain.chat.ShowcaseLine(
+                o.frame.messageId, o.frame.senderId, line, onlyContinuation = o.frame.onlyContinuation,
+                doc = runCatching { codec.editDoc(o.body, mine) }.getOrNull(),
+            )
         }
         return io.tima.domain.chat.ShowcasePage(raw.superId, lines)
     }

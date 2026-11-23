@@ -418,8 +418,10 @@ internal fun Chat(
     onShowcase: (() -> Unit)? = null,
     /** Владельцу группы — поставить суперсообщение по номеру (ЗО5). */
     setSuper: (suspend (Long) -> Boolean)? = null,
-    /** Черновик суперсообщения из «Описания»: открыть редактор с ним; `onSuperTaken` — взят. */
-    superDraft: io.tima.domain.chat.ComposedDoc? = null,
+    /** Черновик описания из «Управление → Сообщения» (СЦ18): открыть редактор с ним; `onSuperTaken` — взят. */
+    superDraft: io.tima.domain.chat.ShowcaseDraft? = null,
+    /** Удалить сообщение уровня 0, которое заменила правка (СЦ18). */
+    dropShowcase: (suspend (Long) -> Boolean)? = null,
     onSuperTaken: () -> Unit = {},
     /** Сообщение по номеру — вставленное, подкладка, переход (Решения §11.3–§11.4). */
     finder: io.tima.domain.chat.MessageFinder? = null,
@@ -518,7 +520,7 @@ internal fun Chat(
             reopenUnreadable = reopenUnreadable, heal = heal, people = people, postman = postman,
             openByPhrase = openByPhrase, fromPhoneMay = fromPhoneMay,
             pins = pins, pinMay = pinMay, setSuper = setSuper, finder = finder,
-            readEffects = readEffects,
+            readEffects = readEffects, dropShowcase = dropShowcase,
         )
     } }
     // Запомненная на странице галочка уровня (ПЛАН-(СЦ) §1.7, 2) — при каждом входе, а не только первом.
@@ -546,8 +548,8 @@ internal fun Chat(
         }
     }
     LaunchedEffect(superDraft) {
-        superDraft?.let { doc ->
-            store.composeSuper(doc)
+        superDraft?.let { d ->
+            store.composeSuper(d.doc, asSuper = d.asSuper, replaces = d.replaces)
             onSuperTaken()
         }
     }
@@ -730,7 +732,7 @@ internal fun Chat(
     // Выбран круг, которого у группы этого вида нет (остался с прежней сборки или от
     // другой группы) — сбросить на первый допустимый, иначе отправка получит 400.
     LaunchedEffect(kind, state.level) {
-        val allowed = kind?.circles ?: return@LaunchedEffect
+        val allowed = kind?.circles?.filter { setSuper != null || it != io.tima.domain.chat.MessageCircle.Everyone } ?: return@LaunchedEffect
         if (allowed.none { it.level == state.level }) store.circleChosen(allowed.first().level)
     }
     // Быстрая отправка из строки ввода (Решения §9): личная группа — −1, публичная — 2. Выбора
@@ -849,7 +851,7 @@ internal fun Chat(
             // Круг предлагается только в группе: в личной переписке всё зашифровано и
             // адресовано одному человеку — выбирать нечего.
             circle = if (group) MessageCircle.of(state.level) else null,
-            circles = kind?.circles ?: MessageCircle.entries,
+            circles = kind?.circles?.filter { setSuper != null || it != io.tima.domain.chat.MessageCircle.Everyone } ?: MessageCircle.entries,
             onCircle = if (group) { chosen -> store.circleChosen(chosen.level) } else null,
             // Сужение живёт рядом с меткой круга: показ включён — значит человек занят
             // доступом, а не чтением. Выключен — реплики выглядят как обычно.
@@ -1325,7 +1327,7 @@ internal fun Chat(
         io.tima.feature.chat.EditorScreen(
             model = editorModel,
             // Правка уходит уровнем исходного — уровень не выбирается.
-            levels = if (editingDoc) emptyList() else kind?.circles ?: listOf(io.tima.domain.chat.MessageCircle.Secret),
+            levels = if (editingDoc) emptyList() else kind?.circles?.filter { setSuper != null || it != io.tima.domain.chat.MessageCircle.Everyone } ?: listOf(io.tima.domain.chat.MessageCircle.Secret),
             title = if (editingDoc) Tima.words.chat.editing else null,
             defaultLevel = state.level,
             preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
@@ -1513,7 +1515,7 @@ internal fun Chat(
                 onHead = {
                     editorChoice = null
                     // Закрытая часть — уровнем выше открытого: по умолчанию «по разрешению» (3).
-                    val levels = kind?.circles?.map { it.level }.orEmpty()
+                    val levels = kind?.circles?.filter { setSuper != null || it != io.tima.domain.chat.MessageCircle.Everyone }?.map { it.level }.orEmpty()
                     editorModel.addContinuation(if (3 in levels) 3 else levels.maxOrNull() ?: 2)
                 },
                 onCancel = { editorChoice = null },
@@ -2198,6 +2200,7 @@ internal object ChatAssembly {
         setSuper: (suspend (Long) -> Boolean)?,
         finder: io.tima.domain.chat.MessageFinder?,
         readEffects: io.tima.domain.chat.ReadEffects? = null,
+        dropShowcase: (suspend (Long) -> Boolean)? = null,
     ): ChatStore =
         ChatStore(
             chatId = chatId,
@@ -2340,6 +2343,7 @@ internal object ChatAssembly {
             pinMay = pinMay,
             setSuper = setSuper,
             finder = finder,
+            dropShowcase = dropShowcase,
         ).also { s ->
             // Недоступное по ссылке (ПЛАН-(ЖС)): причина и уровень, без номеров чужих переписок.
             s.attachLog = { reason -> Journal.note(LogCode.FILE_SEND, "отказ", "причина" to reason) }

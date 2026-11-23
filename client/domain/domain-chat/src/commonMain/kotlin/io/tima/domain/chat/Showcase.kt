@@ -12,7 +12,16 @@ data class ShowcaseLine(
     val line: DecodedLine,
     /** «Только продолжение»: само в список не идёт, его показывает подкладка. */
     val onlyContinuation: Boolean = false,
+    /** Документ редактора — для «Править» в «Управление → Сообщения» (СЦ18); `null` — не выразить. */
+    val doc: ComposedDoc? = null,
 )
+
+/**
+ * Черновик описания из «Управление → Сообщения» (ПЛАН-(СЦ) СЦ18): у группы уходит из переписки уровнем 0 тем же путём,
+ * что любое сообщение. `asSuper` — получив номер, ставится суперсообщением; `replaces` — номер прежнего сообщения,
+ * которое «Править» заменяет (у группы правка подписана автором и идёт из ленты, а уровня 0 в ленте нет).
+ */
+data class ShowcaseDraft(val doc: ComposedDoc, val asSuper: Boolean = true, val replaces: Long = 0)
 
 /** Выдача сервера: суперсообщение (0 — места не заняли) и все сообщения уровня 0 от старых к новым. */
 data class ShowcasePage(val superId: Long, val lines: List<ShowcaseLine>) {
