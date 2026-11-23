@@ -29,10 +29,12 @@ import io.tima.core.ui.CheckMark
 import io.tima.core.ui.Counter
 import io.tima.core.ui.ExpandMark
 import io.tima.core.ui.ListLine
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.Secondary
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tab
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.TextPlace
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
@@ -81,9 +83,11 @@ fun EntityTabsBar(
     if (tabs.isEmpty()) return
     val w = Tima.words.socium
     // Переносом, а не в одну строку: четыре вкладки («Содержимое», СЦ20) на узком экране сжимали последнюю в столбик
-    // букв (живьём на realme, 274, 2026-11-23).
+    // букв (живьём на realme, 274, 2026-11-23). Поле — цветом шапки (заказчик 2026-11-23): шапка и вкладки одним
+    // блоком; размер — «Вкладки окон», как у ряда вкладок окна.
+    ProvidePlace(TextPlace.TABS) {
     FlowRow(
-        Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
+        Modifier.fillMaxWidth().background(Tima.colors.functional).padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -96,6 +100,7 @@ fun EntityTabsBar(
             }
             Tab(label, current = tab == current, onClick = { onTab(tab) }, count = if (tab == PageTab.Manage) badge else 0, modifier = Modifier.testTag(tab.tag))
         }
+    }
     }
     Box(Modifier.fillMaxWidth().height(1.dp).background(Tima.colors.line))
 }
@@ -111,6 +116,7 @@ object PageTags {
     const val WRITE = "page:write"
     const val SHARE = "page:share"
     const val LEVELS = "page:levels"
+    const val FIND = "page:find"
 }
 
 /**
@@ -140,6 +146,8 @@ fun EntityAboutTop(
     extra: (@Composable () -> Unit)? = null,
     /** Переписка с сущностью заблокирована мной (СЦ16): к пузырю уведомлений дописывается «сообщения заблокированы». */
     threadBlocked: Boolean = false,
+    /** «Найти» — после «Настройки» (заказчик 2026-11-23): поиск по сообщениям сущности; `null` — кнопки нет. */
+    onFind: (() -> Unit)? = null,
 ) {
     val w = Tima.words.socium
     val colors = Tima.colors
@@ -178,6 +186,7 @@ fun EntityAboutTop(
             onWrite?.let { Button(w.write, onClick = it, kind = if (onJoin != null) ButtonKind.Quiet else ButtonKind.Action, modifier = Modifier.testTag(PageTags.WRITE)) }
             // «Настройки» (§1.14, 2): уведомления, сообщения от сущности, «Показывать уровень сообщений».
             onNotify?.let { Button(Tima.words.socium.settingsTitle, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.NOTIFY)) }
+            onFind?.let { Button(w.findTitle, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.FIND)) }
             onShare?.let { Button(w.share, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.SHARE)) }
             onLeave?.let { Button(w.leave, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.LEAVE)) }
         }
@@ -261,6 +270,8 @@ fun ManageScreen(
     onBack: () -> Unit,
 ) {
     val w = Tima.words.socium
+    // Разделы — «Меню и настройки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.MENU) {
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(title = title, onBack = onBack, caption = w.tabManage, avatar = title.take(2).uppercase())
         tabs()
@@ -290,6 +301,7 @@ fun ManageScreen(
                 },
             )
         }
+    }
     }
 }
 
@@ -326,6 +338,7 @@ fun ManageMainScreen(
     onShowMembers: (Boolean) -> Unit = {},
 ) {
     val w = Tima.words.socium
+    ProvidePlace(TextPlace.MENU) {
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(title = w.manageMain, onBack = onBack, caption = title)
         Column(Modifier.padding(TimaSpacing.about5), verticalArrangement = Arrangement.spacedBy(TimaSpacing.about4)) {
@@ -364,6 +377,7 @@ fun ManageMainScreen(
             }
         }
     }
+    }
 }
 
 /** Метки «Подписчиков» — для сценариев. */
@@ -393,9 +407,14 @@ fun SubscribersScreen(
     onUnban: (String) -> Unit = {},
     /** Заголовок: «Подписчики» или «Участники». */
     caption: String = Tima.words.socium.tabSubscribers,
+    /** Нажатие на человека — его страница, как из переписки (заказчик 2026-11-23); себя не открывает. */
+    onPerson: ((String) -> Unit)? = null,
+    me: String = "",
 ) {
     val w = Tima.words.socium
     var asked by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Pair<String, Boolean>?>(null) }
+    // Список — «Списки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.LISTS) {
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(title = title, onBack = onBack, caption = caption, avatar = title.take(2).uppercase())
         tabs()
@@ -408,6 +427,7 @@ fun SubscribersScreen(
                     Column {
                         io.tima.core.ui.ListLine(
                             modifier = Modifier.testTag(SubscribersTags.ROW),
+                            onClick = onPerson?.takeIf { p.userId != me }?.let { open -> { open(p.userId) } },
                             left = { io.tima.core.ui.Avatar(letters = p.name.take(1).uppercase()) },
                             middle = {
                                 io.tima.core.ui.Name(p.name)
@@ -441,6 +461,7 @@ fun SubscribersScreen(
                     items(banned.size, key = { "banned:" + banned[it].userId }) { i ->
                         val p = banned[i]
                         io.tima.core.ui.ListLine(
+                            onClick = onPerson?.takeIf { p.userId != me }?.let { open -> { open(p.userId) } },
                             left = { io.tima.core.ui.Avatar(letters = p.name.take(1).uppercase()) },
                             middle = { io.tima.core.ui.Name(p.name) },
                             right = { Button(w.unbanSubscriber, onClick = { onUnban(p.userId) }, kind = ButtonKind.Quiet, modifier = Modifier.testTag(SubscribersTags.UNBAN)) },
@@ -449,6 +470,7 @@ fun SubscribersScreen(
                 }
             }
         }
+    }
     }
 }
 

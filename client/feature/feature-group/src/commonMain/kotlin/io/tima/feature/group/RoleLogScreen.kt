@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,6 +63,8 @@ fun RoleLogScreen(
     /** Можно ли снять этого (СЦ21: админ — только модераторов). */
     removable: (String) -> Boolean = { true },
 ) {
+    // «Меню и настройки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.MENU) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(title = w.manageRoles, onBack = onBack, caption = title, avatar = title.take(2).uppercase())
@@ -117,5 +121,6 @@ fun RoleLogScreen(
                 )
             }
         }
+    }
     }
 }

@@ -1821,6 +1821,8 @@ internal fun Members(
     onInviteCard: ((String) -> Unit)? = null,
     /** Участник без роли (СЦ19): только список имён. */
     namesOnly: Boolean = false,
+    /** Нажатие на участника — его страница (2026-11-23). */
+    onPerson: ((String) -> Unit)? = null,
 ) {
     val kindNow by rememberUpdatedState(groupKind)
     val store = remember(groupId) {
@@ -1868,6 +1870,8 @@ internal fun Members(
     MemberScreen(
         tabs = tabs,
         namesOnly = namesOnly,
+        onPerson = onPerson,
+        me = session.userId,
         // Роли и бан (ПЛАН-(СЦ) СЦ6) — ручками сервера; после — состав заново.
         onRole = { uid, role ->
             scope.launch {

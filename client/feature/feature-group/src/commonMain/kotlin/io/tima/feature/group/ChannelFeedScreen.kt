@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,6 +74,8 @@ fun ChannelFeedScreen(
     onEditor: (() -> Unit)? = null,
     busy: Boolean = false,
 ) {
+    // «Списки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.LISTS) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(
@@ -136,5 +140,6 @@ fun ChannelFeedScreen(
                 Button(w.channelPublish, onClick = { if (text.isNotBlank()) { onPublish(text.trim()); text = "" } }, modifier = Modifier.testTag(ChannelFeedTags.SEND))
             }
         }
+    }
     }
 }

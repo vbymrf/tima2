@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -98,6 +100,8 @@ fun NewGroupScreen(
     /** Сообщество: отметить или снять элемент на шаге «что вносим». */
     onItem: (CommunityItem) -> Unit = {},
 ) {
+    // «Меню и настройки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.MENU) {
     val colors = Tima.colors
     val words = Tima.words.wizard
     Column(modifier.fillMaxSize().background(colors.surface)) {
@@ -170,6 +174,7 @@ fun NewGroupScreen(
                 state.explaining?.let { Explanation(it, onClose = { onExplain(null) }) }
             }
         }
+    }
     }
 }
 

@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -81,6 +83,8 @@ fun VoiceChatScreen(
     onLeave: () -> Unit,
     onBack: () -> Unit,
 ) {
+    // «Списки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.LISTS) {
     val w = Tima.words.socium
     val colors = Tima.colors
     Column(Modifier.fillMaxSize().background(colors.surface)) {
@@ -119,6 +123,7 @@ fun VoiceChatScreen(
             }
             Button(w.leave, onClick = onLeave, kind = ButtonKind.Leave, modifier = Modifier.testTag(VoiceTags.LEAVE))
         }
+    }
     }
 }
 

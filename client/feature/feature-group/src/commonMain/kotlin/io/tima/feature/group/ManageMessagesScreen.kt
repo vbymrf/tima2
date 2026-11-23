@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -68,6 +70,8 @@ fun ManageMessagesScreen(
     onSlowMode: (Int) -> Unit = {},
     notice: String? = null,
 ) {
+    // «Меню и настройки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.MENU) {
     val w = Tima.words.socium
     var asked by remember { mutableStateOf<Long?>(null) }
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
@@ -132,5 +136,6 @@ fun ManageMessagesScreen(
                 }
             }
         }
+    }
     }
 }

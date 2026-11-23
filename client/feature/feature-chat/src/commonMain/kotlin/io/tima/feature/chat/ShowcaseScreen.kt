@@ -21,8 +21,10 @@ import androidx.compose.ui.platform.testTag
 import io.tima.core.ui.Button
 import io.tima.core.ui.ButtonKind
 import io.tima.core.ui.Caption
+import io.tima.core.ui.ProvidePlace
 import io.tima.core.ui.SubwindowHeader
 import io.tima.core.ui.Tertiary
+import io.tima.core.ui.TextPlace
 import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.TimaType
@@ -78,6 +80,9 @@ fun ShowcaseScreen(
         page?.line(number)?.let { QuoteLook(null, it.line.text) } ?: QuoteLook(null, null)
     }
     val open: (String, String, Long) -> Unit = { _, _, number -> if (page?.line(number) != null) single = number }
+    // Страница — «Списки» «Шрифтов и размеров», сами сообщения уровня 0 — «Сообщения», как в переписке (заказчик
+    // 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.LISTS) {
     Column(modifier.fillMaxSize().background(Tima.colors.surface).testTag(ShowcaseTags.SCREEN)) {
         SubwindowHeader(
             title = title,
@@ -111,12 +116,14 @@ fun ShowcaseScreen(
                         }
                         is ShowcaseView.List -> view.lines.forEachIndexed { i, line ->
                             if (i > 0) androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(1.dp).background(Tima.colors.line))
-                            Caption(
-                                line.line.text,
-                                modifier = Modifier.fillMaxWidth().clickable { single = line.serverId }.testTag(ShowcaseTags.ITEM),
-                                fontSize = TimaType.sz4,
-                                maxLines = ShowcasePage.LIST_LINES,
-                            )
+                            ProvidePlace(TextPlace.MESSAGES) {
+                                Caption(
+                                    line.line.text,
+                                    modifier = Modifier.fillMaxWidth().clickable { single = line.serverId }.testTag(ShowcaseTags.ITEM),
+                                    fontSize = TimaType.sz4,
+                                    maxLines = ShowcasePage.LIST_LINES,
+                                )
+                            }
                         }
                     }
                 }
@@ -132,11 +139,12 @@ fun ShowcaseScreen(
             }
         }
     }
+    }
 }
 
 /** Сообщение описания целиком — тем же рисованием, что в переписке. */
 @Composable
-private fun Whole(line: ShowcaseLine) {
+private fun Whole(line: ShowcaseLine) = ProvidePlace(TextPlace.MESSAGES) {
     val rich = line.line.rich
     if (rich != null) RichBody(rich, Modifier.fillMaxWidth().testTag(ShowcaseTags.ITEM))
     else Caption(line.line.text, modifier = Modifier.fillMaxWidth().testTag(ShowcaseTags.ITEM), fontSize = TimaType.sz4)

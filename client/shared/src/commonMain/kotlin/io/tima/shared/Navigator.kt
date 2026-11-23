@@ -331,6 +331,9 @@ internal sealed interface Where {
     /** Вкладка «Содержимое» (СЦ20): фото, видео, музыка, голосовые, файлы, ссылки — с этого устройства. */
     data class EntityContent(val kind: String, val id: String, val title: String) : Where
 
+    /** «Найти» страницы (2026-11-23): по сообщениям сущности, что есть на этом телефоне, и по уровню 0. */
+    data class EntitySearch(val kind: String, val id: String, val title: String) : Where
+
     /** «Управление → Сообщения» (СЦ18): суперсообщение и уровень 0 — написать, править, удалить. */
     data class ManageMessages(val kind: String, val id: String, val title: String) : Where
 
@@ -473,6 +476,7 @@ internal fun whereCode(where: Where): String = when (where) {
     is Where.Subscribers -> if (where.kind == "community") "community.subscribers" else "channel.subscribers"
     is Where.NotifySettings -> "entity.notify"
     is Where.EntityContent -> "entity.content"
+    is Where.EntitySearch -> "entity.search"
     is Where.ManageMessages -> "manage.messages"
     is Where.Chat -> "chat"
     is Where.Person -> "page.person"
@@ -550,6 +554,7 @@ internal object NavStore {
             is Where.Subscribers -> listOf("subscribers", w.channelId, w.title, w.kind).joinToString(f)
             is Where.NotifySettings -> listOf("entity.notify", w.kind, w.id, w.title).joinToString(f)
             is Where.EntityContent -> listOf("entity.content", w.kind, w.id, w.title).joinToString(f)
+            is Where.EntitySearch -> listOf("entity.search", w.kind, w.id, w.title).joinToString(f)
             is Where.ManageMessages -> listOf("manage.messages", w.kind, w.id, w.title).joinToString(f)
             is Where.Access -> listOf("access", w.groupId, w.name.orEmpty()).joinToString(f)
             is Where.Showcase -> listOf("showcase", w.kind, w.id, w.title).joinToString(f)
@@ -581,6 +586,7 @@ internal object NavStore {
             "subscribers" -> Where.Subscribers(at(1), at(2), at(3).ifEmpty { "channel" })
             "entity.notify" -> Where.NotifySettings(at(1), at(2), at(3))
             "entity.content" -> Where.EntityContent(at(1), at(2), at(3))
+            "entity.search" -> Where.EntitySearch(at(1), at(2), at(3))
             "manage.messages" -> Where.ManageMessages(at(1), at(2), at(3))
             "access" -> Where.Access(at(1), at(2).ifEmpty { null })
             "showcase" -> Where.Showcase(at(1), at(2), at(3))

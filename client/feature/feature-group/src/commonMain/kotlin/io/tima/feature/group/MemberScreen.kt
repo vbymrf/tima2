@@ -92,9 +92,17 @@ fun MemberScreen(
     onBan: ((String) -> Unit)? = null,
     /** Участник без роли смотрит состав (СЦ19, «только список имён»): ни ролей, ни действий, ни приглашений. */
     namesOnly: Boolean = false,
+    /**
+     * Нажатие на участника — его страница, как из переписки (заказчик 2026-11-23): там «Написать», звонки. Роли и бан —
+     * кнопкой «⋮» в строке. Себя не открывает.
+     */
+    onPerson: ((String) -> Unit)? = null,
+    me: String = "",
 ) {
     val colors = Tima.colors
     val words = Tima.words.social
+    // Состав — «Списки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка, вкладки и «Из контактов» ставят своё.
+    ProvidePlace(TextPlace.LISTS) {
     Box(modifier.fillMaxSize().background(colors.surface)) {
     Column(Modifier.fillMaxSize()) {
         SubwindowHeader(
@@ -177,6 +185,7 @@ fun MemberScreen(
                         person = state.people[member.userId] ?: ChatPerson.EMPTY,
                         look = look,
                         showRole = !namesOnly,
+                        onOpen = onPerson?.takeIf { member.userId != me }?.let { open -> { open(member.userId) } },
                         // Исключить — того, кто ниже меня (модератор — участника, админ — и модератора).
                         removeMay = !namesOnly && state.memberEdit && member.role != GroupRole.Owner && state.myRole.rank() > member.role.rank(),
                         onRemove = { onRemove(member.userId) },
@@ -209,6 +218,7 @@ fun MemberScreen(
             onInvite = onInviteUser,
             onClose = { onContacts(false) },
         )
+    }
     }
     }
 }
@@ -302,19 +312,26 @@ private fun MemberLine(
     actions: List<Pair<String, () -> Unit>> = emptyList(),
     /** Роль справа; участнику без роли — нет (СЦ19). */
     showRole: Boolean = true,
+    /** Нажатие на строку — страница участника (заказчик 2026-11-23); `null` — строка не нажимается (это я). */
+    onOpen: (() -> Unit)? = null,
 ) {
     val words = Tima.words.social
     var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Column {
     ListLine(
-        onClick = if (actions.isNotEmpty()) ({ open = !open }) else null,
+        // Строка — к человеку; действия над ним — «⋮» справа. Прежде строка раскрывала действия, и открыть человека
+        // было нечем.
+        onClick = onOpen ?: if (actions.isNotEmpty()) ({ open = !open }) else null,
         modifier = Modifier.testTag(MembersTags.ROW),
         left = { Avatar(letters = person.letter()) },
         right = {
-            if (removeMay) {
-                Button(label = words.exclude, onClick = onRemove, modifier = Modifier.testTag(MembersTags.REMOVE))
-            } else if (showRole) {
-                Tertiary(roleCaption(member.role, words))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                if (removeMay) {
+                    Button(label = words.exclude, onClick = onRemove, modifier = Modifier.testTag(MembersTags.REMOVE))
+                } else if (showRole) {
+                    Tertiary(roleCaption(member.role, words))
+                }
+                if (actions.isNotEmpty() && onOpen != null) IconButton(glyph = "⋮", onClick = { open = !open }, modifier = Modifier.testTag(MembersTags.ACTIONS))
             }
         },
         middle = {
@@ -381,6 +398,9 @@ object MembersTags {
     const val CONTACTS = "members:contacts"
     const val ROW = "members:row"
     const val REMOVE = "members:remove"
+
+    /** «⋮» в строке участника — роли и бан под строкой (2026-11-23: нажатие на строку ведёт к человеку). */
+    const val ACTIONS = "members:actions"
 
     /** Беда или предупреждение над полями: «Не получилось…», «Состав изменён, но…». */
     const val TROUBLE = "members:trouble"

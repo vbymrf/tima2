@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -108,6 +110,8 @@ fun ThreadScreen(
     /** Идёт загрузка вложения. */
     busy: Boolean = false,
 ) {
+    // «Списки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.LISTS) {
     val w = Tima.words.socium
     val colors = Tima.colors
     Column(Modifier.fillMaxSize().background(colors.surface)) {
@@ -161,6 +165,7 @@ fun ThreadScreen(
             Button(w.send, onClick = onSend, enabled = input.isNotBlank(), modifier = Modifier.testTag(ThreadTags.SEND))
         }
     }
+    }
 }
 
 /**
@@ -177,12 +182,14 @@ fun AppealsScreen(
     onOpen: (ThreadRow) -> Unit,
     onBack: () -> Unit,
 ) {
+    // «Списки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.LISTS) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(title = w.manageAppeals, onBack = onBack, caption = title, avatar = title.take(2).uppercase())
         if (appeals == null) {
             Secondary(Tima.words.trouble.offline, Modifier.padding(TimaSpacing.about5))
-            return
+            return@Column
         }
         Row(
             Modifier.fillMaxWidth().clickable { onAccept(!appeals.accepts) }.padding(TimaSpacing.about4).testTag(ThreadTags.ACCEPT),
@@ -211,5 +218,6 @@ fun AppealsScreen(
                 )
             }
         }
+    }
     }
 }

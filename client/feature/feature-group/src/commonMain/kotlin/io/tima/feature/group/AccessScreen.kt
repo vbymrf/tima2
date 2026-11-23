@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -52,6 +54,8 @@ fun AccessScreen(
     modifier: Modifier = Modifier,
     onCloseTrouble: () -> Unit = {},
 ) {
+    // «Меню и настройки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.MENU) {
     val colors = Tima.colors
     val words = Tima.words.social
     Column(modifier.fillMaxSize().background(colors.surface)) {
@@ -97,6 +101,7 @@ fun AccessScreen(
                 )
             }
         }
+    }
     }
 }
 

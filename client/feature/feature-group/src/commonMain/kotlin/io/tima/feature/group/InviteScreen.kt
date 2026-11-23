@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -86,6 +88,8 @@ fun InviteScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // «Меню и настройки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.MENU) {
     val words = Tima.words.socium
     Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(title = words.invitesTitle, onBack = onBack)
@@ -110,6 +114,7 @@ fun InviteScreen(
                 }
             }
         }
+    }
     }
 }
 

@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -63,6 +65,8 @@ fun CommunityScreen(
     /** «⋮» сообщества — раздел каталога и уведомления (ПЛАН-(ВС) 15); `null` — кнопки нет. */
     onMenu: (() -> Unit)? = null,
 ) {
+    // «Списки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.LISTS) {
     val colors = Tima.colors
     val words = Tima.words
     Column(modifier.fillMaxSize().background(colors.surface)) {
@@ -172,6 +176,7 @@ fun CommunityScreen(
                 }
             }
         }
+    }
     }
 }
 

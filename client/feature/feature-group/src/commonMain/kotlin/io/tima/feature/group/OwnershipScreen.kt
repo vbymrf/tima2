@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -168,6 +170,8 @@ fun OwnershipScreen(
     /** Удалить с месяцем на отмену — владельцу (СЦ14); `null` — блока нет. */
     deletion: DeletionLook? = null,
 ) {
+    // «Меню и настройки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.MENU) {
     val w = Tima.words.socium
     Column(modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(title = w.manageDanger, onBack = onBack, caption = title)
@@ -235,6 +239,7 @@ fun OwnershipScreen(
                 }
             }
         }
+    }
     }
 }
 

@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.aspectRatio
@@ -59,6 +61,8 @@ fun EntityContentScreen(
     /** Как показать фото, видео, файл — тем же пузырём, что в переписке. */
     preview: @Composable (ContentItem) -> Unit,
 ) {
+    // «Списки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.LISTS) {
     val w = Tima.words.socium
     fun label(s: ContentSection) = when (s) {
         ContentSection.Photo -> w.contentPhotos
@@ -134,5 +138,6 @@ fun EntityContentScreen(
                 }
             }
         }
+    }
     }
 }

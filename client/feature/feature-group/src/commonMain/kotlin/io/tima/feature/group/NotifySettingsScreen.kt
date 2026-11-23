@@ -1,5 +1,7 @@
 package io.tima.feature.group
 
+import io.tima.core.ui.TextPlace
+import io.tima.core.ui.ProvidePlace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -62,6 +64,8 @@ fun NotifySettingsScreen(
     showLevels: Boolean? = null,
     onShowLevels: (Boolean) -> Unit = {},
 ) {
+    // «Меню и настройки» «Шрифтов и размеров» (заказчик 2026-11-23); шапка и вкладки ставят своё.
+    ProvidePlace(TextPlace.MENU) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
         SubwindowHeader(title = w.settingsTitle, onBack = onBack, caption = title, avatar = title.take(2).uppercase())
@@ -91,6 +95,7 @@ fun NotifySettingsScreen(
                 Choice(w.showLevels, showLevels, PageTags.LEVELS) { onShowLevels(!showLevels) }
             }
         }
+    }
     }
 }
 

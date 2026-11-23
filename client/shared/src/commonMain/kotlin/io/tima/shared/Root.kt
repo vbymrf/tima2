@@ -5066,6 +5066,8 @@ private fun App(
                                 },
                                 // Подокно «Уведомления» (СЦ16): новое в сущности и сообщения от неё мне.
                                 onNotify = { where = Where.NotifySettings(kind, id, current.title) },
+                                // «Найти» — после «Настройки» (2026-11-23).
+                                onFind = { where = Where.EntitySearch(kind, id, current.title) },
                                 // Владелец не уходит, пока не передал (409 owner_locked).
                                 onLeave = if (!inside || role == io.tima.domain.chat.GroupRole.Owner || kind == "channel") null else {
                                     {
@@ -5921,6 +5923,9 @@ private fun App(
                         onUnban = { uid -> act("снять бан") { network.invites.banSubscriber(kind, current.channelId, uid, false) } },
                         caption = Tima.words.socium.tabSubscribers,
                         onBack = { where = Where.Nothing },
+                        // Нажатие на подписчика — его страница, как из переписки (2026-11-23).
+                        onPerson = { uid -> where = Where.Person(uid) },
+                        me = me,
                     )
                 }
             }
@@ -5989,6 +5994,59 @@ private fun App(
                             }
                             io.tima.feature.chat.RichBody(rich)
                         },
+                    )
+                }
+            }
+
+            is Where.EntitySearch -> {
+                {
+                    // «Найти» (2026-11-23): что есть на этом телефоне — переписка группы, сохранённая лента канала — и
+                    // сообщения уровня 0 страницы. Читается один раз при входе; набор сужает прочитанное, не спрашивая
+                    // заново. Нажатие — к найденному: в переписке на его месте, у канала — запись с комментариями,
+                    // уровень 0 — «О сущности».
+                    var found by remember(current) { mutableStateOf<List<io.tima.feature.group.FoundLine>?>(null) }
+                    var query by remember(current) { mutableStateOf("") }
+                    LaunchedEffect(current) {
+                        val started = msNow()
+                        val got = mutableListOf<io.tima.feature.group.FoundLine>()
+                        val inside = insideOf(current.kind, current.id)
+                        if (current.kind == "group" && inside) {
+                            for (l in environment.chatLines(current.id, 100_000)) {
+                                val text = l.text?.takeIf { it.isNotBlank() } ?: continue
+                                if (l.serverId > 0) got += io.tima.feature.group.FoundLine(io.tima.feature.group.FoundIn.Chat, l.serverId, l.atMs, text)
+                            }
+                        } else if (current.kind == "channel") {
+                            for ((postId, at, raw) in environment.socialCache.posts(current.id, 100_000)) {
+                                val post = io.tima.core.network.channelPostOf(raw) ?: continue
+                                if (post.text.isNotBlank()) got += io.tima.feature.group.FoundLine(io.tima.feature.group.FoundIn.Post, postId, at, post.text)
+                            }
+                        }
+                        val zero = runCatching { assembled.receiver.showcase.page(io.tima.domain.chat.ShowcaseOf(current.kind, current.id)) }.getOrNull()
+                        val inChat = got.mapTo(HashSet()) { it.number }
+                        zero?.lines.orEmpty().filterNot { it.onlyContinuation }.forEach { z ->
+                            val text = z.line.text
+                            if (text.isNotBlank() && !(current.kind == "group" && z.serverId in inChat)) {
+                                got += io.tima.feature.group.FoundLine(io.tima.feature.group.FoundIn.Zero, z.serverId, z.atMs, text)
+                            }
+                        }
+                        found = got.sortedByDescending { it.atMs }
+                        Journal.note(LogCode.NAV, "найти: прочитано", "вид" to current.kind, "строк" to got.size, "мс" to (msNow() - started))
+                    }
+                    io.tima.feature.group.EntitySearchScreen(
+                        title = current.title,
+                        query = query,
+                        onQuery = { query = it },
+                        found = found,
+                        time = { ms -> if (ms > 0) sociumTime(ms) else "" },
+                        onOpen = { f ->
+                            Journal.note(LogCode.NAV, "найти: открыть", "где" to f.place.name)
+                            where = when (f.place) {
+                                io.tima.feature.group.FoundIn.Chat -> Where.Chat(current.id, current.title, jumpTo = f.number)
+                                io.tima.feature.group.FoundIn.Post -> Where.Comments(current.id, f.number)
+                                io.tima.feature.group.FoundIn.Zero -> Where.Showcase(current.kind, current.id, current.title)
+                            }
+                        },
+                        onBack = { where = Where.Nothing },
                     )
                 }
             }
@@ -6265,6 +6323,8 @@ private fun App(
                             InviteCandidate(entry.userId!!, (peopleCards[entry.userId!!] ?: ChatPerson()).withBookName(entry.name, entry.phone))
                         },
                         tabs = { pageTabBar("group", current.groupId, current.name.orEmpty(), io.tima.feature.group.PageTab.Members) },
+                        // Нажатие на участника — его страница, как из переписки (2026-11-23).
+                        onPerson = { uid -> where = Where.Person(uid) },
                         // Участник без роли — только список имён (СЦ19).
                         namesOnly = roleOf("group", current.groupId).let {
                             it != io.tima.domain.chat.GroupRole.Owner && it != io.tima.domain.chat.GroupRole.Admin && it != io.tima.domain.chat.GroupRole.Moderator

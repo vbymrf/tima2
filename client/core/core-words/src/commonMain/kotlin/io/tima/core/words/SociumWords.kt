@@ -95,6 +95,11 @@ interface SociumWords {
     val slowOff: String
     val editingTitle: String
     val saveEdit: String
+    val findTitle: String
+    val findHint: String
+    val findAbout: String
+    val findReading: String
+    val findNothing: String
     val commentsWord: String
     val superHides: String
     val settingsTitle: String
@@ -331,6 +336,11 @@ object RussianSociumWords : SociumWords {
     override val slowOff = "выкл"
     override val editingTitle = "Правка сообщения"
     override val saveEdit = "Сохранить"
+    override val findTitle = "Найти"
+    override val findHint = "Слово из сообщения"
+    override val findAbout = "Ищется в сообщениях, которые есть на этом телефоне, и в сообщениях уровня 0"
+    override val findReading = "Читаем сообщения…"
+    override val findNothing = "Ничего не нашлось"
     override val commentsWord = "Комментарии"
     override val superHides = "Суперсообщение скрывает остальные сообщения уровня 0, если оно есть"
     override val settingsTitle = "Настройки"
@@ -563,6 +573,11 @@ object EnglishSociumWords : SociumWords {
     override val slowOff = "off"
     override val editingTitle = "Editing message"
     override val saveEdit = "Save"
+    override val findTitle = "Find"
+    override val findHint = "A word from a message"
+    override val findAbout = "Searches the messages kept on this phone and the level 0 messages"
+    override val findReading = "Reading messages…"
+    override val findNothing = "Nothing found"
     override val commentsWord = "Comments"
     override val superHides = "A super message hides the other level 0 messages, if there is one"
     override val settingsTitle = "Settings"
@@ -791,6 +806,11 @@ object SpanishSociumWords : SociumWords {
     override val slowOff = "no"
     override val editingTitle = "Editando mensaje"
     override val saveEdit = "Guardar"
+    override val findTitle = "Buscar"
+    override val findHint = "Una palabra del mensaje"
+    override val findAbout = "Busca en los mensajes guardados en este teléfono y en los de nivel 0"
+    override val findReading = "Leyendo mensajes…"
+    override val findNothing = "No se encontró nada"
     override val commentsWord = "Comentarios"
     override val superHides = "El supermensaje oculta los demás mensajes de nivel 0, si existe"
     override val settingsTitle = "Ajustes"
