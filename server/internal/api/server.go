@@ -232,6 +232,9 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Аватар сущности (СЦ5): ставят владелец и админ; строкам Социума — одним запросом.
 	RegisterEntityAvatars(mux, s.Store, s.requireActiveDevice)
 	RegisterEntityRoleLogs(mux, s.Store, s.requireActiveDevice)
+	// Девятый–одиннадцатый круг Социума (СЦ18–СЦ23): админ канала, подписчики и бан с наследованием,
+	// «Показывать участников», медленный режим комментариев, правка описания.
+	RegisterSocialRound(mux, s.Store, s.requireActiveDevice)
 	// Звуковой чат в сообществе (СЦ7): вход по видимости, предел, выгнанные, ведущий, настройки.
 	RegisterCommunityVoice(mux, s.Store, store.CommunityVoiceOf(s.Store), s.livekitSettings, s.notifier(), s.requireActiveDevice)
 	// Закреплённое и описание (ПЛАН-(ЗО) ЗО1–ЗО2).

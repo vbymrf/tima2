@@ -13,7 +13,7 @@
 //
 // Сообщения уровня 0 есть у каждой сущности — группы, канала, сообщества. Не больше 50;
 // забираются только окном «Описание», от старых к новым; у каждой сущности место под одно
-// суперсообщение, ставит его владелец.
+// суперсообщение, ставят его владелец, админ, модератор (ПЛАН-(СЦ) §1.10, 7).
 package api
 
 import (
@@ -331,6 +331,7 @@ func channelShowcase(st ShowcaseStore) http.HandlerFunc {
 		for _, p := range posts {
 			out = append(out, channelPostItem(p, 0))
 		}
+		attachBodies(r.Context(), st, ch.ChannelID, out)
 		writeShowcase(w, r, st, store.PinChannel, ch.ChannelID, "posts", out)
 	}
 }
@@ -363,7 +364,7 @@ func writeShowcase(w http.ResponseWriter, r *http.Request, st ShowcaseStore, kin
 	_ = json.NewEncoder(w).Encode(map[string]any{"super": super, key: items, "limit": store.ShowcaseLimit})
 }
 
-// showcaseSuper — PUT {message_id} ставит суперсообщение, DELETE снимает. Только владелец.
+// showcaseSuper — PUT {message_id} ставит суперсообщение, DELETE снимает. Владелец, админ, модератор (§1.10, 7).
 func showcaseSuper(st ShowcaseStore, kind, pathKey string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var number int64
@@ -378,7 +379,7 @@ func showcaseSuper(st ShowcaseStore, kind, pathKey string) http.HandlerFunc {
 		err := st.SetShowcaseSuper(r.Context(), kind, r.PathValue(pathKey), number, id.UserID)
 		switch {
 		case errors.Is(err, store.ErrShowcaseNotOwner):
-			writeErr(w, http.StatusForbidden, "not_owner", "суперсообщение ставит владелец")
+			writeErr(w, http.StatusForbidden, "not_owner", "суперсообщение ставят владелец, админ, модератор")
 			return
 		case errors.Is(err, store.ErrMessageGone):
 			writeErr(w, http.StatusConflict, "not_showcase", "суперсообщение — живое сообщение уровня 0 этой сущности")

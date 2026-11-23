@@ -197,8 +197,10 @@ func getChannelPost(st ChannelStore) http.HandlerFunc {
 			if cerr != nil {
 				log.Printf("getChannelPost: счётчик: %v", cerr)
 			}
+			item := channelPostItem(posts[0], counts[number])
+			attachBodies(r.Context(), st, channelID, []map[string]any{item})
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"message": channelPostItem(posts[0], counts[number])})
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": item})
 			return
 		}
 		if err != nil {

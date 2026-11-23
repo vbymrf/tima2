@@ -161,6 +161,9 @@ func patchJoinRequest(deps groupsDeps) http.HandlerFunc {
 			return
 		}
 
+		if *req.Accept && refuseBanned(w, r, deps.store, "group", groupID, userID) {
+			return
+		}
 		if *req.Accept {
 			err := deps.store.AddGroupMember(r.Context(), groupID, userID, "member")
 			if err != nil && !errors.Is(err, store.ErrUserUnknown) {

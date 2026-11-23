@@ -243,6 +243,11 @@ func postGroupMessage(deps groupsDeps) http.HandlerFunc {
 			level = target.Level
 		}
 
+		// Сообщение уровня 0 («Описание») пишут владелец, админ, модератор (ПЛАН-(СЦ) §1.10, 7, заказчик 2026-11-23).
+		if level == levelPublicShowcase && req.EditOf == 0 && roleRank[role] < rankModerator {
+			writeErr(w, http.StatusForbidden, "showcase_staff", "сообщения описания пишут владелец, админ, модератор")
+			return
+		}
 		if level == levelPublicShowcase && req.EditOf == 0 && showcaseFull(w, r, deps.store, store.PinGroup, groupID) {
 			return
 		}

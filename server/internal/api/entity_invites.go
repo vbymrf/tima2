@@ -250,6 +250,9 @@ func answerInvite(st InviteStore, groups groupsDeps, n *Notifier) http.HandlerFu
 			if err := enterByInvite(r.Context(), st, groups, inv); notFound(err) {
 				writeErr(w, http.StatusNotFound, "not_found", "сущности больше нет")
 				return
+			} else if errors.Is(err, store.ErrBanned) {
+				writeErr(w, http.StatusForbidden, "banned", "вы забанены в этой сущности или в её сообществе")
+				return
 			} else if err != nil {
 				log.Printf("answerInvite: вход: %v", err)
 				writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -269,6 +272,10 @@ func answerInvite(st InviteStore, groups groupsDeps, n *Notifier) http.HandlerFu
 }
 
 func enterByInvite(ctx context.Context, st InviteStore, groups groupsDeps, inv store.Invite) error {
+	// Забаненный в сущности или в её сообществе не входит и по приглашению (СЦ23).
+	if err := bannedErr(ctx, st, inv.EntityKind, inv.EntityID, inv.InviteeID); err != nil {
+		return err
+	}
 	switch inv.EntityKind {
 	case "group":
 		g, err := st.GetGroup(ctx, inv.EntityID)

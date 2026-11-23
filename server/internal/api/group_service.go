@@ -330,6 +330,10 @@ func addGroupMember(deps groupsDeps) http.HandlerFunc {
 			writeErr(w, http.StatusForbidden, "forbidden", "добавляют owner|admin|moderator, роль — строго ниже своей")
 			return
 		}
+		// Забаненный в сообществе группы не входит в неё (СЦ23).
+		if refuseBanned(w, r, deps.store, "group", r.PathValue("groupID"), req.UserID) {
+			return
+		}
 		err := deps.store.AddGroupMember(r.Context(), r.PathValue("groupID"), req.UserID, req.Role)
 		if errors.Is(err, store.ErrUserUnknown) {
 			writeErr(w, http.StatusNotFound, "user_not_found", "пользователь не существует")

@@ -238,6 +238,10 @@ func subscribeChannel(st ChannelStore) http.HandlerFunc {
 			writeErr(w, http.StatusNotFound, "not_found", "канал не найден")
 			return
 		}
+		// Забаненный в канале или в его сообществе не подписывается (СЦ21, СЦ23).
+		if refuseBanned(w, r, st, "channel", channelID, id.UserID) {
+			return
+		}
 		if err := st.Subscribe(r.Context(), channelID, id.UserID); err != nil {
 			log.Printf("subscribeChannel: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
@@ -274,8 +278,9 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
-		if ch.OwnerID != id.UserID {
-			writeErr(w, http.StatusForbidden, "not_owner", "публиковать может только владелец канала")
+		// Публикуют владелец, админ и модератор (ПЛАН-(СЦ) §1.12, 1; до 2026-11-23 — только владелец).
+		if !channelTeamHas(r.Context(), st, ch, id.UserID) {
+			writeErr(w, http.StatusForbidden, "not_owner", "публикуют владелец, админ и модератор канала")
 			return
 		}
 		var req struct {
@@ -296,22 +301,16 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 			Lang string `json:"lang,omitempty"`
 			// OnlyContinuation — «только продолжение» (Решения §11.3): необязательное; в ленту не идёт.
 			OnlyContinuation bool `json:"only_continuation,omitempty"`
+			// Body — тело документом (СЦ22): блоки и вложения; есть тело — текст может быть пустым.
+			Body string `json:"body,omitempty"`
 		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&req); err != nil || req.Text == "" {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_text", "нужен непустой text")
 			return
 		}
-		nodes := req.Nodes
-		if len(nodes) == 0 {
-			nodes = []string{req.Text}
-		}
-		var markup []byte
-		if req.Markup != "" {
-			if !json.Valid([]byte(req.Markup)) {
-				writeErr(w, http.StatusBadRequest, "bad_markup", "markup должен быть валидным JSON")
-				return
-			}
-			markup = []byte(req.Markup)
+		nodes, markup, body, ok := openPostBody{Text: req.Text, Nodes: req.Nodes, Markup: req.Markup, Body: req.Body}.parse(w)
+		if !ok {
+			return
 		}
 		// Шифра в канале нет вовсе — трансляция открытая, поэтому −1 здесь не бывает.
 		level := levelEveryone
@@ -335,6 +334,11 @@ func postToChannel(st ChannelStore, n *Notifier) http.HandlerFunc {
 			log.Printf("postToChannel: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
+		}
+		if s, isStore := st.(*store.Store); isStore {
+			if err := store.SetPostBody(r.Context(), s, channelID, postID, body); err != nil {
+				log.Printf("postToChannel: тело: %v", err)
+			}
 		}
 		// ── ПОСТ НЕ КОПИРУЕТСЯ ПОДПИСЧИКАМ (ПЛАН-(ОУ) ОУ1, ОУ2) ─────────────────
 		//
@@ -430,6 +434,7 @@ func listChannelPosts(st ChannelStore) http.HandlerFunc {
 		for _, p := range posts {
 			out = append(out, channelPostItem(p, counts[p.PostID]))
 		}
+		attachBodies(r.Context(), st, channelID, out)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"channel": channelJSON(store.ChannelView{Channel: ch}), "posts": out})
 	}

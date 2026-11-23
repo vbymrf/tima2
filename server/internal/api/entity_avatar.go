@@ -30,7 +30,7 @@ func RegisterEntityAvatars(mux *http.ServeMux, st *store.Store, requireDevice Mi
 	mux.HandleFunc("POST /api/v1/entities/counts", requireDevice(entityCounts(st)))
 }
 
-// mayManageMain — «Основное» (§3): владелец и админ; у канала — владелец.
+// mayManageMain — «Основное» (§3): владелец и админ — у всех трёх видов (у канала админ — с СЦ21).
 func mayManageMain(r *http.Request, st *store.Store, kind, id, userID string) (bool, error) {
 	owner, err := entityOwner(r.Context(), st, kind, id)
 	if err != nil {
@@ -49,6 +49,9 @@ func mayManageMain(r *http.Request, st *store.Store, kind, id, userID string) (b
 	case "community":
 		admins, err := st.CommunityAdmins(r.Context(), id)
 		return listHas(admins, userID), err
+	case "channel":
+		role, err := store.ChannelRole(r.Context(), st, id, userID)
+		return role == "admin", err
 	}
 	return false, nil
 }

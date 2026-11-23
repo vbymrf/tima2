@@ -331,6 +331,10 @@ func subscribeCommunity(st CommunityStore, on bool) http.HandlerFunc {
 				return
 			}
 		}
+		// Забаненный в сообществе не подписывается (СЦ23).
+		if on && refuseBanned(w, r, st, "community", communityID, id.UserID) {
+			return
+		}
 		if err := st.SubscribeCommunity(r.Context(), communityID, id.UserID, on); err != nil {
 			log.Printf("subscribeCommunity: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")

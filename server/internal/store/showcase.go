@@ -34,13 +34,16 @@ var showcaseSuper = map[string]string{
 	ShowcaseCommunity: `SELECT COALESCE(showcase_super, 0) FROM communities WHERE community_id = $1::uuid`,
 }
 
-// showcaseIsOwner — владелец ли $2 сущности $1. У группы владелец — роль в составе (её можно
-// передать), у канала и сообщества — колонка owner_id.
+// showcaseIsOwner — пишет ли $2 описание сущности $1: владелец, админ, модератор (ПЛАН-(СЦ) §1.10, 7, заказчик
+// 2026-11-23; прежде — только владелец). У группы роль — в составе, у канала — владелец или строка команды (админ,
+// модератор), у сообщества — владелец или админ (модератора у сообщества нет, §1.12, 3).
 var showcaseIsOwner = map[string]string{
 	PinGroup: `SELECT EXISTS(SELECT 1 FROM memberships WHERE target_type = 'group' AND target_id = $1::uuid
-		AND user_id = $2 AND role = 'owner' AND left_at IS NULL)`,
-	PinChannel:        `SELECT EXISTS(SELECT 1 FROM channels WHERE channel_id = $1::uuid AND owner_id = $2)`,
-	ShowcaseCommunity: `SELECT EXISTS(SELECT 1 FROM communities WHERE community_id = $1::uuid AND owner_id = $2)`,
+		AND user_id = $2 AND role IN ('owner', 'admin', 'moderator') AND left_at IS NULL)`,
+	PinChannel: `SELECT EXISTS(SELECT 1 FROM channels WHERE channel_id = $1::uuid AND owner_id = $2)
+		OR EXISTS(SELECT 1 FROM channel_moderators WHERE channel_id = $1::uuid AND user_id = $2)`,
+	ShowcaseCommunity: `SELECT EXISTS(SELECT 1 FROM communities WHERE community_id = $1::uuid AND owner_id = $2)
+		OR EXISTS(SELECT 1 FROM community_admins WHERE community_id = $1::uuid AND user_id = $2)`,
 }
 
 var showcaseSet = map[string]string{
@@ -49,8 +52,8 @@ var showcaseSet = map[string]string{
 	ShowcaseCommunity: `UPDATE communities SET showcase_super = $2 WHERE community_id = $1::uuid`,
 }
 
-// ErrShowcaseNotOwner — суперсообщение ставит и снимает только владелец.
-var ErrShowcaseNotOwner = errors.New("суперсообщение описания ставит владелец")
+// ErrShowcaseNotOwner — суперсообщение ставят и снимают владелец, админ, модератор (у сообщества — владелец и админы).
+var ErrShowcaseNotOwner = errors.New("суперсообщение описания ставят владелец, админ, модератор")
 
 // ShowcaseCount — сколько у сущности сообщений уровня 0: предел проверяется перед записью нового.
 func (s *Store) ShowcaseCount(ctx context.Context, kind, container string) (int, error) {
@@ -81,7 +84,7 @@ func (s *Store) ShowcaseSuper(ctx context.Context, kind, container string) (int6
 	return super, err
 }
 
-// SetShowcaseSuper ставит (messageID > 0) или снимает (0) суперсообщение. Только владелец;
+// SetShowcaseSuper ставит (messageID > 0) или снимает (0) суперсообщение. Владелец, админ, модератор;
 // поставить можно лишь живое сообщение уровня 0 этой сущности — иначе ErrMessageGone.
 func (s *Store) SetShowcaseSuper(ctx context.Context, kind, container string, messageID int64, actorID string) error {
 	q, ok := showcaseIsOwner[kind]

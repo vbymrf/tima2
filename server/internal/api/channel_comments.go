@@ -50,7 +50,8 @@ type subscriptionChecker interface {
 // Уровень 3 в канале сегодня достаётся только владельцу: поимённые разрешения у ленты —
 // этап К4, до него список пуст.
 func maxLevelInChannel(r *http.Request, st subscriptionChecker, ch store.Channel, userID string) int16 {
-	if ch.OwnerID == userID {
+	// Команда (владелец, админ, модератор — СЦ21) видит все круги: она их и пишет.
+	if channelTeamHas(r.Context(), st, ch, userID) {
 		return levelByGrant
 	}
 	if sub, err := st.IsSubscribed(r.Context(), ch.ChannelID, userID); err != nil {
@@ -144,6 +145,7 @@ func listComments(st ChannelStore) http.HandlerFunc {
 			}
 			out = append(out, item)
 		}
+		attachBodies(r.Context(), st, root.ChannelID, out)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"channel_id": root.ChannelID, "post_id": root.PostID,
@@ -161,26 +163,14 @@ func addComment(st ChannelStore, n *Notifier) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		var req struct {
-			Text   string   `json:"text"`
-			Nodes  []string `json:"nodes,omitempty"`
-			Markup string   `json:"markup,omitempty"`
-		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&req); err != nil || req.Text == "" {
+		var req openPostBody
+		if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_text", "нужен непустой text")
 			return
 		}
-		nodes := req.Nodes
-		if len(nodes) == 0 {
-			nodes = []string{req.Text}
-		}
-		var markup []byte
-		if req.Markup != "" {
-			if !json.Valid([]byte(req.Markup)) {
-				writeErr(w, http.StatusBadRequest, "bad_markup", "markup должен быть валидным JSON")
-				return
-			}
-			markup = []byte(req.Markup)
+		nodes, markup, body, ok := req.parse(w)
+		if !ok {
+			return
 		}
 		// Выключено — новых не принимаем, старые отдаём (ADR-0024 §6). Проверка стоит
 		// здесь, а не в чтении: закрытый разговор остаётся видимым.
@@ -193,6 +183,18 @@ func addComment(st ChannelStore, n *Notifier) http.HandlerFunc {
 			return
 		}
 		id, _ := auth.FromContext(r.Context())
+		// Медленный режим комментариев (СЦ21): команда не ждёт, как в группе.
+		if s, isStore := st.(*store.Store); isStore {
+			if ch, err := st.GetChannel(r.Context(), root.ChannelID); err == nil && !channelTeamHas(r.Context(), st, ch, id.UserID) {
+				if sec, err := store.ChannelSlowMode(r.Context(), s, root.ChannelID); err == nil && sec > 0 {
+					if recent, err := store.CommentedWithin(r.Context(), s, root.ChannelID, id.UserID, sec); err == nil && recent {
+						w.Header().Set("Retry-After", strconv.Itoa(sec))
+						writeErr(w, http.StatusTooManyRequests, "slow_mode", "подождите: в канале медленный режим")
+						return
+					}
+				}
+			}
+		}
 		now := time.Now().UnixMilli()
 		postID, err := st.CreateComment(r.Context(), store.ChannelPost{
 			ChannelID: root.ChannelID, AuthorID: id.UserID, Text: req.Text,
@@ -207,6 +209,11 @@ func addComment(st ChannelStore, n *Notifier) http.HandlerFunc {
 			log.Printf("addComment: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
+		}
+		if s, isStore := st.(*store.Store); isStore {
+			if err := store.SetPostBody(r.Context(), s, root.ChannelID, postID, body); err != nil {
+				log.Printf("addComment: тело: %v", err)
+			}
 		}
 		// Уведомляем автора корня (ADR-0024, следствие 5): о переносе к себе не
 		// уведомляем, потому что автору нечего делать, а на комментарий отвечают.
