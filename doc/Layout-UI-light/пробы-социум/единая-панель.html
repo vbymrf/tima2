@@ -1,0 +1,416 @@
+<meta charset="utf-8">
+<title>Единая панель ввода — Социум</title>
+<link rel="stylesheet" href="../%D1%81%D1%82%D0%B8%D0%BB%D1%8C.css">
+<style>
+  .ряд-окон { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+  .тел { width: auto; }
+  .замечание { font-size: 12.5px; color: var(--чёрный-70); width: 360px; margin-top: 6px; line-height: 1.5; }
+
+  /* ── Формы, которых в стиль.css пока нет. Уйдут туда, если будут приняты. ── */
+
+  /* Панель ввода — как в личной переписке (InputLine): редактор слева, в поле эмодзи, фото, скрепка, справа голосовое
+     или «отправить». */
+  .панель { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--функц); border-top: 1px solid var(--линия); }
+  .панель .редактор {
+    width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; background: var(--поверхность);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  }
+  .панель .редактор i { display: block; width: 16px; height: 2px; background: var(--чёрный-50); }
+  .панель .поле {
+    flex: 1 1 auto; display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px 0 14px;
+    border-radius: 20px; background: rgba(138, 196, 74, 0.14); color: var(--чёрный-50); font-size: var(--щ5);
+  }
+  .панель .поле .набор { flex: 1 1 auto; color: var(--чёрный-50); }
+  .панель .поле .набор.есть { color: var(--текст); }
+  .панель .поле .зн { font-size: 17px; color: var(--чёрный-35); }
+  .панель .круг {
+    width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; background: var(--навигация); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800;
+  }
+
+  /* Над панелью «Сообщений»: суперсообщение есть — кнопка серая, но нажимается. */
+  .над-панелью { padding: 8px 12px 6px; background: var(--функц); border-top: 1px solid var(--линия); }
+  .над-панелью .кн { min-height: 36px; padding: 0 16px; }
+  .над-панелью .пояснение { font-size: 11.5px; color: var(--чёрный-50); margin-top: 5px; line-height: 1.35; }
+
+  .метка-супер { font-size: 10.5px; font-weight: 800; color: var(--подтверждено); margin-bottom: 3px; letter-spacing: .02em; }
+  .кн-комм {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 7px; padding: 4px 11px;
+    border-radius: var(--радиус-круг); background: var(--чёрный-6); color: var(--текст);
+    font-size: var(--щ6); font-weight: 700; text-decoration: none;
+  }
+  .кн-комм .число { color: var(--активность); font-weight: 800; }
+  .фото { height: 150px; border-radius: 10px; margin: 2px 0 6px; background: linear-gradient(135deg, #c9dbb0, #8fae6b 55%, #5d7d44); }
+  .кто-писал { font-size: 10.5px; color: var(--чёрный-50); margin-bottom: 2px; }
+
+  /* Лист действий по нажатию на сообщение — как в переписке. */
+  .затемнение { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.32); display: flex; align-items: flex-end; }
+  .лист { width: 100%; background: var(--поверхность); border-radius: 16px 16px 0 0; padding: 8px 0 14px; }
+  .лист .ручка { width: 36px; height: 4px; border-radius: 2px; background: var(--чёрный-12); margin: 2px auto 8px; }
+  .лист .пункт-листа { padding: 12px 20px; font-size: var(--щ4); border-top: 1px solid var(--линия); }
+  .лист .пункт-листа.опасно { color: #c62828; }
+
+  /* «О сущности» — вид прежний, добавлены разделители. */
+  .пузырёк { display: inline-block; padding: 4px 12px; border-radius: 999px; background: var(--подтверждено); color: #fff; font-size: 12px; font-weight: 800; }
+  .галка-уровня { display: flex; align-items: center; gap: 12px; padding: 10px 0; font-size: var(--щ5); color: var(--чёрный-70); }
+  .галка-уровня .квадрат { width: 22px; height: 22px; border: 2px solid var(--чёрный-35); border-radius: 6px; }
+  .разделитель { height: 1px; background: var(--линия); margin: 6px 0; }
+  .разделитель.новое { background: var(--навигация); height: 2px; }
+  .сообщение-0 { padding: 10px 0; font-size: var(--щ5); line-height: 1.45; }
+  .вкладки-стр { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 12px; border-bottom: 1px solid var(--линия); font-weight: 700; font-size: 14px; color: var(--чёрный-70); }
+  .вкладки-стр .тек { background: var(--навигация); color: #fff; border-radius: 999px; padding: 3px 12px; }
+</style>
+
+<div class="лист-док">
+<div class="путь"><a href="../%D0%B8%D0%BD%D0%B4%D0%B5%D0%BA%D1%81.html">Layout-UI-light</a> / пробы-социум / единая-панель.html</div>
+<h1>Единая панель ввода <span class="вид подокно">проба</span></h1>
+<p class="подзаголовок">
+  ПЛАН-(СЦ) §1.13, СЦ24–СЦ28 (заказчик 2026-11-23). Везде, где пишется сообщение, — одна панель из личной переписки:
+  редактор, поле с эмодзи, фото и скрепкой, голосовое или «отправить». Сообщения — пузырями, как в переписке, действия —
+  по нажатию на сообщение. Вкладки и шапки — как в приложении сейчас.
+</p>
+
+<div class="ряд-окон">
+
+<!-- 1. Управление → Сообщения -->
+<div class="тел">
+  <div class="окно" style="position:relative">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <span class="ава мал">GR</span>
+      <div class="тянуть">
+        <div class="имя обрез" style="font-size:var(--щ5)">Сообщения</div>
+        <div class="трет">gruppa</div>
+      </div>
+    </div>
+    <div class="зона-2">
+      <div class="поток">
+        <div class="реплика моя">
+          <div class="пузырь">
+            <div class="метка-супер">СУПЕРСООБЩЕНИЕ</div>
+            <b>Добро пожаловать в «gruppa»</b><br>
+            Здесь обсуждаем смету и сроки.<br>
+            • правила — ниже<br>• вопросы — в «Написать»
+            <div class="низ-пузыря"><span>0</span><span>14:20</span></div>
+          </div>
+        </div>
+        <div class="реплика моя">
+          <div class="пузырь">
+            <b>Правила</b><br>Без рекламы. Файлы — в «Содержимое».
+            <div class="низ-пузыря"><span>0</span><span>14:31</span></div>
+          </div>
+        </div>
+        <div class="реплика моя">
+          <div class="пузырь">
+            <div class="фото"></div>
+            План этажа — к обсуждению в четверг.
+            <div class="низ-пузыря"><span>0</span><span>14:40</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="над-панелью">
+      <a class="кн тихая" href="#">Написать суперсообщение</a>
+      <div class="пояснение">Суперсообщение скрывает остальные сообщения уровня 0, если оно есть.</div>
+    </div>
+    <div class="панель">
+      <div class="редактор"><i></i><i></i><i></i></div>
+      <div class="поле"><span class="набор">Сообщение</span><span class="зн">🙂</span><span class="зн">🖼</span><span class="зн">📎</span></div>
+      <div class="круг">🎙</div>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">«Управление → Сообщения»: суперсообщение есть</div>
+  <div class="замечание">Кнопка серая — суперсообщение уже есть; нажимается и открывает редактор с ним. У группы исправленное
+    уходит новым и становится суперсообщением, прежнее остаётся обычным уровня 0. Панель пишет сообщение уровня 0.
+    Кнопки «Написать сообщение уровня 0» больше нет. Крупных кнопок под сообщениями нет.</div>
+</div>
+
+<!-- 2. Нажатие на сообщение -->
+<div class="тел">
+  <div class="окно" style="position:relative">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <span class="ава мал">GR</span>
+      <div class="тянуть">
+        <div class="имя обрез" style="font-size:var(--щ5)">Сообщения</div>
+        <div class="трет">gruppa</div>
+      </div>
+    </div>
+    <div class="зона-2">
+      <div class="поток">
+        <div class="реплика моя">
+          <div class="пузырь">
+            <b>Правила</b><br>Без рекламы. Файлы — в «Содержимое».
+            <div class="низ-пузыря"><span>0</span><span>14:31</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="затемнение">
+      <div class="лист">
+        <div class="ручка"></div>
+        <div class="пункт-листа">Сделать суперсообщением</div>
+        <div class="пункт-листа">Править</div>
+        <div class="пункт-листа">Копировать</div>
+        <div class="пункт-листа опасно">Удалить</div>
+      </div>
+    </div>
+  </div>
+  <div class="подпись">нажатие на сообщение — лист действий</div>
+  <div class="замечание">Тот же лист, что в переписке. У суперсообщения — «Снять суперсообщение». «Править» — только у
+    своего; «Удалить» — с подтверждением, как сейчас.</div>
+</div>
+
+<!-- 3. Написать (человек ↔ сущность) -->
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <span class="ава мал">GR</span>
+      <div class="тянуть">
+        <div class="имя обрез" style="font-size:var(--щ5)">gruppa</div>
+        <div class="трет обрез">Переписка с сущностью не шифруется</div>
+      </div>
+    </div>
+    <div class="зона-2">
+      <div class="поток">
+        <div class="системное">Сегодня</div>
+        <div class="реплика моя">
+          <div class="пузырь">Добрый день! Можно вступить в группу? Я по объявлению.
+            <div class="низ-пузыря"><span>12:30</span><span class="галки">✓✓</span></div>
+          </div>
+        </div>
+        <div class="реплика" style="--полоса:#8ac44a">
+          <div class="пузырь">Здравствуйте! Пришлите, пожалуйста, <b>скан договора</b> — после проверки пригласим.
+            <div class="низ-пузыря"><span>12:41</span></div>
+          </div>
+        </div>
+        <div class="реплика моя">
+          <div class="пузырь" style="padding:8px">
+            <div class="строка" style="padding:0;border:none;background:none">
+              <div class="ава мал" style="background:var(--чёрный-6);color:var(--чёрный-70)">📄</div>
+              <div class="тянуть">
+                <div class="имя обрез" style="font-size:var(--щ5)">договор.pdf</div>
+                <div class="трет">1,1 МБ</div>
+              </div>
+            </div>
+            <div class="низ-пузыря"><span>12:44</span><span class="галки">✓</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="панель">
+      <div class="редактор"><i></i><i></i><i></i></div>
+      <div class="поле"><span class="набор есть">Спасибо!</span><span class="зн">🙂</span></div>
+      <div class="круг">↑</div>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">«Написать»: сторона человека</div>
+  <div class="замечание">Вид переписки: своё — справа, сущности — слева, без имени автора. Набран текст — справа «отправить»
+    (пустое поле — голосовое). Состояние ленты — в подокне «Уведомления» страницы, не здесь.</div>
+</div>
+
+<!-- 4. Обращения (команда) -->
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <span class="ава мал">ИП</span>
+      <div class="тянуть">
+        <div class="имя обрез" style="font-size:var(--щ5)">Иван Петров</div>
+        <div class="трет">gruppa</div>
+      </div>
+      <a class="икона" href="#" title="Заблокировать человека">⋮</a>
+    </div>
+    <div class="зона-2">
+      <div class="поток">
+        <div class="реплика" style="--полоса:#2f9c8f">
+          <div class="пузырь">Добрый день! Можно вступить в группу? Я по объявлению.
+            <div class="низ-пузыря"><span>12:30</span></div>
+          </div>
+        </div>
+        <div class="реплика моя">
+          <div class="пузырь">
+            <div class="кто-писал">Анна · модератор</div>
+            Здравствуйте! Пришлите, пожалуйста, <b>скан договора</b> — после проверки пригласим.
+            <div class="низ-пузыря"><span>12:41</span><span class="галки">✓✓</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="панель">
+      <div class="редактор"><i></i><i></i><i></i></div>
+      <div class="поле"><span class="набор">Сообщение</span><span class="зн">🙂</span><span class="зн">🖼</span><span class="зн">📎</span></div>
+      <div class="круг">🎙</div>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">«Управление → Обращения»: сторона команды</div>
+  <div class="замечание">Своё — сторона сущности, справа; над ним — кто из команды писал (человек этого не видит).
+    «Заблокировать человека» — в «⋮» шапки.</div>
+</div>
+
+<!-- 5. Лента канала как переписка -->
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <span class="ава мал">KA</span>
+      <div class="тянуть">
+        <div class="имя обрез" style="font-size:var(--щ5)">kanal 274</div>
+        <div class="трет">Лента канала</div>
+      </div>
+      <a class="чип откр" href="#">О канале</a>
+      <a class="икона" href="#">⋮</a>
+    </div>
+    <div class="зона-2">
+      <div class="поток">
+        <div class="системное">Вчера</div>
+        <div class="реплика" style="--полоса:#8ac44a">
+          <div class="пузырь">
+            <b>Итоги недели</b><br>Смета закрыта, сроки сдвинуты на неделю.
+            <div class="низ-пузыря"><span>18:02</span></div>
+            <a class="кн-комм" href="../%D1%82%D0%B5%D0%BB%D0%B5%D1%84%D0%BE%D0%BD/%D0%BF%D0%BE%D0%B4%D0%BE%D0%BA%D0%BD%D0%B0/%D0%BA%D0%BE%D0%BC%D0%BC%D0%B5%D0%BD%D1%82%D0%B0%D1%80%D0%B8%D0%B8.html">Комментарии · <span class="число">8</span></a>
+          </div>
+        </div>
+        <div class="системное">Сегодня</div>
+        <div class="реплика" style="--полоса:#8ac44a">
+          <div class="пузырь">
+            <div class="фото"></div>
+            Новый офис — смотрите сами.
+            <div class="низ-пузыря"><span>09:15</span></div>
+            <a class="кн-комм" href="#">Комментарии · <span class="число">0</span></a>
+          </div>
+        </div>
+        <div class="реплика" style="--полоса:#8ac44a">
+          <div class="пузырь">Объявление без обсуждения.
+            <div class="низ-пузыря"><span>09:40</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="панель">
+      <div class="редактор"><i></i><i></i><i></i></div>
+      <div class="поле"><span class="набор">Запись в канал</span><span class="зн">🙂</span><span class="зн">🖼</span><span class="зн">📎</span></div>
+      <div class="круг">🎙</div>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">лента канала как переписка (у команды)</div>
+  <div class="замечание">Записи — пузырями. «Комментарии · N» внизу пузыря — когда обсуждение открыто или комментарии есть;
+    у записи с закрытым обсуждением и без комментариев кнопки нет. Подписчик видит ленту без панели.</div>
+</div>
+
+<!-- 6. Комментарии из пузыря -->
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <span class="ава мал">KA</span>
+      <div class="тянуть">
+        <div class="имя обрез" style="font-size:var(--щ5)">kanal 274</div>
+        <div class="трет">Лента канала</div>
+      </div>
+    </div>
+    <div class="поверх к-низу">
+      <div class="фон-подпись">под ним — запись «Итоги недели»</div>
+      <div class="модалка снизу">
+        <div class="шапка-модалки">
+          <div class="тянуть">
+            <div class="имя" style="font-size:var(--щ5)">Комментарии</div>
+            <div class="трет">8 · 2 ветки</div>
+          </div>
+          <a class="икона" href="#">✕</a>
+        </div>
+        <div style="padding:11px 16px;border-bottom:1px solid var(--линия)">
+          <div class="строка" style="padding:0;border:none;background:none;align-items:flex-start">
+            <span class="ава мал">БП</span>
+            <div class="тянуть">
+              <div class="строка" style="padding:0;border:none;background:none">
+                <span class="имя тянуть" style="font-size:var(--щ5)">Борис Петрович</span>
+                <span class="трет">18:30</span>
+              </div>
+              <div class="втор">Неделя — это реально или с запасом?</div>
+              <div class="строка" style="padding:5px 0 0;border:none;background:none;gap:14px">
+                <span class="трет" style="color:var(--навигация)">Ответить</span>
+                <span class="трет">👍 4</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:11px 16px;border-bottom:1px solid var(--линия)">
+          <div class="строка" style="padding:0;border:none;background:none;align-items:flex-start">
+            <span class="ава мал">ЛГ</span>
+            <div class="тянуть">
+              <div class="строка" style="padding:0;border:none;background:none">
+                <span class="имя тянуть" style="font-size:var(--щ5)">Лена Г.</span>
+                <span class="трет">18:40</span>
+              </div>
+              <div class="втор">С запасом в три дня.</div>
+            </div>
+          </div>
+        </div>
+        <div class="зона-4">
+          <div class="ввод">Написать комментарий…</div>
+          <a class="икона жив" href="#">➤</a>
+        </div>
+      </div>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">«Комментарии · 8» → подокно комментариев</div>
+  <div class="замечание">Подокно — как в макете <a href="../%D1%82%D0%B5%D0%BB%D0%B5%D1%84%D0%BE%D0%BD/%D0%BF%D0%BE%D0%B4%D0%BE%D0%BA%D0%BD%D0%B0/%D0%BA%D0%BE%D0%BC%D0%BC%D0%B5%D0%BD%D1%82%D0%B0%D1%80%D0%B8%D0%B8.html">комментарии.html</a>:
+    оверлей снизу, запись остаётся видна сверху. Ввод комментария пока прежний (§1.13, 10).</div>
+</div>
+
+<!-- 7. О сущности — разделители -->
+<div class="тел">
+  <div class="окно">
+    <div class="статус"><span>9:41</span><span></span></div>
+    <div class="зона-1 подокно">
+      <a class="икона" href="#">‹</a>
+      <span class="ава мал">GR</span>
+      <div class="тянуть">
+        <div class="имя обрез" style="font-size:var(--щ5)">gruppa</div>
+        <div class="трет">Описание</div>
+      </div>
+    </div>
+    <div class="вкладки-стр"><span class="тек">О сущности</span><span>Участники</span><span>Содержимое</span><span>Управление</span></div>
+    <div class="зона-2 вокруг">
+      <div class="строка" style="padding:0;border:none;background:none;gap:16px">
+        <span class="ава" style="width:80px;height:80px;flex-basis:80px;font-size:26px">GR</span>
+        <div class="тянуть">
+          <div class="имя" style="color:var(--подтверждено);font-size:18px">gruppa</div>
+          <div class="втор">группа</div>
+          <div class="трет">участников: 3</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin:12px 0 10px"><span class="пузырёк">Участник</span><span class="пузырёк">Уведомления включены</span></div>
+      <div style="display:flex;gap:8px"><a class="кн" href="#">Написать</a><a class="кн тихая" href="#">Уведомления</a></div>
+      <div class="разделитель новое"></div>
+      <div class="галка-уровня"><span class="квадрат"></span>Показывать уровень сообщений</div>
+      <div class="разделитель новое"></div>
+      <div class="сообщение-0"><b>Правила</b><br>Без рекламы. Файлы — в «Содержимое».</div>
+      <div class="разделитель новое"></div>
+      <div class="сообщение-0">План этажа — к обсуждению в четверг.</div>
+      <div class="разделитель новое"></div>
+      <div class="сообщение-0">Встреча по пятницам в 18:00.</div>
+    </div>
+    <div class="дом-полоса"></div>
+  </div>
+  <div class="подпись">«О сущности»: суперсообщения нет, три сообщения уровня 0</div>
+  <div class="замечание">Вид прежний. Новое — только разделители (здесь выделены салатовым, чтобы их было видно на
+    макете; в приложении — тонкая серая линия): перед «Показывать уровень сообщений» и между сообщениями уровня 0. Есть
+    суперсообщение — показывается только оно (правило ЗО).</div>
+</div>
+
+</div>
+</div>
