@@ -36,6 +36,17 @@ class SealedUploads(
         return id to key
     }
 
+    /** Голосовое вне переписки — на срок у сущности (ПЛАН-(СЦ) §1.14, 5): срок тот же, доступ по ключу в теле. */
+    suspend fun uploadEntityVoice(bytes: ByteArray, kind: String, id: String): Pair<String, ByteArray>? {
+        val key = MediaFiles.newKey()
+        val sealed = MediaFiles.seal(key, bytes)
+        val mediaId = media().uploadSealed(sealed, SendAttachments.VOICE_MIME, term = Media.MediaTerm(entityKind = kind, entityId = id))
+        io.tima.core.diag.Journal.note(io.tima.core.diag.LogCode.FILE_SEND, if (mediaId != null) "загружено" else "не вышло", "вид" to "голосовое", "сущность" to kind)
+        if (mediaId == null) return null
+        keepSent?.invoke(mediaId, sealed, SendAttachments.VOICE_MIME)
+        return mediaId to key
+    }
+
     /** Голосовое — файл на срок (ПЛАН-(ВМ) Р3); ушедшее — в свою папку, слушать без сети. */
     override suspend fun uploadVoice(bytes: ByteArray, chatId: String, peerId: String?, groupId: String?): Pair<String, ByteArray>? {
         val key = MediaFiles.newKey()

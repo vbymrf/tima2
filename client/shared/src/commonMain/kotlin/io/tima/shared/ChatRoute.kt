@@ -602,8 +602,6 @@ internal fun Chat(
     val shareFile = io.tima.core.media.rememberShareFile()
     val openFile = io.tima.core.media.rememberOpenFile()
     val photoWords = Tima.words.chat
-    var asking by remember { mutableStateOf<AttachAsk?>(null) }
-    var askTrouble by remember { mutableStateOf<String?>(null) }
     // Одно фото — сначала в редактор фото, его «Отправить» и шлёт; «Отмена» — не отправлять (заказчик
     // 2026-10-22). Несколько — уходят сразу, как прежде. Не раскодировалось — уходит как есть: решает отправка.
     var sendDraft by remember { mutableStateOf<SendDraft?>(null) }
@@ -617,54 +615,10 @@ internal fun Chat(
             if (bmp != null) sendDraft = SendDraft(bytes, mime, bmp) else store.sendPhotos(listOf(bytes to mime))
         }
     }
-    val photosPicker = io.tima.core.media.rememberPhotosPicker(io.tima.domain.chat.SendAttachments.MAX_PHOTOS) { list ->
-        when (list.size) {
-            0 -> Unit
-            1 -> sendOne(list.single().bytes, list.single().mime)
-            else -> store.sendPhotos(list.map { it.bytes to it.mime })
-        }
-    }
-    val camera = io.tima.core.media.rememberCameraShot { shot -> shot?.let { sendOne(it.bytes, it.mime) } }
-    val onFile: (io.tima.core.media.PickedFile?) -> Unit = { f -> f?.let { store.sendFile(it.bytes, it.mime, it.name) } }
-    val anyFile = io.tima.core.media.rememberFilePicker(io.tima.core.media.FileKind.ANY, onFile)
-    val documentFile = io.tima.core.media.rememberFilePicker(io.tima.core.media.FileKind.DOCUMENT, onFile)
-    val audioFile = io.tima.core.media.rememberFilePicker(io.tima.core.media.FileKind.AUDIO, onFile)
-    val videoFile = io.tima.core.media.rememberFilePicker(io.tima.core.media.FileKind.VIDEO, onFile)
-    val contactPicker = io.tima.core.media.rememberContactPicker { c -> c?.let { store.sendContact(it.name, it.phone) } }
-    val placeNoAccess = Tima.words.chat.placeNoAccess
-    val myPlace = io.tima.core.media.rememberMyPlace { p ->
-        if (p != null) store.sendPlace(p.first, p.second) else { askTrouble = placeNoAccess; asking = AttachAsk.Place }
-    }
-    // В группе файлы — только ссылкой (Решения §2): верхние «Файл», «Документ», «Аудио», «Видео» там убраны —
-    // их делает раздел «Из облака» (заказчик 2026-10-24, 1г#).
-    val byLinkOnly = setOf(
-        io.tima.feature.chat.AttachItem.FILE, io.tima.feature.chat.AttachItem.DOCUMENT,
-        io.tima.feature.chat.AttachItem.AUDIO, io.tima.feature.chat.AttachItem.VIDEO,
-    )
-    val attachItems = io.tima.feature.chat.AttachItem.entries.filter {
-        (it != io.tima.feature.chat.AttachItem.CAMERA || camera != null) && !(store.filesByLink && it in byLinkOnly)
-    }
-    var linkAsk by remember { mutableStateOf(false) }
-    val attachHandler: (io.tima.feature.chat.AttachItem) -> Unit = { item ->
-        // В группе файлы — только ссылкой на облако (Решения §2).
-        fun fileOr(kind: String, pick: () -> Unit) = if (store.filesByLink) asking = AttachAsk.Cloud(kind) else pick()
-        when (item) {
-            io.tima.feature.chat.AttachItem.PICTURE -> photosPicker()
-            io.tima.feature.chat.AttachItem.CAMERA -> camera?.invoke()
-            io.tima.feature.chat.AttachItem.FILE -> fileOr("file", anyFile)
-            io.tima.feature.chat.AttachItem.DOCUMENT -> fileOr("document", documentFile)
-            io.tima.feature.chat.AttachItem.AUDIO -> fileOr("audio", audioFile)
-            io.tima.feature.chat.AttachItem.VIDEO -> fileOr("video", videoFile)
-            io.tima.feature.chat.AttachItem.CONTACT -> contactPicker?.invoke() ?: run { asking = AttachAsk.Contact }
-            io.tima.feature.chat.AttachItem.PLACE -> myPlace?.invoke() ?: run { asking = AttachAsk.Place }
-            // Ссылка — тем же окном, что «Вставить ссылку» в редакторе (заказчик 2026-10-19): вид,
-            // название, цвет; уходит отдельным сообщением в своём пузыре.
-            io.tima.feature.chat.AttachItem.LINK -> linkAsk = true
-            io.tima.feature.chat.AttachItem.CLOUD_FILE -> asking = AttachAsk.FromCloud("file")
-            io.tima.feature.chat.AttachItem.CLOUD_VIDEO -> asking = AttachAsk.FromCloud("video")
-            io.tima.feature.chat.AttachItem.CLOUD_AUDIO -> asking = AttachAsk.FromCloud("audio")
-        }
-    }
+    // Скрепка и галерея — общей частью панели (ПЛАН-(СЦ) СЦ24): переписка — первая на ней; одно фото — в редактор фото.
+    val panelAttach = rememberPanelAttach(store, filesByLink = store.filesByLink, onOnePhoto = ::sendOne)
+    val attachItems = panelAttach.items
+    val attachHandler = panelAttach.onAttach
     // «Сохранить как» (Решения §6): скачать у почтальона, открыть ключом из тела, отдать системе.
     val saved = Tima.words.chat
     val saver = io.tima.core.media.rememberFileSaver { ok ->
@@ -879,18 +833,7 @@ internal fun Chat(
             onAttach = if (store.canAttach) attachHandler else null,
             attachItems = attachItems,
             // Голосовое (ПЛАН-(ВМ) §2.5): в личной и в группе; разрешение — как у звонка, без камеры.
-            voice = if (store.canAttach) io.tima.feature.chat.VoiceInput(
-                ask = { done -> io.tima.core.call.askCallAccess(false) { done(it) } },
-                micName = voiceMic,
-                send = { clip ->
-                    Journal.note(LogCode.VOICE, "отправка", "секунд" to clip.durationMs / 1000, "размер" to clip.ogg.size)
-                    store.sendVoice(clip.ogg, clip.durationMs, clip.wave)
-                },
-                onEvent = { what, value ->
-                    if (what == io.tima.feature.chat.VoiceEvent.RECORD_STARTED) Journal.note(LogCode.VOICE, voiceWord(what), "кГц" to value)
-                    else Journal.note(LogCode.VOICE, voiceWord(what), "секунд" to value)
-                },
-            ) else null,
+            voice = if (store.canAttach) panelVoice(voiceMic, store::sendVoice) else null,
             attachments = io.tima.feature.chat.AttachmentActions(
                 // Идёт выбор — нажатие на фото отмечает его сообщение, а не открывает (2026-10-19).
             openPhoto = { photo ->
@@ -1584,78 +1527,7 @@ internal fun Chat(
             )
         }
     }
-    if (linkAsk) {
-        val settingsNow by environment.settings.all().collectAsState(initial = emptyMap())
-        val linkUploads = remember { SealedUploads({ network.media }) }
-        val linkCardsHere = remember { io.tima.core.network.LinkCardsOverHttp() }
-        EditorAskSheet(
-            ask = "link",
-            scope = scope,
-            cards = linkCardsHere,
-            cardsOn = settingsNow[LINK_CARDS_KEY] != "0",
-            linkColor = settingsNow[LINK_COLOR_KEY].orEmpty(),
-            onLinkColor = { c -> scope.launch { environment.settings.put(LINK_COLOR_KEY, c) } },
-            cardImage = { bytes ->
-                val prepared = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { io.tima.core.media.PhotoPrep.inline(bytes) }
-                val up = prepared?.let { linkUploads.upload(it.full, "image/jpeg", null, null) }
-                if (prepared != null && up != null) {
-                    io.tima.domain.chat.OutMedia(up.first, up.second, "image/jpeg", prepared.width, prepared.height, prepared.full.size.toLong())
-                } else null
-            },
-            put = { widget ->
-                store.sendWidget(widget)
-                Journal.note(LogCode.EDITOR, "ссылка из скрепки", "вид" to ((widget as? io.tima.domain.chat.ComposedWidget.Link)?.mode ?: "?"))
-            },
-            onNotice = { it?.let(store::said) },
-            onClose = { linkAsk = false },
-        )
-    }
-    asking?.let { ask ->
-        val w = Tima.words.chat
-        val (title, fields) = when (ask) {
-            is AttachAsk.Cloud -> w.linkPlace to listOf(w.linkPlace)
-            is AttachAsk.FromCloud -> (w.attachCloud + " · " + w.attachItem("cloud." + ask.kind)) to listOf(w.linkPlace, w.cloudTitleHint)
-            AttachAsk.Place -> w.attachItem("place") to listOf(w.placeAsk)
-            AttachAsk.Contact -> w.attachItem("contact") to listOf(Tima.words.chat.contact, "+7")
-        }
-        io.tima.feature.chat.AskSheet(
-            title = title,
-            fields = fields,
-            ok = w.ok,
-            cancel = w.cancel,
-            trouble = askTrouble,
-            // «Из облака»: ушли с поля ссылки — что по ней (видео сайта, файл, вид файла), без предупреждений.
-            extra = if (ask is AttachAsk.FromCloud) ({ now ->
-                    val url = now.values.firstOrNull().orEmpty()
-                    if (0 in now.left && url.isNotBlank()) {
-                        val full = if ("://" in url) url else "https://$url"
-                        val said = if (ask.kind == "file") {
-                            w.cloudFileIs(w.fileKindName(io.tima.domain.chat.FileKinds.ofName(io.tima.domain.chat.FileKinds.nameOf(full)).key))
-                        } else {
-                            io.tima.feature.chat.linkKindText(full, Tima.words.editor, w)
-                                ?: w.cloudFileIs(w.fileKindName(io.tima.domain.chat.FileKinds.ofName(io.tima.domain.chat.FileKinds.nameOf(full)).key))
-                        }
-                        io.tima.core.ui.Tertiary(said, modifier = androidx.compose.ui.Modifier.testTag(CLOUD_KIND_TAG))
-                    }
-            }) else null,
-            onCancel = { asking = null; askTrouble = null },
-            onDone = { values ->
-                when (ask) {
-                    is AttachAsk.Cloud -> { store.sendLink(values[0], cloudKind = ask.kind); asking = null }
-                    // Отдельным сообщением: видео и звук, что играют у нас, — виджетом, без меток (2а#).
-                    is AttachAsk.FromCloud -> if (values[0].isNotBlank()) {
-                        store.sendWidget(io.tima.feature.chat.cloudAttachWidget(values[0], values.getOrElse(1) { "" }, ask.kind))
-                        asking = null
-                    }
-                    AttachAsk.Place -> {
-                        val point = io.tima.core.media.PlaceText.parse(values[0])
-                        if (point == null) askTrouble = w.placeAsk else { store.sendPlace(point.first, point.second); asking = null; askTrouble = null }
-                    }
-                    AttachAsk.Contact -> { store.sendContact(values[0], values[1]); asking = null }
-                }
-            },
-        )
-    }
+    PanelAttachDialogs(panelAttach, store, environment, remember { SealedUploads({ network.media }) }, scope)
     state.peek?.let { found ->
         val other = (found as? io.tima.domain.chat.FoundMessage.Found)?.line?.chatId?.takeIf { it != chatId }
         io.tima.feature.chat.PeekSheet(

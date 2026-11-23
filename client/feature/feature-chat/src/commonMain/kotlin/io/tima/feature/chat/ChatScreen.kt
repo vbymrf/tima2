@@ -292,6 +292,15 @@ fun ChatScreen(
     onPeekClose: () -> Unit = {},
     /** Из показанного одним — открыть его переписку (другая переписка). `null` — кнопки нет. */
     onOpenChat: ((String) -> Unit)? = null,
+    /** Над панелью ввода — «Написать суперсообщение» и пояснение («Управление → Сообщения», ПЛАН-(СЦ) СЦ25). */
+    aboveInput: (@Composable () -> Unit)? = null,
+    /** Панели нет — читатель ленты канала (СЦ27): писать там может только команда. */
+    inputHidden: Boolean = false,
+    /**
+     * Подпись входа в разговор о сообщении: `null` — как в группе («ветка · N», только когда ответы есть); у ленты канала —
+     * «Комментарии · N», и при нуле, если обсуждение открыто (СЦ27). Вернула `null` — строки нет.
+     */
+    threadLabel: ((ChatLine) -> String?)? = null,
     /** Дошли до верха ленты — ещё порция старых (заказчик 2026-11-09). `null` — лента не растёт. */
     onOlder: (() -> Unit)? = null,
     /** Дорастить ленту до сообщения этой переписки: `true` — оно здесь и придёт в ленту. */
@@ -461,6 +470,7 @@ fun ChatScreen(
             onAuthor = onAuthor,
             lostKeys = state.lostKeys,
             onThread = onThread,
+            threadLabel = threadLabel,
             onFailed = onFailed,
             onMenu = onMenu,
             onSelect = onSelect,
@@ -511,9 +521,12 @@ fun ChatScreen(
             EditBar(onCancel = onEditCancel)
         }
 
+        if (!inputHidden) aboveInput?.invoke()
         // Вход аккаунта потерян (заказчик 2026-11-20) — только чтение: вместо строки ввода — почему и «Войти».
         val lost = ReadOnlyMode.lost.value
-        if (lost != null) {
+        if (inputHidden) {
+            // Панели нет (СЦ27).
+        } else if (lost != null) {
             androidx.compose.foundation.layout.Row(
                 Modifier.fillMaxWidth().padding(TimaSpacing.about3).testTag(READ_ONLY_TAG),
                 verticalAlignment = Alignment.CenterVertically,
@@ -607,6 +620,7 @@ internal fun Reply(
     /** Номера сообщений, к которым ключа не осталось ни у кого: «запросить» у них нет. */
     lostKeys: Set<Long> = emptySet(),
     onThread: ((Long) -> Unit)? = null,
+    threadLabel: ((ChatLine) -> String?)? = null,
     onFailed: ((ChatLine) -> Unit)? = null,
     /** Нажатие на отправленное — меню сообщения (Решения §11.1). `null` — меню нет. */
     onMenu: ((ChatLine) -> Unit)? = null,
@@ -732,13 +746,14 @@ internal fun Reply(
         //
         // Строки нет, когда ответов нет: пустая ветка обещала бы разговор, которого не
         // было.
-        if (onThread != null && line.replies > 0 && line.serverId > 0) {
+        val threadWord = if (threadLabel != null) threadLabel(line) else if (line.replies > 0) Tima.words.chat.thread(line.replies) else null
+        if (onThread != null && threadWord != null && line.serverId > 0) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = TimaSpacing.about1),
                 horizontalArrangement = if (line.outgoing) Arrangement.End else Arrangement.Start,
             ) {
                 Chip(
-                    Tima.words.chat.thread(line.replies),
+                    threadWord,
                     kind = ChipKind.Quiet,
                     onClick = { onThread(line.serverId) },
                 )

@@ -219,7 +219,7 @@ class ChatStore(
     private val finder: MessageFinder? = null,
     /** Удалить прежнее сообщение уровня 0, которое заменила правка из «Управление → Сообщения» (СЦ18). */
     private val dropShowcase: (suspend (Long) -> Boolean)? = null,
-) {
+) : MessageSink {
 
     /**
      * Шаги черновика редактора (заказчик 2026-10-24, 1#): виды и числа, рядом с черновиком под тем же ключом
@@ -921,19 +921,19 @@ class ChatStore(
             attachments.log = value
         }
 
-    fun sendPhotos(images: List<Pair<ByteArray, String>>) = attachments.sendPhotos(images)
+    override fun sendPhotos(images: List<Pair<ByteArray, String>>) = attachments.sendPhotos(images)
 
     fun sendPhotoMade(make: suspend (side: Int) -> PhotoPrep.Prepared?) = attachments.sendPhotoMade(make)
 
-    fun sendFile(bytes: ByteArray, mime: String, name: String) = attachments.sendFile(bytes, mime, name)
+    override fun sendFile(bytes: ByteArray, mime: String, name: String) = attachments.sendFile(bytes, mime, name)
 
-    fun sendVoice(ogg: ByteArray, durationMs: Long, wave: ByteArray) = attachments.sendVoice(ogg, durationMs, wave)
+    override fun sendVoice(ogg: ByteArray, durationMs: Long, wave: ByteArray) = attachments.sendVoice(ogg, durationMs, wave)
 
-    fun sendContact(name: String, phone: String) = attachments.sendContact(name, phone)
+    override fun sendContact(name: String, phone: String) = attachments.sendContact(name, phone)
 
-    fun sendPlace(lat: Double, lon: Double, label: String = "") = attachments.sendPlace(lat, lon, label)
+    override fun sendPlace(lat: Double, lon: Double, label: String) = attachments.sendPlace(lat, lon, label)
 
-    fun sendLink(url: String, title: String = "", cloudKind: String = "") = attachments.sendLink(url, title, cloudKind)
+    override fun sendLink(url: String, title: String, cloudKind: String) = attachments.sendLink(url, title, cloudKind)
 
     // ── Редактор (Решения §9, §10) ──────────────────────────────────────────────
 
@@ -1035,7 +1035,7 @@ class ChatStore(
      * Отдельное сообщение из одного виджета — ссылка из скрепки (заказчик 2026-10-19). Черновик
      * редактора и ответ не трогает: это не собранное в редакторе.
      */
-    fun sendWidget(widget: ComposedWidget): ComposedResult? {
+    override fun sendWidget(widget: ComposedWidget): ComposedResult? {
         val c = composer ?: return null
         if (copies.seen(widget, nowMs())) copyLog?.invoke(DraftSteps.sentCopy(DraftSteps.kindOf(widget)))
         val result = c.send(chatId, ComposedDoc(listOf(ComposedItem.Widget(widget))), _state.value.level, null)
@@ -1231,7 +1231,7 @@ class ChatStore(
     }
 
     /** Сказать человеку одно предложение — «Текст скопирован» и подобное. */
-    fun said(text: String) {
+    override fun said(text: String) {
         _state.value = _state.value.copy(notice = ChatNotice.Said(text))
     }
 

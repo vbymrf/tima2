@@ -44,6 +44,7 @@ object MessageMenuTags {
     const val PICK = "msg:pick"
     const val CARRY = "msg:carry"
     const val CLOSE = "msg:close"
+    const val SUPER = "msg:super"
 }
 
 /**
@@ -82,6 +83,10 @@ fun MessageMenuSheet(
     /** Это сообщение и есть закреплённое — пункт «Открепить». */
     pinned: Boolean = false,
     modifier: Modifier = Modifier,
+    /** «Сделать суперсообщением» / «Снять суперсообщение» — «Управление → Сообщения» (ПЛАН-(СЦ) СЦ25); `null` — нет. */
+    onSuper: (() -> Unit)? = null,
+    /** Это сообщение и есть суперсообщение — пункт «Снять». */
+    superNow: Boolean = false,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -137,6 +142,9 @@ fun MessageMenuSheet(
                     if (pinned) PinTags.MENU_UNPIN else PinTags.MENU_PIN,
                     onClick = one(it),
                 )
+            }
+            onSuper?.let {
+                Item(if (superNow) Tima.words.socium.unsetSuper else Tima.words.socium.makeSuper, MessageMenuTags.SUPER, onClick = one(it))
             }
             onShare?.let { Item(words.menuShare, MessageMenuTags.SHARE, onClick = one(it)) }
             onCopy?.let { Item(words.menuCopy, MessageMenuTags.COPY, onClick = one(it)) }

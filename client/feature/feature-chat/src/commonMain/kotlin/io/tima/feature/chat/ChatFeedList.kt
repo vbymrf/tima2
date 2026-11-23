@@ -112,6 +112,7 @@ internal fun Feed(
     /** Номера сообщений, к которым ключа не осталось ни у кого: «запросить» у них нет. */
     lostKeys: Set<Long> = emptySet(),
     onThread: ((Long) -> Unit)? = null,
+    threadLabel: ((ChatLine) -> String?)? = null,
     onFailed: ((ChatLine) -> Unit)? = null,
     /** Нажатие на отправленное — меню сообщения (Решения §11.1). `null` — меню нет. */
     onMenu: ((ChatLine) -> Unit)? = null,
@@ -261,6 +262,7 @@ internal fun Feed(
                 onAskChatKeys = onAskChatKeys,
                 lostKeys = lostKeys,
                 onThread = onThread,
+                threadLabel = threadLabel,
                 avatarLook = avatarLook,
                 onAuthor = onAuthor,
                 onFailed = onFailed,

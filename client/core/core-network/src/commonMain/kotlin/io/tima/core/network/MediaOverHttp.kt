@@ -56,7 +56,10 @@ class MediaOverHttp(
                     }
                     if (term != null) {
                         put("term", buildJsonObject {
-                            if (term.groupId.isNotEmpty()) {
+                            if (term.entityId.isNotEmpty()) {
+                                put("entity_kind", JsonPrimitive(term.entityKind))
+                                put("entity_id", JsonPrimitive(term.entityId))
+                            } else if (term.groupId.isNotEmpty()) {
                                 put("group_id", JsonPrimitive(term.groupId))
                             } else {
                                 put("chat_id", JsonPrimitive(term.chatId))

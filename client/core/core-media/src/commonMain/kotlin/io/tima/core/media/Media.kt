@@ -52,7 +52,14 @@ interface Media {
      * Файл на срок — голосовое (ПЛАН-(ВМ) Р3): сервер держит его срок из своих правил и отдаёт
      * участникам. Личная — [chatId] и [peerId], группа — [groupId].
      */
-    class MediaTerm(val chatId: String = "", val peerId: String = "", val groupId: String = "")
+    class MediaTerm(
+        val chatId: String = "",
+        val peerId: String = "",
+        val groupId: String = "",
+        /** Срок у сущности (ПЛАН-(СЦ) §1.14, 5): лента с сущностью, канал, описание; доступ — по ключу в теле. */
+        val entityKind: String = "",
+        val entityId: String = "",
+    )
 
     /** Исход забора файла почтальона. */
     sealed interface MediaFetch {
