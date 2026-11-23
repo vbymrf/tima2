@@ -95,6 +95,10 @@ interface SociumWords {
     val slowOff: String
     val editingTitle: String
     val saveEdit: String
+    val threadPhoto: String
+    val threadFile: String
+    val threadEditor: String
+    val threadSending: String
     val tabManage: String
     val write: String
     val share: String
@@ -316,6 +320,10 @@ object RussianSociumWords : SociumWords {
     override val slowOff = "выкл"
     override val editingTitle = "Правка сообщения"
     override val saveEdit = "Сохранить"
+    override val threadPhoto = "Фото"
+    override val threadFile = "Файл"
+    override val threadEditor = "Редактор"
+    override val threadSending = "Отправляется…"
     override val tabManage = "Управление"
     override val write = "Написать"
     override val share = "Поделиться"
@@ -530,6 +538,10 @@ object EnglishSociumWords : SociumWords {
     override val slowOff = "off"
     override val editingTitle = "Editing message"
     override val saveEdit = "Save"
+    override val threadPhoto = "Photo"
+    override val threadFile = "File"
+    override val threadEditor = "Editor"
+    override val threadSending = "Sending…"
     override val tabManage = "Manage"
     override val write = "Write"
     override val share = "Share"
@@ -740,6 +752,10 @@ object SpanishSociumWords : SociumWords {
     override val slowOff = "no"
     override val editingTitle = "Editando mensaje"
     override val saveEdit = "Guardar"
+    override val threadPhoto = "Foto"
+    override val threadFile = "Archivo"
+    override val threadEditor = "Editor"
+    override val threadSending = "Enviando…"
     override val tabManage = "Gestión"
     override val write = "Escribir"
     override val share = "Compartir"

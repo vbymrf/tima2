@@ -4587,7 +4587,85 @@ private fun App(
                     val textOf: (io.tima.domain.chat.ThreadMessage) -> String = { m ->
                         io.tima.core.encryption.TextBodyCodec.decodeLine(m.body)?.text?.takeIf { it.isNotBlank() } ?: m.preview
                     }
-                    io.tima.feature.group.ThreadScreen(
+                    // Единая модель отправки (СЦ17, §1.10, 4; §1.9, 8–9): тело — тот же документ, что в переписке группы;
+                    // файлы закрыты своим ключом, ключ — в теле. Сквозного шифрования у ленты нет (СЦ15).
+                    var busy by remember(current) { mutableStateOf(false) }
+                    var editorDoc by remember(current) { mutableStateOf<io.tima.domain.chat.ComposedDoc?>(null) }
+                    val sendBody: suspend (ByteArray, String) -> io.tima.domain.chat.ThreadStep = { body, preview ->
+                        val p = page
+                        val step = if (asEntity) {
+                            network.threads.writeAs(kind, current.id, current.userId, body, preview)
+                        } else {
+                            network.threads.write(p?.kind ?: kind, p?.entityId ?: current.id, body, preview)
+                        }
+                        Journal.note(LogCode.NAV, "лента сущности: отправлено", "как" to if (asEntity) "entity" else "user", "итог" to (step::class.simpleName ?: "?"))
+                        outcome = step
+                        if (step == io.tima.domain.chat.ThreadStep.Sent) tick++
+                        step
+                    }
+                    val uploads = remember(current) { SealedUploads({ network.media }) }
+                    val photoWord = Tima.words.socium.threadPhoto
+                    val pickPhotos = io.tima.core.media.rememberPhotosPicker(10) { picked ->
+                        if (picked.isEmpty()) return@rememberPhotosPicker
+                        scope.launch {
+                            busy = true
+                            val sent = picked.mapNotNull { img ->
+                                val bmp = io.tima.core.media.decodeImage(img.bytes) ?: return@mapNotNull null
+                                val prep = io.tima.core.media.PhotoPrep.fit(bmp)
+                                val (id, key) = uploads.upload(prep.full, "image/jpeg", null, null) ?: return@mapNotNull null
+                                io.tima.domain.chat.OutMedia(id, key, "image/jpeg", prep.width, prep.height, prep.full.size.toLong())
+                            }
+                            if (sent.isNotEmpty()) sendBody(io.tima.core.encryption.AttachmentBodiesOverKodium.album(sent), photoWord)
+                            else outcome = io.tima.domain.chat.ThreadStep.Offline
+                            busy = false
+                        }
+                    }
+                    val pickFile = io.tima.core.media.rememberFilePicker(io.tima.core.media.FileKind.ANY) { f ->
+                        if (f == null) return@rememberFilePicker
+                        scope.launch {
+                            busy = true
+                            val up = uploads.upload(f.bytes, f.mime, null, null)
+                            if (up != null) {
+                                val m = io.tima.domain.chat.OutMedia(up.first, up.second, f.mime, size = f.bytes.size.toLong(), name = f.name)
+                                sendBody(io.tima.core.encryption.AttachmentBodiesOverKodium.file(m), f.name)
+                            } else {
+                                outcome = io.tima.domain.chat.ThreadStep.Offline
+                            }
+                            busy = false
+                        }
+                    }
+                    val doc = editorDoc
+                    if (doc != null) {
+                        val model = remember(doc) { io.tima.feature.chat.EditorModel(doc, io.tima.core.encryption.TypedOverQuickMarkdown) }
+                        io.tima.feature.chat.EditorScreen(
+                            model = model,
+                            levels = emptyList(),
+                            defaultLevel = 0,
+                            preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
+                            problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
+                            onBack = { editorDoc = null },
+                            onSend = { sentDoc ->
+                                val body = io.tima.core.encryption.ComposedBodiesOverKodium.encode(sentDoc, null)
+                                if (body != null) {
+                                    val preview = io.tima.core.encryption.ComposedBodiesOverKodium.content(sentDoc).displayText().take(120)
+                                    scope.launch { if (sendBody(body, preview) == io.tima.domain.chat.ThreadStep.Sent) editorDoc = null }
+                                }
+                            },
+                        )
+                    } else io.tima.feature.group.ThreadScreen(
+                        content = { m ->
+                            val decoded = remember(m.messageId) { io.tima.core.encryption.TextBodyCodec.decodeLine(m.body) }
+                            val rich = decoded?.rich
+                            if (rich != null && (rich.media.isNotEmpty() || rich.blocks.size > 1)) {
+                                io.tima.feature.chat.RichBody(rich)
+                            } else {
+                                io.tima.core.ui.Caption(decoded?.text?.takeIf { it.isNotBlank() } ?: m.preview, fontSize = io.tima.core.ui.TimaType.sz4)
+                            }
+                        },
+                        onPhotos = pickPhotos,
+                        onFile = pickFile,
+                        onEditor = { editorDoc = io.tima.domain.chat.ComposedDoc(items = listOf(io.tima.domain.chat.ComposedItem.Text(input))) },
+                        busy = busy,
                         title = if (asEntity) (peopleCards[current.userId]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: current.userId.take(8)) else current.title,
                         caption = if (asEntity) current.title else Tima.words.socium.threadAbout,
                         messages = page?.messages.orEmpty(),
@@ -4600,20 +4678,8 @@ private fun App(
                         onSend = {
                             val text = input.trim()
                             scope.launch {
-                                val body = io.tima.core.encryption.TextBodyCodec.encodeTyped(text)
-                                val preview = text.take(120)
-                                val p = page
-                                val step = if (asEntity) {
-                                    network.threads.writeAs(kind, current.id, current.userId, body, preview)
-                                } else {
-                                    network.threads.write(p?.kind ?: kind, p?.entityId ?: current.id, body, preview)
-                                }
-                                Journal.note(LogCode.NAV, "лента сущности: отправлено", "как" to if (asEntity) "entity" else "user", "итог" to (step::class.simpleName ?: "?"))
-                                outcome = step
-                                if (step == io.tima.domain.chat.ThreadStep.Sent) {
-                                    input = ""
-                                    tick++
-                                }
+                                val step = sendBody(io.tima.core.encryption.TextBodyCodec.encodeTyped(text), text.take(120))
+                                if (step == io.tima.domain.chat.ThreadStep.Sent) input = ""
                             }
                         },
                         outcome = outcome,

@@ -50,6 +50,9 @@ object ThreadTags {
     const val APPEAL = "appeals:row"
     const val ACCEPT = "appeals:accept"
     const val BLOCK = "thread:block"
+    const val PHOTO = "thread:photo"
+    const val FILE = "thread:file"
+    const val EDITOR = "thread:editor"
 }
 
 /**
@@ -94,8 +97,16 @@ fun ThreadScreen(
     onSend: () -> Unit,
     outcome: ThreadStep?,
     onBack: () -> Unit,
-    /** Человек: «Уведомления» ленты — включено, выключено, заблокировано; команда: «Заблокировать человека». */
+    /** Команда: «Заблокировать человека». Состояние ленты у человека — в подокне «Уведомления» страницы (СЦ16). */
     extra: (@Composable () -> Unit)? = null,
+    /** Тело сообщения оформленным (СЦ17: фото, файлы, редактор — как в переписке); `null` — текстом. */
+    content: (@Composable (ThreadMessage) -> Unit)? = null,
+    /** Вложения, как в переписке (СЦ17, §1.10, 4); `null` — кнопки нет. */
+    onPhotos: (() -> Unit)? = null,
+    onFile: (() -> Unit)? = null,
+    onEditor: (() -> Unit)? = null,
+    /** Идёт загрузка вложения. */
+    busy: Boolean = false,
 ) {
     val w = Tima.words.socium
     val colors = Tima.colors
@@ -115,7 +126,7 @@ fun ThreadScreen(
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
                         if (asEntity && m.fromEntity) m.authorId?.let { Tertiary(authorName(it)) }
-                        Caption(text(m), fontSize = TimaType.sz4)
+                        if (content != null) content(m) else Caption(text(m), fontSize = TimaType.sz4)
                         Tertiary(time(m.atMs))
                     }
                 }
@@ -130,6 +141,17 @@ fun ThreadScreen(
             else -> null
         }
         trouble?.let { Secondary(it, Modifier.padding(horizontal = TimaSpacing.about4)) }
+        if (busy) Tertiary(w.threadSending, Modifier.padding(horizontal = TimaSpacing.about4))
+        if (onPhotos != null || onFile != null || onEditor != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3),
+                horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
+            ) {
+                onPhotos?.let { io.tima.core.ui.Chip(w.threadPhoto, onClick = it, modifier = Modifier.testTag(ThreadTags.PHOTO)) }
+                onFile?.let { io.tima.core.ui.Chip(w.threadFile, onClick = it, modifier = Modifier.testTag(ThreadTags.FILE)) }
+                onEditor?.let { io.tima.core.ui.Chip(w.threadEditor, onClick = it, modifier = Modifier.testTag(ThreadTags.EDITOR)) }
+            }
+        }
         Row(
             Modifier.fillMaxWidth().padding(TimaSpacing.about3),
             verticalAlignment = Alignment.CenterVertically,
