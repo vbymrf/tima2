@@ -3,6 +3,8 @@
 # Переменные: MAESTRO_GROUP — группа; MAESTRO_MEMBER — как человек виден в составе (`redmi.*`).
 # «Исключить» стоит у каждой строки с одной меткой — нужная берётся внутри строки с именем
 # (`childOf`), а не правее надписи: `rightOf` брал кнопку из чужой строки (PH-19, PH-42).
+# С 2026-11-23 (278) «Исключить» — в ряду под строкой, открывается «⋮» `members:actions`; нажатие
+# на саму строку ведёт на страницу человека.
 appId: io.tima.app.v2
 ---
 - runFlow: group-open.yaml
@@ -14,6 +16,12 @@ appId: io.tima.app.v2
 - extendedWaitUntil:
     visible: "${MAESTRO_MEMBER}"
     timeout: 10000
+- tapOn:
+    id: "members:actions"
+    childOf:
+      id: "members:row"
+      containsDescendants:
+        - text: "${MAESTRO_MEMBER}"
 - tapOn:
     id: "members:remove"
     childOf:

@@ -73,7 +73,9 @@ fun PhoneFields(
             )
         }
         Box(Modifier.weight(1f)) {
-            Field(value = number, onChange = onNumber, modifier = numberModifier, hint = hint, numeric = true)
+            // Одной строкой: подсказка «999 000 00 00» в узком поле переносилась на две строки, на крупных «Списках» —
+            // на четыре (живьём 278, 2026-11-23).
+            Field(value = number, onChange = onNumber, modifier = numberModifier, hint = hint, numeric = true, lineOne = true)
         }
     }
 }

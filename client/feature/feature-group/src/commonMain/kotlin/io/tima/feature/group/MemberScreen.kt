@@ -317,21 +317,21 @@ private fun MemberLine(
 ) {
     val words = Tima.words.social
     var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    Column {
+    // Справа — только «⋮»; «Исключить», роли и бан — рядом под строкой. «Исключить» сбоку на крупных «Списках» сжимал
+    // имя до «re…», а «участник» рвал на «участ / ник» (живьём 278, Списки 22, 2026-11-23).
+    val menu = actions.isNotEmpty() || removeMay
+    // Метка строки — на строке вместе с рядом действий: сценарий находит «Исключить» внутри строки с именем.
+    Column(Modifier.testTag(MembersTags.ROW)) {
     ListLine(
         // Строка — к человеку; действия над ним — «⋮» справа. Прежде строка раскрывала действия, и открыть человека
         // было нечем.
-        onClick = onOpen ?: if (actions.isNotEmpty()) ({ open = !open }) else null,
-        modifier = Modifier.testTag(MembersTags.ROW),
+        onClick = onOpen ?: if (menu) ({ open = !open }) else null,
         left = { Avatar(letters = person.letter()) },
         right = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                if (removeMay) {
-                    Button(label = words.exclude, onClick = onRemove, modifier = Modifier.testTag(MembersTags.REMOVE))
-                } else if (showRole) {
-                    Tertiary(roleCaption(member.role, words))
-                }
-                if (actions.isNotEmpty() && onOpen != null) IconButton(glyph = "⋮", onClick = { open = !open }, modifier = Modifier.testTag(MembersTags.ACTIONS))
+            if (menu) {
+                IconButton(glyph = "⋮", onClick = { open = !open }, modifier = Modifier.testTag(MembersTags.ACTIONS))
+            } else if (showRole) {
+                Tertiary(roleCaption(member.role, words))
             }
         },
         middle = {
@@ -339,8 +339,8 @@ private fun MemberLine(
                 // Как в переписке группы: по «Виду», а не идентификатором. Идентификатор —
                 // последнее прибежище, когда о человеке не известно ничего.
                 Name(person.line(look) ?: Tima.words.chat.someone)
-                // Роль видна всегда: справа может стоять «Исключить» (живой взгляд 2026-11-19 на realme).
-                if (removeMay) Tertiary(roleCaption(member.role, words))
+                // Роль под именем, когда справа «⋮» (живой взгляд 2026-11-19 на realme).
+                if (menu && showRole) Tertiary(roleCaption(member.role, words))
                 member.bannedUntil?.let { Secondary(words.bannedUntil(it)) }
             }
         },
@@ -355,6 +355,7 @@ private fun MemberLine(
             for ((label, act) in actions) {
                 Button(label = label, onClick = { act(); open = false }, kind = io.tima.core.ui.ButtonKind.Quiet, modifier = Modifier.testTag(MembersTags.ROLE))
             }
+            if (removeMay) Button(label = words.exclude, onClick = { open = false; onRemove() }, modifier = Modifier.testTag(MembersTags.REMOVE))
         }
     }
     }
@@ -399,7 +400,7 @@ object MembersTags {
     const val ROW = "members:row"
     const val REMOVE = "members:remove"
 
-    /** «⋮» в строке участника — роли и бан под строкой (2026-11-23: нажатие на строку ведёт к человеку). */
+    /** «⋮» в строке участника — роли, бан и «Исключить» под строкой (2026-11-23: нажатие на строку ведёт к человеку). */
     const val ACTIONS = "members:actions"
 
     /** Беда или предупреждение над полями: «Не получилось…», «Состав изменён, но…». */

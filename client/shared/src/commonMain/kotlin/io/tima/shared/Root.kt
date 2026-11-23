@@ -2014,6 +2014,9 @@ private fun App(
     }
     // «Показывать участников» (СЦ19) — «вид:номер» → включено; спрашивается при входе на страницу.
     val showMembersOf = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    // Запрос «Найти» — «вид:номер» → строка; живёт, пока живо приложение: вернулся из найденного — запрос на месте
+    // (живьём 278: поле опустевало).
+    val findQueries = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
     val pageTabBar: @Composable (String, String, String, io.tima.feature.group.PageTab) -> Unit = { kind, id, title, now ->
         LaunchedEffect(kind, id) {
             val k = io.tima.domain.chat.EntityKind.fromWire(kind) ?: io.tima.domain.chat.EntityKind.Group
@@ -4688,7 +4691,8 @@ private fun App(
                     // устройстве (СЦ22): сохранённое — сразу, пришедший отрезок заменяет сохранённый.
                     var posts by remember(current) { mutableStateOf<List<io.tima.domain.chat.ChannelFeedPost>?>(null) }
                     var tick by remember(current) { mutableStateOf(0) }
-                    var shown by remember(current) { mutableStateOf(50) }
+                    // Открыли на записи («Найти», «Показать в переписке») — сохранённое целиком, чтобы запись была в ленте.
+                    var shown by remember(current) { mutableStateOf(if (current.jumpTo != null) 100_000 else 50) }
                     var said by remember(current) { mutableStateOf<String?>(null) }
                     var editor by remember(current) { mutableStateOf<EditorRequest?>(null) }
                     val cache = environment.socialCache
@@ -4801,6 +4805,17 @@ private fun App(
                             editorRequest = editor,
                             onEditorClosed = { editor = null },
                             notice = said,
+                            jumpPlace = current.jumpTo?.let { target ->
+                                jumpBuffers?.let { buffers ->
+                                    val chat = "channel:" + current.channelId
+                                    io.tima.feature.chat.JumpPlace(
+                                        buffers = buffers,
+                                        chatId = chat,
+                                        key = io.tima.domain.chat.JumpBuffer.keyOf(chat, false),
+                                        jumpTo = target,
+                                    )
+                                }
+                            },
                         )
                         if (channelMenu) {
                             val key = "channel:${current.channelId}"
@@ -5968,7 +5983,8 @@ private fun App(
                     }
                     val uri = androidx.compose.ui.platform.LocalUriHandler.current
                     val showIt: (io.tima.domain.chat.ContentItem) -> Unit = { it ->
-                        where = if (current.kind == "group") Where.Chat(current.id, current.title) else Where.Comments(current.id, it.messageId)
+                        // Группа — переписка, канал — лента на месте записи (2026-11-23; прежде — комментарии без самой записи).
+                        where = if (current.kind == "group") Where.Chat(current.id, current.title, jumpTo = it.messageId) else Where.ChannelFeed(current.id, current.title, jumpTo = it.messageId)
                     }
                     io.tima.feature.group.EntityContentScreen(
                         title = current.title,
@@ -6005,7 +6021,7 @@ private fun App(
                     // заново. Нажатие — к найденному: в переписке на его месте, у канала — запись с комментариями,
                     // уровень 0 — «О сущности».
                     var found by remember(current) { mutableStateOf<List<io.tima.feature.group.FoundLine>?>(null) }
-                    var query by remember(current) { mutableStateOf("") }
+                    val queryKey = "${current.kind}:${current.id}"
                     LaunchedEffect(current) {
                         val started = msNow()
                         val got = mutableListOf<io.tima.feature.group.FoundLine>()
@@ -6025,7 +6041,8 @@ private fun App(
                         val inChat = got.mapTo(HashSet()) { it.number }
                         zero?.lines.orEmpty().filterNot { it.onlyContinuation }.forEach { z ->
                             val text = z.line.text
-                            if (text.isNotBlank() && !(current.kind == "group" && z.serverId in inChat)) {
+                            // Уровень 0 группы и канала лежит и в переписке или ленте — один раз (живьём 278: запись канала дважды).
+                            if (text.isNotBlank() && z.serverId !in inChat) {
                                 got += io.tima.feature.group.FoundLine(io.tima.feature.group.FoundIn.Zero, z.serverId, z.atMs, text)
                             }
                         }
@@ -6034,15 +6051,16 @@ private fun App(
                     }
                     io.tima.feature.group.EntitySearchScreen(
                         title = current.title,
-                        query = query,
-                        onQuery = { query = it },
+                        query = findQueries[queryKey].orEmpty(),
+                        onQuery = { findQueries[queryKey] = it },
                         found = found,
                         time = { ms -> if (ms > 0) sociumTime(ms) else "" },
                         onOpen = { f ->
                             Journal.note(LogCode.NAV, "найти: открыть", "где" to f.place.name)
                             where = when (f.place) {
                                 io.tima.feature.group.FoundIn.Chat -> Where.Chat(current.id, current.title, jumpTo = f.number)
-                                io.tima.feature.group.FoundIn.Post -> Where.Comments(current.id, f.number)
+                                // Запись канала — в ленте на её месте (живьём 278: комментарии саму запись не показывают).
+                                io.tima.feature.group.FoundIn.Post -> Where.ChannelFeed(current.id, current.title, jumpTo = f.number)
                                 io.tima.feature.group.FoundIn.Zero -> Where.Showcase(current.kind, current.id, current.title)
                             }
                         },

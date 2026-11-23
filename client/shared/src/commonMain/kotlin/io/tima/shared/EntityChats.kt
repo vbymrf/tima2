@@ -71,6 +71,8 @@ internal fun EntityChat(
     onEditorClosed: () -> Unit = {},
     notice: String? = null,
     banner: (@Composable () -> Unit)? = null,
+    /** Открыть на сообщении ([io.tima.feature.chat.JumpPlace.jumpTo]) — «Найти» ведёт к записи канала (2026-11-23). */
+    jumpPlace: io.tima.feature.chat.JumpPlace? = null,
 ) {
     var draft by remember { mutableStateOf("") }
     var ownEditor by remember { mutableStateOf<EditorRequest?>(null) }
@@ -133,6 +135,7 @@ internal fun EntityChat(
             onThread = onThread,
             onMenu = menu?.let { { line -> menuLine = line } },
             banner = banner,
+            jumpPlace = jumpPlace,
         )
         menuLine?.let { line ->
             val m = menu?.invoke(line)

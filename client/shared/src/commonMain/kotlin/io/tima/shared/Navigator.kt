@@ -238,6 +238,8 @@ internal fun Where.sameAs(other: Where): Boolean = when (this) {
     is Where.Community -> other is Where.Community && other.communityId == communityId
     is Where.Showcase -> other is Where.Showcase && other.id == id && other.kind == kind
     is Where.Comments -> other is Where.Comments && other.channelId == channelId && other.postId == postId
+    // Лента того же канала — то же звено, к какой бы записи её ни открыли («Найти», 2026-11-23), как у переписки.
+    is Where.ChannelFeed -> other is Where.ChannelFeed && other.channelId == channelId
     // Настройки — одно звено, что бы в них ни было открыто: пункт заменяет список и обратно, как до цепочек.
     is Where.Settings -> other is Where.Settings
     else -> this == other
@@ -390,7 +392,7 @@ internal sealed interface Where {
     data class Roles(val kind: String, val id: String, val title: String) : Where
 
     /** Лента канала (ПЛАН-(СЦ) СЦ3): строка канала в Социуме ведёт сюда. */
-    data class ChannelFeed(val channelId: String, val title: String) : Where
+    data class ChannelFeed(val channelId: String, val title: String, val jumpTo: Long? = null) : Where
 
     /** Звуковой чат сообщества (ПЛАН-(СЦ) СЦ7). */
     data class Voice(val roomId: String, val title: String, val communityId: String) : Where
