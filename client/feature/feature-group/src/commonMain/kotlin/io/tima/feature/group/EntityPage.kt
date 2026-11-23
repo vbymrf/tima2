@@ -48,17 +48,24 @@ import io.tima.domain.chat.GroupRole
 enum class PageTab(val tag: String) {
     About("page:tab:about"),
     Members("page:tab:members"),
+    Content("page:tab:content"),
     Manage("page:tab:manage"),
 }
 
 /**
- * Какие вкладки видит человек с этой ролью (§3): участники — у группы, подписчики — у канала (ПЛАН-(ВС) 16), управление —
- * у владельца, админа, модератора.
+ * Какие вкладки видит человек с этой ролью (§3): «Участники» («Подписчики» у канала и сообщества) — команде всегда,
+ * участнику — если у сущности включено «Показывать участников» (СЦ19); «Содержимое» — кто видит сообщения, у группы и
+ * канала (СЦ20); «Управление» — владельцу, админу, модератору. Одна «О сущности» — полосы нет.
  */
-fun pageTabs(role: GroupRole?, hasMembers: Boolean): List<PageTab> {
+fun pageTabs(role: GroupRole?, hasMembers: Boolean, showMembers: Boolean = false, content: Boolean = false): List<PageTab> {
     val staff = role == GroupRole.Owner || role == GroupRole.Admin || role == GroupRole.Moderator
-    if (!staff) return emptyList()
-    return listOfNotNull(PageTab.About, PageTab.Members.takeIf { hasMembers }, PageTab.Manage)
+    val tabs = listOfNotNull(
+        PageTab.About,
+        PageTab.Members.takeIf { hasMembers && (staff || showMembers) },
+        PageTab.Content.takeIf { content },
+        PageTab.Manage.takeIf { staff },
+    )
+    return if (tabs.size > 1) tabs else emptyList()
 }
 
 /** Полоса вкладок страницы; пусто — полосы нет. */
@@ -68,7 +75,7 @@ fun EntityTabsBar(
     current: PageTab,
     onTab: (PageTab) -> Unit,
     badge: Int = 0,
-    /** Канал: вкладка «Участники» зовётся «Подписчики» (ПЛАН-(ВС) 16). */
+    /** Канал и сообщество: вкладка «Участники» зовётся «Подписчики» (ПЛАН-(ВС) 16, СЦ19). */
     subscribers: Boolean = false,
 ) {
     if (tabs.isEmpty()) return
@@ -78,6 +85,7 @@ fun EntityTabsBar(
             val label = when (tab) {
                 PageTab.About -> w.tabAbout
                 PageTab.Members -> if (subscribers) w.tabSubscribers else w.tabMembers
+                PageTab.Content -> w.tabContent
                 PageTab.Manage -> w.tabManage
             }
             Tab(label, current = tab == current, onClick = { onTab(tab) }, count = if (tab == PageTab.Manage) badge else 0, modifier = Modifier.testTag(tab.tag))
@@ -124,6 +132,8 @@ fun EntityAboutTop(
     count: String? = null,
     /** Под кнопками — у сообщества звуковые чаты (СЦ7); `null` — ничего. */
     extra: (@Composable () -> Unit)? = null,
+    /** Переписка с сущностью заблокирована мной (СЦ16): к пузырю уведомлений дописывается «сообщения заблокированы». */
+    threadBlocked: Boolean = false,
 ) {
     val w = Tima.words.socium
     val colors = Tima.colors
@@ -146,14 +156,15 @@ fun EntityAboutTop(
                 if (inside) NotifyState.On else NotifyState.Off,
             )
             if (inside) {
-                Pill(
-                    when (notify) {
-                        NotifyState.On -> w.notifyOn
-                        NotifyState.Off -> w.notifyOff
-                        NotifyState.Blocked -> w.notifyBlocked
-                    },
-                    notify,
-                )
+                val state = when (notify) {
+                    NotifyState.On -> w.notifyOn
+                    NotifyState.Off -> w.notifyOff
+                    NotifyState.Blocked -> w.notifyBlocked
+                }
+                // Состояние сущности; заблокирована переписка — дописывается (СЦ16, §1.10, 2).
+                Pill(if (threadBlocked) state + " · " + w.messagesBlockedMark else state, notify)
+            } else if (threadBlocked) {
+                Pill(w.messagesBlockedMark, NotifyState.Blocked)
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -219,8 +230,8 @@ fun manageSections(role: GroupRole?, kind: io.tima.domain.chat.EntityKind): List
     if (!mod) return emptyList()
     return listOfNotNull(
         ManageSection.Main.takeIf { admin },
-        // Роли: у группы — владелец и админ (админ — модераторов); у канала и сообщества раздаёт владелец.
-        ManageSection.Roles.takeIf { if (kind == io.tima.domain.chat.EntityKind.Group) admin else owner },
+        // Роли: у группы и канала — владелец и админ (админ — модераторов, СЦ21); у сообщества раздаёт владелец.
+        ManageSection.Roles.takeIf { if (kind == io.tima.domain.chat.EntityKind.Community) owner else admin },
         ManageSection.Requests.takeIf { admin && kind == io.tima.domain.chat.EntityKind.Group },
         ManageSection.Access.takeIf { admin && kind == io.tima.domain.chat.EntityKind.Group },
         ManageSection.Messages,
@@ -275,6 +286,7 @@ fun ManageScreen(
 
 /** Метки «Основного» — для сценариев. */
 object ManageMainTags {
+    const val SHOW_MEMBERS = "manage:main:show-members"
     const val TITLE = "manage:main:title"
     const val ABOUT = "manage:main:about"
     const val SECRET = "manage:main:secret"
@@ -300,6 +312,9 @@ fun ManageMainScreen(
     onBack: () -> Unit,
     /** Аватар (СЦ5): картинка сейчас и кнопки «Сменить» / «Убрать»; `null` — блока нет. */
     avatar: (@Composable () -> Unit)? = null,
+    /** «Показывать участников» (СЦ19): `null` — ещё не знаем; меняется сразу, без «Сохранить». */
+    showMembers: Boolean? = null,
+    onShowMembers: (Boolean) -> Unit = {},
 ) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
@@ -319,6 +334,19 @@ fun ManageMainScreen(
                     Secondary(w.secretAbout)
                 }
             }
+            if (showMembers != null) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { onShowMembers(!showMembers) }.testTag(ManageMainTags.SHOW_MEMBERS),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+                ) {
+                    CheckMark(showMembers)
+                    Column {
+                        Caption(w.showMembers, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                        Secondary(w.showMembersHint)
+                    }
+                }
+            }
             Button(w.save, onClick = onSave, modifier = Modifier.testTag(ManageMainTags.SAVE))
             when (saved) {
                 true -> Secondary(w.saved)
@@ -333,58 +361,87 @@ fun ManageMainScreen(
 object SubscribersTags {
     const val ROW = "subscribers:row"
     const val EXCLUDE = "subscribers:exclude"
+    const val BAN = "subscribers:ban"
+    const val UNBAN = "subscribers:unban"
 }
 
 /**
- * «Подписчики» канала (ПЛАН-(ВС) 16, заказчик 2026-11-20): видят владелец и модераторы, исключать можно — владельца
- * никто, модератора только владелец (то же правило на сервере). «Исключить» — двумя нажатиями: второе подтверждает.
+ * «Подписчики» канала и сообщества, «Участники» участнику (ПЛАН-(ВС) 16; СЦ19, СЦ21, СЦ23). Команде — роли, «Исключить»
+ * (может подписаться снова) и «Забанить» (не может, пока не снимут) у тех, кто ниже рангом, и список забаненных со
+ * «Снять бан». Участнику — только имена. Опасные кнопки — двумя нажатиями: второе подтверждает.
  */
 @Composable
 fun SubscribersScreen(
     title: String,
     tabs: @Composable () -> Unit,
-    /** (номер, имя, роль словом или пусто, можно ли исключить); `null` — ещё не пришли или нет прав. */
+    /** Строки; `null` — нет связи или прав. */
     people: List<SubscriberLine>?,
     onExclude: (String) -> Unit,
     onBack: () -> Unit,
+    onBan: (String) -> Unit = {},
+    /** Забаненные (только команде); пусто — раздела нет. */
+    banned: List<SubscriberLine> = emptyList(),
+    onUnban: (String) -> Unit = {},
+    /** Заголовок: «Подписчики» или «Участники». */
+    caption: String = Tima.words.socium.tabSubscribers,
 ) {
     val w = Tima.words.socium
-    var asked by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var asked by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Pair<String, Boolean>?>(null) }
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
-        SubwindowHeader(title = title, onBack = onBack, caption = w.tabSubscribers, avatar = title.take(2).uppercase())
+        SubwindowHeader(title = title, onBack = onBack, caption = caption, avatar = title.take(2).uppercase())
         tabs()
         when {
             people == null -> Secondary(Tima.words.trouble.offline, Modifier.padding(TimaSpacing.about5))
-            people.isEmpty() -> Tertiary(w.subscribersNone, Modifier.padding(TimaSpacing.about5))
+            people.isEmpty() && banned.isEmpty() -> Tertiary(w.subscribersNone, Modifier.padding(TimaSpacing.about5))
             else -> androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize()) {
                 items(people.size, key = { people[it].userId }) { i ->
                     val p = people[i]
-                    io.tima.core.ui.ListLine(
-                        modifier = Modifier.testTag(SubscribersTags.ROW),
-                        left = { io.tima.core.ui.Avatar(letters = p.name.take(1).uppercase()) },
-                        middle = {
-                            io.tima.core.ui.Name(p.name)
-                            if (p.role.isNotEmpty()) Tertiary(p.role, lineOne = true)
-                        },
-                        right = if (p.excludable) {
-                            {
-                                val sure = asked == p.userId
+                    Column {
+                        io.tima.core.ui.ListLine(
+                            modifier = Modifier.testTag(SubscribersTags.ROW),
+                            left = { io.tima.core.ui.Avatar(letters = p.name.take(1).uppercase()) },
+                            middle = {
+                                io.tima.core.ui.Name(p.name)
+                                if (p.role.isNotEmpty()) Tertiary(p.role, lineOne = true)
+                            },
+                        )
+                        if (p.excludable) {
+                            val sure = asked?.takeIf { it.first == p.userId }
+                            FlowRow(
+                                Modifier.padding(start = TimaSpacing.about5, end = TimaSpacing.about4, bottom = TimaSpacing.about2),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
                                 Button(
-                                    if (sure) w.excludeSure else w.excludeSubscriber,
-                                    onClick = { if (sure) { asked = null; onExclude(p.userId) } else asked = p.userId },
-                                    kind = if (sure) io.tima.core.ui.ButtonKind.Dangerous else io.tima.core.ui.ButtonKind.Quiet,
+                                    if (sure?.second == false) w.excludeSure else w.excludeSubscriber,
+                                    onClick = { if (sure?.second == false) { asked = null; onExclude(p.userId) } else asked = p.userId to false },
+                                    kind = if (sure?.second == false) ButtonKind.Dangerous else ButtonKind.Quiet,
                                     modifier = Modifier.testTag(SubscribersTags.EXCLUDE),
                                 )
+                                Button(
+                                    if (sure?.second == true) w.banSure else w.banSubscriber,
+                                    onClick = { if (sure?.second == true) { asked = null; onBan(p.userId) } else asked = p.userId to true },
+                                    kind = if (sure?.second == true) ButtonKind.Dangerous else ButtonKind.Quiet,
+                                    modifier = Modifier.testTag(SubscribersTags.BAN),
+                                )
                             }
-                        } else {
-                            null
-                        },
-                    )
+                        }
+                    }
+                }
+                if (banned.isNotEmpty()) {
+                    item(key = "banned:title") { io.tima.core.ui.Name(w.bannedTitle, Modifier.padding(TimaSpacing.about4)) }
+                    items(banned.size, key = { "banned:" + banned[it].userId }) { i ->
+                        val p = banned[i]
+                        io.tima.core.ui.ListLine(
+                            left = { io.tima.core.ui.Avatar(letters = p.name.take(1).uppercase()) },
+                            middle = { io.tima.core.ui.Name(p.name) },
+                            right = { Button(w.unbanSubscriber, onClick = { onUnban(p.userId) }, kind = ButtonKind.Quiet, modifier = Modifier.testTag(SubscribersTags.UNBAN)) },
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-/** Строка «Подписчиков»: кто, как назвать, роль словом, можно ли исключить. */
+/** Строка «Подписчиков»: кто, как назвать, роль словом (участнику — пусто), можно ли исключить и забанить. */
 data class SubscriberLine(val userId: String, val name: String, val role: String, val excludable: Boolean)

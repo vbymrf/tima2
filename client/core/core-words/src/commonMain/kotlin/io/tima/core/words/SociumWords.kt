@@ -50,6 +50,51 @@ interface SociumWords {
     val excludeSubscriber: String
     val excludeSure: String
     val subscribersNone: String
+
+    /** Девятый–одиннадцатый круг Социума (ПЛАН-(СЦ) СЦ16–СЦ23). */
+    val notifyEntitySection: String
+    val notifyThreadSection: String
+    val notifyThreadOfCommunity: String
+    val wordOn: String
+    val wordOff: String
+    val wordSilent: String
+    val wordBlocked: String
+    val notifyThreadHint: String
+    val notifyEntityNeedsJoin: String
+    val messagesBlockedMark: String
+    val tabContent: String
+    val contentPhotos: String
+    val contentVideo: String
+    val contentMusic: String
+    val contentVoice: String
+    val contentFiles: String
+    val contentLinks: String
+    val contentCollecting: String
+    val contentEmpty: String
+    val contentFromPhone: String
+    val showInChat: String
+    val showMembers: String
+    val showMembersHint: String
+    val banSubscriber: String
+    val banSure: String
+    val unbanSubscriber: String
+    val bannedTitle: String
+    val staffAdmins2: String
+    val roleAdminShort: String
+    val roleModeratorShort: String
+    val writeSuper: String
+    val writeLevelZero: String
+    val superMark: String
+    val editMessage: String
+    val deleteMessage: String
+    val deleteSure: String
+    val levelZeroNone: String
+    val makeSuper: String
+    val unsetSuper: String
+    val slowModeComments: String
+    val slowOff: String
+    val editingTitle: String
+    val saveEdit: String
     val tabManage: String
     val write: String
     val share: String
@@ -225,6 +270,49 @@ object RussianSociumWords : SociumWords {
     override val excludeSubscriber = "Исключить"
     override val excludeSure = "Точно исключить?"
     override val subscribersNone = "Подписчиков пока нет"
+    override val notifyEntitySection = "Новое в сущности"
+    override val notifyThreadSection = "Сообщения от сущности мне"
+    override val notifyThreadOfCommunity = "Это переписка с сообществом, в которое входит эта сущность"
+    override val wordOn = "Включены"
+    override val wordOff = "Выключены"
+    override val wordSilent = "Без уведомления"
+    override val wordBlocked = "Заблокированы"
+    override val notifyThreadHint = "Заблокированы — сущность не сможет вам писать, а вы ей сможете"
+    override val notifyEntityNeedsJoin = "Доступно после вступления или подписки"
+    override val messagesBlockedMark = "сообщения заблокированы"
+    override val tabContent = "Содержимое"
+    override val contentPhotos = "Фото"
+    override val contentVideo = "Видео"
+    override val contentMusic = "Музыка"
+    override val contentVoice = "Голосовые"
+    override val contentFiles = "Файлы"
+    override val contentLinks = "Ссылки"
+    override val contentCollecting = "Собирается…"
+    override val contentEmpty = "Здесь пока ничего нет"
+    override val contentFromPhone = "Только то, что есть на этом устройстве: пролистайте переписку вверх — старое добавится"
+    override val showInChat = "Показать в переписке"
+    override val showMembers = "Показывать участников"
+    override val showMembersHint = "Участники видят список имён, без ролей. В группе состав и так виден по авторам сообщений"
+    override val banSubscriber = "Забанить"
+    override val banSure = "Точно забанить?"
+    override val unbanSubscriber = "Снять бан"
+    override val bannedTitle = "Забанены"
+    override val staffAdmins2 = "Админы"
+    override val roleAdminShort = "админ"
+    override val roleModeratorShort = "модератор"
+    override val writeSuper = "Написать суперсообщение"
+    override val writeLevelZero = "Написать сообщение уровня 0"
+    override val superMark = "суперсообщение"
+    override val editMessage = "Править"
+    override val deleteMessage = "Удалить"
+    override val deleteSure = "Точно удалить?"
+    override val levelZeroNone = "Сообщений уровня 0 пока нет"
+    override val makeSuper = "Сделать суперсообщением"
+    override val unsetSuper = "Снять суперсообщение"
+    override val slowModeComments = "Медленный режим комментариев"
+    override val slowOff = "выкл"
+    override val editingTitle = "Правка сообщения"
+    override val saveEdit = "Сохранить"
     override val tabManage = "Управление"
     override val write = "Написать"
     override val share = "Поделиться"
@@ -390,6 +478,49 @@ object EnglishSociumWords : SociumWords {
     override val excludeSubscriber = "Remove"
     override val excludeSure = "Remove for sure?"
     override val subscribersNone = "No subscribers yet"
+    override val notifyEntitySection = "New posts here"
+    override val notifyThreadSection = "Messages to me from here"
+    override val notifyThreadOfCommunity = "This is the conversation with the community this belongs to"
+    override val wordOn = "On"
+    override val wordOff = "Off"
+    override val wordSilent = "Without notification"
+    override val wordBlocked = "Blocked"
+    override val notifyThreadHint = "Blocked — they cannot write to you, but you still can write to them"
+    override val notifyEntityNeedsJoin = "Available after joining or subscribing"
+    override val messagesBlockedMark = "messages blocked"
+    override val tabContent = "Content"
+    override val contentPhotos = "Photos"
+    override val contentVideo = "Video"
+    override val contentMusic = "Music"
+    override val contentVoice = "Voice"
+    override val contentFiles = "Files"
+    override val contentLinks = "Links"
+    override val contentCollecting = "Collecting…"
+    override val contentEmpty = "Nothing here yet"
+    override val contentFromPhone = "Only what is on this device: scroll the conversation up to add older items"
+    override val showInChat = "Show in conversation"
+    override val showMembers = "Show members"
+    override val showMembersHint = "Members see a list of names, without roles. In a group, authors of messages are visible anyway"
+    override val banSubscriber = "Ban"
+    override val banSure = "Ban for sure?"
+    override val unbanSubscriber = "Unban"
+    override val bannedTitle = "Banned"
+    override val staffAdmins2 = "Admins"
+    override val roleAdminShort = "admin"
+    override val roleModeratorShort = "moderator"
+    override val writeSuper = "Write a super message"
+    override val writeLevelZero = "Write a level 0 message"
+    override val superMark = "super message"
+    override val editMessage = "Edit"
+    override val deleteMessage = "Delete"
+    override val deleteSure = "Delete for sure?"
+    override val levelZeroNone = "No level 0 messages yet"
+    override val makeSuper = "Make super message"
+    override val unsetSuper = "Unset super message"
+    override val slowModeComments = "Slow mode for comments"
+    override val slowOff = "off"
+    override val editingTitle = "Editing message"
+    override val saveEdit = "Save"
     override val tabManage = "Manage"
     override val write = "Write"
     override val share = "Share"
@@ -551,6 +682,49 @@ object SpanishSociumWords : SociumWords {
     override val excludeSubscriber = "Expulsar"
     override val excludeSure = "¿Expulsar de verdad?"
     override val subscribersNone = "Aún no hay suscriptores"
+    override val notifyEntitySection = "Novedades aquí"
+    override val notifyThreadSection = "Mensajes para mí desde aquí"
+    override val notifyThreadOfCommunity = "Es la conversación con la comunidad a la que pertenece"
+    override val wordOn = "Activadas"
+    override val wordOff = "Desactivadas"
+    override val wordSilent = "Sin notificación"
+    override val wordBlocked = "Bloqueados"
+    override val notifyThreadHint = "Bloqueados: no podrán escribirte, pero tú sí podrás escribirles"
+    override val notifyEntityNeedsJoin = "Disponible al unirse o suscribirse"
+    override val messagesBlockedMark = "mensajes bloqueados"
+    override val tabContent = "Contenido"
+    override val contentPhotos = "Fotos"
+    override val contentVideo = "Vídeo"
+    override val contentMusic = "Música"
+    override val contentVoice = "Voz"
+    override val contentFiles = "Archivos"
+    override val contentLinks = "Enlaces"
+    override val contentCollecting = "Recopilando…"
+    override val contentEmpty = "Aún no hay nada"
+    override val contentFromPhone = "Solo lo que hay en este dispositivo: desplaza la conversación hacia arriba para añadir lo anterior"
+    override val showInChat = "Mostrar en la conversación"
+    override val showMembers = "Mostrar miembros"
+    override val showMembersHint = "Los miembros ven una lista de nombres, sin roles. En un grupo, los autores de los mensajes se ven de todos modos"
+    override val banSubscriber = "Vetar"
+    override val banSure = "¿Vetar de verdad?"
+    override val unbanSubscriber = "Quitar veto"
+    override val bannedTitle = "Vetados"
+    override val staffAdmins2 = "Administradores"
+    override val roleAdminShort = "administrador"
+    override val roleModeratorShort = "moderador"
+    override val writeSuper = "Escribir supermensaje"
+    override val writeLevelZero = "Escribir mensaje de nivel 0"
+    override val superMark = "supermensaje"
+    override val editMessage = "Editar"
+    override val deleteMessage = "Eliminar"
+    override val deleteSure = "¿Eliminar de verdad?"
+    override val levelZeroNone = "Aún no hay mensajes de nivel 0"
+    override val makeSuper = "Hacer supermensaje"
+    override val unsetSuper = "Quitar supermensaje"
+    override val slowModeComments = "Modo lento de comentarios"
+    override val slowOff = "no"
+    override val editingTitle = "Editando mensaje"
+    override val saveEdit = "Guardar"
     override val tabManage = "Gestión"
     override val write = "Escribir"
     override val share = "Compartir"

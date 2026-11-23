@@ -50,10 +50,13 @@ data class ChannelInfo(
     val isPublic: Boolean,
     val secret: Boolean,
     val communityId: String?,
+    /** Админ канала (ПЛАН-(СЦ) СЦ21): роль выше модератора; `moderator` у него тоже правда — он в команде. */
+    val admin: Boolean = false,
 ) {
     val type: EntityType get() = EntityType(EntityKind.Channel, if (isPublic) EntityReach.Public else EntityReach.Personal, secret)
     val role: GroupRole get() = when {
         owner -> GroupRole.Owner
+        admin -> GroupRole.Admin
         moderator -> GroupRole.Moderator
         else -> GroupRole.Member
     }

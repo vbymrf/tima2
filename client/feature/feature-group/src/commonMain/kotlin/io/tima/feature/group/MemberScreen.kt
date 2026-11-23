@@ -90,6 +90,8 @@ fun MemberScreen(
     onRole: ((String, String) -> Unit)? = null,
     /** Бан на сутки (СЦ6); `null` — права нет. */
     onBan: ((String) -> Unit)? = null,
+    /** Участник без роли смотрит состав (СЦ19, «только список имён»): ни ролей, ни действий, ни приглашений. */
+    namesOnly: Boolean = false,
 ) {
     val colors = Tima.colors
     val words = Tima.words.social
@@ -98,7 +100,7 @@ fun MemberScreen(
         SubwindowHeader(
             title = words.members,
             onBack = onBack,
-            right = onAccess?.let { open ->
+            right = onAccess?.takeIf { !namesOnly }?.let { open ->
                 { Chip(words.access, kind = ChipKind.Selected, onClick = open) }
             },
         )
@@ -112,7 +114,7 @@ fun MemberScreen(
             state.warning?.let { Trouble(it, Modifier.testTag(MembersTags.TROUBLE)) }
 
             // Заявки новых личностей — первыми: решение за модератором, и ждать оно не должно.
-            if (claims.isNotEmpty()) {
+            if (claims.isNotEmpty() && !namesOnly) {
                 io.tima.core.ui.Caption(words.identityClaims, weight = androidx.compose.ui.text.font.FontWeight.ExtraBold, color = colors.alarm)
                 for (c in claims) {
                     Row(
@@ -126,7 +128,7 @@ fun MemberScreen(
                 }
             }
 
-            if (state.memberEdit) {
+            if (state.memberEdit && !namesOnly) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2),
@@ -174,11 +176,12 @@ fun MemberScreen(
                         member = member,
                         person = state.people[member.userId] ?: ChatPerson.EMPTY,
                         look = look,
+                        showRole = !namesOnly,
                         // Исключить — того, кто ниже меня (модератор — участника, админ — и модератора).
-                        removeMay = state.memberEdit && member.role != GroupRole.Owner && state.myRole.rank() > member.role.rank(),
+                        removeMay = !namesOnly && state.memberEdit && member.role != GroupRole.Owner && state.myRole.rank() > member.role.rank(),
                         onRemove = { onRemove(member.userId) },
                         // Роли и бан (СЦ6): тому, кто ниже меня; владелец назначает и админов.
-                        actions = if (member.role != GroupRole.Owner && state.myRole.rank() > member.role.rank() && (onRole != null || onBan != null)) {
+                        actions = if (!namesOnly && member.role != GroupRole.Owner && state.myRole.rank() > member.role.rank() && (onRole != null || onBan != null)) {
                             buildList {
                                 val w = Tima.words.socium
                                 if (onRole != null && state.myRole.rank() >= GroupRole.Admin.rank()) {
@@ -297,6 +300,8 @@ private fun MemberLine(
     removeMay: Boolean,
     onRemove: () -> Unit,
     actions: List<Pair<String, () -> Unit>> = emptyList(),
+    /** Роль справа; участнику без роли — нет (СЦ19). */
+    showRole: Boolean = true,
 ) {
     val words = Tima.words.social
     var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -308,7 +313,7 @@ private fun MemberLine(
         right = {
             if (removeMay) {
                 Button(label = words.exclude, onClick = onRemove, modifier = Modifier.testTag(MembersTags.REMOVE))
-            } else {
+            } else if (showRole) {
                 Tertiary(roleCaption(member.role, words))
             }
         },

@@ -164,14 +164,20 @@ class InvitesOverHttp(
         null
     }
 
-    /** Модератор канала или админ сообщества (СЦ6): выдать или снять; раздаёт владелец. */
-    suspend fun setStaff(kind: EntityKind, id: String, userId: String, on: Boolean): Boolean = try {
+    /**
+     * Модератор или админ канала, админ сообщества (СЦ6, СЦ21): выдать или снять. `role` — у канала: `moderator`
+     * (умолчание) или `admin`; админа назначает владелец, модератора — владелец и админ.
+     */
+    suspend fun setStaff(kind: EntityKind, id: String, userId: String, on: Boolean, role: String? = null): Boolean = try {
         val base = path(kind, id) + if (kind == EntityKind.Channel) "/moderators" else "/admins"
         val r = if (on) {
             client.post(route.api(base)) {
                 header("Authorization", "Bearer ${token()}")
                 contentType(ContentType.Application.Json)
-                setBody(buildJsonObject { put("user_id", JsonPrimitive(userId)) }.toString())
+                setBody(buildJsonObject {
+                    put("user_id", JsonPrimitive(userId))
+                    role?.let { put("role", JsonPrimitive(it)) }
+                }.toString())
             }
         } else {
             client.delete(route.api("$base/$userId")) { header("Authorization", "Bearer ${token()}") }
@@ -259,24 +265,96 @@ class InvitesOverHttp(
         emptyMap()
     }
 
-    /** Подписчики канала (ПЛАН-(ВС) 16): номера, владелец, модераторы; нет прав или связи — `null`. */
-    suspend fun channelSubscribers(channelId: String): ChannelSubscribers? = try {
-        val r = client.get(route.api(path(EntityKind.Channel, channelId) + "/subscribers")) {
+    /**
+     * Подписчики канала или сообщества (ПЛАН-(ВС) 16, СЦ19, СЦ23): команде — с владельцем, командой и забаненными
+     * (`team = true`); подписчику — только номера, если включено «Показывать участников». Нет прав или связи — `null`.
+     */
+    suspend fun entitySubscribers(kind: EntityKind, id: String): ChannelSubscribers? = try {
+        val r = client.get(route.api(path(kind, id) + "/subscribers")) {
             header("Authorization", "Bearer ${token()}")
         }
         if (r.status != HttpStatusCode.OK) null else r.jsonBody()?.let { body ->
             fun ids(key: String) = (body[key] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
-            ChannelSubscribers(ids("subscribers"), (body["owner_id"] as? JsonPrimitive)?.content.orEmpty(), ids("moderators"))
+            ChannelSubscribers(
+                subscribers = ids("subscribers"),
+                ownerId = (body["owner_id"] as? JsonPrimitive)?.content.orEmpty(),
+                moderators = ids("moderators"),
+                admins = ids("admins"),
+                banned = ids("banned"),
+                team = body.containsKey("owner_id"),
+            )
         }
     } catch (_: Throwable) {
         null
     }
 
-    /** Исключить подписчика (ПЛАН-(ВС) 16): владелец и модераторы; модератора — только владелец. */
-    suspend fun removeSubscriber(channelId: String, userId: String): Boolean = try {
-        client.delete(route.api(path(EntityKind.Channel, channelId) + "/subscribers/" + userId)) {
+    /** Подписчики канала (ПЛАН-(ВС) 16) — прежнее имя. */
+    suspend fun channelSubscribers(channelId: String): ChannelSubscribers? = entitySubscribers(EntityKind.Channel, channelId)
+
+    /** «Исключить» (ПЛАН-(ВС) 16, СЦ23): может подписаться снова; у сообщества — и с его каналов и групп. */
+    suspend fun removeSubscriber(kind: EntityKind, id: String, userId: String): Boolean = try {
+        client.delete(route.api(path(kind, id) + "/subscribers/" + userId)) {
             header("Authorization", "Bearer ${token()}")
         }.status == HttpStatusCode.NoContent
+    } catch (_: Throwable) {
+        false
+    }
+
+    /** Исключить подписчика канала — прежнее имя. */
+    suspend fun removeSubscriber(channelId: String, userId: String): Boolean = removeSubscriber(EntityKind.Channel, channelId, userId)
+
+    /** «Забанить» (`on`) и «Снять бан» (СЦ21, СЦ23): забаненный не подписывается, пока не снимут. */
+    suspend fun banSubscriber(kind: EntityKind, id: String, userId: String, on: Boolean): Boolean = try {
+        val url = route.api(path(kind, id) + "/subscribers/" + userId + "/ban")
+        val r = if (on) client.post(url) { header("Authorization", "Bearer ${token()}") } else client.delete(url) { header("Authorization", "Bearer ${token()}") }
+        r.status == HttpStatusCode.NoContent
+    } catch (_: Throwable) {
+        false
+    }
+
+    /** Админы канала (СЦ21) из команды: `GET …/moderators` → `admins`; нет связи — пусто. */
+    suspend fun channelAdmins(channelId: String): List<String> = try {
+        val r = client.get(route.api(path(EntityKind.Channel, channelId) + "/moderators")) { header("Authorization", "Bearer ${token()}") }
+        (r.jsonBody()?.get("admins") as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
+    } catch (_: Throwable) {
+        emptyList()
+    }
+
+    /** «Показывать участников» сущностей вида (СЦ19): номер → включено; без связи — пусто. */
+    suspend fun showMembers(kind: EntityKind, ids: List<String>): Map<String, Boolean> = try {
+        if (ids.isEmpty()) emptyMap() else {
+            val r = client.post(route.api("/api/v1/entities/show-members")) {
+                header("Authorization", "Bearer ${token()}")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("kind", JsonPrimitive(kind.wire))
+                    put("ids", kotlinx.serialization.json.JsonArray(ids.take(200).map { JsonPrimitive(it) }))
+                }.toString())
+            }
+            r.jsonBody()?.get("show")?.jsonObjectOrNull()?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.content?.toBooleanStrictOrNull()?.let { k to it } }?.toMap().orEmpty()
+        }
+    } catch (_: Throwable) {
+        emptyMap()
+    }
+
+    /** Сменить «Показывать участников» (СЦ19): владелец и админ. */
+    suspend fun setShowMembers(kind: EntityKind, id: String, on: Boolean): Boolean = try {
+        client.put(route.api(path(kind, id) + "/show-members")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("show", JsonPrimitive(on)) }.toString())
+        }.status == HttpStatusCode.OK
+    } catch (_: Throwable) {
+        false
+    }
+
+    /** Медленный режим комментариев канала (СЦ21), секунды; 0 — выключен. Владелец и админ. */
+    suspend fun setChannelSlowMode(channelId: String, sec: Int): Boolean = try {
+        client.put(route.api(path(EntityKind.Channel, channelId) + "/slow-mode")) {
+            header("Authorization", "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("sec", JsonPrimitive(sec)) }.toString())
+        }.status == HttpStatusCode.OK
     } catch (_: Throwable) {
         false
     }
@@ -339,5 +417,15 @@ class InvitesOverHttp(
     }
 }
 
-/** Подписчики канала (ПЛАН-(ВС) 16): кто подписан, кто владелец, кто модератор. */
-data class ChannelSubscribers(val subscribers: List<String>, val ownerId: String, val moderators: List<String>)
+/**
+ * Подписчики канала или сообщества (ПЛАН-(ВС) 16, СЦ19, СЦ23): кто подписан; команде — ещё владелец, команда (у канала
+ * `moderators` — все с ролью), админы и забаненные. `team = false` — ответ подписчику: только номера.
+ */
+data class ChannelSubscribers(
+    val subscribers: List<String>,
+    val ownerId: String,
+    val moderators: List<String>,
+    val admins: List<String> = emptyList(),
+    val banned: List<String> = emptyList(),
+    val team: Boolean = true,
+)

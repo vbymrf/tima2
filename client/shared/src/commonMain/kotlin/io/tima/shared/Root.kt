@@ -2003,18 +2003,39 @@ private fun App(
             else -> io.tima.domain.chat.EntityType(io.tima.domain.chat.EntityKind.Community, io.tima.domain.chat.EntityReach.Public)
         }
     }
+    // Внутри ли я: участник группы, подписчик канала или сообщества.
+    val insideOf: (String, String) -> Boolean = { kind, id ->
+        when (kind) {
+            "group" -> socialState.mine.any { it.groupId == id }
+            "community" -> socialState.communities.any { it.communityId == id }
+            else -> socialState.channels.any { it.channelId == id }
+        }
+    }
+    // «Показывать участников» (СЦ19) — «вид:номер» → включено; спрашивается при входе на страницу.
+    val showMembersOf = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
     val pageTabBar: @Composable (String, String, String, io.tima.feature.group.PageTab) -> Unit = { kind, id, title, now ->
+        LaunchedEffect(kind, id) {
+            val k = io.tima.domain.chat.EntityKind.fromWire(kind) ?: io.tima.domain.chat.EntityKind.Group
+            network.invites.showMembers(k, listOf(id))[id]?.let { showMembersOf["$kind:$id"] = it }
+        }
         io.tima.feature.group.EntityTabsBar(
-            // «Подписчики» у канала (ПЛАН-(ВС) 16): видят владелец и модераторы — те же, кому видны вкладки.
-            tabs = io.tima.feature.group.pageTabs(roleOf(kind, id), hasMembers = kind == "group" || kind == "channel"),
+            // «Участники» («Подписчики» у канала и сообщества): команде всегда, участнику — по «Показывать участников»
+            // (СЦ19); «Содержимое» — кто внутри группы или канала (СЦ20).
+            tabs = io.tima.feature.group.pageTabs(
+                roleOf(kind, id),
+                hasMembers = true,
+                showMembers = insideOf(kind, id) && showMembersOf["$kind:$id"] == true,
+                content = false,
+            ),
             current = now,
-            subscribers = kind == "channel",
+            subscribers = kind != "group",
             onTab = { tab ->
                 Journal.note(LogCode.NAV, "вкладка страницы", "вкладка" to tab.name)
                 navigator.switchTab(
                     when (tab) {
                         io.tima.feature.group.PageTab.About -> Where.Showcase(kind, id, title)
-                        io.tima.feature.group.PageTab.Members -> if (kind == "channel") Where.Subscribers(id, title) else Where.Members(id, title)
+                        io.tima.feature.group.PageTab.Members -> if (kind == "group") Where.Members(id, title) else Where.Subscribers(id, title, kind)
+                        io.tima.feature.group.PageTab.Content -> Where.EntityContent(kind, id, title)
                         io.tima.feature.group.PageTab.Manage -> Where.Manage(kind, id, title)
                     },
                 )
@@ -4606,25 +4627,8 @@ private fun App(
                                     kind = io.tima.core.ui.ButtonKind.Quiet,
                                     modifier = androidx.compose.ui.Modifier.padding(horizontal = io.tima.core.ui.TimaSpacing.about4),
                                 )
-                            } else if (p != null) {
-                                // У человека — состояние ленты: включено, выключено, заблокировано (§1.9, 10).
-                                androidx.compose.foundation.layout.Row(
-                                    androidx.compose.ui.Modifier.padding(horizontal = io.tima.core.ui.TimaSpacing.about4),
-                                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
-                                ) {
-                                    for (st in io.tima.domain.chat.ThreadState.entries) {
-                                        io.tima.core.ui.Chip(
-                                            when (st) {
-                                                io.tima.domain.chat.ThreadState.On -> Tima.words.socium.notifyOn
-                                                io.tima.domain.chat.ThreadState.Off -> Tima.words.socium.notifyOff
-                                                io.tima.domain.chat.ThreadState.Blocked -> Tima.words.socium.notifyBlocked
-                                            },
-                                            kind = if (p.state == st) io.tima.core.ui.ChipKind.Selected else io.tima.core.ui.ChipKind.Neutral,
-                                            onClick = { scope.launch { network.threads.setState(p.kind, p.entityId, st); tick++ } },
-                                        )
-                                    }
-                                }
                             }
+                            // У человека состояние ленты — в подокне «Уведомления» страницы (СЦ16), не здесь.
                         },
                     )
                 }
@@ -4707,6 +4711,10 @@ private fun App(
                     val group = kind == io.tima.domain.chat.EntityKind.Group
                     var entries by remember(current) { mutableStateOf<List<io.tima.domain.chat.RoleLogEntry>?>(null) }
                     var staff by remember(current) { mutableStateOf<List<String>?>(if (group) null else emptyList()) }
+                    // Админы канала (СЦ21): подпись в строке, «Назначить админом» — владельцу, админ снимает только модераторов.
+                    var channelAdmins by remember(current) { mutableStateOf<Set<String>>(emptySet()) }
+                    val channel = kind == io.tima.domain.chat.EntityKind.Channel
+                    val myRole = roleOf(current.kind, current.id)
                     var trouble by remember(current) { mutableStateOf<String?>(null) }
                     var tick by remember(current) { mutableStateOf(0) }
                     val youWord = Tima.words.socium.you
@@ -4715,6 +4723,7 @@ private fun App(
                     LaunchedEffect(current, tick) {
                         entries = network.invites.roleLog(kind, current.id)
                         if (!group) staff = network.ownership.staff(kind, current.id)
+                        if (channel) channelAdmins = network.invites.channelAdmins(current.id).toSet()
                         val ids = entries.orEmpty().flatMap { listOf(it.actorId, it.targetId) } + staff.orEmpty()
                         if (ids.isNotEmpty()) people.want(ids.distinct())
                     }
@@ -4753,6 +4762,26 @@ private fun App(
                         },
                         trouble = trouble,
                         meId = session.userId,
+                        admins = if (channel) channelAdmins else null,
+                        onAddAdmin = if (channel && myRole == io.tima.domain.chat.GroupRole.Owner) {
+                            { nick ->
+                                scope.launch {
+                                    trouble = null
+                                    when (val found = network.directory.byNickname(nick)) {
+                                        is io.tima.domain.chat.UserLookup.Found -> {
+                                            val ok = network.invites.setStaff(kind, current.id, found.userId, true, role = "admin")
+                                            Journal.note(LogCode.NAV, "назначить админом", "вышло" to ok)
+                                            if (!ok) trouble = offlineWord
+                                            tick++
+                                        }
+                                        else -> trouble = noNickWord
+                                    }
+                                }
+                            }
+                        } else {
+                            null
+                        },
+                        removable = { uid -> !channel || myRole == io.tima.domain.chat.GroupRole.Owner || uid !in channelAdmins || uid == session.userId },
                     )
                 }
             }
@@ -4898,7 +4927,14 @@ private fun App(
                                 else -> socialState.channels.any { it.channelId == id }
                             }
                             val muted = "$kind:$id" in mutedAll
+                            // Переписка с сущностью (СЦ16): заблокирована мной — пузырь говорит об этом.
+                            var threadBlocked by remember(kind, id) { mutableStateOf(false) }
+                            LaunchedEffect(kind, id) {
+                                val k = io.tima.domain.chat.EntityKind.fromWire(kind) ?: io.tima.domain.chat.EntityKind.Group
+                                threadBlocked = network.threads.mineWith(k, id)?.state == io.tima.domain.chat.ThreadState.Blocked
+                            }
                             io.tima.feature.group.EntityAboutTop(
+                                threadBlocked = threadBlocked,
                                 title = current.title,
                                 type = typeOf(kind, id),
                                 role = role,
@@ -4913,9 +4949,8 @@ private fun App(
                                         }
                                     }
                                 },
-                                onNotify = if (!inside) null else {
-                                    { assembled.liveStates?.mute(kind, id, !muted) }
-                                },
+                                // Подокно «Уведомления» (СЦ16): новое в сущности и сообщения от неё мне.
+                                onNotify = { where = Where.NotifySettings(kind, id, current.title) },
                                 // Владелец не уходит, пока не передал (409 owner_locked).
                                 onLeave = if (!inside || role == io.tima.domain.chat.GroupRole.Owner || kind == "channel") null else {
                                     {
@@ -5009,6 +5044,9 @@ private fun App(
                         aboutWas = got
                     }
                     var saved by remember(current) { mutableStateOf<Boolean?>(null) }
+                    // «Показывать участников» (СЦ19): с сервера при входе, меняется сразу.
+                    var showMembersNow by remember(current) { mutableStateOf<Boolean?>(null) }
+                    LaunchedEffect(current) { showMembersNow = network.invites.showMembers(kind, listOf(current.id))[current.id] }
                     // Аватар (СЦ5): выбор, обрезка квадратом, JPEG через медиа и «PUT …/avatar».
                     var cropping by remember(current) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
                     var picture by remember(current) { mutableStateOf<String?>(null) }
@@ -5053,6 +5091,15 @@ private fun App(
                         secret = secret,
                         renamable = true,
                         saved = saved,
+                        showMembers = showMembersNow,
+                        onShowMembers = { on ->
+                            showMembersNow = on
+                            scope.launch {
+                                val ok = network.invites.setShowMembers(kind, current.id, on)
+                                Journal.note(LogCode.NAV, "показывать участников", "включено" to on, "вышло" to ok)
+                                if (ok) showMembersOf["${current.kind}:${current.id}"] = on else showMembersNow = !on
+                            }
+                        },
                         onTitle = { title = it; saved = null },
                         about = about,
                         onAbout = { about = it; saved = null },
@@ -5693,44 +5740,111 @@ private fun App(
 
             is Where.Subscribers -> {
                 {
-                    // Подписчики канала (ПЛАН-(ВС) 16): владелец и модераторы видят и исключают; модератора — владелец.
+                    // Подписчики канала и сообщества (ПЛАН-(ВС) 16, СЦ19, СЦ21, СЦ23): команде — роли, «Исключить»,
+                    // «Забанить», забаненные; участнику — только имена, если включено «Показывать участников».
+                    val kind = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Channel
                     var got by remember(current) { mutableStateOf<io.tima.core.network.ChannelSubscribers?>(null) }
                     var loaded by remember(current) { mutableStateOf(false) }
                     var tick by remember(current) { mutableStateOf(0) }
                     LaunchedEffect(current, tick) {
-                        got = network.invites.channelSubscribers(current.channelId)
+                        got = network.invites.entitySubscribers(kind, current.channelId)
                         loaded = true
-                        got?.let { people.want(it.subscribers) }
+                        got?.let { people.want(it.subscribers + it.banned) }
                     }
                     val me = session.userId
                     val socialWords = Tima.words.social
                     val list = got
+                    val youWord = Tima.words.socium.you
+                    val nameOf: (String) -> String = { uid ->
+                        if (uid == me) youWord else peopleCards[uid]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: uid.take(8)
+                    }
+                    // Ранг для правила «ниже меня»: владелец 3, админ 2, модератор 1, подписчик 0 (то же на сервере).
+                    fun rankIn(s: io.tima.core.network.ChannelSubscribers, uid: String): Int = when {
+                        uid == s.ownerId -> 3
+                        uid in s.admins -> 2
+                        uid in s.moderators -> 1
+                        else -> 0
+                    }
+                    val act: (String, suspend () -> Boolean) -> Unit = { what, call ->
+                        scope.launch {
+                            val ok = call()
+                            Journal.note(LogCode.NAV, "подписчики: $what", "вид" to current.kind, "вышло" to ok)
+                            tick++
+                        }
+                    }
                     io.tima.feature.group.SubscribersScreen(
                         title = current.title,
-                        tabs = { pageTabBar("channel", current.channelId, current.title, io.tima.feature.group.PageTab.Members) },
+                        tabs = { pageTabBar(current.kind, current.channelId, current.title, io.tima.feature.group.PageTab.Members) },
                         people = if (!loaded) emptyList() else list?.let { s ->
-                            val iOwn = s.ownerId == me
+                            val myRank = rankIn(s, me)
                             s.subscribers.map { uid ->
-                                val moderator = uid in s.moderators
                                 io.tima.feature.group.SubscriberLine(
                                     userId = uid,
-                                    name = if (uid == me) Tima.words.socium.you else peopleCards[uid]?.line(PersonLook.DEFAULT, PERSON_FIRST_LINE)?.takeIf { it.isNotBlank() } ?: uid.take(8),
-                                    role = when {
-                                        uid == s.ownerId -> socialWords.owner
-                                        moderator -> socialWords.moderator
+                                    name = nameOf(uid),
+                                    role = if (!s.team) "" else when (rankIn(s, uid)) {
+                                        3 -> socialWords.owner
+                                        2 -> Tima.words.socium.roleAdminShort
+                                        1 -> socialWords.moderator
                                         else -> ""
                                     },
-                                    excludable = uid != s.ownerId && uid != me && (!moderator || iOwn),
+                                    excludable = s.team && uid != me && rankIn(s, uid) < myRank,
                                 )
                             }.sortedBy { if (it.role.isEmpty()) 1 else 0 }
                         },
-                        onExclude = { uid ->
+                        onExclude = { uid -> act("исключить") { network.invites.removeSubscriber(kind, current.channelId, uid) } },
+                        onBan = { uid -> act("забанить") { network.invites.banSubscriber(kind, current.channelId, uid, true) } },
+                        banned = list?.takeIf { it.team }?.banned.orEmpty().map { uid ->
+                            io.tima.feature.group.SubscriberLine(uid, nameOf(uid), "", excludable = false)
+                        },
+                        onUnban = { uid -> act("снять бан") { network.invites.banSubscriber(kind, current.channelId, uid, false) } },
+                        caption = Tima.words.socium.tabSubscribers,
+                        onBack = { where = Where.Nothing },
+                    )
+                }
+            }
+
+            // «Содержимое» (СЦ20) и «Управление → Сообщения» (СЦ18) — следующими этапами; входов в них пока нет.
+            is Where.EntityContent -> {
+                { where = Where.Nothing }
+            }
+
+            is Where.ManageMessages -> {
+                { where = Where.Nothing }
+            }
+
+            is Where.NotifySettings -> {
+                {
+                    // Подокно «Уведомления» (СЦ16, §1.10, 1): новое в сущности — отключение уведомлений сущности; сообщения
+                    // от сущности мне — состояние переписки «сущность — человек» (у элемента сообщества — с сообществом).
+                    val kind = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Group
+                    var page by remember(current) { mutableStateOf<io.tima.domain.chat.ThreadPage?>(null) }
+                    var state by remember(current) { mutableStateOf<io.tima.domain.chat.ThreadState?>(null) }
+                    var tick by remember(current) { mutableStateOf(0) }
+                    LaunchedEffect(current, tick) {
+                        val got = network.threads.mineWith(kind, current.id)
+                        page = got
+                        state = got?.state ?: state ?: io.tima.domain.chat.ThreadState.On
+                    }
+                    val inside = insideOf(current.kind, current.id)
+                    val muted = "${current.kind}:${current.id}" in mutedAll
+                    io.tima.feature.group.NotifySettingsScreen(
+                        title = current.title,
+                        entityOn = if (inside) !muted else null,
+                        onEntity = { on ->
+                            Journal.note(LogCode.NAV, "уведомления сущности", "включены" to on)
+                            assembled.liveStates?.mute(current.kind, current.id, !on)
+                        },
+                        threadState = state,
+                        onThread = { st ->
+                            state = st
                             scope.launch {
-                                val ok = network.invites.removeSubscriber(current.channelId, uid)
-                                Journal.note(LogCode.NAV, "подписчик исключён", "вышло" to ok)
+                                val p = page
+                                val ok = network.threads.setState(p?.kind ?: kind, p?.entityId ?: current.id, st)
+                                Journal.note(LogCode.NAV, "уведомления переписки", "состояние" to st.wire, "вышло" to ok)
                                 tick++
                             }
                         },
+                        threadOfCommunity = page?.let { it.kind != kind || it.entityId != current.id } ?: false,
                         onBack = { where = Where.Nothing },
                     )
                 }
@@ -5758,6 +5872,10 @@ private fun App(
                             InviteCandidate(entry.userId!!, (peopleCards[entry.userId!!] ?: ChatPerson()).withBookName(entry.name, entry.phone))
                         },
                         tabs = { pageTabBar("group", current.groupId, current.name.orEmpty(), io.tima.feature.group.PageTab.Members) },
+                        // Участник без роли — только список имён (СЦ19).
+                        namesOnly = roleOf("group", current.groupId).let {
+                            it != io.tima.domain.chat.GroupRole.Owner && it != io.tima.domain.chat.GroupRole.Admin && it != io.tima.domain.chat.GroupRole.Moderator
+                        },
                         // Секретная (СЦ2): приглашение на сервере и черновик-карточка в личной переписке с приглашённым —
                         // отправляет её сам пригласивший; заблокировал его получатель — не дойдёт, как любое его сообщение.
                         onInviteCard = if (socialState.mine.firstOrNull { it.groupId == current.groupId }?.secret == true) {

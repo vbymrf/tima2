@@ -1945,6 +1945,8 @@ internal fun Members(
      * Секретная группа (ПЛАН-(СЦ) СЦ2): «добавить из книги» — послать приглашение; `null` — добавлять, как раньше.
      */
     onInviteCard: ((String) -> Unit)? = null,
+    /** Участник без роли (СЦ19): только список имён. */
+    namesOnly: Boolean = false,
 ) {
     val kindNow by rememberUpdatedState(groupKind)
     val store = remember(groupId) {
@@ -1991,6 +1993,7 @@ internal fun Members(
 
     MemberScreen(
         tabs = tabs,
+        namesOnly = namesOnly,
         // Роли и бан (ПЛАН-(СЦ) СЦ6) — ручками сервера; после — состав заново.
         onRole = { uid, role ->
             scope.launch {

@@ -72,6 +72,7 @@ class ChannelsOverHttp(
                 title = o.str("title").orEmpty(),
                 owner = o.bool("owner") ?: false,
                 moderator = o.bool("moderator") ?: false,
+                admin = o.bool("admin") ?: false,
                 isPublic = o.bool("is_public") ?: true,
                 secret = o.bool("hidden") ?: false,
                 communityId = o.str("community_id")?.ifBlank { null },

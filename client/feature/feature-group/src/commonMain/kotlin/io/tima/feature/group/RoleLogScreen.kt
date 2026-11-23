@@ -25,6 +25,7 @@ import io.tima.domain.chat.RoleLogEntry
 
 /** Метки «Управление → Роли» (ПЛАН-(СЦ) СЦ6). */
 object RoleLogTags {
+    const val ADD_ADMIN = "roles:add-admin"
     const val MEMBERS = "roles:members"
     const val ROW = "roles:row"
     const val STAFF = "roles:staff"
@@ -53,6 +54,12 @@ fun RoleLogScreen(
     trouble: String? = null,
     /** Мой номер: свои записи журнала — «Вы добавили», а не «Вы добавил(а)». */
     meId: String = "",
+    /** Канал (СЦ21): кто из команды админ — подпись «админ» или «модератор» у строки. */
+    admins: Set<String>? = null,
+    /** Канал (СЦ21): назначить админом — владельцу; `null` — кнопки нет. */
+    onAddAdmin: ((String) -> Unit)? = null,
+    /** Можно ли снять этого (СЦ21: админ — только модераторов). */
+    removable: (String) -> Boolean = { true },
 ) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
@@ -67,8 +74,15 @@ fun RoleLogScreen(
                 for (uid in staff) {
                     ListLine(
                         modifier = Modifier.testTag(RoleLogTags.STAFF),
-                        middle = { Name(nameOf(uid)) },
-                        right = { Button(w.staffRemove, onClick = { onRemoveStaff(uid) }, kind = ButtonKind.Quiet, modifier = Modifier.testTag(RoleLogTags.REMOVE)) },
+                        middle = {
+                            Name(nameOf(uid))
+                            if (admins != null) Tertiary(if (uid in admins) w.roleAdminShort else w.roleModeratorShort, lineOne = true)
+                        },
+                        right = if (removable(uid)) {
+                            { Button(w.staffRemove, onClick = { onRemoveStaff(uid) }, kind = ButtonKind.Quiet, modifier = Modifier.testTag(RoleLogTags.REMOVE)) }
+                        } else {
+                            null
+                        },
                     )
                 }
                 var nick by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
@@ -78,6 +92,9 @@ fun RoleLogScreen(
                 ) {
                     io.tima.core.ui.Field(value = nick, onChange = { nick = it }, hint = "@" + Tima.words.social.nickField.lowercase(), modifier = Modifier.weight(1f).testTag(RoleLogTags.NICK))
                     Button(w.staffAdd, onClick = { if (nick.isNotBlank()) { onAddNick(nick.trim().removePrefix("@")); nick = "" } }, modifier = Modifier.testTag(RoleLogTags.ADD))
+                }
+                onAddAdmin?.let { add ->
+                    Button(w.makeAdmin, onClick = { if (nick.isNotBlank()) { add(nick.trim().removePrefix("@")); nick = "" } }, kind = ButtonKind.Quiet, modifier = Modifier.testTag(RoleLogTags.ADD_ADMIN))
                 }
                 trouble?.let { Secondary(it) }
             }

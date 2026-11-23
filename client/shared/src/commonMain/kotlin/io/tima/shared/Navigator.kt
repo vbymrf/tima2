@@ -227,7 +227,8 @@ internal fun Where.sameAs(other: Where): Boolean = when (this) {
     is Where.Chat -> other is Where.Chat && other.chatId == chatId
     is Where.Person -> other is Where.Person && other.userId == userId
     is Where.Members -> other is Where.Members && other.groupId == groupId
-    is Where.Subscribers -> other is Where.Subscribers && other.channelId == channelId
+    is Where.Subscribers -> other is Where.Subscribers && other.channelId == channelId && other.kind == kind
+    is Where.NotifySettings -> other is Where.NotifySettings && other.id == id && other.kind == kind
     is Where.Access -> other is Where.Access && other.groupId == groupId
     is Where.Community -> other is Where.Community && other.communityId == communityId
     is Where.Showcase -> other is Where.Showcase && other.id == id && other.kind == kind
@@ -254,7 +255,7 @@ internal val Where.transient: Boolean
 internal val Where.swipesWindows: Boolean
     get() = this is Where.Chat || this is Where.Thread || this is Where.Comments || this is Where.Person ||
         this is Where.Community || this is Where.ChannelFeed || this is Where.Showcase || this is Where.Voice ||
-        this is Where.Members || this is Where.Subscribers
+        this is Where.Members || this is Where.Subscribers || this is Where.EntityContent
 
 /** Чья это страница сущности (вкладка или подокно управления) — номер сущности; `null` — не страница. */
 internal val Where.pageOf: String?
@@ -262,6 +263,8 @@ internal val Where.pageOf: String?
         is Where.Showcase -> id
         is Where.Members -> groupId
         is Where.Subscribers -> channelId
+        is Where.EntityContent -> id
+        is Where.ManageMessages -> id
         is Where.Manage -> id
         is Where.ManageMain -> id
         is Where.Roles -> id
@@ -311,8 +314,20 @@ internal sealed interface Where {
      */
     data class Members(val groupId: String, val name: String?) : Where
 
-    /** Подписчики канала (ПЛАН-(ВС) 16): видят владелец и модераторы, исключать можно. */
-    data class Subscribers(val channelId: String, val title: String) : Where
+    /**
+     * Подписчики канала или сообщества (ПЛАН-(ВС) 16, СЦ19, СЦ23): команде — роли, «Исключить», «Забанить»; участнику —
+     * только имена, если включено «Показывать участников». `channelId` — номер сущности вида `kind`.
+     */
+    data class Subscribers(val channelId: String, val title: String, val kind: String = "channel") : Where
+
+    /** Подокно «Уведомления» страницы сущности (СЦ16): новое в сущности и сообщения от сущности мне. */
+    data class NotifySettings(val kind: String, val id: String, val title: String) : Where
+
+    /** Вкладка «Содержимое» (СЦ20): фото, видео, музыка, голосовые, файлы, ссылки — с этого устройства. */
+    data class EntityContent(val kind: String, val id: String, val title: String) : Where
+
+    /** «Управление → Сообщения» (СЦ18): суперсообщение и уровень 0 — написать, править, удалить. */
+    data class ManageMessages(val kind: String, val id: String, val title: String) : Where
 
     /**
      * Переписка. Имя хранится здесь, потому что строка в списке появится позже — потоком. [jumpTo] —
@@ -450,7 +465,10 @@ internal fun whereCode(where: Where): String = when (where) {
     Where.NewGroup -> "group.new"
     Where.NewVirtual -> "virtual.new"
     is Where.Members -> "group.members"
-    is Where.Subscribers -> "channel.subscribers"
+    is Where.Subscribers -> if (where.kind == "community") "community.subscribers" else "channel.subscribers"
+    is Where.NotifySettings -> "entity.notify"
+    is Where.EntityContent -> "entity.content"
+    is Where.ManageMessages -> "manage.messages"
     is Where.Chat -> "chat"
     is Where.Person -> "page.person"
     is Where.Access -> "group.access"
@@ -524,7 +542,10 @@ internal object NavStore {
             is Where.ChannelFeed -> listOf("channel.feed", w.channelId, w.title).joinToString(f)
             is Where.Voice -> listOf("voice", w.roomId, w.title, w.communityId).joinToString(f)
             is Where.Members -> listOf("members", w.groupId, w.name.orEmpty()).joinToString(f)
-            is Where.Subscribers -> listOf("subscribers", w.channelId, w.title).joinToString(f)
+            is Where.Subscribers -> listOf("subscribers", w.channelId, w.title, w.kind).joinToString(f)
+            is Where.NotifySettings -> listOf("entity.notify", w.kind, w.id, w.title).joinToString(f)
+            is Where.EntityContent -> listOf("entity.content", w.kind, w.id, w.title).joinToString(f)
+            is Where.ManageMessages -> listOf("manage.messages", w.kind, w.id, w.title).joinToString(f)
             is Where.Access -> listOf("access", w.groupId, w.name.orEmpty()).joinToString(f)
             is Where.Showcase -> listOf("showcase", w.kind, w.id, w.title).joinToString(f)
             is Where.Comments -> listOf("comments", w.channelId, w.postId.toString()).joinToString(f)
@@ -552,7 +573,10 @@ internal object NavStore {
             "channel.feed" -> Where.ChannelFeed(at(1), at(2))
             "voice" -> Where.Voice(at(1), at(2), at(3))
             "members" -> Where.Members(at(1), at(2).ifEmpty { null })
-            "subscribers" -> Where.Subscribers(at(1), at(2))
+            "subscribers" -> Where.Subscribers(at(1), at(2), at(3).ifEmpty { "channel" })
+            "entity.notify" -> Where.NotifySettings(at(1), at(2), at(3))
+            "entity.content" -> Where.EntityContent(at(1), at(2), at(3))
+            "manage.messages" -> Where.ManageMessages(at(1), at(2), at(3))
             "access" -> Where.Access(at(1), at(2).ifEmpty { null })
             "showcase" -> Where.Showcase(at(1), at(2), at(3))
             "comments" -> at(2).toLongOrNull()?.let { Where.Comments(at(1), it) }
