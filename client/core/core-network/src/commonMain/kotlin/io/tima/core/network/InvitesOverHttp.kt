@@ -187,33 +187,41 @@ class InvitesOverHttp(
         false
     }
 
-    /** Лента канала (СЦ3): последние 50 записей, новые сверху; `null` — нет связи или канал закрыт. */
-    suspend fun channelPosts(channelId: String): List<io.tima.domain.chat.ChannelFeedPost>? = try {
-        val r = client.get(route.api("/api/v1/channels/$channelId/posts?limit=50")) { header("Authorization", "Bearer ${token()}") }
+    /**
+     * Лента канала (СЦ3, СЦ22): страница записей, новые сверху; `before` — старше этого номера (0 — с самых новых).
+     * `null` — нет связи или канал закрыт.
+     */
+    suspend fun channelPosts(channelId: String, before: Long = 0, limit: Int = 50): List<io.tima.domain.chat.ChannelFeedPost>? = try {
+        val q = "limit=$limit" + if (before > 0) "&before=$before" else ""
+        val r = client.get(route.api("/api/v1/channels/$channelId/posts?$q")) { header("Authorization", "Bearer ${token()}") }
         if (r.status != HttpStatusCode.OK) null else r.jsonBody()?.get("posts")?.jsonArrayOrNull()?.mapNotNull { e ->
-            val o = e.jsonObjectOrNull() ?: return@mapNotNull null
-            io.tima.domain.chat.ChannelFeedPost(
-                postId = o.long("post_id") ?: return@mapNotNull null,
-                authorId = o.str("author_id").orEmpty(),
-                text = o.str("text").orEmpty(),
-                atMs = o.long("created_at_unix_ms") ?: 0L,
-                comments = o.int("comments") ?: 0,
-                commentsClosed = o.bool("comments_closed") ?: false,
-            )
+            e.jsonObjectOrNull()?.let(::channelPostOf)
         }?.sortedByDescending { it.postId }
     } catch (_: Throwable) {
         null
     }
 
-    /** Запись в канал текстом (СЦ3): пишут владелец и модератор; уровень 0 — всем подписчикам. */
-    suspend fun channelPublish(channelId: String, text: String): Boolean = try {
+    /**
+     * Запись в канал (СЦ3, СЦ22): пишут владелец, админ, модератор. Текст, узлы, разметка — для поиска и прежнего показа;
+     * `body` — тело документом (фото, файлы); с ним текст может быть пустым.
+     */
+    suspend fun channelPublish(
+        channelId: String,
+        text: String,
+        body: ByteArray? = null,
+        nodes: List<String> = emptyList(),
+        markup: String = "",
+        level: Int = 0,
+    ): Boolean = try {
         client.post(route.api("/api/v1/channels/$channelId/posts")) {
             header("Authorization", "Bearer ${token()}")
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("text", JsonPrimitive(text))
-                put("nodes", kotlinx.serialization.json.JsonArray(emptyList()))
-                put("level", JsonPrimitive(0))
+                put("nodes", kotlinx.serialization.json.JsonArray(nodes.map { JsonPrimitive(it) }))
+                if (markup.isNotEmpty()) put("markup", JsonPrimitive(markup))
+                body?.let { put("body", JsonPrimitive(b64.encode(it))) }
+                put("level", JsonPrimitive(level))
             }.toString())
         }.status.value in 200..299
     } catch (_: Throwable) {
@@ -416,6 +424,28 @@ class InvitesOverHttp(
         )
     }
 }
+
+private val b64 = kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT_OPTIONAL)
+
+/** Запись канала из ответа сервера или из сохранённого на устройстве (СЦ22) — один разбор. */
+fun channelPostOf(o: JsonObject): io.tima.domain.chat.ChannelFeedPost? = io.tima.domain.chat.ChannelFeedPost(
+    postId = o.long("post_id") ?: return null,
+    authorId = o.str("author_id").orEmpty(),
+    text = o.str("text").orEmpty(),
+    atMs = o.long("created_at_unix_ms") ?: 0L,
+    comments = o.int("comments") ?: 0,
+    commentsClosed = o.bool("comments_closed") ?: false,
+    raw = o.toString(),
+    bodyB64 = o.str("body").orEmpty(),
+    nodes = (o["nodes"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty(),
+    markup = o["markup"]?.let { m -> (m as? JsonPrimitive)?.content ?: m.toString() }.orEmpty(),
+    level = o.int("level") ?: 0,
+)
+
+/** Сохранённая запись канала (JSON) — обратно в запись. */
+fun channelPostOf(raw: String): io.tima.domain.chat.ChannelFeedPost? = runCatching {
+    (kotlinx.serialization.json.Json.parseToJsonElement(raw) as? JsonObject)?.let(::channelPostOf)
+}.getOrNull()
 
 /**
  * Подписчики канала или сообщества (ПЛАН-(ВС) 16, СЦ19, СЦ23): кто подписан; команде — ещё владелец, команда (у канала

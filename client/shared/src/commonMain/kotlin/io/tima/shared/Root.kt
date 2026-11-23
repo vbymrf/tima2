@@ -2025,7 +2025,7 @@ private fun App(
                 roleOf(kind, id),
                 hasMembers = true,
                 showMembers = insideOf(kind, id) && showMembersOf["$kind:$id"] == true,
-                content = false,
+                content = kind != "community" && insideOf(kind, id),
             ),
             current = now,
             subscribers = kind != "group",
@@ -4723,11 +4723,88 @@ private fun App(
 
             is Where.ChannelFeed -> {
                 {
-                    // Лента канала (СЦ3): записи, «Комментарии», «О канале»; пишут владелец и модератор.
+                    // Лента канала (СЦ3, СЦ22): сохранённое на устройстве — сразу, новое — с сервера; пришедший отрезок
+                    // заменяет сохранённый (удалённое уходит). «Ещё» — старше показанного, тоже сохраняется.
+                    // Пишут владелец, админ, модератор; запись — тем же документом, что сообщение (фото, файлы).
                     var posts by remember(current) { mutableStateOf<List<io.tima.domain.chat.ChannelFeedPost>?>(null) }
                     var tick by remember(current) { mutableStateOf(0) }
-                    LaunchedEffect(current, tick) { posts = network.invites.channelPosts(current.channelId) }
+                    var shown by remember(current) { mutableStateOf(50) }
+                    val cache = environment.socialCache
+                    val keep: suspend (List<io.tima.domain.chat.ChannelFeedPost>, Long) -> Unit = { got, before ->
+                        val from = got.minOfOrNull { it.postId } ?: 0L
+                        val to = if (before > 0) before - 1 else Long.MAX_VALUE
+                        cache.putPosts(current.channelId, if (got.size < 50) 1L else from, to, got.map { Triple(it.postId, it.atMs, it.raw) })
+                    }
+                    LaunchedEffect(current, tick, shown) {
+                        val saved = cache.posts(current.channelId, shown).mapNotNull { io.tima.core.network.channelPostOf(it.third) }
+                        if (saved.isNotEmpty()) posts = saved
+                        val got = network.invites.channelPosts(current.channelId)
+                        if (got != null) {
+                            keep(got, 0L)
+                            posts = cache.posts(current.channelId, shown).mapNotNull { io.tima.core.network.channelPostOf(it.third) }.ifEmpty { got }
+                        } else if (saved.isEmpty()) {
+                            posts = null
+                        }
+                        Journal.note(LogCode.NAV, "лента канала", "сохранено" to saved.size, "с сервера" to (got?.size ?: -1))
+                    }
                     val role = roleOf("channel", current.channelId)
+                    val staffHere = role == io.tima.domain.chat.GroupRole.Owner || role == io.tima.domain.chat.GroupRole.Moderator || role == io.tima.domain.chat.GroupRole.Admin
+                    var busy by remember(current) { mutableStateOf(false) }
+                    var editorDoc by remember(current) { mutableStateOf<io.tima.domain.chat.ComposedDoc?>(null) }
+                    val uploads = remember(current) { SealedUploads({ network.media }) }
+                    val photoWord = Tima.words.socium.threadPhoto
+                    val publishBody: suspend (ByteArray, String) -> Unit = { body, text ->
+                        val ok = network.invites.channelPublish(current.channelId, text, body = body)
+                        Journal.note(LogCode.NAV, "запись в канал", "тело" to true, "вышло" to ok)
+                        tick++
+                    }
+                    val pickPhotos = io.tima.core.media.rememberPhotosPicker(10) { picked ->
+                        if (picked.isEmpty()) return@rememberPhotosPicker
+                        scope.launch {
+                            busy = true
+                            val sent = picked.mapNotNull { img ->
+                                val bmp = io.tima.core.media.decodeImage(img.bytes) ?: return@mapNotNull null
+                                val prep = io.tima.core.media.PhotoPrep.fit(bmp)
+                                val (id, key) = uploads.upload(prep.full, "image/jpeg", null, null) ?: return@mapNotNull null
+                                io.tima.domain.chat.OutMedia(id, key, "image/jpeg", prep.width, prep.height, prep.full.size.toLong())
+                            }
+                            if (sent.isNotEmpty()) publishBody(io.tima.core.encryption.AttachmentBodiesOverKodium.album(sent), "")
+                            busy = false
+                        }
+                    }
+                    val pickFile = io.tima.core.media.rememberFilePicker(io.tima.core.media.FileKind.ANY) { f ->
+                        if (f == null) return@rememberFilePicker
+                        scope.launch {
+                            busy = true
+                            uploads.upload(f.bytes, f.mime, null, null)?.let { (id, key) ->
+                                val m = io.tima.domain.chat.OutMedia(id, key, f.mime, size = f.bytes.size.toLong(), name = f.name)
+                                publishBody(io.tima.core.encryption.AttachmentBodiesOverKodium.file(m), f.name)
+                            }
+                            busy = false
+                        }
+                    }
+                    val docNow = editorDoc
+                    if (docNow != null) {
+                        val model = remember(docNow) { io.tima.feature.chat.EditorModel(docNow, io.tima.core.encryption.TypedOverQuickMarkdown) }
+                        io.tima.feature.chat.EditorScreen(
+                            model = model,
+                            levels = emptyList(),
+                            defaultLevel = 1,
+                            preview = io.tima.core.encryption.ComposedBodiesOverKodium::preview,
+                            problems = io.tima.core.encryption.ComposedBodiesOverKodium::problems,
+                            onBack = { editorDoc = null },
+                            onSend = { sentDoc ->
+                                val body = io.tima.core.encryption.ComposedBodiesOverKodium.encode(sentDoc, null)
+                                if (body != null) {
+                                    val text = io.tima.core.encryption.ComposedBodiesOverKodium.content(sentDoc).displayText()
+                                    scope.launch {
+                                        publishBody(body, text)
+                                        editorDoc = null
+                                    }
+                                }
+                            },
+                        )
+                    } else {
                     // «⋮» канала (ПЛАН-(ВС) 16): разделы каталога и уведомления — как у группы, без группового звонка и
                     // «Моего цвета».
                     var channelMenu by remember(current) { mutableStateOf(false) }
@@ -4738,10 +4815,10 @@ private fun App(
                         time = { ms -> if (ms > 0) sociumTime(ms) else "" },
                         onComments = { p -> where = Where.Comments(current.channelId, p.postId) },
                         onAbout = { where = Where.Showcase("channel", current.channelId, current.title) },
-                        onPublish = if (role == io.tima.domain.chat.GroupRole.Owner || role == io.tima.domain.chat.GroupRole.Moderator || role == io.tima.domain.chat.GroupRole.Admin) {
+                        onPublish = if (staffHere) {
                             { text ->
                                 scope.launch {
-                                    val ok = network.invites.channelPublish(current.channelId, text)
+                                    val ok = network.invites.channelPublish(current.channelId, text, nodes = listOf(text))
                                     Journal.note(LogCode.NAV, "запись в канал", "вышло" to ok)
                                     tick++
                                 }
@@ -4752,6 +4829,26 @@ private fun App(
                         onBack = { where = Where.Nothing },
                         avatarPicture = entityAvatars["channel:${current.channelId}"]?.let { "tima-media://$it" },
                         onMenu = { channelMenu = true },
+                        content = { p ->
+                            val rich = remember(p.postId, p.bodyB64, p.markup) { channelRich(p) }
+                            if (rich != null && (rich.media.isNotEmpty() || rich.blocks.size > 1)) {
+                                io.tima.feature.chat.RichBody(rich)
+                            } else {
+                                io.tima.core.ui.Name(rich?.let { p.text.ifBlank { "…" } } ?: p.text)
+                            }
+                        },
+                        onMore = {
+                            scope.launch {
+                                val oldest = posts?.minOfOrNull { it.postId } ?: return@launch
+                                val older = network.invites.channelPosts(current.channelId, before = oldest)
+                                if (older != null) keep(older, oldest)
+                                shown += 50
+                            }
+                        },
+                        onPhotos = if (staffHere) pickPhotos else null,
+                        onFile = if (staffHere) pickFile else null,
+                        onEditor = if (staffHere) ({ editorDoc = io.tima.domain.chat.ComposedDoc(items = listOf(io.tima.domain.chat.ComposedItem.Text(""))) }) else null,
+                        busy = busy,
                     )
                     if (channelMenu) {
                         val key = "channel:${current.channelId}"
@@ -4765,6 +4862,7 @@ private fun App(
                             onNotifyOff = assembled.liveStates?.let { l -> { off: Boolean -> l.mute("channel", current.channelId, off) } },
                             title = Tima.words.socium.channelSettings,
                         )
+                    }
                     }
                     }
                 }
@@ -5877,7 +5975,70 @@ private fun App(
 
             // «Содержимое» (СЦ20) и «Управление → Сообщения» (СЦ18) — следующими этапами; входов в них пока нет.
             is Where.EntityContent -> {
-                { where = Where.Nothing }
+                {
+                    // «Содержимое» (СЦ20): указатель на устройстве; первое открытие разбирает сохранённое (группа —
+                    // переписку, канал — сохранённую ленту) под «Собирается…», дальше — только новее разобранного.
+                    val key = "${current.kind}:${current.id}"
+                    val cache = environment.socialCache
+                    var items by remember(current) { mutableStateOf<List<io.tima.domain.chat.ContentItem>?>(null) }
+                    var collecting by remember(current) { mutableStateOf(false) }
+                    var section by remember(current) { mutableStateOf(io.tima.domain.chat.ContentSection.Photo) }
+                    LaunchedEffect(current) {
+                        val upTo = cache.scannedUpTo(key)
+                        items = cache.items(key)
+                        collecting = upTo < 0
+                        val started = msNow()
+                        val fresh = mutableListOf<io.tima.domain.chat.ContentItem>()
+                        var top = upTo.coerceAtLeast(0)
+                        if (current.kind == "group") {
+                            val lines = environment.chatLines(current.id, if (upTo < 0) 100_000 else 2_000)
+                            for (l in lines) {
+                                if (l.serverId <= upTo.coerceAtLeast(0) || l.serverId <= 0) continue
+                                fresh += io.tima.domain.chat.ContentIndex.of(l.serverId, l.atMs, l.rich, l.text, l.senderId.orEmpty())
+                                top = maxOf(top, l.serverId)
+                            }
+                        } else {
+                            for ((id, at, raw) in cache.postsAfter(current.id, upTo.coerceAtLeast(0))) {
+                                val p = io.tima.core.network.channelPostOf(raw) ?: continue
+                                fresh += io.tima.domain.chat.ContentIndex.of(id, at, channelRich(p), p.text, p.authorId)
+                                top = maxOf(top, id)
+                            }
+                        }
+                        cache.put(key, fresh, top)
+                        items = cache.items(key)
+                        collecting = false
+                        Journal.note(LogCode.NAV, "содержимое", "вид" to current.kind, "первый раз" to (upTo < 0), "новых" to fresh.size, "мс" to (msNow() - started))
+                    }
+                    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+                    val showIt: (io.tima.domain.chat.ContentItem) -> Unit = { it ->
+                        where = if (current.kind == "group") Where.Chat(current.id, current.title) else Where.Comments(current.id, it.messageId)
+                    }
+                    io.tima.feature.group.EntityContentScreen(
+                        title = current.title,
+                        tabs = { pageTabBar(current.kind, current.id, current.title, io.tima.feature.group.PageTab.Content) },
+                        items = items,
+                        collecting = collecting,
+                        section = section,
+                        onSection = { section = it },
+                        onOpen = { it ->
+                            if (it.section == io.tima.domain.chat.ContentSection.Link) runCatching { uri.openUri(it.url) } else showIt(it)
+                        },
+                        onShow = showIt,
+                        time = { ms -> if (ms > 0) sociumTime(ms) else "" },
+                        onBack = { where = Where.Nothing },
+                        preview = { it ->
+                            val rich = remember(it.messageId, it.index) {
+                                val block = when (it.section) {
+                                    io.tima.domain.chat.ContentSection.Photo -> io.tima.domain.chat.RichBlock.Image(0)
+                                    io.tima.domain.chat.ContentSection.Voice -> io.tima.domain.chat.RichBlock.Voice(0)
+                                    else -> io.tima.domain.chat.RichBlock.File(0)
+                                }
+                                io.tima.domain.chat.RichContent(blocks = listOf(block), media = listOf(it.media()))
+                            }
+                            io.tima.feature.chat.RichBody(rich)
+                        },
+                    )
+                }
             }
 
             is Where.ManageMessages -> {
@@ -6493,4 +6654,16 @@ internal fun sociumTime(atMs: Long, nowMs: Long = kotlinx.datetime.Clock.System.
         at.year == now.year -> two(at.dayOfMonth) + "." + two(at.monthNumber)
         else -> two(at.dayOfMonth) + "." + two(at.monthNumber) + "." + at.year
     }
+}
+
+/** Запись канала оформленной (СЦ22): тело документом, иначе узлы и разметка; `null` — не разобралось. */
+internal fun channelRich(p: io.tima.domain.chat.ChannelFeedPost): io.tima.domain.chat.RichContent? {
+    if (p.bodyB64.isNotEmpty()) {
+        val bytes = runCatching {
+            kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT_OPTIONAL).decode(p.bodyB64)
+        }.getOrNull()
+        bytes?.let { io.tima.core.encryption.TextBodyCodec.decodeLine(it)?.rich }?.let { return it }
+    }
+    if (p.nodes.isEmpty()) return null
+    return io.tima.core.encryption.ComposedBodiesOverKodium.readOpen(p.nodes, p.markup)?.rich
 }

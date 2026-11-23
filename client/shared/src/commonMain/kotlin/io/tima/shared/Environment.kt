@@ -1,5 +1,6 @@
 package io.tima.shared
 
+import kotlinx.coroutines.flow.first
 import io.tima.core.diag.Journal
 import io.tima.core.diag.LogCode
 import io.tima.core.network.CallHistoryOverHttp
@@ -840,6 +841,13 @@ class Environment private constructor(
     private val chatFeed = SqlChatFeed(db, TextBodyCodec, cipher, myUserId, priorIdentities::ids)
 
     val chat: ObserveChat = ObserveChat(chatFeed)
+
+    /** Строки переписки разобранными — «Содержимому» (ПЛАН-(СЦ) СЦ20): последние `limit`, от старых к новым. */
+    suspend fun chatLines(chatId: String, limit: Int): List<io.tima.domain.chat.ChatLine> =
+        chatFeed.page(chatId, limit).first()
+
+    /** Лента канала и «Содержимое» на устройстве (СЦ20, СЦ22), закрытые ключом устройства. */
+    val socialCache: io.tima.core.database.SqlSocialCache = io.tima.core.database.SqlSocialCache(db, cipher)
 
     /** Строка по номеру из базы — первое место, где ищется вставленное и подкладка. */
     val localMessages: io.tima.domain.chat.LocalMessages = chatFeed

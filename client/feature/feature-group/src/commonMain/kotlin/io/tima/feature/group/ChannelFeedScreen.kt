@@ -38,6 +38,10 @@ object ChannelFeedTags {
     const val ABOUT = "channel:about"
     const val INPUT = "channel:input"
     const val SEND = "channel:send"
+    const val MORE = "channel:more"
+    const val PHOTO = "channel:photo"
+    const val FILE = "channel:file"
+    const val EDITOR = "channel:editor"
 }
 
 /**
@@ -58,6 +62,15 @@ fun ChannelFeedScreen(
     avatarPicture: String? = null,
     /** «⋮» канала — разделы и уведомления, как у группы (ПЛАН-(ВС) 16); `null` — кнопки нет. */
     onMenu: (() -> Unit)? = null,
+    /** Запись оформленной — фото, файлы, блоки (СЦ22); `null` — текстом. */
+    content: (@Composable (ChannelFeedPost) -> Unit)? = null,
+    /** «Ещё» — записи старше показанных (СЦ22); `null` — кнопки нет. */
+    onMore: (() -> Unit)? = null,
+    /** Вложения записи, как в переписке (СЦ22, СЦ17); `null` — кнопки нет. */
+    onPhotos: (() -> Unit)? = null,
+    onFile: (() -> Unit)? = null,
+    onEditor: (() -> Unit)? = null,
+    busy: Boolean = false,
 ) {
     val w = Tima.words.socium
     Column(Modifier.fillMaxSize().background(Tima.colors.surface)) {
@@ -83,7 +96,7 @@ fun ChannelFeedScreen(
                         modifier = Modifier.testTag(ChannelFeedTags.POST),
                         middle = {
                             Column(verticalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
-                                Name(p.text)
+                                if (content != null) content(p) else Name(p.text)
                                 Tertiary(time(p.atMs))
                                 if (!p.commentsClosed || p.comments > 0) {
                                     Button(
@@ -97,6 +110,19 @@ fun ChannelFeedScreen(
                         },
                     )
                 }
+            }
+            if (onMore != null && !posts.isNullOrEmpty()) {
+                item(key = "more") {
+                    Button(w.channelMore, onClick = onMore, kind = ButtonKind.Quiet, modifier = Modifier.padding(TimaSpacing.about4).testTag(ChannelFeedTags.MORE))
+                }
+            }
+        }
+        if (busy) Tertiary(w.threadSending, Modifier.padding(horizontal = TimaSpacing.about4))
+        if (onPublish != null && (onPhotos != null || onFile != null || onEditor != null)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3), horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about2)) {
+                onPhotos?.let { io.tima.core.ui.Chip(w.threadPhoto, onClick = it, modifier = Modifier.testTag(ChannelFeedTags.PHOTO)) }
+                onFile?.let { io.tima.core.ui.Chip(w.threadFile, onClick = it, modifier = Modifier.testTag(ChannelFeedTags.FILE)) }
+                onEditor?.let { io.tima.core.ui.Chip(w.threadEditor, onClick = it, modifier = Modifier.testTag(ChannelFeedTags.EDITOR)) }
             }
         }
         if (onPublish != null) {

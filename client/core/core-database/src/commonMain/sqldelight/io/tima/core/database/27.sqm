@@ -1,0 +1,28 @@
+-- Схема 27 → 28: лента канала на устройстве (ПЛАН-(СЦ) СЦ22) и указатель «Содержимого» (СЦ20).
+-- Лента канала на устройстве (ПЛАН-(СЦ) СЦ22): запись сервера целиком (JSON), закрытая ключом устройства. Вход в
+-- канал показывает сохранённое сразу и добирает новое; удалённое на сервере в пришедшем отрезке убирается.
+CREATE TABLE channel_post (
+    channel_id      TEXT    NOT NULL,
+    post_id         INTEGER NOT NULL,
+    at_ms           INTEGER NOT NULL,
+    raw_enc         BLOB    NOT NULL,
+    PRIMARY KEY (channel_id, post_id)
+);
+
+-- «Содержимое» (СЦ20): указатель «вложение → сообщение», закрытый ключом устройства; собирается при первом открытии
+-- вкладки и добирается новым (решение «в», 2026-11-23). `entity_key` — «group:<номер>» или «channel:<номер>».
+CREATE TABLE content_item (
+    entity_key TEXT    NOT NULL,
+    message_id INTEGER NOT NULL,
+    idx        INTEGER NOT NULL,
+    section    TEXT    NOT NULL,
+    at_ms      INTEGER NOT NULL,
+    data_enc   BLOB    NOT NULL,
+    PRIMARY KEY (entity_key, message_id, idx)
+);
+
+-- До какого сообщения сущность разобрана в «Содержимое».
+CREATE TABLE content_scan (
+    entity_key TEXT    NOT NULL PRIMARY KEY,
+    up_to      INTEGER NOT NULL
+);
