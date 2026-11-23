@@ -398,3 +398,33 @@ func MyChannelAdmin(ctx context.Context, s *Store, userID string) (map[string]bo
 	}
 	return out, rows.Err()
 }
+
+// SetCommunityMessageBody — тело сообщения описания сообщества документом (СЦ25); пустое — не пишется.
+func SetCommunityMessageBody(ctx context.Context, s *Store, communityID string, messageID int64, body []byte) error {
+	if len(body) == 0 {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx, `UPDATE community_messages SET body = $3 WHERE community_id::text = $1 AND message_id = $2`,
+		communityID, messageID, body)
+	return err
+}
+
+// CommunityMessageBodies — тела сообщений описания сообщества; без тела в ответе нет.
+func CommunityMessageBodies(ctx context.Context, s *Store, communityID string) (map[int64][]byte, error) {
+	out := map[int64][]byte{}
+	rows, err := s.pool.Query(ctx, `SELECT message_id, body FROM community_messages
+		WHERE community_id::text = $1 AND body IS NOT NULL AND NOT deleted`, communityID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var b []byte
+		if err := rows.Scan(&id, &b); err != nil {
+			return out, err
+		}
+		out[id] = b
+	}
+	return out, rows.Err()
+}

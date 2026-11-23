@@ -421,30 +421,15 @@ func communityMessages(st CommunityStore) http.HandlerFunc {
 // addCommunityMessage — описание: сообщение уровня 0. Пишут владелец и админы.
 func addCommunityMessage(st CommunityStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Text   string   `json:"text"`
-			Nodes  []string `json:"nodes,omitempty"`
-			Markup string   `json:"markup,omitempty"`
-		}
+		var req openPostBody
 		if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
 			return
 		}
-		nodes := req.Nodes
-		if len(nodes) == 0 && req.Text != "" {
-			nodes = []string{req.Text}
-		}
-		if len(nodes) == 0 {
-			writeErr(w, http.StatusBadRequest, "bad_text", "нужен непустой текст")
+		// Тело документом (СЦ25): с ним текст может быть пустым — фото, файл, голосовое.
+		nodes, markup, body, ok := req.parse(w)
+		if !ok {
 			return
-		}
-		var markup []byte
-		if req.Markup != "" {
-			if !json.Valid([]byte(req.Markup)) {
-				writeErr(w, http.StatusBadRequest, "bad_markup", "markup должен быть валидным JSON")
-				return
-			}
-			markup = []byte(req.Markup)
 		}
 		if showcaseFull(w, r, st, store.ShowcaseCommunity, r.PathValue("communityID")) {
 			return
@@ -468,6 +453,11 @@ func addCommunityMessage(st CommunityStore) http.HandlerFunc {
 			log.Printf("addCommunityMessage: %v", err)
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
+		}
+		if s, isStore := st.(*store.Store); isStore {
+			if err := store.SetCommunityMessageBody(r.Context(), s, r.PathValue("communityID"), messageID, body); err != nil {
+				log.Printf("addCommunityMessage: тело: %v", err)
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)

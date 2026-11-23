@@ -333,3 +333,20 @@ func TestЗаписьКаналаТеломИМедленныйРежим(t *tes
 		t.Fatalf("комментарий владельца: %d", code)
 	}
 }
+
+// СЦ25: сообщение описания сообщества с телом документом и без текста — принимается и отдаётся описанием.
+func TestОписаниеСообществаТелом(t *testing.T) {
+	ts, _ := setup(t)
+	owner := registerDevice(t, ts, "+79990199051")
+	community := makeCommunity(t, ts, owner, "Ядро")
+	body := base64.RawURLEncoding.EncodeToString([]byte{0x0a, 0x01, 'x'})
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/communities/"+community+"/messages", map[string]any{"text": "", "body": body}, nil); code != 201 {
+		t.Fatalf("сообщение телом: %d", code)
+	}
+	var sc struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	if code := getAuthed(t, ts, owner.token, "/api/v1/communities/"+community+"/showcase", &sc); code != 200 || len(sc.Messages) != 1 || sc.Messages[0]["body"] != body {
+		t.Fatalf("описание с телом: %d %+v", code, sc.Messages)
+	}
+}

@@ -33,17 +33,19 @@ type Media struct {
 	TermChat  string
 	TermPeer  string
 	TermGroup string
+	// TermEntity — срок у сущности (ПЛАН-(СЦ) §1.14, 5): «вид:номер»; доступ — по ключу в теле, без проверки участия.
+	TermEntity string
 }
 
 // mediaCols — столбцы записи о файле в порядке [scanMedia].
 const mediaCols = `media_id, owner_id, storage_key, mime, size_bytes, is_encrypted, chunk_count, status,
 	COALESCE(postman_chat::text, ''), COALESCE(postman_peer::text, ''), COALESCE(owner_device::text, ''),
-	term_sec, COALESCE(term_chat::text, ''), COALESCE(term_peer::text, ''), COALESCE(term_group::text, '')`
+	term_sec, COALESCE(term_chat::text, ''), COALESCE(term_peer::text, ''), COALESCE(term_group::text, ''), term_entity`
 
 func scanMedia(row pgx.Row) (Media, error) {
 	var m Media
 	err := row.Scan(&m.MediaID, &m.OwnerID, &m.StorageKey, &m.Mime, &m.SizeBytes, &m.IsEncrypted, &m.ChunkCount, &m.Status,
-		&m.PostmanChat, &m.PostmanPeer, &m.OwnerDevice, &m.TermSec, &m.TermChat, &m.TermPeer, &m.TermGroup)
+		&m.PostmanChat, &m.PostmanPeer, &m.OwnerDevice, &m.TermSec, &m.TermChat, &m.TermPeer, &m.TermGroup, &m.TermEntity)
 	return m, err
 }
 
@@ -66,15 +68,15 @@ func (s *Store) CreateMedia(ctx context.Context, m Media, contentHash []byte) (M
 	// обходили бы, не подтверждая загрузку.
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO media_objects (owner_id, storage_key, mime, size_bytes, is_encrypted, content_hash, chunk_count,
-			postman_chat, postman_peer, owner_device, term_sec, term_chat, term_peer, term_group)
+			postman_chat, postman_peer, owner_device, term_sec, term_chat, term_peer, term_group, term_entity)
 		SELECT $1::uuid, '', $2::text, $3::bigint, $4::boolean, $5::bytea, $6::int,
 			NULLIF($8, '')::uuid, NULLIF($9, '')::uuid, NULLIF($10, '')::uuid,
-			$11::int, NULLIF($12, '')::uuid, NULLIF($13, '')::uuid, NULLIF($14, '')::uuid
+			$11::int, NULLIF($12, '')::uuid, NULLIF($13, '')::uuid, NULLIF($14, '')::uuid, $15::text
 		 WHERE $7::bigint = 0 OR $3::bigint + (SELECT COALESCE(sum(size_bytes), 0) FROM media_objects
 		                                       WHERE owner_id = $1::uuid AND created_at > now() - interval '1 day') <= $7::bigint
 		RETURNING media_id`,
 		m.OwnerID, m.Mime, m.SizeBytes, m.IsEncrypted, contentHash, m.ChunkCount, m.QuotaBytes,
-		m.PostmanChat, m.PostmanPeer, m.OwnerDevice, m.TermSec, m.TermChat, m.TermPeer, m.TermGroup).Scan(&m.MediaID)
+		m.PostmanChat, m.PostmanPeer, m.OwnerDevice, m.TermSec, m.TermChat, m.TermPeer, m.TermGroup, m.TermEntity).Scan(&m.MediaID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return m, ErrUploadQuota
 	}

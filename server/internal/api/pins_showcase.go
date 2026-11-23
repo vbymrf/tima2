@@ -18,6 +18,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -350,7 +351,18 @@ func communityShowcase(st ShowcaseStore) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		writeShowcase(w, r, st, store.ShowcaseCommunity, communityID, "messages", messagesJSON(msgs))
+		items := messagesJSON(msgs)
+		// Тела документом (СЦ25) — к сообщениям, у которых они есть.
+		if s, isStore := st.(*store.Store); isStore {
+			if bodies, err := store.CommunityMessageBodies(r.Context(), s, communityID); err == nil {
+				for _, it := range items {
+					if id, ok := it["message_id"].(int64); ok && len(bodies[id]) > 0 {
+						it["body"] = base64.RawURLEncoding.EncodeToString(bodies[id])
+					}
+				}
+			}
+		}
+		writeShowcase(w, r, st, store.ShowcaseCommunity, communityID, "messages", items)
 	}
 }
 

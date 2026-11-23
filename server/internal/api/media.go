@@ -186,6 +186,9 @@ func mediaInit(deps mediaDeps) http.HandlerFunc {
 				ChatID  string `json:"chat_id,omitempty"`
 				PeerID  string `json:"peer_id,omitempty"`
 				GroupID string `json:"group_id,omitempty"`
+				// EntityKind/EntityID — срок у сущности (ПЛАН-(СЦ) §1.14, 5): лента с сущностью, канал, описание.
+				EntityKind string `json:"entity_kind,omitempty"`
+				EntityID   string `json:"entity_id,omitempty"`
 			} `json:"term,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
@@ -266,6 +269,9 @@ func mediaInit(deps mediaDeps) http.HandlerFunc {
 				media.TermGroup = t.GroupID
 			case t.GroupID == "" && t.PeerID != "" && t.ChatID == personalChatID(id.UserID, t.PeerID):
 				media.TermChat, media.TermPeer = t.ChatID, t.PeerID
+			case t.GroupID == "" && t.ChatID == "" && t.PeerID == "" && t.EntityID != "" &&
+				(t.EntityKind == "group" || t.EntityKind == "channel" || t.EntityKind == "community"):
+				media.TermEntity = t.EntityKind + ":" + t.EntityID
 			default:
 				writeErr(w, http.StatusBadRequest, "bad_term", "файл на срок — в своей личной переписке (chat_id и peer_id) или в группе (group_id)")
 				return
@@ -503,6 +509,10 @@ func postmanAccess(m store.Media, userID, deviceID string) (allowed, byPeer bool
 // termAccess — кому отдаётся файл на срок (ПЛАН-(ВМ) Р3): в личной — отправителю и собеседнику, в
 // группе — её участникам сейчас. Скачивания не считаются.
 func termAccess(ctx context.Context, deps mediaDeps, m store.Media, userID string) (bool, error) {
+	// Срок у сущности: участников группы у ленты с сущностью и канала нет — доступ по ключу в теле (§1.14, 5).
+	if m.TermEntity != "" {
+		return true, nil
+	}
 	if m.TermGroup != "" {
 		return isGroupMember(ctx, deps, m.TermGroup, userID)
 	}

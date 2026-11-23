@@ -599,11 +599,14 @@ func editCommunityMessage(st *store.Store) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "bad_json", "тело не парсится")
 			return
 		}
-		nodes, markup, _, ok := req.parse(w)
+		nodes, markup, body, ok := req.parse(w)
 		if !ok {
 			return
 		}
 		err := store.EditCommunityMessage(r.Context(), st, r.PathValue("entityID"), messageID, userID, nodes, markup)
+		if err == nil {
+			err = store.SetCommunityMessageBody(r.Context(), st, r.PathValue("entityID"), messageID, body)
+		}
 		if errors.Is(err, store.ErrNotAllowed) {
 			writeErr(w, http.StatusForbidden, "edit_not_author", "исправить сообщение может только автор")
 			return
