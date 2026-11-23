@@ -1246,6 +1246,7 @@ private fun App(
         SystemBack.handle = {
             val top = navigator.where
             when {
+                SystemBack.inner?.invoke() == true -> true
                 windowSwitcher -> {
                     windowSwitcher = false
                     true
@@ -4635,6 +4636,10 @@ private fun App(
                         }
                     }
                     val doc = editorDoc
+                    DisposableEffect(doc != null) {
+                        if (doc != null) SystemBack.inner = { editorDoc = null; true }
+                        onDispose { SystemBack.inner = null }
+                    }
                     if (doc != null) {
                         val model = remember(doc) { io.tima.feature.chat.EditorModel(doc, io.tima.core.encryption.TypedOverQuickMarkdown) }
                         io.tima.feature.chat.EditorScreen(
@@ -4784,6 +4789,10 @@ private fun App(
                         }
                     }
                     val docNow = editorDoc
+                    DisposableEffect(docNow != null) {
+                        if (docNow != null) SystemBack.inner = { editorDoc = null; true }
+                        onDispose { SystemBack.inner = null }
+                    }
                     if (docNow != null) {
                         val model = remember(docNow) { io.tima.feature.chat.EditorModel(docNow, io.tima.core.encryption.TypedOverQuickMarkdown) }
                         io.tima.feature.chat.EditorScreen(
@@ -6068,6 +6077,10 @@ private fun App(
                     }
                     val blank = io.tima.domain.chat.ComposedDoc(items = listOf(io.tima.domain.chat.ComposedItem.Text("")), level = 0)
                     val ed = editing
+                    DisposableEffect(ed != null) {
+                        if (ed != null) SystemBack.inner = { editing = null; notice = null; true }
+                        onDispose { SystemBack.inner = null }
+                    }
                     if (ed != null) {
                         val model = remember(ed) { io.tima.feature.chat.EditorModel(ed.first, io.tima.core.encryption.TypedOverQuickMarkdown) }
                         io.tima.feature.chat.EditorScreen(

@@ -1,6 +1,9 @@
 package io.tima.feature.group
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -90,6 +93,27 @@ fun EntityContentScreen(
             Tertiary(w.contentEmpty, Modifier.padding(TimaSpacing.about5))
         }
         LazyColumn(Modifier.fillMaxSize()) {
+            // Фото и видео — сеткой миниатюр по три (живьём на realme, 274: во всю ширину одно фото занимало экран).
+            if (section == ContentSection.Photo || section == ContentSection.Video) {
+                val rows = list.chunked(3)
+                items(rows.size, key = { "grid:" + rows[it].first().messageId + ":" + rows[it].first().index }) { r ->
+                    androidx.compose.foundation.layout.Row(
+                        Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        for (it in rows[r]) {
+                            androidx.compose.foundation.layout.Box(
+                                Modifier.weight(1f).aspectRatio(1f)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                                    .clickable { onOpen(it) }
+                                    .testTag(ContentTags.ROW),
+                            ) { preview(it) }
+                        }
+                        repeat(3 - rows[r].size) { androidx.compose.foundation.layout.Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                return@LazyColumn
+            }
             items(list.size, key = { list[it].messageId.toString() + ":" + list[it].index }) { i ->
                 val it = list[i]
                 Column(Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about2)) {

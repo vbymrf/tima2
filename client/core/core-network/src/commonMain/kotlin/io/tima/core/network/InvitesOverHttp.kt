@@ -203,7 +203,8 @@ class InvitesOverHttp(
 
     /**
      * Запись в канал (СЦ3, СЦ22): пишут владелец, админ, модератор. Текст, узлы, разметка — для поиска и прежнего показа;
-     * `body` — тело документом (фото, файлы); с ним текст может быть пустым.
+     * `body` — тело документом (фото, файлы); с ним текст может быть пустым. Уровень — 1 «всем»: уровень 0 — это
+     * описание (ПЛАН-(ЗО)), и запись ленты уровнем 0 попадала в «Описание» и «Управление → Сообщения» (живьём на 274).
      */
     suspend fun channelPublish(
         channelId: String,
@@ -211,7 +212,7 @@ class InvitesOverHttp(
         body: ByteArray? = null,
         nodes: List<String> = emptyList(),
         markup: String = "",
-        level: Int = 0,
+        level: Int = 1,
     ): Boolean = try {
         client.post(route.api("/api/v1/channels/$channelId/posts")) {
             header("Authorization", "Bearer ${token()}")

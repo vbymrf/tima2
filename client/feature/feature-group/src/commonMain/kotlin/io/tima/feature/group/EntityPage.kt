@@ -80,7 +80,13 @@ fun EntityTabsBar(
 ) {
     if (tabs.isEmpty()) return
     val w = Tima.words.socium
-    Row(Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // Переносом, а не в одну строку: четыре вкладки («Содержимое», СЦ20) на узком экране сжимали последнюю в столбик
+    // букв (живьём на realme, 274, 2026-11-23).
+    FlowRow(
+        Modifier.fillMaxWidth().padding(horizontal = TimaSpacing.about3, vertical = TimaSpacing.about2),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         for (tab in tabs) {
             val label = when (tab) {
                 PageTab.About -> w.tabAbout
