@@ -380,3 +380,21 @@ func CommentedWithin(ctx context.Context, s *Store, channelID, userID string, se
 		  AND created_at > now() - make_interval(secs => $3))`, channelID, userID, sec).Scan(&recent)
 	return recent, err
 }
+
+// MyChannelAdmin — каналы, где человек админ (СЦ21): номер → true.
+func MyChannelAdmin(ctx context.Context, s *Store, userID string) (map[string]bool, error) {
+	out := map[string]bool{}
+	rows, err := s.pool.Query(ctx, `SELECT channel_id::text FROM channel_moderators WHERE user_id::text = $1 AND role = 'admin'`, userID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return out, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}

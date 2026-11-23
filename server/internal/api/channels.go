@@ -171,7 +171,21 @@ func listMyChannels(st ChannelStore) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
-		writeChannels(w, channels)
+		// Админ канала (СЦ21): `moderator` остаётся «в команде», `admin` — роль выше; прежний клиент видит модератора.
+		var admin map[string]bool
+		if s, isStore := st.(*store.Store); isStore {
+			if admin, err = store.MyChannelAdmin(r.Context(), s, id.UserID); err != nil {
+				log.Printf("listMyChannels: админ: %v", err)
+			}
+		}
+		out := make([]map[string]any, 0, len(channels))
+		for _, c := range channels {
+			item := channelJSON(c)
+			item["admin"] = admin[c.ChannelID]
+			out = append(out, item)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"channels": out})
 	}
 }
 

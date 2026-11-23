@@ -63,6 +63,13 @@ func TestАдминКанала(t *testing.T) {
 	if code := postAuthed(t, ts, mod.token, "POST", base+"/moderators", map[string]string{"user_id": other.userID}, nil); code != 403 {
 		t.Fatalf("модератор назначил модератора: %d", code)
 	}
+	var mine struct {
+		Channels []map[string]any `json:"channels"`
+	}
+	if code := getAuthed(t, ts, admin.token, "/api/v1/channels", &mine); code != 200 || len(mine.Channels) != 1 ||
+		mine.Channels[0]["admin"] != true || mine.Channels[0]["moderator"] != true {
+		t.Fatalf("мои каналы админа: %d %+v", code, mine.Channels)
+	}
 	var team struct {
 		Moderators []string `json:"moderators"`
 		Admins     []string `json:"admins"`
