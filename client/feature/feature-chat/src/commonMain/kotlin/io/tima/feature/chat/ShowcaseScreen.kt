@@ -107,7 +107,9 @@ fun ShowcaseScreen(
                     state.loading && page == null -> Tertiary(w.loading)
                     page == null -> Tertiary(w.failed)
                     else -> when (val view = page.view()) {
-                        ShowcaseView.Empty -> Tertiary(w.empty)
+                        // Сообщений уровня 0 нет — под чертой пусто: «Описания пока нет» спорило с описанием сущности
+                        // над пузырями (заказчик 2026-11-24: «убери надпись совсем»).
+                        ShowcaseView.Empty -> Unit
                         is ShowcaseView.Super -> Whole(view.line)
                         // Между сообщениями уровня 0 — разделитель (СЦ28, §1.13, 8).
                         is ShowcaseView.Feed -> view.lines.forEachIndexed { i, it ->

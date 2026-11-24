@@ -22,7 +22,6 @@ interface ShowcaseWords {
     val title: String
     val loading: String
     val failed: String
-    val empty: String
     val join: String
     val subscribe: String
     val makeSuper: String
@@ -63,7 +62,6 @@ object RussianShowcaseWords : ShowcaseWords {
     override val title = "Описание"
     override val loading = "Загружаю описание…"
     override val failed = "Описание не загрузилось — проверьте связь"
-    override val empty = "Описания пока нет"
     override val join = "Вступить"
     override val subscribe = "Подписаться"
     override val makeSuper = "Создать суперсообщение"
@@ -103,7 +101,6 @@ object EnglishShowcaseWords : ShowcaseWords {
     override val title = "About"
     override val loading = "Loading the description…"
     override val failed = "The description didn't load — check the connection"
-    override val empty = "No description yet"
     override val join = "Join"
     override val subscribe = "Subscribe"
     override val makeSuper = "Create a super message"
@@ -143,7 +140,6 @@ object SpanishShowcaseWords : ShowcaseWords {
     override val title = "Descripción"
     override val loading = "Cargando la descripción…"
     override val failed = "La descripción no se cargó: revise la conexión"
-    override val empty = "Aún no hay descripción"
     override val join = "Unirse"
     override val subscribe = "Suscribirse"
     override val makeSuper = "Crear un supermensaje"
