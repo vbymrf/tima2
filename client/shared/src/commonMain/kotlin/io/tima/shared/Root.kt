@@ -5051,6 +5051,13 @@ private fun App(
                                 val k = io.tima.domain.chat.EntityKind.fromWire(kind) ?: io.tima.domain.chat.EntityKind.Group
                                 pageCount = network.invites.counts(k, listOf(id))[id]
                             }
+                            // Описание сущности (2026-11-24) — с сервера при входе: страницу открывают и не вступившие, у
+                            // кого её нет в списке «Социума»; до ответа — то, что прочитано для списка.
+                            var pageAbout by remember(kind, id) { mutableStateOf(entityAbouts["$kind:$id"]) }
+                            LaunchedEffect(kind, id) {
+                                val k = io.tima.domain.chat.EntityKind.fromWire(kind) ?: io.tima.domain.chat.EntityKind.Group
+                                network.invites.abouts(k, listOf(id))[id]?.let { pageAbout = it }
+                            }
                             val inside = when (kind) {
                                 "group" -> socialState.mine.any { it.groupId == id }
                                 "community" -> socialState.communities.any { it.communityId == id }
@@ -5107,6 +5114,7 @@ private fun App(
                                     }
                                 },
                                 count = pageCount?.let { n -> if (kind == "group") Tima.words.socium.membersCount(n) else Tima.words.socium.subscribersCount(n) },
+                                about = pageAbout,
                                 extra = if (kind == "community" && voice != null) {
                                     {
                                         var rooms by remember(id) { mutableStateOf<List<io.tima.core.network.VoiceChatInfo>>(emptyList()) }

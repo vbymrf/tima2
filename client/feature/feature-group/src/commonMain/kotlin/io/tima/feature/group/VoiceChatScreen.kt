@@ -201,7 +201,7 @@ fun VoiceRoomsList(
             ListLine(
                 modifier = Modifier.testTag(VoiceTags.ROOM),
                 onClick = { onEnter(id, title) },
-                left = { TypeIcon(io.tima.domain.chat.EntityType(io.tima.domain.chat.EntityKind.Voice, io.tima.domain.chat.EntityReach.Public), 24.dp) },
+                left = { TypeIcon(io.tima.domain.chat.EntityType(io.tima.domain.chat.EntityKind.Voice, io.tima.domain.chat.EntityReach.Public), 24.dp, markBeside = true) },
                 middle = { Name(title); Tertiary(w.voiceInside(count(id))) },
                 right = { Box(Modifier.size(10.dp).background(if (count(id) > 0) Tima.colors.confirmed else Tima.colors.quiet, CircleShape)) },
             )

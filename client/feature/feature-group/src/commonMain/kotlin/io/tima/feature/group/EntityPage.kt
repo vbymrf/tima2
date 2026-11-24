@@ -117,6 +117,7 @@ object PageTags {
     const val SHARE = "page:share"
     const val LEVELS = "page:levels"
     const val FIND = "page:find"
+    const val ABOUT = "page:about-text"
 }
 
 /**
@@ -148,6 +149,8 @@ fun EntityAboutTop(
     threadBlocked: Boolean = false,
     /** «Найти» — после «Настройки» (заказчик 2026-11-23): поиск по сообщениям сущности; `null` — кнопки нет. */
     onFind: (() -> Unit)? = null,
+    /** Описание сущности из «Управление → Основное»; пусто или `null` — строки нет. */
+    about: String? = null,
 ) {
     val w = Tima.words.socium
     val colors = Tima.colors
@@ -158,11 +161,17 @@ fun EntityAboutTop(
                 val own = role == GroupRole.Owner || role == GroupRole.Admin || role == GroupRole.Moderator
                 Caption(title, fontSize = TimaType.sz3, weight = FontWeight.Bold, color = if (own) colors.confirmed else colors.text, maxLines = 2)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    TypeIcon(type, 16.dp)
+                    // Как в строке списка: метка (замок, шар) — рядом со значком, а не поверх (заказчик 2026-11-24).
+                    TypeIcon(type, 18.dp, markBeside = true)
                     Secondary(type.words(w))
                 }
                 count?.let { Tertiary(it) }
             }
+        }
+        // Описание сущности — отдельной строкой между аватаром и пузырями, целиком (заказчик 2026-11-24); прежде оно
+        // было видно только второй строкой в списке «Социума».
+        about?.takeIf { it.isNotBlank() }?.let {
+            Caption(it, Modifier.fillMaxWidth().testTag(PageTags.ABOUT), fontSize = TimaType.sz4)
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Pill(
