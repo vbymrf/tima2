@@ -1,0 +1,222 @@
+/* Пробы ленты канала без пузыря (заказчик 2026-11-24). Тема — ../стиль.css; здесь только то, чего в теме нет.
+
+   Запись канала — во всю ширину, без рамки. Под ней — блок откликов из «Слайдов»: эмоции под общей рамкой (их
+   видят все) и комментарии. У каналов ещё «+ / −» — частная оценка, которой человек подбирает свою ленту: её не
+   видит никто, поэтому у неё нет числа. Группы и личные переписки остаются пузырями. */
+
+/* ── Страница пробы ─────────────────────────────────────────────────────── */
+
+.ряд-окон { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+.замечание { font-size: 12.5px; color: var(--чёрный-70); width: 360px; margin-top: 6px; line-height: 1.5; }
+.навигация-проб { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+.навигация-проб a {
+  display: inline-flex; align-items: center; padding: 7px 13px; border-radius: 999px;
+  border: 1px solid var(--чёрный-12); background: var(--поверхность); text-decoration: none; color: var(--текст);
+  font-size: 12.5px; font-weight: 700;
+}
+.навигация-проб a.выбор { border-color: var(--навигация); border-width: 2px; }
+.подсказка-прокрутки { font-size: 12.5px; color: var(--чёрный-50); margin: -6px 0 16px; }
+
+.группа-проб { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin: 0 0 8px; }
+.карточка-пробы {
+  display: block; padding: 12px 14px; border-radius: var(--радиус-мал); background: var(--поверхность);
+  border: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+}
+.карточка-пробы.выбор { border: 2px solid var(--навигация); }
+.карточка-пробы .код { font-size: 12px; font-weight: 800; color: var(--чёрный-50); }
+.карточка-пробы .название { font-size: 15px; font-weight: 800; margin: 2px 0 4px; }
+.карточка-пробы .суть { font-size: 13px; color: var(--чёрный-70); line-height: 1.45; }
+
+/* ── Поле под шапкой: лента и то, что лежит поверх неё ─────────────────── */
+
+.поле-ленты { flex: 1 1 auto; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.лента { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: var(--поверхность); scrollbar-width: thin; }
+
+/* ── Запись ─────────────────────────────────────────────────────────────── */
+
+/* У темы есть свой .запись с линией снизу (строка ленты «Медиа») — здесь граница только у разделителя */
+.запись { position: relative; padding: 12px 16px 14px; border-bottom: none; }
+.когда { font-size: var(--щ6); font-weight: 600; color: var(--чёрный-50); margin-bottom: 4px; }
+.текст-записи { font-size: var(--щ4); line-height: 1.5; }
+.текст-записи p { margin: 0 0 8px; }
+.текст-записи p:last-child { margin-bottom: 0; }
+
+.фото-записи {
+  position: relative; height: 170px; margin: 6px 0 8px; border-radius: var(--радиус-квадрат);
+  background: linear-gradient(135deg, #c9dbb0, #8fae6b 55%, #5d7d44);
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255, 255, 255, 0.6); font-size: 11px; font-weight: 700;
+}
+.фото-записи.другое { background: linear-gradient(135deg, #b9cde0, #7f9fbf 55%, #4d6d8f); }
+/* В2: кадр выходит за поля — во всю ширину экрана, без скругления */
+.фото-записи.от-края { margin-left: -16px; margin-right: -16px; border-radius: 0; height: 210px; }
+/* Точки альбома — под кадром, на фоне темы (как в «Слайдах») */
+.точки-под-кадром { display: flex; justify-content: center; gap: 5px; margin: -2px 0 8px; }
+.точки-под-кадром > i { width: 6px; height: 6px; border-radius: 50%; background: var(--чёрный-12); }
+.точки-под-кадром > i.тек { background: var(--текст); }
+
+/* ── Низ записи: блок откликов и оценка ────────────────────────────────── */
+
+.низ-записи { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.низ-записи > .блок-откликов { flex: 1 1 auto; min-width: 0; }
+/* Обсуждение закрыто и комментариев нет — секция эмоций одна, скругление со всех сторон */
+.блок-откликов > .секция.эмоции-слева:last-child { border-radius: var(--радиус-мал); }
+
+/* «+ / −» — частная оценка для своей ленты. Круг — «нажми»; числа нет: показывать некому.
+   Выбранное «+» — салатовое, выбранное «−» — тёмное: красного в палитре нет. */
+.оценка { flex: 0 0 auto; display: flex; gap: 4px; }
+.оценка.столбиком { flex-direction: column; gap: 6px; }
+.кн-оценки {
+  box-sizing: border-box; width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--чёрный-12); background: var(--поверхность); color: var(--чёрный-70);
+  font-size: 19px; font-weight: 800; line-height: 1; text-decoration: none;
+}
+.кн-оценки.да { background: var(--навигация); border-color: var(--навигация); color: #ffffff; }
+.кн-оценки.нет { background: var(--чёрный-70); border-color: var(--чёрный-70); color: #ffffff; }
+/* На кадре — белым без заливки, как «+ / −» в «Слайдах» */
+.оценка.на-кадре { position: absolute; right: 10px; bottom: 12px; z-index: 2; }
+.оценка.на-кадре .кн-оценки { border-color: rgba(255, 255, 255, 0.75); background: rgba(0, 0, 0, 0.12); color: #ffffff; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
+.оценка.на-кадре .кн-оценки.да { background: var(--навигация); border-color: var(--навигация); text-shadow: none; }
+
+/* ── Разделители ────────────────────────────────────────────────────────── */
+
+.черта { height: 1px; background: var(--чёрный-12); }
+.черта.в-полях { margin: 0 16px; }
+.полоса-фона { height: 8px; background: var(--функц); box-shadow: inset 0 1px 0 var(--чёрный-6), inset 0 -1px 0 var(--чёрный-6); }
+.черта-время {
+  display: flex; align-items: center; gap: 10px; padding: 8px 16px 0;
+  font-size: var(--щ6); font-weight: 700; color: var(--чёрный-50); white-space: nowrap;
+}
+.черта-время::before, .черта-время::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--чёрный-12); }
+.отступ-записей { height: 8px; }
+
+.строка-автора { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.строка-автора .кто { font-size: var(--щ5); font-weight: 800; line-height: 1.2; }
+.строка-автора .ещё-записи {
+  margin-left: auto; width: 30px; height: 30px; border-radius: 50%; flex: 0 0 30px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--чёрный-50); font-size: 18px; font-weight: 800; text-decoration: none;
+}
+
+/* ── Колонка справа внутри записи (О-Б, О-В, итог 2) ───────────────────── */
+
+.запись.с-колонкой { display: grid; grid-template-columns: minmax(0, 1fr) 48px; padding-right: 0; }
+.запись.с-колонкой > .тело { min-width: 0; padding-right: 6px; }
+.запись.с-колонкой > .колонка { position: relative; }
+.колонка > .оценка { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+/* О-В: кнопки едут за прокруткой, но не выходят из своей записи — граница колонки и есть граница записи */
+.колонка.едет > .оценка { position: sticky; top: 8px; }
+
+/* ── О-Г: липкий низ записи ─────────────────────────────────────────────── */
+
+.низ-записи.липкий {
+  position: sticky; bottom: 0; z-index: 2;
+  margin: 10px -16px -14px; padding: 8px 16px 10px;
+  background: var(--поверхность);
+}
+.низ-записи.липкий.прилип { box-shadow: 0 -1px 0 var(--чёрный-12), 0 -10px 14px -12px rgba(0, 0, 0, 0.45); }
+/* Сколько записи прочитано — салатовой чертой по верху прилипшей строки */
+.низ-записи .доля {
+  position: absolute; left: 0; top: 0; height: 2px; width: 0; opacity: 0;
+  background: var(--навигация); transition: opacity 0.2s;
+}
+
+/* ── О-Д: одна колонка на месте, запись под ней отмечена ───────────────── */
+
+.оценка-поверх {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%); z-index: 4;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.оценка-поверх .кн-оценки { box-shadow: 0 1px 5px rgba(0, 0, 0, 0.22); }
+.запись.текущая::before {
+  content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 4px;
+  border-radius: 0 2px 2px 0; background: var(--навигация);
+}
+.линия-фокуса {
+  position: absolute; left: 0; right: 0; top: 50%; z-index: 3; pointer-events: none;
+  border-top: 1px dashed var(--навигация);
+}
+.линия-фокуса::after {
+  content: "середина экрана"; position: absolute; left: 8px; top: -15px;
+  font-size: 9.5px; font-weight: 800; color: var(--навигация); background: var(--поверхность); padding: 0 4px;
+}
+
+/* ── В3: одна запись на экран ───────────────────────────────────────────── */
+
+.лента.слайды { scroll-snap-type: y mandatory; }
+.лента.слайды > .запись { box-sizing: border-box; height: 100%; scroll-snap-align: start; display: flex; flex-direction: column; }
+.лента.слайды .фото-записи { flex: 1 1 auto; height: auto; min-height: 0; margin: 0 -16px 10px; border-radius: 0; }
+.лента.слайды .текст-записи.крупно { flex: 1 1 auto; min-height: 0; overflow: hidden; font-size: var(--щ3); padding-right: 46px; }
+.лента.слайды .низ-записи { margin-top: auto; padding-top: 10px; }
+.лента.слайды .оценка.у-текста { position: absolute; right: 10px; bottom: 70px; }
+.дальше { color: var(--чёрный-50); font-weight: 700; }
+
+/* ── Кнопки ленты: «назад», «вперёд», «вниз» ───────────────────────────── */
+
+/* Как сейчас в переписке: круги 42 dp справа внизу, поверх ленты */
+.кнопки-ленты {
+  position: absolute; right: 12px; bottom: 12px; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  transition: opacity 0.4s;
+}
+.кн-ленты {
+  box-sizing: border-box; width: 42px; height: 42px; border-radius: 50%; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--функц); color: var(--текст); font-size: 20px; text-decoration: none;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.22);
+}
+/* Стрелки — одноцветным шрифтом: иначе Windows берёт для «↓» цветной эмодзи */
+.кн-ленты, .зона-1.подокно .икона.мал { font-family: "Segoe UI Symbol", Arial, sans-serif; }
+/* К3: в покое бледнеют, при прокрутке возвращаются */
+.кнопки-ленты.бледно { opacity: 0.3; }
+/* В правом жёлобе — меньше, без тени и на непрозрачной подложке: лежат не поверх текста, а в своём месте */
+.кнопки-ленты.в-жёлобе { right: 0; bottom: 0; width: 48px; gap: 6px; padding: 8px 0 10px; background: var(--поверхность); }
+.кнопки-ленты.в-жёлобе .кн-ленты { width: 38px; height: 38px; font-size: 18px; box-shadow: none; background: var(--чёрный-6); }
+
+/* К1: полоса под лентой. Недоступная кнопка бледнеет, а не исчезает — иначе лента прыгала бы на высоту полосы */
+.полоса-кнопок {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  background: var(--функц); border-top: 1px solid var(--чёрный-12);
+}
+.полоса-кнопок .кн-ленты { width: 36px; height: 36px; font-size: 18px; box-shadow: none; background: var(--чёрный-6); }
+.полоса-кнопок .кн-ленты.нет { color: var(--чёрный-35); background: none; }
+.полоса-кнопок .растяжка { flex: 1 1 auto; }
+.полоса-кнопок .сколько { font-size: var(--щ6); font-weight: 800; color: var(--текст); }
+.полоса-кнопок .сколько b { display: inline-block; min-width: 18px; padding: 1px 6px; margin-right: 4px; border-radius: 999px; background: var(--активность); text-align: center; }
+
+/* К4: в шапке — круги поменьше */
+.зона-1.подокно .икона.мал { width: 32px; height: 32px; flex-basis: 32px; font-size: 15px; }
+
+/* Жёлоб без оценки (К2): текст до него не доходит */
+.лента.с-жёлобом .запись { padding-right: 64px; }
+
+/* ── Панель ввода автора канала — как в единой панели ──────────────────── */
+
+.панель { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--функц); border-top: 1px solid var(--линия); }
+.панель .редактор {
+  width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; background: var(--поверхность);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+}
+.панель .редактор i { display: block; width: 16px; height: 2px; background: var(--чёрный-50); }
+.панель .поле {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px 0 14px;
+  border-radius: 20px; background: rgba(138, 196, 74, 0.14); color: var(--чёрный-50); font-size: var(--щ5);
+}
+.панель .поле .набор { flex: 1 1 auto; }
+.панель .поле .зн { font-size: 17px; color: var(--чёрный-35); }
+.панель .круг {
+  width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; background: var(--навигация); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800;
+}
+
+/* ── Эмоции в пузыре (личная и группа) ─────────────────────────────────── */
+
+.метка-эмоции.моя { color: var(--навигация); border-color: var(--навигация); }
+/* Э2: проставленные — под одной общей рамкой, тот же элемент, что под записью канала */
+.эмоции-пузыря {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px 10px;
+  padding: 2px 9px; border: 1px solid var(--рамка); border-radius: var(--радиус-квадрат-мал);
+  font-size: 10.5px; font-weight: 700; color: var(--текст); white-space: nowrap;
+}
+.эмоции-пузыря .моя { color: var(--навигация); }
