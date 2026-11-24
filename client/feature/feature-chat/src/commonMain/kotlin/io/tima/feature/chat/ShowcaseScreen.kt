@@ -68,7 +68,7 @@ fun ShowcaseScreen(
     modifier: Modifier = Modifier,
     /** Полоса вкладок страницы сущности (ПЛАН-(СЦ) СЦ4); `null` — нет. */
     tabs: (@Composable () -> Unit)? = null,
-    /** Верх «О сущности» над суперсообщением: тип, пузыри, кнопки (СЦ4); `null` — нет. */
+    /** Верх «Описание» над суперсообщением: тип, пузыри, кнопки (СЦ4); `null` — нет. */
     top: (@Composable () -> Unit)? = null,
 ) {
     val w = Tima.words.showcase

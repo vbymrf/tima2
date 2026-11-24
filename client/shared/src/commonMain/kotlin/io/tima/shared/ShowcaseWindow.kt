@@ -42,7 +42,7 @@ internal fun ShowcaseWindow(
     onJoin: () -> Unit,
     onGroupSuper: (ComposedDoc) -> Unit,
     onBack: () -> Unit,
-    /** Полоса вкладок и верх «О сущности» (ПЛАН-(СЦ) СЦ4). */
+    /** Полоса вкладок и верх «Описание» (ПЛАН-(СЦ) СЦ4). */
     tabs: (@Composable () -> Unit)? = null,
     top: (@Composable () -> Unit)? = null,
 ) {
