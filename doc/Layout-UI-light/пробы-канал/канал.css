@@ -248,8 +248,112 @@
 .ход .кн-ленты svg { width: 20px; height: 20px; display: block; }
 .ход .кн-ленты.нет { color: var(--чёрный-35); background: none; pointer-events: none; }
 .ход .растяжка { flex: 1 1 auto; }
-.ход .номер { min-width: 58px; text-align: center; font-size: var(--щ6); font-weight: 700; color: var(--чёрный-50); }
-.ход .номер b { color: var(--текст); }
+/* «Назад» появляется и исчезает, как в переписке; место за ней держится, чтобы кнопки не прыгали */
+.ход .скрыта { visibility: hidden; }
+/* Число новых — перед «вниз», как у полосы К1; номера записи нет */
+.ход .сколько { font-size: var(--щ6); font-weight: 800; color: var(--текст); white-space: nowrap; }
+.ход .сколько b {
+  display: inline-block; min-width: 18px; padding: 1px 6px; margin-right: 4px; border-radius: 999px;
+  background: var(--активность); text-align: center;
+}
+
+/* ── Меню записи, «Оценка», выбор нескольких, шапка (ПЛАН-(СЦ) §1.18, 8) ── */
+
+.окно { position: relative; }
+/* Палец вверх и вниз — контуром, не эмодзи: 👍 уже есть среди эмоций («Одобрение») */
+.пальцы .кн-оценки svg { width: 18px; height: 18px; display: block; }
+/* Выбранный — залит чёрным, как «+ / −» в «Оценке» (оценка.html): чёрный в этом коде — «я» */
+.пальцы .кн-оценки.да, .пальцы .кн-оценки.нет { background: var(--текст); border-color: var(--текст); color: #ffffff; }
+.секция.эмоции-слева[data-open] { cursor: pointer; }
+/* «Лента»: запись держат пальцем — текст не выделяется */
+.лента.с-меню .запись { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* Лист снизу поверх окна — как меню сообщения и «Настройки» в приложении */
+.лист-поверх {
+  position: absolute; inset: 0; z-index: 20; display: none;
+  flex-direction: column; justify-content: flex-end; background: rgba(17, 17, 17, 0.45);
+}
+.лист-поверх.открыт { display: flex; }
+.лист { background: var(--поверхность); max-height: calc(100% - 56px); overflow-y: auto; }
+.шапка-листа { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; }
+.шапка-листа.подложка { background: var(--функц); }
+.шапка-листа .цитата {
+  flex: 1 1 auto; min-width: 0; font-size: var(--щ5); color: var(--чёрный-70); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.имя-листа { font-size: var(--щ5); font-weight: 800; }
+.пункт-меню {
+  display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 16px; box-sizing: border-box;
+  border-top: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+  font-size: var(--щ4); font-weight: 600;
+}
+.пункт-меню > .тянуть { flex: 1 1 auto; min-width: 0; padding: 8px 0; }
+.пункт-меню .трет { display: block; margin-top: 2px; font-size: var(--щ6); font-weight: 600; color: var(--чёрный-50); }
+.пункт-меню .знак { color: var(--чёрный-35); font-weight: 700; }
+.пункт-меню.подпункт { padding-left: 32px; }
+.пункт-меню.скрыт { display: none; }
+.галка {
+  flex: 0 0 22px; width: 22px; height: 22px; box-sizing: border-box; border-radius: 6px;
+  border: 2px solid var(--чёрный-35); display: flex; align-items: center; justify-content: center;
+}
+.флажок.вкл .галка { background: var(--текст); border-color: var(--текст); }
+.флажок.вкл .галка::after { content: "✓"; color: #ffffff; font-size: 14px; font-weight: 900; }
+
+/* Переключатель режима — первым и крупнее остальных: своей полосой во всю ширину, со значком */
+.плитка-режима {
+  display: flex; align-items: center; gap: 14px; min-height: 68px; padding: 10px 16px; box-sizing: border-box;
+  background: var(--чёрный-6); border-top: 1px solid var(--чёрный-12); text-decoration: none; color: var(--текст);
+}
+.плитка-режима .значок-режима {
+  flex: 0 0 46px; width: 46px; height: 46px; border-radius: 50%; background: var(--поверхность);
+  display: flex; align-items: center; justify-content: center;
+}
+.плитка-режима svg { width: 24px; height: 24px; display: block; }
+.плитка-режима b { display: block; font-size: var(--щ4); font-weight: 800; }
+.плитка-режима .трет { display: block; font-size: var(--щ6); font-weight: 600; color: var(--чёрный-50); }
+.плитка-режима .знак { color: var(--чёрный-35); font-weight: 700; }
+/* Значок переключения в шапке — по настройке «Показать кнопку в шапке», одной на все каналы */
+.зона-1 .кн-режима svg { width: 18px; height: 18px; display: block; }
+.зона-1 .кн-режима.скрыта { display: none; }
+
+/* «Оценка» — восемь эмоций четырьмя осями и покой, одна на человека (оценка.html) */
+.шкала { padding: 10px 16px 14px; }
+.ось { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+.ось .столб, .чип-шкалы { flex: 0 0 112px; width: 112px; box-sizing: border-box; text-align: center; }
+.чип-шкалы {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 5px 4px;
+  border-radius: 999px; border: 1px solid var(--чёрный-12); color: var(--текст);
+  font-size: var(--щ6); font-weight: 700; text-decoration: none; white-space: nowrap;
+}
+.чип-шкалы.выбран { background: var(--текст); border-color: var(--текст); color: var(--поверхность); }
+.ось.итог { padding-top: 12px; }
+
+/* Выбор нескольких — как в группе: отметка, полоса выбора на месте строки ввода */
+.отметка {
+  display: none; position: absolute; right: 12px; top: -25px; z-index: 3;
+  width: 26px; height: 26px; box-sizing: border-box; border-radius: 50%;
+  background: var(--поверхность); border: 2px solid var(--линия); box-shadow: 0 0 0 3px var(--поверхность);
+  align-items: center; justify-content: center;
+}
+.лента.статьи .отметка { top: 10px; }
+.лента.выбор .отметка { display: flex; }
+.лента.выбор .запись { cursor: pointer; }
+.лента.выбор .запись.выбрана { background: rgba(138, 196, 74, 0.08); }
+.запись.выбрана .отметка { background: var(--навигация); border-color: var(--навигация); }
+.запись.выбрана .отметка::after { content: "✓"; color: #ffffff; font-size: 15px; font-weight: 900; }
+.окно.выбор .кнопки-ленты, .окно.выбор > .панель, .окно.выбор .панель-статьи > .низ-записи { display: none; }
+.полоса-выбора {
+  display: none; flex: 0 0 auto; align-items: center; gap: 8px; padding: 8px 12px;
+  background: var(--функц); border-top: 1px solid var(--чёрный-12);
+}
+.окно.выбор .полоса-выбора { display: flex; }
+.полоса-выбора .выбрано { font-size: var(--щ5); font-weight: 800; white-space: nowrap; }
+.чипы-выбора { flex: 1 1 auto; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.чип-выбора {
+  flex: 0 0 auto; padding: 7px 12px; border-radius: 999px; background: var(--чёрный-6); color: var(--текст);
+  font-size: var(--щ6); font-weight: 700; text-decoration: none; white-space: nowrap;
+}
+.чип-выбора.тёмный { background: var(--текст); color: #ffffff; }
 
 /* ── Эмоции в пузыре (личная и группа) ─────────────────────────────────── */
 
