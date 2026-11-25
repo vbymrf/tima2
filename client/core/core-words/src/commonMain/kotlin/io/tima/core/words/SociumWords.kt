@@ -113,6 +113,9 @@ interface SociumWords {
     val share: String
     val leave: String
 
+    /** «Отписаться» — выход из канала подписчиком (2026-11-25). */
+    val unsubscribe: String
+
     // Передача владения (СЦ11, §6.4).
     val transferTitle: String
     val transferAbout: String
@@ -387,6 +390,7 @@ object RussianSociumWords : SociumWords {
     override val write = "Написать"
     override val share = "Поделиться"
     override val leave = "Выйти"
+    override val unsubscribe = "Отписаться"
     override val transferTitle = "Передать владение"
     override val transferAbout = "Выберите, кому передать: принять может модератор и выше (в сообществе — админ). Вы станете участником."
     override val transferNeedsOldKey = "Передать можно ключом, которым владение получено. Введите прежнюю секретную фразу."
@@ -672,6 +676,7 @@ object EnglishSociumWords : SociumWords {
     override val write = "Write"
     override val share = "Share"
     override val leave = "Leave"
+    override val unsubscribe = "Unsubscribe"
     override val transferTitle = "Transfer ownership"
     override val transferAbout = "Choose who receives it: a moderator or above (in a community, an admin). You will become a member."
     override val transferNeedsOldKey = "Ownership can be transferred only with the key it was received with. Enter your previous secret phrase."
@@ -953,6 +958,7 @@ object SpanishSociumWords : SociumWords {
     override val write = "Escribir"
     override val share = "Compartir"
     override val leave = "Salir"
+    override val unsubscribe = "Cancelar suscripción"
     override val transferTitle = "Transferir la propiedad"
     override val transferAbout = "Elige a quién: puede aceptar un moderador o superior (en una comunidad, un administrador). Pasarás a ser miembro."
     override val transferNeedsOldKey = "Solo se transfiere con la clave con la que se recibió. Introduce tu frase secreta anterior."

@@ -5185,9 +5185,26 @@ private fun App(
 
             is Where.Showcase -> {
                 {
+                    // Открыто ссылкой — названия в переходе нет (2026-11-25: шапка была пустой): с сервера, у несекретных.
+                    var linkTitle by remember(current.kind, current.id) { mutableStateOf("") }
+                    LaunchedEffect(current.kind, current.id, current.title) {
+                        if (current.title.isBlank()) {
+                            val k = io.tima.domain.chat.EntityKind.fromWire(current.kind) ?: io.tima.domain.chat.EntityKind.Group
+                            network.invites.titles(k, listOf(current.id))[current.id]?.let { linkTitle = it }
+                        }
+                    }
+                    val shownTitle = current.title.ifBlank { linkTitle }
+                    // Подписка на канал (2026-11-25: «Подписаться» у канала молчала — ветки не было).
+                    val subscribeChannel: (String, Boolean) -> Unit = { channelId, on ->
+                        scope.launch {
+                            val ok = network.channels.subscribe(channelId, on)
+                            Journal.note(LogCode.NAV, if (on) "подписаться на канал" else "отписаться от канала", "итог" to ok.toString())
+                            social.refresh()
+                        }
+                    }
                     ShowcaseWindow(
                         of = io.tima.domain.chat.ShowcaseOf(current.kind, current.id),
-                        title = current.title,
+                        title = shownTitle,
                         source = assembled.receiver.showcase,
                         showcaseApi = network.showcase,
                         scope = scope,
@@ -5206,12 +5223,13 @@ private fun App(
                             when (current.kind) {
                                 "group" -> social.ask(current.id)
                                 "community" -> scope.launch { network.communities.subscribe(current.id, true); social.refresh() }
+                                "channel" -> subscribeChannel(current.id, true)
                             }
                         },
                         // Группа — переписка с редактором; сообщество — редактор здесь же.
                         onGroupSuper = { doc ->
                             superDraft = current.id to io.tima.domain.chat.ShowcaseDraft(doc)
-                            where = Where.Chat(current.id, current.title)
+                            where = Where.Chat(current.id, shownTitle)
                         },
                         onBack = { where = Where.Nothing },
                         // Комментарии и оценка сообщения «Описания» — по настройке сущности (§1.18, 11).
@@ -5220,7 +5238,7 @@ private fun App(
                             Journal.note(LogCode.SHOWCASE, "комментарии описания", "вид" to current.kind)
                             where = Where.Comments(current.id, line.serverId, kind = current.kind, fromShowcase = true)
                         },
-                        tabs = { pageTabBar(current.kind, current.id, current.title, io.tima.feature.group.PageTab.About) },
+                        tabs = { pageTabBar(current.kind, current.id, shownTitle, io.tima.feature.group.PageTab.About) },
                         top = {
                             val kind = current.kind
                             val id = current.id
@@ -5252,7 +5270,7 @@ private fun App(
                             }
                             io.tima.feature.group.EntityAboutTop(
                                 threadBlocked = threadBlocked,
-                                title = current.title,
+                                title = shownTitle,
                                 type = typeOf(kind, id),
                                 role = role,
                                 inside = inside,
@@ -5263,21 +5281,26 @@ private fun App(
                                         when (kind) {
                                             "group" -> social.ask(id)
                                             "community" -> scope.launch { network.communities.subscribe(id, true); social.refresh() }
+                                            "channel" -> subscribeChannel(id, true)
                                         }
                                     }
                                 },
                                 // Подокно «Уведомления» (СЦ16): новое в сущности и сообщения от неё мне.
-                                onNotify = { where = Where.NotifySettings(kind, id, current.title) },
+                                onNotify = { where = Where.NotifySettings(kind, id, shownTitle) },
                                 // «Найти» — после «Настройки» (2026-11-23).
-                                onFind = { where = Where.EntitySearch(kind, id, current.title) },
-                                // Владелец не уходит, пока не передал (409 owner_locked).
-                                onLeave = if (!inside || role == io.tima.domain.chat.GroupRole.Owner || kind == "channel") null else {
+                                onFind = { where = Where.EntitySearch(kind, id, shownTitle) },
+                                // Владелец не уходит, пока не передал (409 owner_locked). Из канала отписывается подписчик;
+                                // команде канала отписка не показывается — её роль подпиской не снимается.
+                                onLeave = if (!inside || role == io.tima.domain.chat.GroupRole.Owner ||
+                                    (kind == "channel" && role != io.tima.domain.chat.GroupRole.Member)
+                                ) null else {
                                     {
                                         scope.launch {
                                             Journal.note(LogCode.NAV, "выйти из сущности", "вид" to kind)
                                             when (kind) {
                                                 "group" -> network.groups.removeMember(id, session.userId)
                                                 "community" -> network.communities.subscribe(id, false)
+                                                "channel" -> network.channels.subscribe(id, false)
                                             }
                                             social.refresh()
                                             where = Where.Nothing
@@ -5285,12 +5308,12 @@ private fun App(
                                     }
                                 },
                                 // «Написать» — любой, кто видит страницу (§1.9, 3); у элемента сообщества — лента сообщества.
-                                onWrite = { where = Where.Thread(kind, id, current.title) },
+                                onWrite = { where = Where.Thread(kind, id, shownTitle) },
                                 // «Поделиться» — у публичных несекретных (§1.6, 2; §1.8, 3): ссылка на сущность.
                                 onShare = typeOf(kind, id).takeIf { it.reach == io.tima.domain.chat.EntityReach.Public && !it.secret }?.let { t ->
                                     {
                                         Journal.note(LogCode.NAV, "поделиться сущностью", "вид" to kind)
-                                        invite.share(current.title + "\n" + io.tima.domain.chat.EntityInvites.entityLink(t.kind, id))
+                                        invite.share(shownTitle + "\n" + io.tima.domain.chat.EntityInvites.entityLink(t.kind, id))
                                     }
                                 },
                                 count = pageCount?.let { n -> if (kind == "group") Tima.words.socium.membersCount(n) else Tima.words.socium.subscribersCount(n) },

@@ -369,7 +369,15 @@ class InvitesOverHttp(
     }
 
     /** Описания сущностей вида (ПЛАН-(ВС) 10–11): номер → описание; у кого описания нет и без связи — пусто. */
-    suspend fun abouts(kind: EntityKind, ids: List<String>): Map<String, String> = try {
+    suspend fun abouts(kind: EntityKind, ids: List<String>): Map<String, String> = aboutField(kind, ids, "about")
+
+    /**
+     * Названия несекретных сущностей (2026-11-25): «Описание», открытое ссылкой, — с названием в шапке. Сервер без
+     * поля `titles` отвечает пустым — название остаётся пустым, как было.
+     */
+    suspend fun titles(kind: EntityKind, ids: List<String>): Map<String, String> = aboutField(kind, ids, "titles")
+
+    private suspend fun aboutField(kind: EntityKind, ids: List<String>, field: String): Map<String, String> = try {
         if (ids.isEmpty()) emptyMap() else {
             val r = client.post(route.api("/api/v1/entities/about")) {
                 header("Authorization", "Bearer ${token()}")
@@ -379,7 +387,7 @@ class InvitesOverHttp(
                     put("ids", kotlinx.serialization.json.JsonArray(ids.take(500).map { JsonPrimitive(it) }))
                 }.toString())
             }
-            r.jsonBody()?.get("about")?.jsonObjectOrNull()?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.content?.let { k to it } }?.toMap().orEmpty()
+            r.jsonBody()?.get(field)?.jsonObjectOrNull()?.mapNotNull { (k, v) -> (v as? JsonPrimitive)?.content?.let { k to it } }?.toMap().orEmpty()
         }
     } catch (_: Throwable) {
         emptyMap()

@@ -197,7 +197,11 @@ fun EntityAboutTop(
             onNotify?.let { Button(Tima.words.socium.settingsTitle, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.NOTIFY)) }
             onFind?.let { Button(w.findTitle, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.FIND)) }
             onShare?.let { Button(w.share, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.SHARE)) }
-            onLeave?.let { Button(w.leave, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.LEAVE)) }
+            // Из канала подписчик выходит «Отписаться» (2026-11-25), из группы и сообщества — «Выйти».
+            onLeave?.let {
+                val label = if (type.kind == io.tima.domain.chat.EntityKind.Channel) w.unsubscribe else w.leave
+                Button(label, onClick = it, kind = ButtonKind.Quiet, modifier = Modifier.testTag(PageTags.LEAVE))
+            }
         }
         if (showLevels != null) {
             Row(

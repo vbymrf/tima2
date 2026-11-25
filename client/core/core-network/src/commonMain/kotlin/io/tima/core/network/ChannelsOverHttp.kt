@@ -1,6 +1,7 @@
 package io.tima.core.network
 
 import io.ktor.client.HttpClient
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -15,10 +16,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
 /**
- * Каналы по HTTP: пока только создание (ПЛАН-(СО)-СООБЩЕСТВ С5).
- *
- * Чтение канала клиенту пока негде показать — экрана каналов нет, — и заводить порт
- * «на будущее» здесь незачем: он тут же начнёт расходиться с тем, что понадобится.
+ * Каналы по HTTP: создание (ПЛАН-(СО)-СООБЩЕСТВ С5), свои каналы, подписка и отписка.
  */
 class ChannelsOverHttp(
     private val route: ServerRoute,
@@ -54,6 +52,24 @@ class ChannelsOverHttp(
         } else {
             ChannelStep.Refused(body.codeOf())
         }
+    }
+
+    /**
+     * `POST|DELETE /api/v1/channels/{id}/subscribe` — подписаться и отписаться (2026-11-25: «Подписаться» на странице
+     * канала молчала — запроса в клиенте не было). `false` — отказ (секретный, бан) или нет связи.
+     */
+    suspend fun subscribe(channelId: String, on: Boolean): Boolean {
+        val path = route.api("/api/v1/channels/$channelId/subscribe")
+        val response = try {
+            if (on) {
+                client.post(path) { header("Authorization", "Bearer ${token()}") }
+            } else {
+                client.delete(path) { header("Authorization", "Bearer ${token()}") }
+            }
+        } catch (_: Throwable) {
+            return false
+        }
+        return response.status == HttpStatusCode.OK
     }
 
     /** `GET /api/v1/channels` — свои каналы без лент людей (ПЛАН-(СЦ) СЦ3). `null` — нет связи. */
