@@ -148,8 +148,8 @@ func TestОписаниеНастройкиИКомментарии(t *testing.T
 			Comments bool `json:"comments"`
 		} `json:"settings"`
 		Messages []struct {
-			MessageID int64 `json:"message_id"`
-			Comments  int   `json:"comments"`
+			MessageID int64  `json:"message_id"`
+			Comments  int    `json:"comments"`
 			MyEmotion string `json:"my_emotion"`
 		} `json:"messages"`
 	}

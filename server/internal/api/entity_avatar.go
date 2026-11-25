@@ -213,7 +213,14 @@ func entityAbouts(st *store.Store) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		// Названия несекретных — рядом (2026-11-25, поле добавлено, прежние ответы не меняются).
+		titles, err := store.EntityTitles(r.Context(), st, req.Kind, req.IDs)
+		if err != nil {
+			log.Printf("entityAbouts: названия: %v", err)
+			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"about": out})
+		_ = json.NewEncoder(w).Encode(map[string]any{"about": out, "titles": titles})
 	}
 }

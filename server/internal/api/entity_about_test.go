@@ -63,3 +63,44 @@ func TestEntityAbout(t *testing.T) {
 		}
 	}
 }
+
+// Название несекретной сущности — в ответе описаний и не вступившему (2026-11-25: «Описание», открытое ссылкой, было
+// без названия в шапке); секретной — нет.
+func TestEntityTitlesForStranger(t *testing.T) {
+	ts, _ := setup(t)
+	owner := registerDevice(t, ts, "+79990088011")
+	stranger := registerDevice(t, ts, "+79990088012")
+
+	var open, secret struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels", map[string]any{"title": "Открытый"}, &open); code != 201 {
+		t.Fatalf("канал: %d", code)
+	}
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/channels", map[string]any{"title": "Тайный", "hidden": true}, &secret); code != 201 {
+		t.Fatalf("секретный канал: %d", code)
+	}
+	var group struct {
+		GroupID string `json:"group_id"`
+	}
+	if code := postAuthed(t, ts, owner.token, "POST", "/api/v1/groups", map[string]any{"title": "Дача", "kind": "public"}, &group); code != 201 {
+		t.Fatalf("группа: %d", code)
+	}
+	var got struct {
+		Titles map[string]string `json:"titles"`
+	}
+	if code := postAuthed(t, ts, stranger.token, "POST", "/api/v1/entities/about", map[string]any{"kind": "channel", "ids": []string{open.ChannelID, secret.ChannelID}}, &got); code != 200 {
+		t.Fatalf("чтение: %d", code)
+	}
+	if got.Titles[open.ChannelID] != "Открытый" {
+		t.Fatalf("название открытого: %q", got.Titles[open.ChannelID])
+	}
+	if title, has := got.Titles[secret.ChannelID]; has {
+		t.Fatalf("название секретного ушло чужому: %q", title)
+	}
+	got.Titles = nil
+	postAuthed(t, ts, stranger.token, "POST", "/api/v1/entities/about", map[string]any{"kind": "group", "ids": []string{group.GroupID}}, &got)
+	if got.Titles[group.GroupID] != "Дача" {
+		t.Fatalf("название группы: %q", got.Titles[group.GroupID])
+	}
+}

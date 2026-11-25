@@ -47,6 +47,32 @@ func EntityAbouts(ctx context.Context, s *Store, kind string, ids []string) (map
 	return out, rows.Err()
 }
 
+// EntityTitles — названия несекретных сущностей по номерам (2026-11-25): «Описание», открытое ссылкой, не
+// вступившему показывает название в шапке. Секретные и удалённые в ответ не попадают — их название знают только свои,
+// и у своих оно есть в списке «Социума».
+func EntityTitles(ctx context.Context, s *Store, kind string, ids []string) (map[string]string, error) {
+	out := map[string]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	table, key := entityTable(kind)
+	rows, err := s.pool.Query(ctx, `
+		SELECT `+key+`::text, title FROM `+table+`
+		 WHERE `+key+`::text = ANY($1) AND NOT hidden AND deleted_at IS NULL`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, title string
+		if err := rows.Scan(&id, &title); err != nil {
+			return nil, err
+		}
+		out[id] = title
+	}
+	return out, rows.Err()
+}
+
 // SetEntityAbout — название (если не nil) и описание (если не nil) одной записью. Права проверяет вызывающий.
 func SetEntityAbout(ctx context.Context, s *Store, kind, id string, title, about *string) error {
 	table, key := entityTable(kind)
