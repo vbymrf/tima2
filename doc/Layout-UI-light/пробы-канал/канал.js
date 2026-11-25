@@ -69,10 +69,47 @@
 
   // ── Меню записи, «Оценка», выбор нескольких, шапка (ПЛАН-(СЦ) §1.18, 8) ──────────────────────────
   var held = null, openedAt = 0;   // запись, о которой открыто меню; когда открыто — отпускание пальца не закрывает
+  var rateBlock = null;            // плашка, из которой открыта «Оценка»
 
   function sheetOf(win, kind) { return win.querySelector('.лист-поверх.' + kind); }
   function openSheet(s) { if (s) { s.classList.add('открыт'); openedAt = Date.now(); } }
-  function closeSheet(s) { if (s) s.classList.remove('открыт'); }
+  function closeSheet(s) {
+    if (!s) return;
+    s.classList.remove('открыт');
+    s.closest('.окно').querySelectorAll('.запись.нажата').forEach(function (r) { r.classList.remove('нажата'); });
+  }
+
+  // Эмоции плашки: читаем и пишем; нет ни одной — «😊 0», плашка вида не меняет
+  function readEmos(block) {
+    return Array.prototype.filter.call(block.querySelectorAll('.эмоция'), function (a) {
+      return !a.classList.contains('ноль');
+    }).map(function (a) {
+      var p = a.textContent.trim().split(' ');
+      return { e: p[0], n: +p[1], mine: a.classList.contains('моя') };
+    });
+  }
+  function writeEmos(block, list) {
+    list = list.filter(function (x) { return x.n > 0; });
+    block.querySelector('.эмоции-рамка').innerHTML = list.length ? list.map(function (x) {
+      return '<a class="эмоция' + (x.mine ? ' моя' : '') + '" href="#">' + x.e + ' ' + x.n + '</a>';
+    }).join('') : '<a class="эмоция ноль" href="#">😊 0</a>';
+  }
+  // Своя эмоция — одна: прежняя минус один, новая плюс один
+  function applyMine(block, e) {
+    var list = readEmos(block), hit = null;
+    list.forEach(function (x) { if (x.mine) { x.n -= 1; x.mine = false; } if (x.e === e) hit = x; });
+    if (e) { if (hit) { hit.n += 1; hit.mine = true; } else list.push({ e: e, n: 1, mine: true }); }
+    writeEmos(block, list);
+    block.dispatchEvent(new CustomEvent('reaction-changed', { bubbles: true }));
+  }
+  function renderGiven(s, block) {
+    var box = s.querySelector('.все-эмоции');
+    if (!box) return;
+    var list = block ? readEmos(block).sort(function (a, b) { return b.n - a.n; }) : [];
+    box.innerHTML = list.length ? list.map(function (x) {
+      return '<span class="эм-итог' + (x.mine ? ' моя' : '') + '">' + x.e + ' ' + x.n + '</span>';
+    }).join('') : '<span class="эм-итог">😊 0</span>';
+  }
 
   function openMenu(win, rec) {
     var s = sheetOf(win, 'меню-записи');
@@ -84,19 +121,26 @@
     s.querySelector('.цитата').textContent = '«' + words.replace(/\s+/g, ' ').trim().slice(0, 160) + '»';
     var copy = s.querySelector('.копия .тянуть');
     if (copy) copy.textContent = rec.querySelector('.фото-записи') ? 'Сохранить как' : 'Скопировать текст';
+    var pin = s.querySelector('.закрепить .тянуть');
+    if (pin) pin.textContent = rec.hasAttribute('data-pinned') ? 'Открепить' : 'Закрепить';
     s.querySelectorAll('.подпункт').forEach(function (x) { x.classList.add('скрыт'); });
     var more = s.querySelector('.раскрыть .знак');
     if (more) more.textContent = '›';
+    // В «Ленте» запись под меню подсвечена — одна; в «Статье» она на экране одна и так
+    win.querySelectorAll('.запись.нажата').forEach(function (r) { r.classList.remove('нажата'); });
+    if (!rec.closest('.статьи')) rec.classList.add('нажата');
     openSheet(s);
   }
 
-  // «Оценка»: отмечена моя эмоция этой записи — та, что в плашке салатовая
+  // «Оценка»: отмечена моя эмоция этой записи — та, что в плашке салатовая; ниже — все, что поставлены
   function openRate(win, block) {
     var s = sheetOf(win, 'оценка-лист');
     if (!s) return;
+    rateBlock = block;
     var mine = block && block.querySelector('.эмоция.моя');
     var e = mine ? mine.textContent.trim().split(' ')[0] : null;
     pickEmotion(s, e && s.querySelector('.чип-шкалы[data-e="' + e + '"]'));
+    renderGiven(s, block);
     openSheet(s);
   }
   function pickEmotion(s, chip) {
@@ -152,8 +196,12 @@
           document.querySelectorAll('[data-toggle="head-btn"]').forEach(function (x) { x.classList.toggle('вкл', on); });
           document.querySelectorAll('.кн-режима').forEach(function (x) { x.classList.toggle('скрыта', !on); });
         } else a.classList.toggle('вкл', on);
-      } else if (a.classList.contains('чип-шкалы')) pickEmotion(s, a.classList.contains('выбран') ? null : a);
-      else if (a.hasAttribute('data-unset')) pickEmotion(s, null);
+      } else if (a.classList.contains('чип-шкалы') || a.hasAttribute('data-unset')) {
+        // Выбор сразу меняет числа в плашке записи и список «Уже поставили»
+        var chip = a.hasAttribute('data-unset') || a.classList.contains('выбран') ? null : a;
+        pickEmotion(s, chip);
+        if (rateBlock) { applyMine(rateBlock, chip ? chip.dataset.e : null); renderGiven(s, rateBlock); }
+      }
       else if (a.classList.contains('пункт-меню')) closeSheet(s);
       return;
     }
@@ -243,6 +291,10 @@
         recs[cur].querySelector('template.отклики-записи').innerHTML = row.innerHTML;
       }
       show();
+    });
+    // Эмоцию сменили в «Оценке» — запомнить в записи, как пальцы
+    panel.addEventListener('reaction-changed', function () {
+      recs[cur].querySelector('template.отклики-записи').innerHTML = row.innerHTML;
     });
     f.addEventListener('scroll', show, { passive: true });
     show();
