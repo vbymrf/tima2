@@ -89,6 +89,9 @@ data class ComposedLook(val firstLine: String, val rows: Int)
  * справа всегда «отправить», а не кнопка без действия.
  */
 @OptIn(ExperimentalLayoutApi::class)
+/** Отступ строки набора сверху и снизу внутри рамки: прежние 6 dp рамки и 4 dp поля, теперь — внутри поля. */
+private val FIELD_PAD_V = 10.dp
+
 @Composable
 internal fun InputLine(
     typed: String,
@@ -149,26 +152,32 @@ internal fun InputLine(
                 modifier = Modifier
                     .weight(1f)
                     .background(colors.surface, CircleShape)
-                    .padding(start = TimaSpacing.about4, end = BUBBLE_END, top = 6.dp, bottom = 6.dp),
+                    .padding(end = BUBBLE_END),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.weight(1f).padding(vertical = 4.dp)) {
-                    if (typed.isEmpty()) {
-                        Caption(composed?.firstLine ?: Tima.words.chat.messageHint, fontSize = TimaType.sz4, color = colors.text3, lineOne = true)
-                    }
-                    BasicTextField(
-                        value = shown,
-                        onValueChange = ::edited,
-                        // Собрано в редакторе — печатать в разметку нельзя (Решения §9).
-                        readOnly = composed != null,
-                        textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
-                        cursorBrush = SolidColor(colors.navigation),
-                        visualTransformation = rememberMarkdownView(typed, source),
-                        keyboardOptions = io.tima.core.ui.TextKeyboard,
-                        modifier = Modifier.fillMaxWidth().testTag(CHAT_INPUT_TAG)
-                            .onFocusChanged { if (it.isFocused) area = null },
-                    )
-                }
+                // Поле — во всю рамку, кроме значков (заказчик 2026-11-25, «1а#»): отступы рамки — внутри поля, нажатие в
+                // любом её месте левее значков открывает клавиатуру. Заодно середина метки `chat:input` попадает в поле на
+                // любом телефоне: снятие дерева обрезает узлы низа экрана, и середина узла уезжала в верхний отступ (PH-69).
+                BasicTextField(
+                    value = shown,
+                    onValueChange = ::edited,
+                    // Собрано в редакторе — печатать в разметку нельзя (Решения §9).
+                    readOnly = composed != null,
+                    textStyle = TextStyle(fontSize = TimaType.sz4, color = colors.text),
+                    cursorBrush = SolidColor(colors.navigation),
+                    visualTransformation = rememberMarkdownView(typed, source),
+                    keyboardOptions = io.tima.core.ui.TextKeyboard,
+                    modifier = Modifier.weight(1f).testTag(CHAT_INPUT_TAG)
+                        .onFocusChanged { if (it.isFocused) area = null },
+                    decorationBox = { inner ->
+                        Box(Modifier.padding(start = TimaSpacing.about4, top = FIELD_PAD_V, bottom = FIELD_PAD_V)) {
+                            if (typed.isEmpty()) {
+                                Caption(composed?.firstLine ?: Tima.words.chat.messageHint, fontSize = TimaType.sz4, color = colors.text3, lineOne = true)
+                            }
+                            inner()
+                        }
+                    },
+                )
                 // Набран символ — остаётся Эмоджи: Галерея и Скрепка шлют отдельное сообщение.
                 // Отступы между значками и до «отправить» шире прежних (заказчик 2026-10-18: вдвое, затем
                 // на 30 % меньше), за счёт места внутри пузыря: поле набора уже, пузырь и строка те же.

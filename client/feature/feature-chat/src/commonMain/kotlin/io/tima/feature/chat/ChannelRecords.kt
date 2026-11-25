@@ -102,6 +102,9 @@ object RecordTags {
     const val FRESH = "channel:article.fresh"
     const val RATE = "channel:rate"
     const val RATE_UNSET = "channel:rate.unset"
+    const val SUBSCRIBE = "channel:subscribe"
+    const val SUBSCRIBE_OK = "channel:subscribe.ok"
+    const val SUBSCRIBE_CLOSE = "channel:subscribe.close"
     const val MODE = "channel:mode"
     fun emotion(key: String) = "channel:rate.$key"
 }
@@ -376,6 +379,42 @@ private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
  * Окно «Оценка» (подокно `оценка.html`, §1.18, 9): восемь эмоций четырьмя осями, «Спокойствие» посередине; выбрать
  * можно одну, нажатие по выбранной или «Снять» — снять. Ниже «Ваш выбор» — все эмоции, что уже поставлены.
  */
+/**
+ * «Оценивают подписчики» (заказчик 2026-11-25, «3а#»): не подписчик нажал эмоции или палец — сервер ему откажет, и вместо
+ * молчаливого отказа — объяснение и «Подписаться». Подписался — окно закрывается, оценка дальше обычная.
+ */
+@Composable
+fun SubscribeAsk(onSubscribe: () -> Unit, onClose: () -> Unit) {
+    val colors = Tima.colors
+    val words = Tima.words.socium
+    val once = io.tima.core.ui.rememberOnePress(RecordTags.SUBSCRIBE)
+    ProvidePlace(TextPlace.MENU) {
+        Box(
+            Modifier.fillMaxSize().background(colors.text.copy(alpha = 0.45f)).clickable(onClick = onClose),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Column(
+                Modifier.fillMaxWidth().background(colors.surface).clickable(enabled = false) {}
+                    .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3).testTag(RecordTags.SUBSCRIBE),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Caption(words.rateSubscribers, fontSize = TimaType.sz5, weight = FontWeight.ExtraBold)
+                        io.tima.core.ui.Tertiary(words.rateSubscribeAbout)
+                    }
+                    io.tima.core.ui.IconButton(glyph = "✕", onClick = onClose, modifier = Modifier.testTag(RecordTags.SUBSCRIBE_CLOSE))
+                }
+                io.tima.core.ui.Button(
+                    Tima.words.showcase.subscribe,
+                    onClick = { once.press { onSubscribe(); onClose() } },
+                    modifier = Modifier.testTag(RecordTags.SUBSCRIBE_OK),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun EmotionSheet(reactions: Reactions, onPick: (String?) -> Unit, onClose: () -> Unit) {
     val colors = Tima.colors

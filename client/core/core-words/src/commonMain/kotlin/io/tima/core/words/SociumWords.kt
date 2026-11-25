@@ -267,6 +267,10 @@ interface SociumWords {
     fun emotionAxis(axis: Int): String
     val rateTitle: String
     val rateHint: String
+
+    /** Не подписчик нажал эмоции или палец (2026-11-25): заголовок и пояснение окна с «Подписаться». */
+    val rateSubscribers: String
+    val rateSubscribeAbout: String
     val rateAxis: String
     val rateMine: String
     val rateUnset: String
@@ -553,6 +557,8 @@ object RussianSociumWords : SociumWords {
     }
     override val rateTitle = "Оценка"
     override val rateHint = "одна эмоция · можно сменить"
+    override val rateSubscribers = "Оценивают подписчики"
+    override val rateSubscribeAbout = "Подпишитесь на канал — и сможете ставить эмоции и пальцы"
     override val rateAxis = "Ось"
     override val rateMine = "Ваш выбор"
     override val rateUnset = "Снять"
@@ -835,6 +841,8 @@ object EnglishSociumWords : SociumWords {
     }
     override val rateTitle = "Rating"
     override val rateHint = "one emotion · can be changed"
+    override val rateSubscribers = "Subscribers rate"
+    override val rateSubscribeAbout = "Subscribe to the channel to add emotions and thumbs"
     override val rateAxis = "Axis"
     override val rateMine = "Your choice"
     override val rateUnset = "Remove"
@@ -1117,6 +1125,8 @@ object SpanishSociumWords : SociumWords {
     }
     override val rateTitle = "Valoración"
     override val rateHint = "una emoción · se puede cambiar"
+    override val rateSubscribers = "Valoran los suscriptores"
+    override val rateSubscribeAbout = "Suscríbete al canal para poner emociones y pulgares"
     override val rateAxis = "Eje"
     override val rateMine = "Tu elección"
     override val rateUnset = "Quitar"

@@ -4721,6 +4721,8 @@ private fun App(
                     }
                     val role = roleOf("channel", current.channelId)
                     val staffHere = role == io.tima.domain.chat.GroupRole.Owner || role == io.tima.domain.chat.GroupRole.Moderator || role == io.tima.domain.chat.GroupRole.Admin
+                    // Роль есть — канал в своих, то есть подписан (владелец подписан всегда). Нет — оценивать нельзя (3а#).
+                    val subscribedHere = role != null
                     val w = Tima.words.socium
                     val offlineWord = Tima.words.trouble.offline
                     val of = io.tima.domain.chat.ShowcaseOf("channel", current.channelId)
@@ -4756,6 +4758,7 @@ private fun App(
                     val reactionsNow = remember(current) { androidx.compose.runtime.mutableStateMapOf<Long, io.tima.domain.chat.Reactions>() }
                     val votesNow = remember(current) { androidx.compose.runtime.mutableStateMapOf<Long, Int>() }
                     var rateFor by remember(current) { mutableStateOf<ChatLine?>(null) }
+                    var askSubscribe by remember(current) { mutableStateOf(false) }
                     var chosen by remember(current) { mutableStateOf<List<ChatLine>>(emptyList()) }
                     var forwardChosen by remember(current) { mutableStateOf(false) }
                     var pinnedId by remember(current) { mutableStateOf(0L) }
@@ -4785,13 +4788,17 @@ private fun App(
                         // Пальцы — подписчику; команда свой канал себе не подбирает.
                         voting = !staffHere,
                         comments = { line -> byId[line.serverId]?.let { it.comments to it.commentsClosed } ?: (0 to false) },
-                        onEmotions = { line -> rateFor = line },
+                        onEmotions = { line -> if (subscribedHere) rateFor = line else askSubscribe = true },
                         onComments = { line -> where = Where.Comments(current.channelId, line.serverId) },
                         onVote = { line, v ->
-                            val was = votesNow[line.serverId] ?: byId[line.serverId]?.myVote ?: 0
-                            votesNow[line.serverId] = v
-                            scope.launch { if (!network.reactions.vote(current.channelId, line.serverId, v)) votesNow[line.serverId] = was }
-                            Journal.note(LogCode.NAV, "палец записи", "оценка" to v)
+                            if (!subscribedHere) {
+                                askSubscribe = true
+                            } else {
+                                val was = votesNow[line.serverId] ?: byId[line.serverId]?.myVote ?: 0
+                                votesNow[line.serverId] = v
+                                scope.launch { if (!network.reactions.vote(current.channelId, line.serverId, v)) votesNow[line.serverId] = was }
+                                Journal.note(LogCode.NAV, "палец записи", "оценка" to v)
+                            }
                         },
                         onMenu = {},
                         article = article,
@@ -4931,6 +4938,7 @@ private fun App(
                             onInnerBack = {
                                 when {
                                     rateFor != null -> { rateFor = null; true }
+                                    askSubscribe -> { askSubscribe = false; true }
                                     forwardChosen -> { forwardChosen = false; true }
                                     else -> false
                                 }
@@ -4991,6 +4999,19 @@ private fun App(
                                     Journal.note(LogCode.NAV, "эмоция записи", "эмоция" to (e ?: "снята"))
                                 },
                                 onClose = { rateFor = null },
+                            )
+                        }
+                        // Не подписчик нажал эмоции или палец — объяснение и «Подписаться» (3а#).
+                        if (askSubscribe) {
+                            io.tima.feature.chat.SubscribeAsk(
+                                onSubscribe = {
+                                    scope.launch {
+                                        val ok = network.channels.subscribe(current.channelId, true)
+                                        Journal.note(LogCode.NAV, "подписаться на канал", "откуда" to "оценка", "итог" to ok.toString())
+                                        social.refresh()
+                                    }
+                                },
+                                onClose = { askSubscribe = false },
                             )
                         }
                         // Переслать выбранное — в переписку из списка, текстом (§1.18, 8).
@@ -5313,7 +5334,8 @@ private fun App(
                                                 "channel" -> network.channels.subscribe(id, false)
                                             }
                                             social.refresh()
-                                            where = Where.Nothing
+                                            // Из канала — в «Социум» с начала (3а#): лента канала без подписки — не то, куда хотели.
+                                            if (kind == "channel") goToWindow(Window.Social, Via.Switcher) else where = Where.Nothing
                                         }
                                     }
                                 },
@@ -5512,6 +5534,21 @@ private fun App(
                     var openedReactions by remember(current) { mutableStateOf(opened?.second?.reactions ?: io.tima.domain.chat.Reactions()) }
                     var openedVote by remember(current) { mutableStateOf(opened?.second?.myVote ?: 0) }
                     var rateOpen by remember(current) { mutableStateOf(false) }
+                    // Канал, а я не подписан — оценивать нельзя, вместо отказа — «Оценивают подписчики» (3а#).
+                    val channelOutside = current.kind == "channel" && roleOf("channel", current.channelId) == null
+                    var askSubscribe by remember(current) { mutableStateOf(false) }
+                    // Системная «Назад» сначала закрывает «Оценку» и вопрос, потом окно (как в ленте канала, 6984c6fc).
+                    val commentsBack by androidx.compose.runtime.rememberUpdatedState<() -> Boolean>({
+                        when {
+                            rateOpen -> { rateOpen = false; true }
+                            askSubscribe -> { askSubscribe = false; true }
+                            else -> false
+                        }
+                    })
+                    DisposableEffect(Unit) {
+                        SystemBack.inner = { commentsBack() }
+                        onDispose { SystemBack.inner = null }
+                    }
                     Box(Modifier.fillMaxSize()) {
                     CommentsScreen(
                         // Сверху — само сообщение «Описания» и его оценка; пальцы — только у канала (§1.18, 11, 4а).
@@ -5522,15 +5559,19 @@ private fun App(
                                     text = line.line.text,
                                     reactions = openedReactions,
                                     comments = commentsState.entries.size,
-                                    onEmotions = { rateOpen = true },
+                                    onEmotions = { if (channelOutside) askSubscribe = true else rateOpen = true },
                                     // Пальцы — подписчику; команда свой канал себе не подбирает (§1.18, 8).
                                     vote = if (current.kind == "channel" && roleOf("channel", current.channelId).let { r ->
                                             r != io.tima.domain.chat.GroupRole.Owner && r != io.tima.domain.chat.GroupRole.Admin && r != io.tima.domain.chat.GroupRole.Moderator
                                         }) openedVote else null,
                                     onVote = { v ->
-                                        val was = openedVote
-                                        openedVote = v
-                                        scope.launch { if (!network.reactions.vote(current.channelId, current.postId, v)) openedVote = was }
+                                        if (channelOutside) {
+                                            askSubscribe = true
+                                        } else {
+                                            val was = openedVote
+                                            openedVote = v
+                                            scope.launch { if (!network.reactions.vote(current.channelId, current.postId, v)) openedVote = was }
+                                        }
                                     },
                                 )
                             }
@@ -5561,6 +5602,18 @@ private fun App(
                                 }
                             },
                             onClose = { rateOpen = false },
+                        )
+                    }
+                    if (askSubscribe) {
+                        io.tima.feature.chat.SubscribeAsk(
+                            onSubscribe = {
+                                scope.launch {
+                                    val ok = network.channels.subscribe(current.channelId, true)
+                                    Journal.note(LogCode.NAV, "подписаться на канал", "откуда" to "комментарии", "итог" to ok.toString())
+                                    social.refresh()
+                                }
+                            },
+                            onClose = { askSubscribe = false },
                         )
                     }
                     }
