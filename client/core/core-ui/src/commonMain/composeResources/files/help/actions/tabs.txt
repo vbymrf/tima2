@@ -1,0 +1,3 @@
+chats|Личные
+groups|Группы
+channels|Каналы

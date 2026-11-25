@@ -216,6 +216,9 @@
 .черта-время.тесно { padding-top: 2px; }
 .лента > .черта-время.тесно:first-child { padding-top: 8px; }
 .черта-время.тесно + .запись { padding-top: 4px; }
+/* Над первой непрочитанной — та же черта, жёлтая, «Новые записи · время»: как «Новые сообщения» в переписке */
+.черта-время.новые { color: var(--чёрный-70); }
+.черта-время.новые::before, .черта-время.новые::after { height: 1.5px; background: var(--активность); }
 /* Запас под последней записью на высоту кнопки: в конце ленты «назад» стоит над ним, а не над её «+ / −» */
 .запас-ленты { height: 58px; }
 
@@ -333,7 +336,8 @@
 .поставили { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--чёрный-12); }
 .все-эмоции { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; font-size: var(--щ5); font-weight: 700; }
 .эм-итог { white-space: nowrap; }
-.эм-итог.моя { color: var(--навигация); }
+/* «Моё» — залито чёрным, как везде (заказчик 2026-11-25, 1а#) */
+.эм-итог.моя { background: var(--текст); color: var(--поверхность); margin: 0 -4px; padding: 1px 6px; border-radius: 999px; }
 
 /* Плашка вида не меняет: обсуждение закрыто — «💬» с числом приглушён, прочитать можно */
 .блок-откликов .отклик.закрыто { color: var(--чёрный-35); }
@@ -387,11 +391,11 @@
 
 /* ── Эмоции в пузыре (личная и группа) ─────────────────────────────────── */
 
-.метка-эмоции.моя { color: var(--навигация); border-color: var(--навигация); }
+.метка-эмоции.моя { background: var(--текст); color: var(--поверхность); border-color: var(--текст); }
 /* Э2: проставленные — под одной общей рамкой, тот же элемент, что под записью канала */
 .эмоции-пузыря {
   display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px 10px;
   padding: 2px 9px; border: 1px solid var(--рамка); border-radius: var(--радиус-квадрат-мал);
   font-size: 10.5px; font-weight: 700; color: var(--текст); white-space: nowrap;
 }
-.эмоции-пузыря .моя { color: var(--навигация); }
+.эмоции-пузыря .моя { background: var(--текст); color: var(--поверхность); margin: 0 -4px; padding: 0 5px; border-radius: 999px; }
