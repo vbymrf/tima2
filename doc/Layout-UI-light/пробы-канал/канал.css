@@ -210,6 +210,47 @@
   display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800;
 }
 
+/* ── «Лента» (выбор заказчика 2026-11-25): В2 + Р3 + О-А + К3 ─────────── */
+
+/* Время на черте — тесно: только время, отступы вокруг черты маленькие */
+.черта-время.тесно { padding-top: 2px; }
+.лента > .черта-время.тесно:first-child { padding-top: 8px; }
+.черта-время.тесно + .запись { padding-top: 4px; }
+/* Запас под последней записью на высоту кнопки: в конце ленты «назад» стоит над ним, а не над её «+ / −» */
+.запас-ленты { height: 58px; }
+
+/* ── «Статья» (выбор заказчика 2026-11-25): одна запись на экран, панель внизу ── */
+
+/* Запись — не меньше экрана; длиннее экрана — читается прокруткой, следующая встаёт на место по её концу */
+.лента.статьи { scroll-snap-type: y mandatory; }
+.лента.статьи > .запись {
+  box-sizing: border-box; min-height: 100%; scroll-snap-align: start;
+  display: flex; flex-direction: column; padding-bottom: 18px;
+}
+.лента.статьи > .запись + .запись { box-shadow: inset 0 1px 0 var(--чёрный-12); }
+.лента.статьи .фото-записи { flex: 1 1 auto; height: auto; min-height: 200px; margin: 4px -16px 10px; border-radius: 0; }
+.лента.статьи .текст-записи.крупно { font-size: var(--щ3); }
+/* Короткая запись — посередине экрана, а не строкой у верха пустого листа */
+.лента.статьи > .запись.коротко > .текст-записи { margin: auto 0; }
+
+/* Панель под лентой: верхняя строка — запись на экране, нижняя — лента */
+.панель-статьи { flex: 0 0 auto; position: relative; background: var(--поверхность); border-top: 1px solid var(--чёрный-12); }
+.панель-статьи > .доля {
+  position: absolute; left: 0; top: -2px; height: 3px; width: 0; opacity: 0;
+  background: var(--навигация); transition: opacity 0.2s;
+}
+.панель-статьи > .низ-записи { margin: 0; padding: 8px 12px 8px 16px; }
+.панель-статьи > .ход {
+  display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+  background: var(--функц); border-top: 1px solid var(--чёрный-6);
+}
+.ход .кн-ленты { width: 38px; height: 38px; box-shadow: none; background: var(--чёрный-6); }
+.ход .кн-ленты svg { width: 20px; height: 20px; display: block; }
+.ход .кн-ленты.нет { color: var(--чёрный-35); background: none; pointer-events: none; }
+.ход .растяжка { flex: 1 1 auto; }
+.ход .номер { min-width: 58px; text-align: center; font-size: var(--щ6); font-weight: 700; color: var(--чёрный-50); }
+.ход .номер b { color: var(--текст); }
+
 /* ── Эмоции в пузыре (личная и группа) ─────────────────────────────────── */
 
 .метка-эмоции.моя { color: var(--навигация); border-color: var(--навигация); }
