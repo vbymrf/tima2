@@ -4917,7 +4917,15 @@ private fun App(
                                         onClose = { chosen = emptyList() },
                                     )
                                 },
+                                clear = { chosen = emptyList() },
                             ),
+                            onInnerBack = {
+                                when {
+                                    rateFor != null -> { rateFor = null; true }
+                                    forwardChosen -> { forwardChosen = false; true }
+                                    else -> false
+                                }
+                            },
                             pins = EntityPins(
                                 ids = listOfNotNull(pinnedId.takeIf { it > 0 }),
                                 may = staffHere,
@@ -5482,7 +5490,10 @@ private fun App(
                                     reactions = openedReactions,
                                     comments = commentsState.entries.size,
                                     onEmotions = { rateOpen = true },
-                                    vote = if (current.kind == "channel") openedVote else null,
+                                    // Пальцы — подписчику; команда свой канал себе не подбирает (§1.18, 8).
+                                    vote = if (current.kind == "channel" && roleOf("channel", current.channelId).let { r ->
+                                            r != io.tima.domain.chat.GroupRole.Owner && r != io.tima.domain.chat.GroupRole.Admin && r != io.tima.domain.chat.GroupRole.Moderator
+                                        }) openedVote else null,
                                     onVote = { v ->
                                         val was = openedVote
                                         openedVote = v

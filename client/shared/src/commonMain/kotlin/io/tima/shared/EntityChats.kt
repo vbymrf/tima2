@@ -75,6 +75,8 @@ internal class EntityChoosing(
     val chosen: Set<String>,
     val toggle: (ChatLine) -> Unit,
     val bar: @Composable () -> Unit,
+    /** Выйти из выбора — системной «Назад». */
+    val clear: () -> Unit = {},
 )
 
 /** Закреплённое места — полоса под шапкой (ПЛАН-(ЗО) ЗО3, у канала — §1.18, 8): номера, право, снять. */
@@ -123,6 +125,8 @@ internal fun EntityChat(
     pins: EntityPins? = null,
     /** Первая непрочитанная — черта «Новые записи» и число новых (§1.18, 10); 0 — нет. */
     firstUnread: Long = 0,
+    /** Открытое поверх места снаружи («Оценка», пересылка) — закрыть системной «Назад»; `true` — закрыто. */
+    onInnerBack: (() -> Boolean)? = null,
 ) {
     var draft by remember { mutableStateOf("") }
     var ownEditor by remember { mutableStateOf<EditorRequest?>(null) }
@@ -132,8 +136,19 @@ internal fun EntityChat(
     val closeEditor: () -> Unit = {
         if (ownEditor != null) ownEditor = null else onEditorClosed()
     }
-    DisposableEffect(active != null) {
-        if (active != null) SystemBack.inner = { closeEditor(); true }
+    // Системная «Назад» сначала закрывает открытое внутри места — редактор, лист действий, «Оценку», выбор, — и только
+    // потом уводит из окна (живьём на realme, 282, 2026-11-25: «Назад» с открытым листом закрывал канал).
+    val innerBack by androidx.compose.runtime.rememberUpdatedState<() -> Boolean>({
+        when {
+            active != null -> { closeEditor(); true }
+            menuLine != null -> { menuLine = null; true }
+            onInnerBack?.invoke() == true -> true
+            choosing != null && choosing.chosen.isNotEmpty() -> { choosing.clear(); true }
+            else -> false
+        }
+    })
+    DisposableEffect(Unit) {
+        SystemBack.inner = { innerBack() }
         onDispose { SystemBack.inner = null }
     }
     val panel = rememberPanelAttach(sink, filesByLink = filesByLink)
