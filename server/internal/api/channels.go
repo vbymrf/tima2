@@ -449,6 +449,8 @@ func listChannelPosts(st ChannelStore) http.HandlerFunc {
 			out = append(out, channelPostItem(p, counts[p.PostID]))
 		}
 		attachBodies(r.Context(), st, channelID, out)
+		// Эмоции записи и свой палец (§1.18, СЦ37): одним запросом на страницу, как счётчик комментариев
+		attachReactions(r.Context(), st, "channel", channelID, id.UserID, "post_id", out, false)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"channel": channelJSON(store.ChannelView{Channel: ch}), "posts": out})
 	}

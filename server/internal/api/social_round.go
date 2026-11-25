@@ -557,7 +557,8 @@ func editChannelPost(st *store.Store) http.HandlerFunc {
 		me, _ := auth.FromContext(r.Context())
 		err = store.EditChannelPost(r.Context(), st, r.PathValue("entityID"), postID, me.UserID, req.Text, nodes, markup, body)
 		if errors.Is(err, store.ErrNotAllowed) {
-			writeErr(w, http.StatusForbidden, "edit_not_author", "исправить запись может только автор")
+			// Код прежний — расширился круг тех, кому можно (автор и команда канала, §1.18, 8)
+			writeErr(w, http.StatusForbidden, "edit_not_author", "исправить запись могут автор и команда канала")
 			return
 		} else if err != nil {
 			log.Printf("editChannelPost: %v", err)

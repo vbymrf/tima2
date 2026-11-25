@@ -235,6 +235,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	// Девятый–одиннадцатый круг Социума (СЦ18–СЦ23): админ канала, подписчики и бан с наследованием,
 	// «Показывать участников», медленный режим комментариев, правка описания.
 	RegisterSocialRound(mux, s.Store, s.requireActiveDevice)
+	// Эмоции, пальцы, комментарии к уровню 0, настройки «Описания» (ПЛАН-(СЦ) §1.18, СЦ37–СЦ40)
+	RegisterReactions(mux, s.Store, s.requireActiveDevice)
 	// Звуковой чат в сообществе (СЦ7): вход по видимости, предел, выгнанные, ведущий, настройки.
 	RegisterCommunityVoice(mux, s.Store, store.CommunityVoiceOf(s.Store), s.livekitSettings, s.notifier(), s.requireActiveDevice)
 	// Закреплённое и описание (ПЛАН-(ЗО) ЗО1–ЗО2).

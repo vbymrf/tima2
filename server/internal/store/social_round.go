@@ -277,13 +277,17 @@ func PostBodiesOf(ctx context.Context, s *Store, channelID string, ids []uint64)
 	return out, rows.Err()
 }
 
-// EditChannelPost — правка записи канала автором (СЦ18): текст, узлы, разметка, тело. ErrNotAllowed — не автор
-// или записи нет.
-func EditChannelPost(ctx context.Context, s *Store, channelID string, postID uint64, authorID, text string, nodes []string, markup, body []byte) error {
+// EditChannelPost — правка записи канала (СЦ18): текст, узлы, разметка, тело. Правят автор и команда канала —
+// владелец, админ, модератор: своих и чужих записей у канала нет, запись — канала (ПЛАН-(СЦ) §1.18, 8, 5б;
+// заказчик 2026-11-25). ErrNotAllowed — не автор и не команда, или записи нет.
+func EditChannelPost(ctx context.Context, s *Store, channelID string, postID uint64, actorID, text string, nodes []string, markup, body []byte) error {
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE channel_posts SET text = $4, nodes = $5, markup = $6, body = COALESCE($7, body), edited_at_unix_ms = $8
-		 WHERE channel_id = $1 AND post_id = $2 AND author_id::text = $3 AND NOT deleted`,
-		channelID, postID, authorID, text, nodes, markup, body, time.Now().UnixMilli())
+		UPDATE channel_posts p SET text = $4, nodes = $5, markup = $6, body = COALESCE($7, body), edited_at_unix_ms = $8
+		 WHERE p.channel_id = $1 AND p.post_id = $2 AND NOT p.deleted
+		   AND (p.author_id::text = $3
+		     OR EXISTS (SELECT 1 FROM channels c WHERE c.channel_id = p.channel_id AND c.owner_id::text = $3)
+		     OR EXISTS (SELECT 1 FROM channel_moderators m WHERE m.channel_id = p.channel_id AND m.user_id::text = $3))`,
+		channelID, postID, actorID, text, nodes, markup, body, time.Now().UnixMilli())
 	if err != nil {
 		if isBadUUID(err) {
 			return ErrChannelNotFound

@@ -311,6 +311,8 @@ func groupShowcase(st ShowcaseStore) http.HandlerFunc {
 		for _, m := range msgs {
 			out = append(out, groupMessageJSON(m))
 		}
+		// Эмоции и комментарии к сообщениям уровня 0 (§1.18, 11)
+		attachReactions(r.Context(), st, "group", groupID, id.UserID, "message_id", out, true)
 		writeShowcase(w, r, st, store.PinGroup, groupID, "messages", out)
 	}
 }
@@ -328,11 +330,25 @@ func channelShowcase(st ShowcaseStore) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "internal", "ошибка хранилища")
 			return
 		}
+		// Число комментариев — как в ленте: у канала комментарии «Описания» — комментарии записи (§1.18, 11)
+		ids := make([]uint64, 0, len(posts))
+		for _, p := range posts {
+			ids = append(ids, p.PostID)
+		}
+		var counts map[uint64]int
+		if cs, isStore := st.(*store.Store); isStore {
+			var err error
+			if counts, err = cs.CommentCounts(r.Context(), ch.ChannelID, ids); err != nil {
+				log.Printf("channelShowcase: счётчик: %v", err)
+			}
+		}
 		out := make([]map[string]any, 0, len(posts))
 		for _, p := range posts {
-			out = append(out, channelPostItem(p, 0))
+			out = append(out, channelPostItem(p, counts[p.PostID]))
 		}
 		attachBodies(r.Context(), st, ch.ChannelID, out)
+		viewer, _ := auth.FromContext(r.Context())
+		attachReactions(r.Context(), st, "channel", ch.ChannelID, viewer.UserID, "post_id", out, false)
 		writeShowcase(w, r, st, store.PinChannel, ch.ChannelID, "posts", out)
 	}
 }
@@ -362,6 +378,8 @@ func communityShowcase(st ShowcaseStore) http.HandlerFunc {
 				}
 			}
 		}
+		viewer, _ := auth.FromContext(r.Context())
+		attachReactions(r.Context(), st, "community", communityID, viewer.UserID, "message_id", items, true)
 		writeShowcase(w, r, st, store.ShowcaseCommunity, communityID, "messages", items)
 	}
 }
@@ -373,7 +391,10 @@ func writeShowcase(w http.ResponseWriter, r *http.Request, st ShowcaseStore, kin
 		log.Printf("showcase super %s: %v", kind, err)
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"super": super, key: items, "limit": store.ShowcaseLimit})
+	// Настройки «Описания» (§1.18, 11): целиком или обрезкой, комментарии к уровню 0. Вид сущности — тот же, что у
+	// закреплённого: group, channel, community.
+	_ = json.NewEncoder(w).Encode(map[string]any{"super": super, key: items, "limit": store.ShowcaseLimit,
+		"settings": showcaseSettingsFor(r.Context(), st, kind, container)})
 }
 
 // showcaseSuper — PUT {message_id} ставит суперсообщение, DELETE снимает. Владелец, админ, модератор (§1.10, 7).
