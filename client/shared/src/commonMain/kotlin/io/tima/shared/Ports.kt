@@ -63,6 +63,12 @@ interface ChatPorts {
     /** Описание — сообщения уровня 0 и суперсообщение (ПЛАН-(ЗО) ЗО4–ЗО5). */
     val showcase: io.tima.core.network.ShowcaseOverHttp
 
+    /** Эмоции, пальцы, настройки «Описания» (ПЛАН-(СЦ) §1.18, СЦ37–СЦ40). */
+    val reactions: io.tima.core.network.ReactionsOverHttp
+
+    /** Комментарии к сообщению уровня 0 группы или сообщества (§1.18, 11): `group` или `community`. */
+    fun level0Comments(kind: String): io.tima.domain.chat.PostComments
+
     /** Сообщение по номеру — вставленное, подкладка, переход (Решения §11.3–§11.4). */
     val byNumber: io.tima.core.network.MessageByNumberOverHttp
 

@@ -1121,7 +1121,9 @@ class Receiver(
         if (of.kind != "group") {
             return io.tima.domain.chat.ShowcasePage(
                 raw.superId,
-                raw.open.mapNotNull { item ->
+                settings = raw.settings,
+                extras = raw.extras,
+                lines = raw.open.mapNotNull { item ->
                     // Тело документом (СЦ25) — им и показ, и правка; нет — узлы и разметка.
                     val fromBody = item.body?.let { codec.decodeLine(it) }
                     (fromBody ?: io.tima.core.encryption.ComposedBodiesOverKodium.readOpen(item.nodes, item.markup))
@@ -1155,7 +1157,7 @@ class Receiver(
                 atMs = o.frame.placedAtMs,
             )
         }
-        return io.tima.domain.chat.ShowcasePage(raw.superId, lines)
+        return io.tima.domain.chat.ShowcasePage(raw.superId, lines, raw.settings, raw.extras)
     }
 
     /**

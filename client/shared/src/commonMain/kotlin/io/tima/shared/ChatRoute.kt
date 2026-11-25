@@ -285,7 +285,6 @@ import io.tima.feature.shell.UpdateOffer
 import io.tima.feature.shell.UpdateSection
 import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
-import io.tima.domain.chat.CarryToPage
 import io.tima.domain.chat.CreateChannel
 import io.tima.domain.chat.CreateCommunity
 import io.tima.domain.chat.ChatLine
@@ -332,8 +331,6 @@ internal fun Chat(
     circlesInitial: Boolean = false,
     /** Отчёт о проблеме из подокна неотправленного — с причиной и тем, ждёт оно или отказано. */
     onReportFailed: ((reason: String?, waiting: Boolean) -> Unit)? = null,
-    /** Унести реплику к себе на страницу: `(messageId, круг записи)`. */
-    onCarry: (Long, Int) -> Unit = { _, _ -> },
     /** Лечение группы без ключа при открытии; `null` — лечить нечем. */
     heal: HealGroupKey? = null,
     /** Меню «•••» (Р5): разделы набора сообществ и перенос. `null` — меню нет. */
@@ -858,10 +855,6 @@ internal fun Chat(
             onSelect = { line -> selectFor = line },
             // Показ доступности — только в группе: в личной переписке круга нет.
             onCircles = if (group) store::circlesShown else null,
-            // «Добавить себе» ведёт на свою страницу — то есть в другое окно. Оттого перенос
-            // делает PageStore, а не ChatStore: страница одна, и знать о принесённом обязана
-            // она, а не окно переписки.
-            onCarry = if (group) { messageId, was -> onCarry(messageId, was) } else null,
             // Ветка — только в группе: в личной переписке отвечать некому, кроме одного
             // собеседника, и разговор о реплике совпадает с самой перепиской.
             onThread = if (group) store::threadOpened else null,
@@ -1572,12 +1565,6 @@ internal fun Chat(
                 store.picked(line)
                 Journal.note(LogCode.PICKS, "добавить", "уровень" to io.tima.domain.chat.MessagePicks.levelOf(chatId, group, community).substringBefore(':'))
                 close()
-            },
-            // Перенести себе — из группы и только выносимые круги (К2): личная переписка шифр.
-            onCarry = if (group && CarryToPage.canCarry(line.level)) {
-                { onCarry(line.serverId, line.level); close() }
-            } else {
-                null
             },
             // Закрепить и открепить (ПЛАН-(ЗО) ЗО3): у кого право и у отправленного.
             // Закреплённые группой (ПЛАН-(СЦ) СЦ12): «Открепить» убирает только это сообщение; «Закрепить», когда уже

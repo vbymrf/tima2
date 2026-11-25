@@ -83,7 +83,8 @@ fun SelectionBar(
     onCopy: (() -> Unit)?,
     onSave: (() -> Unit)? = null,
     onForward: (() -> Unit)?,
-    onDelete: () -> Unit,
+    /** `null` — «Удалить» нет: подписчик канала (ПЛАН-(СЦ) §1.18, 8). */
+    onDelete: (() -> Unit)?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -105,7 +106,7 @@ fun SelectionBar(
             onCopy?.let { Chip(w.selectCopy, kind = ChipKind.Quiet, onClick = it, modifier = Modifier.testTag(SelectTags.action("copy"))) }
             onSave?.let { Chip(w.fileSaveAs, kind = ChipKind.Quiet, onClick = it, modifier = Modifier.testTag(SelectTags.action("save"))) }
             onForward?.let { Chip(w.selectForward, kind = ChipKind.Quiet, onClick = it, modifier = Modifier.testTag(SelectTags.action("forward"))) }
-            Chip(w.selectDelete, kind = ChipKind.Selected, onClick = onDelete, modifier = Modifier.testTag(SelectTags.action("delete")))
+            onDelete?.let { Chip(w.selectDelete, kind = ChipKind.Selected, onClick = it, modifier = Modifier.testTag(SelectTags.action("delete"))) }
         }
     }
 }

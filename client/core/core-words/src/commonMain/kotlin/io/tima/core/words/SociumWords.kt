@@ -256,6 +256,40 @@ interface SociumWords {
     val communityAbout: String
     /** Строка каталога: «подписан» — у канала и сообщества без роли (2026-11-20). */
     val rowSubscribed: String
+
+    // ── Лента канала без пузыря, «Оценка», «Описание» (ПЛАН-(СЦ) §1.18, СЦ37–СЦ40) ──
+    /** Название эмоции шкалы «Оценки» по ключу (approval…calm). */
+    fun emotion(key: String): String
+    /** Ось шкалы 0…4: Статус, Разрядка, Угроза, Внимание, Покой. */
+    fun emotionAxis(axis: Int): String
+    val rateTitle: String
+    val rateHint: String
+    val rateAxis: String
+    val rateMine: String
+    val rateUnset: String
+    val rateGiven: String
+    val voteUp: String
+    val voteDown: String
+    val newRecords: String
+    val modeFeed: String
+    val modeArticle: String
+    val modeFeedAbout: String
+    val modeArticleAbout: String
+    val modeSwitch: String
+    val headerButton: String
+    val headerButtonAbout: String
+    val chooseMany: String
+    val recordActions: String
+    val fresh: String
+    val recordPrev: String
+    val recordNext: String
+    val recordBack: String
+    val recordDown: String
+    val commentsClosed: String
+    val showcaseWhole: String
+    val showcaseWholeHint: String
+    val showcaseComments: String
+    val showcaseCommentsHint: String
 }
 
 object RussianSociumWords : SociumWords {
@@ -493,6 +527,54 @@ object RussianSociumWords : SociumWords {
     override val channelPostHint = "Новая запись"
     override val channelPublish = "Опубликовать"
     override fun channelComments(n: Int) = if (n > 0) "Комментарии: $n" else "Комментировать"
+    override fun emotion(key: String) = when (key) {
+        "approval" -> "Одобрение"
+        "contempt" -> "Презрение"
+        "laughter" -> "Смех"
+        "pain" -> "Боль"
+        "rage" -> "Ярость"
+        "fear" -> "Страх"
+        "interest" -> "Интерес"
+        "boredom" -> "Скука"
+        "calm" -> "Спокойствие"
+        else -> key
+    }
+    override fun emotionAxis(axis: Int) = when (axis) {
+        0 -> "Статус"
+        1 -> "Разрядка"
+        2 -> "Угроза"
+        3 -> "Внимание"
+        4 -> "Покой"
+        else -> ""
+    }
+    override val rateTitle = "Оценка"
+    override val rateHint = "одна эмоция · можно сменить"
+    override val rateAxis = "Ось"
+    override val rateMine = "Ваш выбор"
+    override val rateUnset = "Снять"
+    override val rateGiven = "Уже поставили"
+    override val voteUp = "Больше такого в моей ленте"
+    override val voteDown = "Меньше такого в моей ленте"
+    override val newRecords = "Новые записи"
+    override val modeFeed = "Лента"
+    override val modeArticle = "Статья"
+    override val modeFeedAbout = "записи подряд"
+    override val modeArticleAbout = "одна запись на экран"
+    override val modeSwitch = "переключить"
+    override val headerButton = "Показать кнопку в шапке"
+    override val headerButtonAbout = "значок переключения перед «⋮» — для всех каналов"
+    override val chooseMany = "Выбрать несколько"
+    override val recordActions = "Действия с записью"
+    override val fresh = "новых"
+    override val recordPrev = "Предыдущая запись"
+    override val recordNext = "Следующая запись"
+    override val recordBack = "Назад — туда, откуда перешли"
+    override val recordDown = "Вниз — к последней записи"
+    override val commentsClosed = "Обсуждение закрыто"
+    override val showcaseWhole = "Описание целиком"
+    override val showcaseWholeHint = "Выключено — обрезкой: начало каждого сообщения с оформлением, нажатие — целиком"
+    override val showcaseComments = "Комментарии к описанию"
+    override val showcaseCommentsHint = "Нажатие на сообщение «Описания» открывает комментарии и оценку; пишут участники"
 }
 
 object EnglishSociumWords : SociumWords {
@@ -726,6 +808,54 @@ object EnglishSociumWords : SociumWords {
     override val channelPostHint = "New post"
     override val channelPublish = "Publish"
     override fun channelComments(n: Int) = if (n > 0) "Comments: $n" else "Comment"
+    override fun emotion(key: String) = when (key) {
+        "approval" -> "Approval"
+        "contempt" -> "Contempt"
+        "laughter" -> "Laughter"
+        "pain" -> "Pain"
+        "rage" -> "Rage"
+        "fear" -> "Fear"
+        "interest" -> "Interest"
+        "boredom" -> "Boredom"
+        "calm" -> "Calm"
+        else -> key
+    }
+    override fun emotionAxis(axis: Int) = when (axis) {
+        0 -> "Status"
+        1 -> "Release"
+        2 -> "Threat"
+        3 -> "Attention"
+        4 -> "Peace"
+        else -> ""
+    }
+    override val rateTitle = "Rating"
+    override val rateHint = "one emotion · can be changed"
+    override val rateAxis = "Axis"
+    override val rateMine = "Your choice"
+    override val rateUnset = "Remove"
+    override val rateGiven = "Already given"
+    override val voteUp = "More like this in my feed"
+    override val voteDown = "Less like this in my feed"
+    override val newRecords = "New posts"
+    override val modeFeed = "Feed"
+    override val modeArticle = "Article"
+    override val modeFeedAbout = "posts one after another"
+    override val modeArticleAbout = "one post per screen"
+    override val modeSwitch = "switch"
+    override val headerButton = "Show button in header"
+    override val headerButtonAbout = "switch icon before «⋮» — for all channels"
+    override val chooseMany = "Select several"
+    override val recordActions = "Post actions"
+    override val fresh = "new"
+    override val recordPrev = "Previous post"
+    override val recordNext = "Next post"
+    override val recordBack = "Back — to where you came from"
+    override val recordDown = "Down — to the latest post"
+    override val commentsClosed = "Comments closed"
+    override val showcaseWhole = "Description in full"
+    override val showcaseWholeHint = "Off — shortened: the start of each message with its formatting, tap — in full"
+    override val showcaseComments = "Comments on description"
+    override val showcaseCommentsHint = "Tapping a description message opens comments and rating; members write"
 }
 
 object SpanishSociumWords : SociumWords {
@@ -959,4 +1089,52 @@ object SpanishSociumWords : SociumWords {
     override val channelPostHint = "Nueva publicación"
     override val channelPublish = "Publicar"
     override fun channelComments(n: Int) = if (n > 0) "Comentarios: $n" else "Comentar"
+    override fun emotion(key: String) = when (key) {
+        "approval" -> "Aprobación"
+        "contempt" -> "Desprecio"
+        "laughter" -> "Risa"
+        "pain" -> "Dolor"
+        "rage" -> "Ira"
+        "fear" -> "Miedo"
+        "interest" -> "Interés"
+        "boredom" -> "Aburrimiento"
+        "calm" -> "Calma"
+        else -> key
+    }
+    override fun emotionAxis(axis: Int) = when (axis) {
+        0 -> "Estatus"
+        1 -> "Descarga"
+        2 -> "Amenaza"
+        3 -> "Atención"
+        4 -> "Reposo"
+        else -> ""
+    }
+    override val rateTitle = "Valoración"
+    override val rateHint = "una emoción · se puede cambiar"
+    override val rateAxis = "Eje"
+    override val rateMine = "Tu elección"
+    override val rateUnset = "Quitar"
+    override val rateGiven = "Ya puestas"
+    override val voteUp = "Más como esto en mi feed"
+    override val voteDown = "Menos como esto en mi feed"
+    override val newRecords = "Publicaciones nuevas"
+    override val modeFeed = "Feed"
+    override val modeArticle = "Artículo"
+    override val modeFeedAbout = "publicaciones seguidas"
+    override val modeArticleAbout = "una publicación por pantalla"
+    override val modeSwitch = "cambiar"
+    override val headerButton = "Mostrar botón en la cabecera"
+    override val headerButtonAbout = "icono de cambio antes de «⋮» — para todos los canales"
+    override val chooseMany = "Seleccionar varias"
+    override val recordActions = "Acciones con la publicación"
+    override val fresh = "nuevas"
+    override val recordPrev = "Publicación anterior"
+    override val recordNext = "Publicación siguiente"
+    override val recordBack = "Atrás — a donde venías"
+    override val recordDown = "Abajo — a la última publicación"
+    override val commentsClosed = "Comentarios cerrados"
+    override val showcaseWhole = "Descripción completa"
+    override val showcaseWholeHint = "Apagado — recortada: el inicio de cada mensaje con su formato, toque — completa"
+    override val showcaseComments = "Comentarios en la descripción"
+    override val showcaseCommentsHint = "Tocar un mensaje de la descripción abre comentarios y valoración; escriben los miembros"
 }

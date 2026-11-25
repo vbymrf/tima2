@@ -18,4 +18,10 @@ data class ChannelFeedPost(
     val nodes: List<String> = emptyList(),
     val markup: String = "",
     val level: Int = 0,
+    /** Эмоции записи (ПЛАН-(СЦ) §1.18): сколько поставили каждую, по убыванию; видят все. */
+    val reactions: List<EmotionCount> = emptyList(),
+    /** Своя эмоция — ключ шкалы; `null` — не ставил. */
+    val myEmotion: String? = null,
+    /** Свой палец: 1 — вверх, −1 — вниз, 0 — нет. Частная оценка: сервер отдаёт только свою. */
+    val myVote: Int = 0,
 )

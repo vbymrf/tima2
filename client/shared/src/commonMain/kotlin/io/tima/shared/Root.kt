@@ -34,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import io.tima.core.encryption.AccountIdentitiesOverKodium
 import io.tima.core.encryption.DeviceKeyFactoryOverKodium
 import io.tima.core.encryption.IdentitySignerOverKodium
@@ -285,7 +286,6 @@ import io.tima.feature.shell.UpdateOffer
 import io.tima.feature.shell.UpdateSection
 import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
-import io.tima.domain.chat.CarryToPage
 import io.tima.domain.chat.CreateChannel
 import io.tima.domain.chat.CreateCommunity
 import io.tima.domain.chat.ChatLine
@@ -1143,6 +1143,8 @@ private fun App(
     var superDraft by remember { mutableStateOf<Pair<String, io.tima.domain.chat.ShowcaseDraft>?>(null) }
     // Фото, пересылаемое из просмотра в другую переписку (2026-10-18): номер переписки, файл, вид.
     var forwardItems by remember { mutableStateOf<Pair<String, List<io.tima.feature.chat.Forwarded>>?>(null) }
+    // Сообщение «Описания», открытое ради комментариев и оценки (ПЛАН-(СЦ) §1.18, 11): верх окна комментариев.
+    var showcaseOpen by remember { mutableStateOf<Pair<io.tima.domain.chat.ShowcaseLine, io.tima.domain.chat.ShowcaseExtra?>?>(null) }
     // Куда человек ходил — второй вопрос правила журнала («что он делал»). Пишется смена,
     // а не каждая перерисовка: журнал должен читаться, а не разбухать.
     // Кодом, а не названием (заказчик 2026-09-27): код один на любом языке и находится
@@ -4686,8 +4688,8 @@ private fun App(
 
             is Where.ChannelFeed -> {
                 {
-                    // Лента канала как переписка (СЦ27, §1.13, 6; §1.14, 4): записи пузырями, та же панель у команды; шапка ведёт
-                    // на страницу канала, как у группы («О канале» нет); «Комментарии · N» под записью. Хранится на
+                    // Лента канала (СЦ27, §1.13, 6; §1.14, 4) — без пузыря (ПЛАН-(СЦ) §1.18, СЦ37–СЦ38): «Лента» или «Статья»,
+                    // та же панель у команды; шапка ведёт на страницу канала, как у группы («О канале» нет). Хранится на
                     // устройстве (СЦ22): сохранённое — сразу, пришедший отрезок заменяет сохранённый.
                     var posts by remember(current) { mutableStateOf<List<io.tima.domain.chat.ChannelFeedPost>?>(null) }
                     var tick by remember(current) { mutableStateOf(0) }
@@ -4737,6 +4739,69 @@ private fun App(
                             entityLine("channel:" + current.channelId, p.postId, p.text, channelRich(p), false, p.atMs, p.authorId, replies = p.comments, level = p.level)
                         }
                     }
+                    // «Лента» или «Статья» — своя у каждого канала, новый канал — «Лентой»; «Показать кнопку в шапке» — одна на
+                    // все каналы (§1.18, 8).
+                    val looks by remember { environment.settings.all() }.collectAsState(emptyMap())
+                    val article = looks[ChannelLookKeys.MODE + current.channelId] == ChannelLookKeys.ARTICLE
+                    val headerButton = looks[ChannelLookKeys.BUTTON] == "1"
+                    val setArticle: (Boolean) -> Unit = { on ->
+                        scope.launch { runCatching { environment.settings.put(ChannelLookKeys.MODE + current.channelId, if (on) ChannelLookKeys.ARTICLE else ChannelLookKeys.FEED) } }
+                        Journal.note(LogCode.NAV, "вид канала", "статья" to on)
+                    }
+                    // Эмоции и пальцы меняются нажатием сразу; сервер отвечает — его ответ главнее.
+                    val reactionsNow = remember(current) { androidx.compose.runtime.mutableStateMapOf<Long, io.tima.domain.chat.Reactions>() }
+                    val votesNow = remember(current) { androidx.compose.runtime.mutableStateMapOf<Long, Int>() }
+                    var rateFor by remember(current) { mutableStateOf<ChatLine?>(null) }
+                    var chosen by remember(current) { mutableStateOf<List<ChatLine>>(emptyList()) }
+                    var forwardChosen by remember(current) { mutableStateOf(false) }
+                    var pinnedId by remember(current) { mutableStateOf(0L) }
+                    LaunchedEffect(current) { network.reactions.channelPin(current.channelId)?.let { pinnedId = it } }
+                    // Первая непрочитанная — по последней записи, которую это устройство уже показывало (§1.18, 10).
+                    var firstUnread by remember(current) { mutableStateOf(-1L) }
+                    LaunchedEffect(current, list.isNotEmpty()) {
+                        if (firstUnread >= 0 || list.isEmpty()) return@LaunchedEffect
+                        val key = ChannelLookKeys.SEEN + current.channelId
+                        val seen = runCatching { environment.settings.all().first()[key] }.getOrNull()?.toLongOrNull() ?: 0L
+                        firstUnread = if (seen <= 0) 0L else list.filter { it.postId > seen }.minOfOrNull { it.postId } ?: 0L
+                        runCatching { environment.settings.put(key, list.maxOf { it.postId }.toString()) }
+                    }
+                    val reactionsOf: (ChatLine) -> io.tima.domain.chat.Reactions = { line ->
+                        reactionsNow[line.serverId]
+                            ?: byId[line.serverId]?.let { io.tima.domain.chat.Reactions(it.reactions, it.myEmotion) }
+                            ?: io.tima.domain.chat.Reactions()
+                    }
+                    val records = io.tima.feature.chat.RecordLook(
+                        reactions = reactionsOf,
+                        vote = { line -> votesNow[line.serverId] ?: byId[line.serverId]?.myVote ?: 0 },
+                        // Пальцы — подписчику; команда свой канал себе не подбирает.
+                        voting = !staffHere,
+                        comments = { line -> byId[line.serverId]?.let { it.comments to it.commentsClosed } ?: (0 to false) },
+                        onEmotions = { line -> rateFor = line },
+                        onComments = { line -> where = Where.Comments(current.channelId, line.serverId) },
+                        onVote = { line, v ->
+                            val was = votesNow[line.serverId] ?: byId[line.serverId]?.myVote ?: 0
+                            votesNow[line.serverId] = v
+                            scope.launch { if (!network.reactions.vote(current.channelId, line.serverId, v)) votesNow[line.serverId] = was }
+                            Journal.note(LogCode.NAV, "палец записи", "оценка" to v)
+                        },
+                        onMenu = {},
+                        article = article,
+                    )
+                    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                    val shareOut = remember { io.tima.core.contacts.platformInvite() }
+                    val chatWords = Tima.words.chat
+                    val pickLevel = "channel:" + current.channelId
+                    val pickOne: (ChatLine) -> Unit = { line ->
+                        scope.launch {
+                            val result = runCatching { environment.picks.add(pickLevel, "channel:" + current.channelId, line.serverId) }.getOrNull()
+                            said = when (result) {
+                                io.tima.domain.chat.PickResult.Added -> chatWords.picked
+                                io.tima.domain.chat.PickResult.Already -> chatWords.pickedAlready
+                                io.tima.domain.chat.PickResult.Full -> chatWords.picksFull
+                                else -> null
+                            }
+                        }
+                    }
                     Box(Modifier.fillMaxSize()) {
                         EntityChat(
                             title = current.title,
@@ -4757,10 +4822,7 @@ private fun App(
                             canWrite = staffHere,
                             onHeader = { where = Where.Showcase("channel", current.channelId, current.title) },
                             onMore = { channelMenu = true },
-                            threadLabel = { line ->
-                                // «Комментарии · N» (§1.13, 6): обсуждение открыто или комментарии есть.
-                                byId[line.serverId]?.takeIf { !it.commentsClosed || it.comments > 0 }?.let { w.commentsWord + " · " + it.comments }
-                            },
+                            // Комментарии — областью плашки под записью (§1.18, 8), а не строкой «Комментарии · N».
                             onThread = { postId -> where = Where.Comments(current.channelId, postId) },
                             banner = if (list.size >= shown) ({
                                 io.tima.core.ui.Button(
@@ -4776,12 +4838,28 @@ private fun App(
                                     modifier = androidx.compose.ui.Modifier.padding(horizontal = io.tima.core.ui.TimaSpacing.about3).testTag(io.tima.feature.group.ChannelFeedTags.MORE),
                                 )
                             }) else null,
-                            menu = if (staffHere) ({ line ->
+                            // Меню записи — у всех (§1.18, 8): своих и чужих записей у канала нет — модератор и выше правит и
+                            // удаляет любую, закрепляет; подписчику — поделиться, скопировать, в указатели, выбрать несколько.
+                            menu = { line ->
                                 val p = byId[line.serverId]
-                                val own = p?.authorId == session.userId
                                 EntityMenu(
-                                    own = own,
-                                    onEdit = p?.takeIf { own }?.let { post ->
+                                    own = staffHere,
+                                    onShare = line.text?.takeIf { it.isNotBlank() }?.let { text ->
+                                        {
+                                            if (!shareOut.share(text)) {
+                                                clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
+                                                said = chatWords.copied
+                                            }
+                                        }
+                                    },
+                                    onPick = { pickOne(line) },
+                                    onChoose = { chosen = listOf(line) },
+                                    onPin = if (staffHere) ({
+                                        val next = if (pinnedId == line.serverId) null else line.serverId
+                                        scope.launch { if (network.reactions.setChannelPin(current.channelId, next)) pinnedId = next ?: 0L }
+                                    }) else null,
+                                    pinned = pinnedId == line.serverId,
+                                    onEdit = p?.takeIf { staffHere }?.let { post ->
                                         val doc = post.bodyB64.takeIf { it.isNotEmpty() }?.let { b ->
                                             runCatching {
                                                 io.tima.core.encryption.TextBodyCodec.editDoc(
@@ -4799,9 +4877,52 @@ private fun App(
                                             }
                                         }
                                     },
-                                    onDelete = { scope.launch { network.showcase.deleteOpen(of, line.serverId); tick++ } },
+                                    onDelete = if (staffHere) ({ scope.launch { network.showcase.deleteOpen(of, line.serverId); tick++ } }) else null,
                                 )
+                            },
+                            records = records,
+                            firstUnread = firstUnread.coerceAtLeast(0L),
+                            // Значок в шапке — режим, в который переключит (3а#), по настройке «Показать кнопку в шапке».
+                            headerExtra = if (headerButton) ({
+                                Box(
+                                    Modifier.size(io.tima.core.ui.TimaSizes.iconButton)
+                                        .background(Tima.colors.text.copy(alpha = 0.06f), androidx.compose.foundation.shape.CircleShape)
+                                        .clickable { setArticle(!article) }
+                                        .testTag(io.tima.feature.chat.RecordTags.MODE),
+                                    contentAlignment = androidx.compose.ui.Alignment.Center,
+                                ) { io.tima.feature.chat.RecordIcon(io.tima.feature.chat.modeIcon(toArticle = !article), Tima.colors.text) }
                             }) else null,
+                            choosing = EntityChoosing(
+                                chosen = chosen.map { it.dedupKey }.toSet(),
+                                toggle = { line ->
+                                    chosen = if (chosen.any { it.dedupKey == line.dedupKey }) chosen.filterNot { it.dedupKey == line.dedupKey } else chosen + line
+                                },
+                                bar = {
+                                    io.tima.feature.chat.SelectionBar(
+                                        count = chosen.size,
+                                        onPick = { chosen.forEach(pickOne); chosen = emptyList() },
+                                        onCopy = chosen.filter { !it.text.isNullOrBlank() }.takeIf { it.isNotEmpty() }?.let { texts ->
+                                            {
+                                                clipboard.setText(androidx.compose.ui.text.AnnotatedString(texts.sortedBy { it.atMs }.mapNotNull { it.text }.joinToString("\n\n")))
+                                                said = chatWords.copied
+                                                chosen = emptyList()
+                                            }
+                                        },
+                                        onForward = if (listState.chats.isNotEmpty()) ({ forwardChosen = true }) else null,
+                                        onDelete = if (staffHere) ({
+                                            val ids = chosen.map { it.serverId }
+                                            chosen = emptyList()
+                                            scope.launch { ids.forEach { network.showcase.deleteOpen(of, it) }; tick++ }
+                                        }) else null,
+                                        onClose = { chosen = emptyList() },
+                                    )
+                                },
+                            ),
+                            pins = EntityPins(
+                                ids = listOfNotNull(pinnedId.takeIf { it > 0 }),
+                                may = staffHere,
+                                onUnpin = if (staffHere) ({ scope.launch { if (network.reactions.setChannelPin(current.channelId, null)) pinnedId = 0L } }) else null,
+                            ),
                             editorRequest = editor,
                             onEditorClosed = { editor = null },
                             notice = said,
@@ -4828,6 +4949,51 @@ private fun App(
                                 notifyOff = assembled.liveStates?.let { key in mutedAll },
                                 onNotifyOff = assembled.liveStates?.let { l -> { off: Boolean -> l.mute("channel", current.channelId, off) } },
                                 title = Tima.words.socium.channelSettings,
+                                // «Лента» ↔ «Статья» — первым и крупнее; «Показать кнопку в шапке» — одна на все каналы (§1.18, 8).
+                                mode = io.tima.feature.chat.ModeTile(
+                                    title = if (article) w.modeFeed else w.modeArticle,
+                                    about = (if (article) w.modeFeedAbout else w.modeArticleAbout) + " — " + w.modeSwitch,
+                                    icon = io.tima.feature.chat.modeIcon(toArticle = !article),
+                                    onClick = { setArticle(!article) },
+                                ),
+                                headerButton = headerButton,
+                                onHeaderButton = { on -> scope.launch { runCatching { environment.settings.put(ChannelLookKeys.BUTTON, if (on) "1" else "0") } } },
+                            )
+                        }
+                        // «Оценка» (§1.18, 9): одна эмоция, можно сменить или снять; ниже — все, что уже поставлены.
+                        rateFor?.let { line ->
+                            io.tima.feature.chat.EmotionSheet(
+                                reactions = reactionsOf(line),
+                                onPick = { e ->
+                                    val before = reactionsOf(line)
+                                    reactionsNow[line.serverId] = before.with(e)
+                                    scope.launch {
+                                        val after = network.reactions.react("channel", current.channelId, line.serverId, e)
+                                        reactionsNow[line.serverId] = after ?: before
+                                    }
+                                    Journal.note(LogCode.NAV, "эмоция записи", "эмоция" to (e ?: "снята"))
+                                },
+                                onClose = { rateFor = null },
+                            )
+                        }
+                        // Переслать выбранное — в переписку из списка, текстом (§1.18, 8).
+                        if (forwardChosen) {
+                            val targets = listState.chats.map { it.chatId to (it.title ?: chatWords.nameless) }
+                            io.tima.feature.chat.ChoiceSheet(
+                                title = chatWords.photoForwardTitle,
+                                items = targets.map { io.tima.feature.chat.Choice(title = it.second) },
+                                empty = chatWords.photoForwardTitle,
+                                onCancel = { forwardChosen = false },
+                                onPick = { i ->
+                                    val (target, title) = targets[i]
+                                    val items = chosen.sortedBy { it.atMs }.mapNotNull { l -> l.text?.takeIf { it.isNotBlank() }?.let { io.tima.feature.chat.Forwarded.Text(it, marks = false) } }
+                                    forwardChosen = false
+                                    chosen = emptyList()
+                                    if (items.isNotEmpty()) {
+                                        forwardItems = target to items
+                                        where = Where.Chat(target, title)
+                                    }
+                                },
                             )
                         }
                     }
@@ -5040,6 +5206,12 @@ private fun App(
                             where = Where.Chat(current.id, current.title)
                         },
                         onBack = { where = Where.Nothing },
+                        // Комментарии и оценка сообщения «Описания» — по настройке сущности (§1.18, 11).
+                        onComments = { line, extra ->
+                            showcaseOpen = line to extra
+                            Journal.note(LogCode.SHOWCASE, "комментарии описания", "вид" to current.kind)
+                            where = Where.Comments(current.id, line.serverId, kind = current.kind, fromShowcase = true)
+                        },
                         tabs = { pageTabBar(current.kind, current.id, current.title, io.tima.feature.group.PageTab.About) },
                         top = {
                             val kind = current.kind
@@ -5188,6 +5360,20 @@ private fun App(
                     // «Показывать участников» (СЦ19): с сервера при входе, меняется сразу.
                     var showMembersNow by remember(current) { mutableStateOf<Boolean?>(null) }
                     LaunchedEffect(current) { showMembersNow = network.invites.showMembers(kind, listOf(current.id))[current.id] }
+                    // Настройки «Описания» (ПЛАН-(СЦ) §1.18, 11) — приходят вместе с «Описанием».
+                    var showcaseSettingsNow by remember(current) { mutableStateOf<io.tima.domain.chat.ShowcaseSettings?>(null) }
+                    LaunchedEffect(current) {
+                        showcaseSettingsNow = network.showcase.page(io.tima.domain.chat.ShowcaseOf(current.kind, current.id))?.settings
+                    }
+                    val setShowcase: (Boolean?, Boolean?) -> Unit = { whole, comments ->
+                        val was = showcaseSettingsNow
+                        showcaseSettingsNow = was?.copy(whole = whole ?: was.whole, comments = comments ?: was.comments)
+                        scope.launch {
+                            val after = network.reactions.showcaseSettings(current.kind, current.id, whole, comments)
+                            Journal.note(LogCode.NAV, "настройки описания", "целиком" to (after?.whole ?: "?"), "комментарии" to (after?.comments ?: "?"))
+                            showcaseSettingsNow = after ?: was
+                        }
+                    }
                     // Аватар (СЦ5): выбор, обрезка квадратом, JPEG через медиа и «PUT …/avatar».
                     var cropping by remember(current) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
                     var picture by remember(current) { mutableStateOf<String?>(null) }
@@ -5233,6 +5419,10 @@ private fun App(
                         renamable = true,
                         saved = saved,
                         showMembers = showMembersNow,
+                        showcaseWhole = showcaseSettingsNow?.whole,
+                        onShowcaseWhole = { on -> setShowcase(on, null) },
+                        showcaseComments = showcaseSettingsNow?.comments,
+                        onShowcaseComments = { on -> setShowcase(null, on) },
                         onShowMembers = { on ->
                             showMembersNow = on
                             scope.launch {
@@ -5271,12 +5461,36 @@ private fun App(
 
             is Where.Comments -> {
                 {
+                    // У канала — комментарии записи; у группы и сообщества — комментарии к сообщению уровня 0 (§1.18, 11).
                     val comments = remember(current) {
-                        CommentsStore(network.comments, scope, current.channelId, current.postId)
+                        CommentsStore(if (current.kind == "channel") network.comments else network.level0Comments(current.kind), scope, current.channelId, current.postId)
                     }
                     val commentsState by comments.state.collectAsState()
                     LaunchedEffect(current) { comments.refresh() }
+                    val opened = showcaseOpen?.takeIf { current.fromShowcase && it.first.serverId == current.postId }
+                    var openedReactions by remember(current) { mutableStateOf(opened?.second?.reactions ?: io.tima.domain.chat.Reactions()) }
+                    var openedVote by remember(current) { mutableStateOf(opened?.second?.myVote ?: 0) }
+                    var rateOpen by remember(current) { mutableStateOf(false) }
+                    Box(Modifier.fillMaxSize()) {
                     CommentsScreen(
+                        // Сверху — само сообщение «Описания» и его оценка; пальцы — только у канала (§1.18, 11, 4а).
+                        top = opened?.let { (line, _) ->
+                            {
+                                io.tima.feature.chat.ShowcaseMessageTop(
+                                    rich = line.line.rich,
+                                    text = line.line.text,
+                                    reactions = openedReactions,
+                                    comments = commentsState.entries.size,
+                                    onEmotions = { rateOpen = true },
+                                    vote = if (current.kind == "channel") openedVote else null,
+                                    onVote = { v ->
+                                        val was = openedVote
+                                        openedVote = v
+                                        scope.launch { if (!network.reactions.vote(current.channelId, current.postId, v)) openedVote = was }
+                                    },
+                                )
+                            }
+                        },
                         state = commentsState,
                         // Имя берётся из книги: экран её не читает сам, иначе у каждого
                         // экрана завёлся бы свой способ звать человека.
@@ -5292,6 +5506,20 @@ private fun App(
                         onReply = comments::reply,
                         onCloseTrouble = comments::closeTrouble,
                     )
+                    if (rateOpen) {
+                        io.tima.feature.chat.EmotionSheet(
+                            reactions = openedReactions,
+                            onPick = { e ->
+                                val before = openedReactions
+                                openedReactions = before.with(e)
+                                scope.launch {
+                                    openedReactions = network.reactions.react(current.kind, current.channelId, current.postId, e) ?: before
+                                }
+                            },
+                            onClose = { rateOpen = false },
+                        )
+                    }
+                    }
                 }
             }
 
@@ -5776,11 +6004,6 @@ private fun App(
                             problemDraft = "$what. Причина: ${reason ?: "не сохранена"}. Переписка ${current.chatId.take(8)}."
                             cameFrom = Origin(window, (if (waiting) "ждёт: " else "не отправилось: ") + (reason ?: "без причины"))
                             where = Where.Settings(SettingsItem.PROBLEM)
-                        },
-                        onCarry = { messageId, was ->
-                            // Из переписки уносится сообщение группы: вид контейнера
-                            // назван прямо, а не подразумевается умолчанием.
-                            page.carry(CarryToPage.CONTAINER_GROUP, current.chatId, messageId, was)
                         },
                     )
                 }

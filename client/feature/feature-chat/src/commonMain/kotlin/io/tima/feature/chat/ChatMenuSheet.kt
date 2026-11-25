@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,9 @@ import io.tima.core.ui.Tima
 import io.tima.core.ui.TimaSpacing
 import io.tima.core.ui.words
 import io.tima.domain.chat.Section
+
+/** Пункт «Лента» ↔ «Статья» в настройках канала (ПЛАН-(СЦ) §1.18, 8): куда переключит, о чём режим, значок. */
+class ModeTile(val title: String, val about: String, val icon: RecordGlyph, val onClick: () -> Unit)
 
 /** «Участники» в меню группы — для сценариев состава (2026-10-22). */
 const val CHAT_MEMBERS_TAG: String = "chat:members"
@@ -86,6 +90,14 @@ fun ChatMenuSheet(
     onNotifyOff: ((Boolean) -> Unit)? = null,
     /** Заголовок листа; `null` — «Настройки группы» или «Настройки переписки» (канал — свой, ПЛАН-(ВС) 16). */
     title: String? = null,
+    /**
+     * Переключатель «Лента» ↔ «Статья» у канала (ПЛАН-(СЦ) §1.18, 8): первым пунктом, крупнее остальных и со значком;
+     * значок — режим, в который переключит. `null` — пункта нет.
+     */
+    mode: ModeTile? = null,
+    /** «Показать кнопку в шапке» — одна настройка на все каналы; `null` — пункта нет. */
+    headerButton: Boolean? = null,
+    onHeaderButton: ((Boolean) -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words.chat
@@ -120,6 +132,37 @@ fun ChatMenuSheet(
                     ProvidePlace(TextPlace.HEADERS) { Name(title ?: if (group) words.groupSettings else words.chatSettings) }
                 }
                 IconButton(glyph = "✕", onClick = onClose)
+            }
+
+            if (mode != null) {
+                Row(
+                    Modifier.fillMaxWidth().background(colors.text.copy(alpha = 0.06f)).clickable { mode.onClick(); onClose() }
+                        .padding(horizontal = TimaSpacing.about4, vertical = TimaSpacing.about3)
+                        .testTag(RecordTags.MODE),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+                ) {
+                    Box(Modifier.size(46.dp).background(colors.surface, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                        RecordIcon(mode.icon, colors.text, size = 24.dp)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Name(mode.title)
+                        Tertiary(mode.about, lineOne = true)
+                    }
+                    Tertiary("›", lineOne = true)
+                }
+            }
+            if (headerButton != null && onHeaderButton != null) {
+                ListLine(
+                    onClick = { onHeaderButton(!headerButton) },
+                    middle = {
+                        Column {
+                            Name(Tima.words.socium.headerButton)
+                            Tertiary(Tima.words.socium.headerButtonAbout, lineOne = true)
+                        }
+                    },
+                    right = { CheckMark(headerButton) },
+                )
             }
 
             val currentName = sections.firstOrNull { it.id == currentSection }?.name ?: book.commonSection

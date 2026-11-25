@@ -126,6 +126,10 @@ class ShowcaseOverHttp(
         val frames: List<ByteArray>,
         /** У канала и сообщества: номер, автор, узлы, разметка. */
         val open: List<OpenItem>,
+        /** Настройки «Описания» (ПЛАН-(СЦ) §1.18, 11): целиком или обрезкой, комментарии к уровню 0. */
+        val settings: io.tima.domain.chat.ShowcaseSettings = io.tima.domain.chat.ShowcaseSettings(),
+        /** Эмоции, свой палец и число комментариев сообщений — номер → что пришло. */
+        val extras: Map<Long, io.tima.domain.chat.ShowcaseExtra> = emptyMap(),
     )
 
     class OpenItem(
@@ -153,13 +157,25 @@ class ShowcaseOverHttp(
         if (response.status != HttpStatusCode.OK) return null
         val body = response.jsonBody() ?: return null
         val superId = body.long("super") ?: 0L
+        val settings = showcaseSettingsOf(body["settings"]?.jsonObjectOrNull())
+        val list = body[if (of.kind == "channel") "posts" else "messages"]?.jsonArrayOrNull().orEmpty()
+        // Эмоции, свой палец, комментарии (§1.18, 11) — у всех видов одним разбором, по номеру сообщения.
+        val extras = list.mapNotNull { el ->
+            val o = el.jsonObjectOrNull() ?: return@mapNotNull null
+            val id = o.long("post_id") ?: o.long("message_id") ?: return@mapNotNull null
+            id to io.tima.domain.chat.ShowcaseExtra(
+                reactions = io.tima.domain.chat.Reactions(emotionCountsOf(o), o.str("my_emotion")?.takeIf { it.isNotEmpty() }),
+                comments = o.int("comments") ?: 0,
+                myVote = o.int("my_vote") ?: 0,
+                commentsClosed = o.bool("comments_closed") ?: false,
+            )
+        }.toMap()
         if (of.kind == "group") {
-            val frames = body["messages"]?.jsonArrayOrNull().orEmpty().mapNotNull { el ->
+            val frames = list.mapNotNull { el ->
                 el.jsonObjectOrNull()?.let { GroupFrame.toStored(it.toString()) }
             }
-            return Raw(superId, frames, emptyList())
+            return Raw(superId, frames, emptyList(), settings, extras)
         }
-        val list = body[if (of.kind == "channel") "posts" else "messages"]?.jsonArrayOrNull().orEmpty()
         val open = list.mapNotNull { el ->
             val o = el.jsonObjectOrNull() ?: return@mapNotNull null
             val id = o.long("post_id") ?: o.long("message_id") ?: return@mapNotNull null
@@ -169,7 +185,7 @@ class ShowcaseOverHttp(
             val body = o.str("body")?.takeIf { it.isNotEmpty() }?.let { runCatching { b64.decode(it) }.getOrNull() }
             OpenItem(id, o.str("author_id"), nodes, markup, body, o.long("created_at_unix_ms") ?: 0L)
         }
-        return Raw(superId, emptyList(), open)
+        return Raw(superId, emptyList(), open, settings, extras)
     }
 
     /**

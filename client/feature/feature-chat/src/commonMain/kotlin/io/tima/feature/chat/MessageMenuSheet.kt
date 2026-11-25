@@ -42,7 +42,7 @@ object MessageMenuTags {
     const val COPY = "msg:copy"
     const val SAVE = "msg:save"
     const val PICK = "msg:pick"
-    const val CARRY = "msg:carry"
+    const val CHOOSE = "msg:choose"
     const val CLOSE = "msg:close"
     const val SUPER = "msg:super"
 }
@@ -51,10 +51,10 @@ object MessageMenuTags {
  * Меню отправленного сообщения (doc_mig/РЕДАКТОР-СООБЩЕНИЙ.md §11.1; заказчик 2026-10-18 —
  * сразу со всеми пунктами).
  *
- * **Чужое:** Ответить · Поделиться · Скопировать текст · Добавить в Подборку · Перенести себе.
+ * **Чужое:** Ответить · Поделиться · Скопировать текст · В указатели. «Перенести себе» убрано (ПЛАН-(СЦ) §1.18, 8).
  * **Своё:** вместо «Ответить» — одна кнопка с выбором: Изменить · Удалить у себя · Удалить у всех
  * («самому себе не отвечаем»). Пункта нет, когда делать им нечего (`null`): «Перенести себе» в
- * личной переписке, «Изменить» после трёх правок.
+ * личной переписке, «Изменить» после трёх правок. У ленты канала — ещё «Выбрать несколько».
  *
  * Размеры — по «Шрифтам и размерам» (заказчик 2026-10-24): строка из сообщения — по «Сообщениям»,
  * пункты — по «Меню и настройкам», как в окнах ссылок.
@@ -77,7 +77,8 @@ fun MessageMenuSheet(
      */
     onSave: (() -> Unit)? = null,
     onPick: (() -> Unit)? = null,
-    onCarry: (() -> Unit)? = null,
+    /** «Выбрать несколько» — у ленты канала один жест, и выбор входит пунктом меню (ПЛАН-(СЦ) §1.18, 8). */
+    onChoose: (() -> Unit)? = null,
     /** «Закрепить» (ПЛАН-(ЗО) ЗО3); `null` — права нет. */
     onPin: (() -> Unit)? = null,
     /** Это сообщение и есть закреплённое — пункт «Открепить». */
@@ -150,7 +151,7 @@ fun MessageMenuSheet(
             onCopy?.let { Item(words.menuCopy, MessageMenuTags.COPY, onClick = one(it)) }
             onSave?.let { Item(words.fileSaveAs, MessageMenuTags.SAVE, onClick = one(it)) }
             onPick?.let { Item(words.menuPick, MessageMenuTags.PICK, onClick = one(it)) }
-            onCarry?.let { Item(words.menuCarry, MessageMenuTags.CARRY, onClick = one(it)) }
+            onChoose?.let { Item(Tima.words.socium.chooseMany, MessageMenuTags.CHOOSE, onClick = one(it)) }
         }
     }
     }

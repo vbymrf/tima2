@@ -61,6 +61,9 @@ internal val LocalRefTitled = staticCompositionLocalOf { false }
 /** Строк у абзаца в подкладке с заданным числом строк; иначе — без предела. */
 internal val LocalRefLines = staticCompositionLocalOf { Int.MAX_VALUE }
 
+/** «Описание целиком» (ПЛАН-(СЦ) §1.18, 11): подкладки — без обрезки по строкам, сколько бы строк ни задал автор. */
+internal val LocalRefWhole = staticCompositionLocalOf { false }
+
 /**
  * Как перейти к вставленному (заказчик 2026-10-20, ADR-0050 §1): `""` — без перехода (сообщение
  * видно, перехода нет); [tap] — само сообщение: любая его часть открывает окно перехода и перебивает
@@ -134,18 +137,19 @@ internal fun UnderlayRef(underlay: RichBlock.Underlay) {
     // На поля выходит только в пузыре: вне его (виджет в редакторе) полей нет — обычная область.
     val bleed = LocalUnderlayBleed.current && depth == 0 && LocalBubbleInset.current.start > 0.dp
     val titled = LocalRefTitled.current
+    val lines = if (LocalRefWhole.current) 0 else underlay.lines
     RefFrame(jump, bleed = bleed, tag = if (underlay.tap) "message.ref.tap" else "message.ref") {
         if (!titled) RefAuthor(underlay.author, look.name, jump)
         val rich = look.rich
         when {
             depth > 0 -> RefLine(look)
-            rich == null -> RefFallback(look, if (underlay.lines == 0) Int.MAX_VALUE else underlay.lines)
+            rich == null -> RefFallback(look, if (lines == 0) Int.MAX_VALUE else lines)
             else -> {
-                val blocks = remember(rich, underlay.lines) { RefCut.underlay(rich, underlay.lines) }
+                val blocks = remember(rich, lines) { RefCut.underlay(rich, lines) }
                 CompositionLocalProvider(
                     LocalRefDepth provides depth + 1,
                     LocalUnderlayBleed provides false,
-                    LocalRefLines provides if (underlay.lines == 0) Int.MAX_VALUE else underlay.lines,
+                    LocalRefLines provides if (lines == 0) Int.MAX_VALUE else lines,
                     LocalRichMedia provides rich.media,
                 ) {
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {

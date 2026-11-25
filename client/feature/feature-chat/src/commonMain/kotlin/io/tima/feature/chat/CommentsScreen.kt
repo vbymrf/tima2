@@ -74,6 +74,8 @@ fun CommentsScreen(
      */
     title: String? = null,
     onCloseTrouble: () -> Unit = {},
+    /** Над разговором — само сообщение «Описания» с плашкой откликов (ПЛАН-(СЦ) §1.18, 11); `null` — нет. */
+    top: (@Composable () -> Unit)? = null,
 ) {
     val colors = Tima.colors
     val words = Tima.words
@@ -98,6 +100,7 @@ fun CommentsScreen(
                 }
             }
 
+            top?.invoke()
             root?.let { line ->
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(TimaSpacing.about4),

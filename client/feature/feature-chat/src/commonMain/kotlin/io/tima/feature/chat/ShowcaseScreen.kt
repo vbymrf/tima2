@@ -1,5 +1,9 @@
 package io.tima.feature.chat
 
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -70,6 +74,11 @@ fun ShowcaseScreen(
     tabs: (@Composable () -> Unit)? = null,
     /** Верх «Описание» над суперсообщением: тип, пузыри, кнопки (СЦ4); `null` — нет. */
     top: (@Composable () -> Unit)? = null,
+    /**
+     * Нажатие на сообщение «Описания» — его комментарии и оценка (ПЛАН-(СЦ) §1.18, 11), когда у сущности включены
+     * «Комментарии к описанию»; `null` — нажатие открывает сообщение одно, как прежде.
+     */
+    onComments: ((ShowcaseLine) -> Unit)? = null,
 ) {
     val w = Tima.words.showcase
     var single by remember { mutableStateOf<Long?>(null) }
@@ -77,7 +86,8 @@ fun ShowcaseScreen(
     // Подкладка и переход внутри описания — по его же сообщениям: «Продолжить чтение» открывает
     // сообщение одно, без ленты.
     val quoteLook: (String, String, Long) -> QuoteLook = { _, _, number ->
-        page?.line(number)?.let { QuoteLook(null, it.line.text) } ?: QuoteLook(null, null)
+        // Исходное целиком — подкладка суперсообщения показывает его с оформлением, а не простым текстом (§1.18, 11).
+        page?.line(number)?.let { QuoteLook(null, it.line.text, rich = it.line.rich) } ?: QuoteLook(null, null)
     }
     val open: (String, String, Long) -> Unit = { _, _, number -> if (page?.line(number) != null) single = number }
     // Страница — «Списки» «Шрифтов и размеров», сами сообщения уровня 0 — «Сообщения», как в переписке (заказчик
@@ -92,9 +102,13 @@ fun ShowcaseScreen(
             avatarPicture = avatarPicture,
         )
         if (single == null) tabs?.invoke()
+        // «Описание целиком» (§1.18, 11): подкладки суперсообщения — без обрезки по строкам.
+        val whole = page?.settings?.whole == true
+        val tap: (ShowcaseLine) -> Unit = { line -> if (onComments != null) onComments(line) else single = line.serverId }
         androidx.compose.runtime.CompositionLocalProvider(
             LocalQuoteLook provides quoteLook,
             LocalOpenMessage provides open,
+            LocalRefWhole provides whole,
         ) {
             Column(
                 Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(TimaSpacing.about4),
@@ -110,21 +124,18 @@ fun ShowcaseScreen(
                         // Сообщений уровня 0 нет — под чертой пусто: «Описания пока нет» спорило с описанием сущности
                         // над пузырями (заказчик 2026-11-24: «убери надпись совсем»).
                         ShowcaseView.Empty -> Unit
-                        is ShowcaseView.Super -> Whole(view.line)
+                        is ShowcaseView.Super -> Box(if (onComments != null) Modifier.clickable { onComments(view.line) } else Modifier) { Whole(view.line) }
                         // Между сообщениями уровня 0 — разделитель (СЦ28, §1.13, 8).
                         is ShowcaseView.Feed -> view.lines.forEachIndexed { i, it ->
                             if (i > 0) androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(1.dp).background(Tima.colors.line))
-                            Whole(it)
+                            Box(if (onComments != null) Modifier.clickable { onComments(it) } else Modifier) { Whole(it) }
                         }
+                        // Больше трёх — списком (§1.18, 11): целиком или обрезкой; обрезка — с полным оформлением (выделение,
+                        // заголовки, картинки), а не простым текстом; нажатие — сообщение целиком или его комментарии.
                         is ShowcaseView.List -> view.lines.forEachIndexed { i, line ->
                             if (i > 0) androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(1.dp).background(Tima.colors.line))
-                            ProvidePlace(TextPlace.MESSAGES) {
-                                Caption(
-                                    line.line.text,
-                                    modifier = Modifier.fillMaxWidth().clickable { single = line.serverId }.testTag(ShowcaseTags.ITEM),
-                                    fontSize = TimaType.sz4,
-                                    maxLines = ShowcasePage.LIST_LINES,
-                                )
+                            Box(Modifier.fillMaxWidth().clickable { tap(line) }) {
+                                if (whole) Whole(line) else Clipped(line)
                             }
                         }
                     }
@@ -143,6 +154,26 @@ fun ShowcaseScreen(
     }
     }
 }
+
+/**
+ * Сообщение описания обрезкой (§1.18, 11): тем же рисованием, что в переписке, — с оформлением, — но по высоте около трёх
+ * строк, низ затухает.
+ */
+@Composable
+private fun Clipped(line: ShowcaseLine) {
+    val surface = Tima.colors.surface
+    Box(Modifier.fillMaxWidth().heightIn(max = CLIPPED_HEIGHT).clipToBounds()) {
+        Whole(line)
+        Box(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(CLIPPED_FADE)
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(surface.copy(alpha = 0f), surface))),
+        )
+    }
+}
+
+/** Высота сообщения обрезкой — около трёх строк текста. */
+private val CLIPPED_HEIGHT = 84.dp
+private val CLIPPED_FADE = 22.dp
 
 /** Сообщение описания целиком — тем же рисованием, что в переписке. */
 @Composable

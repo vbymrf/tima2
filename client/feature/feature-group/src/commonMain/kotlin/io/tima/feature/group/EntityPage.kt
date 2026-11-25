@@ -317,6 +317,8 @@ fun ManageScreen(
 /** Метки «Основного» — для сценариев. */
 object ManageMainTags {
     const val SHOW_MEMBERS = "manage:main:show-members"
+    const val SHOWCASE_WHOLE = "manage:main:showcase-whole"
+    const val SHOWCASE_COMMENTS = "manage:main:showcase-comments"
     const val TITLE = "manage:main:title"
     const val ABOUT = "manage:main:about"
     const val SECRET = "manage:main:secret"
@@ -345,6 +347,12 @@ fun ManageMainScreen(
     /** «Показывать участников» (СЦ19): `null` — ещё не знаем; меняется сразу, без «Сохранить». */
     showMembers: Boolean? = null,
     onShowMembers: (Boolean) -> Unit = {},
+    /** «Описание целиком» (ПЛАН-(СЦ) §1.18, 11): выключено — обрезкой; `null` — ещё не знаем. Меняется сразу. */
+    showcaseWhole: Boolean? = null,
+    onShowcaseWhole: (Boolean) -> Unit = {},
+    /** «Комментарии к описанию» (§1.18, 11): нажатие на сообщение «Описания» — комментарии и оценка. */
+    showcaseComments: Boolean? = null,
+    onShowcaseComments: (Boolean) -> Unit = {},
 ) {
     val w = Tima.words.socium
     ProvidePlace(TextPlace.MENU) {
@@ -378,6 +386,23 @@ fun ManageMainScreen(
                     }
                 }
             }
+            for ((on, set, label, hint, tag) in listOf(
+                SettingRow(showcaseWhole, onShowcaseWhole, w.showcaseWhole, w.showcaseWholeHint, ManageMainTags.SHOWCASE_WHOLE),
+                SettingRow(showcaseComments, onShowcaseComments, w.showcaseComments, w.showcaseCommentsHint, ManageMainTags.SHOWCASE_COMMENTS),
+            )) {
+                if (on == null) continue
+                Row(
+                    Modifier.fillMaxWidth().clickable { set(!on) }.testTag(tag),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(TimaSpacing.about3),
+                ) {
+                    CheckMark(on)
+                    Column {
+                        Caption(label, fontSize = TimaType.sz5, weight = FontWeight.Bold)
+                        Secondary(hint)
+                    }
+                }
+            }
             Button(w.save, onClick = onSave, modifier = Modifier.testTag(ManageMainTags.SAVE))
             when (saved) {
                 true -> Secondary(w.saved)
@@ -388,6 +413,9 @@ fun ManageMainScreen(
     }
     }
 }
+
+/** Строка-галочка «Основного»: значение (`null` — не знаем), смена, надпись, пояснение, метка. */
+private data class SettingRow(val on: Boolean?, val set: (Boolean) -> Unit, val label: String, val hint: String, val tag: String)
 
 /** Метки «Подписчиков» — для сценариев. */
 object SubscribersTags {

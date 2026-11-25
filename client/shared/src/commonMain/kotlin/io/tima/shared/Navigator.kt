@@ -409,7 +409,11 @@ internal sealed interface Where {
      * Адрес — канал и запись в нём: страница человека тоже канал, поэтому одного вида
      * достаточно и для ленты, и для канала.
      */
-    data class Comments(val channelId: String, val postId: Long) : Where
+    /**
+     * Комментарии записи канала; [kind] `group` или `community` — комментарии к сообщению уровня 0 («Описание», ПЛАН-(СЦ)
+     * §1.18, 11): тогда [channelId] — номер сущности, [postId] — номер сообщения, а сверху — само сообщение и оценка.
+     */
+    data class Comments(val channelId: String, val postId: Long, val kind: String = "channel", val fromShowcase: Boolean = false) : Where
 
     /**
      * Подтверждение привязки нового устройства.

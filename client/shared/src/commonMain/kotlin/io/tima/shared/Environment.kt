@@ -623,6 +623,13 @@ class Network(
     override val showcase: io.tima.core.network.ShowcaseOverHttp =
         io.tima.core.network.ShowcaseOverHttp(link.route, link.client, token = { token() })
 
+    /** Эмоции, пальцы, настройки «Описания» (ПЛАН-(СЦ) §1.18). */
+    override val reactions: io.tima.core.network.ReactionsOverHttp =
+        io.tima.core.network.ReactionsOverHttp(link.route, link.client, token = { token() })
+
+    override fun level0Comments(kind: String): io.tima.domain.chat.PostComments =
+        io.tima.core.network.Level0CommentsOverHttp(link.route, link.client, token = { token() }, kind = kind)
+
     /** Сообщение по номеру (Решения §11.3–§11.4). */
     override val byNumber: io.tima.core.network.MessageByNumberOverHttp =
         io.tima.core.network.MessageByNumberOverHttp(link.route, link.client, token = { token() })

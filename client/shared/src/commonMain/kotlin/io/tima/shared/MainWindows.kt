@@ -284,7 +284,6 @@ import io.tima.feature.shell.UpdateOffer
 import io.tima.feature.shell.UpdateSection
 import io.tima.feature.shell.UpdateStore
 import io.tima.feature.chat.NewChatStore
-import io.tima.domain.chat.CarryToPage
 import io.tima.domain.chat.CreateChannel
 import io.tima.domain.chat.CreateCommunity
 import io.tima.domain.chat.ChatLine

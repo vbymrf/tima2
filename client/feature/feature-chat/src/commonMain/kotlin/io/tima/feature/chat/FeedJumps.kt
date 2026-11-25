@@ -6,6 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -205,6 +206,9 @@ const val JUMP_BACK_TAG = "chat:jump.back"
 const val JUMP_FORWARD_TAG = "chat:jump.forward"
 const val DOWN_TAG = "chat:down"
 
+/** Число новых у «вниз» в ленте канала (ПЛАН-(СЦ) §1.18, 9). */
+const val DOWN_FRESH_TAG = "chat:down.fresh"
+
 /**
  * Номер сообщения у края экрана сейчас — «откуда», когда сообщение со ссылкой неизвестно (закреплённое).
  * Служебная строка без номера («Вы закрепили сообщение») пропускается: иначе «назад» после перехода не
@@ -291,7 +295,14 @@ fun Modifier.coversFeedTop(jumps: FeedJumps): Modifier = this.then(
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun JumpButtons(jumps: FeedJumps, lines: List<ChatLine>, state: LazyListState, modifier: Modifier = Modifier) {
+internal fun JumpButtons(
+    jumps: FeedJumps,
+    lines: List<ChatLine>,
+    state: LazyListState,
+    modifier: Modifier = Modifier,
+    /** Сколько новых ниже экрана — числом у «вниз» (лента канала, ПЛАН-(СЦ) §1.18, 9); 0 — без числа. */
+    fresh: Int = 0,
+) {
     val scope = rememberCoroutineScope()
     val awayFromBottom = state.firstVisibleItemIndex > 2
     val feed by androidx.compose.runtime.rememberUpdatedState(lines)
@@ -304,7 +315,20 @@ internal fun JumpButtons(jumps: FeedJumps, lines: List<ChatLine>, state: LazyLis
             JumpButton("↪", JUMP_FORWARD_TAG) { jumps.step(jumps.buffer.forward(), scroll) }
         }
         if (awayFromBottom) {
-            JumpButton("↓", DOWN_TAG) { scope.launch { state.animateScrollToItem(0) } }
+            Box {
+                JumpButton("↓", DOWN_TAG) { scope.launch { state.animateScrollToItem(0) } }
+                if (fresh > 0) {
+                    Caption(
+                        "$fresh",
+                        fontSize = 10.sp,
+                        weight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                        color = Tima.colors.text,
+                        lineOne = true,
+                        modifier = Modifier.align(Alignment.TopEnd).background(Tima.colors.activity, CircleShape)
+                            .padding(horizontal = 5.dp, vertical = 1.dp).testTag(DOWN_FRESH_TAG),
+                    )
+                }
+            }
         }
     }
 }

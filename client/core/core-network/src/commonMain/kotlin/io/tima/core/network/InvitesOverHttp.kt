@@ -441,7 +441,19 @@ fun channelPostOf(o: JsonObject): io.tima.domain.chat.ChannelFeedPost? = io.tima
     nodes = (o["nodes"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty(),
     markup = o["markup"]?.let { m -> (m as? JsonPrimitive)?.content ?: m.toString() }.orEmpty(),
     level = o.int("level") ?: 0,
+    reactions = emotionCountsOf(o),
+    myEmotion = o.str("my_emotion")?.takeIf { it.isNotEmpty() },
+    myVote = o.int("my_vote") ?: 0,
 )
+
+/** Эмоции сообщения из ответа сервера (ПЛАН-(СЦ) §1.18): `reactions: [{emotion, count}]`; неизвестные ключи — мимо. */
+fun emotionCountsOf(o: JsonObject): List<io.tima.domain.chat.EmotionCount> =
+    (o["reactions"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { e ->
+        val r = e as? JsonObject ?: return@mapNotNull null
+        val key = r.str("emotion") ?: return@mapNotNull null
+        if (io.tima.domain.chat.Emotion.of(key) == null) return@mapNotNull null
+        io.tima.domain.chat.EmotionCount(key, r.int("count") ?: 0)
+    }.orEmpty()
 
 /** Сохранённая запись канала (JSON) — обратно в запись. */
 fun channelPostOf(raw: String): io.tima.domain.chat.ChannelFeedPost? = runCatching {

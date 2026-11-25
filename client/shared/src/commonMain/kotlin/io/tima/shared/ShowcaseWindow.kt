@@ -45,6 +45,8 @@ internal fun ShowcaseWindow(
     /** Полоса вкладок и верх «Описание» (ПЛАН-(СЦ) СЦ4). */
     tabs: (@Composable () -> Unit)? = null,
     top: (@Composable () -> Unit)? = null,
+    /** Комментарии и оценка сообщения «Описания» (ПЛАН-(СЦ) §1.18, 11) — когда у сущности они включены. */
+    onComments: ((io.tima.domain.chat.ShowcaseLine, io.tima.domain.chat.ShowcaseExtra?) -> Unit)? = null,
 ) {
     var state by remember(of) { mutableStateOf(ShowcaseState()) }
     var reload by remember(of) { mutableIntStateOf(0) }
@@ -103,5 +105,6 @@ internal fun ShowcaseWindow(
         top = top,
         // Суперсообщение и уровень 0 пишутся из «Управление → Сообщения» (ПЛАН-(СЦ) СЦ18, §1.10, 6): здесь — только показ.
         onSuper = null,
+        onComments = if (page?.settings?.comments == true && onComments != null) ({ line -> onComments(line, page.extras[line.serverId]) }) else null,
     )
 }

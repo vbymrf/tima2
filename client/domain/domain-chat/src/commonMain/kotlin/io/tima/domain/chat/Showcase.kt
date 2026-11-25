@@ -25,8 +25,27 @@ data class ShowcaseLine(
  */
 data class ShowcaseDraft(val doc: ComposedDoc, val asSuper: Boolean = true, val replaces: Long = 0)
 
-/** Выдача сервера: суперсообщение (0 — места не заняли) и все сообщения уровня 0 от старых к новым. */
-data class ShowcasePage(val superId: Long, val lines: List<ShowcaseLine>) {
+/**
+ * Что пришло к сообщению «Описания» (ПЛАН-(СЦ) §1.18, 11): эмоции, свой палец (у канала), число комментариев и закрыто
+ * ли обсуждение (у канала — выключатель записи).
+ */
+data class ShowcaseExtra(
+    val reactions: Reactions = Reactions(),
+    val comments: Int = 0,
+    val myVote: Int = 0,
+    val commentsClosed: Boolean = false,
+)
+
+/**
+ * Выдача сервера: суперсообщение (0 — места не заняли) и все сообщения уровня 0 от старых к новым; настройки
+ * «Описания» и что пришло к каждому сообщению (§1.18, 11).
+ */
+data class ShowcasePage(
+    val superId: Long,
+    val lines: List<ShowcaseLine>,
+    val settings: ShowcaseSettings = ShowcaseSettings(),
+    val extras: Map<Long, ShowcaseExtra> = emptyMap(),
+) {
 
     /**
      * Что показать (заказчик 2026-10-18): суперсообщение есть — его, за вид отвечает владелец; нет

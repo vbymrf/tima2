@@ -117,7 +117,13 @@ internal fun RichBlockViewOf(block: RichBlock) {
         }
         is RichBlock.Row -> RichRow(block)
         // Вложения внутри смешанного тела — тем же видом, что и вне пузыря.
-        is RichBlock.Album, is RichBlock.File, is RichBlock.Voice -> AttachmentsView(io.tima.domain.chat.RichContent(listOf(block), LocalRichMedia.current))
+        // Запись канала (В2): кадры — от края до края экрана, файлы и голос — в полях.
+        is RichBlock.Album -> LocalMediaBleed.current.let { by ->
+            androidx.compose.foundation.layout.Box(if (by > 0.dp) Modifier.bleed(by) else Modifier) {
+                AttachmentsView(io.tima.domain.chat.RichContent(listOf(block), LocalRichMedia.current))
+            }
+        }
+        is RichBlock.File, is RichBlock.Voice -> AttachmentsView(io.tima.domain.chat.RichContent(listOf(block), LocalRichMedia.current))
         is RichBlock.Image, is RichBlock.Link, is RichBlock.Cloud, is RichBlock.Place, is RichBlock.Contact,
         is RichBlock.Emoji, is RichBlock.Quoted, is RichBlock.Underlay,
         is RichBlock.Video, is RichBlock.Marks, is RichBlock.Audio, is RichBlock.Stream -> WidgetView(block)

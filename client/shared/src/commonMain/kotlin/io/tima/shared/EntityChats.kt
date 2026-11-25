@@ -33,16 +33,56 @@ import kotlinx.coroutines.launch
  * голосовым и редактором. Своё у места — откуда сообщения и куда уходит отправленное.
  */
 
+/**
+ * Вид ленты канала на этом устройстве (ПЛАН-(СЦ) §1.18, 8): «Лента» или «Статья» — свой у каждого канала (по умолчанию
+ * «Лента»); «Показать кнопку в шапке» — одна на все каналы; последняя показанная запись — для черты «Новые записи».
+ */
+internal object ChannelLookKeys {
+    const val MODE = "channel.look."
+    const val BUTTON = "channel.look.button"
+    const val SEEN = "channel.seen."
+    const val ARTICLE = "article"
+    const val FEED = "feed"
+}
+
 /** Редактор, открытый местом: правка, суперсообщение. [send] — `true`, ушло, окно закрывается. */
 internal class EditorRequest(val doc: ComposedDoc, val title: String? = null, val send: suspend (ComposedDoc) -> Boolean)
 
-/** Лист действий у сообщения места; `null`-пункта нет. */
+/**
+ * Лист действий у сообщения места; `null`-пункта нет. У ленты канала (ПЛАН-(СЦ) §1.18, 8) — как у групп: подписчику
+ * «Поделиться», «Скопировать текст» («Сохранить как» у фото и файлов), «В указатели», «Выбрать несколько»; модератору
+ * и выше — ещё «Изменить или удалить» (любую запись — `own` здесь значит «вправе править») и «Закрепить».
+ */
 internal class EntityMenu(
     val own: Boolean,
     val onEdit: (() -> Unit)? = null,
     val onDelete: (() -> Unit)? = null,
     val onSuper: (() -> Unit)? = null,
     val superNow: Boolean = false,
+    val onShare: (() -> Unit)? = null,
+    val onSave: (() -> Unit)? = null,
+    val onPick: (() -> Unit)? = null,
+    val onChoose: (() -> Unit)? = null,
+    val onPin: (() -> Unit)? = null,
+    val pinned: Boolean = false,
+)
+
+/**
+ * Выбор нескольких в ленте канала (§1.18, 8, 1#): выбранные — по ключу строки; [bar] — полоса выбора на месте строки
+ * ввода: сколько выбрано и что с ними сделать.
+ */
+internal class EntityChoosing(
+    val chosen: Set<String>,
+    val toggle: (ChatLine) -> Unit,
+    val bar: @Composable () -> Unit,
+)
+
+/** Закреплённое места — полоса под шапкой (ПЛАН-(ЗО) ЗО3, у канала — §1.18, 8): номера, право, снять. */
+internal class EntityPins(
+    val ids: List<Long>,
+    val may: Boolean,
+    val onUnpin: (() -> Unit)? = null,
+    val onRemove: ((List<Long>) -> Unit)? = null,
 )
 
 @Composable
@@ -73,6 +113,16 @@ internal fun EntityChat(
     banner: (@Composable () -> Unit)? = null,
     /** Открыть на сообщении ([io.tima.feature.chat.JumpPlace.jumpTo]) — «Найти» ведёт к записи канала (2026-11-23). */
     jumpPlace: io.tima.feature.chat.JumpPlace? = null,
+    /** Лента канала без пузыря — «Лента» или «Статья» (ПЛАН-(СЦ) §1.18, СЦ37–СЦ38); `null` — пузырями. */
+    records: io.tima.feature.chat.RecordLook? = null,
+    /** Значок в шапке перед «•••» — переключение «Лента» ↔ «Статья» по настройке. */
+    headerExtra: (@Composable () -> Unit)? = null,
+    /** Выбор нескольких; `null` — выбора нет. */
+    choosing: EntityChoosing? = null,
+    /** Закреплённое; `null` — полосы нет. */
+    pins: EntityPins? = null,
+    /** Первая непрочитанная — черта «Новые записи» и число новых (§1.18, 10); 0 — нет. */
+    firstUnread: Long = 0,
 ) {
     var draft by remember { mutableStateOf("") }
     var ownEditor by remember { mutableStateOf<EditorRequest?>(null) }
@@ -108,12 +158,22 @@ internal fun EntityChat(
         )
         return
     }
+    val chooseNow = choosing != null && choosing.chosen.isNotEmpty()
     Box(Modifier.fillMaxSize()) {
+        androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            io.tima.feature.chat.LocalChatSelection provides choosing?.let { io.tima.feature.chat.ChatSelection(it.chosen, it.toggle) },
+        ) {
         io.tima.feature.chat.ChatScreen(
+            modifier = Modifier.weight(1f),
             state = io.tima.feature.chat.ChatState(
                 lines = lines,
                 draft = draft,
                 notice = (sent ?: notice)?.let { io.tima.feature.chat.ChatNotice.Said(it) },
+                firstUnread = firstUnread,
+                pinned = pins?.ids?.singleOrNull() ?: 0L,
+                pinnedIds = pins?.ids.orEmpty(),
+                pinMay = pins?.may ?: false,
             ),
             peer = title,
             caption = caption,
@@ -130,13 +190,25 @@ internal fun EntityChat(
             onShowcase = onHeader,
             onMore = onMore,
             aboveInput = aboveInput,
-            inputHidden = !canWrite,
+            // Идёт выбор — полоса выбора на месте строки ввода, как в группе.
+            inputHidden = !canWrite || chooseNow,
             threadLabel = threadLabel,
             onThread = onThread,
             onMenu = menu?.let { { line -> menuLine = line } },
             banner = banner,
             jumpPlace = jumpPlace,
+            // Длительное нажатие и «⋯» открывают лист действий этого места — тот же, что пункт меню.
+            records = records?.let { r ->
+                io.tima.feature.chat.RecordLook(r.reactions, r.vote, r.voting, r.comments, r.onEmotions, r.onComments, r.onVote,
+                    onMenu = { line -> menuLine = line }, article = r.article)
+            },
+            headerExtra = headerExtra,
+            onUnpin = pins?.onUnpin,
+            onPinsRemove = pins?.onRemove,
         )
+        }
+        if (chooseNow) choosing!!.bar()
+        }
         menuLine?.let { line ->
             val m = menu?.invoke(line)
             val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
@@ -147,7 +219,14 @@ internal fun EntityChat(
                 onClose = { menuLine = null },
                 onEdit = m?.onEdit?.let { e -> { menuLine = null; e() } },
                 onDeleteForAll = m?.onDelete?.let { d -> { menuLine = null; d() } },
-                onCopy = line.text?.takeIf { it.isNotBlank() }?.let { t -> { menuLine = null; copy(t) } },
+                // У записи с фото и файлами — «Сохранить как» вместо «Скопировать текст» (заказчик 2026-10-22).
+                onCopy = if (m?.onSave != null) null else line.text?.takeIf { it.isNotBlank() }?.let { t -> { menuLine = null; copy(t) } },
+                onSave = m?.onSave?.let { s -> { menuLine = null; s() } },
+                onShare = m?.onShare?.let { s -> { menuLine = null; s() } },
+                onPick = m?.onPick?.let { p -> { menuLine = null; p() } },
+                onChoose = m?.onChoose?.let { c -> { menuLine = null; c() } },
+                onPin = m?.onPin?.let { p -> { menuLine = null; p() } },
+                pinned = m?.pinned ?: false,
                 onSuper = m?.onSuper?.let { s -> { menuLine = null; s() } },
                 superNow = m?.superNow ?: false,
             )

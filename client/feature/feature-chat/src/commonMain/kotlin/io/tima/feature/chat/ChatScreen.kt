@@ -68,7 +68,6 @@ import io.tima.domain.chat.RichContent
 import kotlinx.coroutines.launch
 import io.tima.domain.chat.letter
 import io.tima.domain.chat.line
-import io.tima.domain.chat.CarryToPage
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.KIND_SYSTEM
@@ -199,14 +198,6 @@ fun ChatScreen(
     attachItems: List<AttachItem> = AttachItem.entries,
     /** Голосовое из строки ввода (ПЛАН-(ВМ) §2.5); `null` — голосовых здесь нет. */
     voice: VoiceInput? = null,
-    /**
-     * Унести чужую запись к себе на страницу: `(messageId, круг записи)`.
-     *
-     * `null` — уносить некуда или незачем: личная переписка. У **своих** реплик кнопки нет
-     * никогда — своё и так своё, — и у тех, чей круг не выносится: «по разрешению» отдано
-     * поимённо, шифр читают по ключу.
-     */
-    onCarry: ((Long, Int) -> Unit)? = null,
     /** «Сообщение недоступно, запросить» — личная переписка и группа (2026-10-06). `null` — не нажимается. */
     onAskChatKeys: (() -> Unit)? = null,
     /** Где аватар в группе (пробы «вид группы», 2026-10-07): «Вид» в «Социуме». */
@@ -307,6 +298,10 @@ fun ChatScreen(
     onReach: (suspend (Long) -> Boolean)? = null,
     /** Где остановились — при выходе (ПЛАН-(МП) М2): номер сообщения у верхнего края; 0 — внизу. */
     onPlace: ((Long) -> Unit)? = null,
+    /** Лента канала без пузыря — «Лента» или «Статья» (ПЛАН-(СЦ) §1.18, СЦ37–СЦ38); `null` — переписка пузырями. */
+    records: RecordLook? = null,
+    /** Справа в шапке, перед «•••» — значок переключения «Лента» ↔ «Статья» (по настройке); `null` — нет. */
+    headerExtra: (@Composable () -> Unit)? = null,
 ) {
     val cancelledMark = Tima.words.auth.identityCancelledMark
     val colors = Tima.colors
@@ -327,7 +322,7 @@ fun ChatScreen(
             // 2026-09-17: это про группу, а не про переписку). Они живут в меню «•••».
             onMore = onMore,
             onPerson = onPerson ?: onShowcase,
-            right = onCall?.let { call ->
+            right = headerExtra ?: onCall?.let { call ->
                 {
                     IconButton(
                         glyph = "\uD83D\uDCDE",
@@ -434,8 +429,14 @@ fun ChatScreen(
             LocalQuoteLook provides quoteLook,
             LocalAttachmentActions provides attachments,
             LocalOpenMessage provides openMessage,
+            LocalRecordLook provides records,
         ) {
-        Feed(
+        if (records?.article == true) ArticleFeed(
+            lines = state.lines.filterNot { attachments.photosGone(it.rich) },
+            look = records,
+            firstUnread = state.firstUnread,
+            modifier = Modifier.weight(1f),
+        ) else Feed(
             jumps = jumps,
             onOlder = onOlder,
             firstUnread = state.firstUnread,
@@ -464,7 +465,6 @@ fun ChatScreen(
             modifier = Modifier.weight(1f),
             showCircles = state.showCircles,
             onNarrow = onNarrow,
-            onCarry = onCarry,
             onAskChatKeys = onAskChatKeys?.takeIf { state.chatKeysMay || state.keyAskMay },
             avatarLook = avatarLook,
             onAuthor = onAuthor,
@@ -611,7 +611,6 @@ internal fun Reply(
     strip: Color? = null,
     showCircle: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
-    onCarry: ((Long, Int) -> Unit)? = null,
     onAskChatKeys: (() -> Unit)? = null,
     /** Где аватар в группе (пробы «вид группы», 2026-10-07): «Вид» в «Социуме». */
     avatarLook: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
@@ -735,7 +734,7 @@ internal fun Reply(
             bare { Caption(emoji.trim(), fontSize = 44.sp) }
         } else {
             Bubbled(
-                line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, line.serverId in lostKeys,
+                line, author, letter, face, strip, continuation, showCircle, onNarrow, onAskChatKeys, line.serverId in lostKeys,
                 look = avatarLook,
                 onAvatar = line.senderId?.let { who -> onAuthor?.let { open -> { open(who) } } },
             )
@@ -902,7 +901,6 @@ private fun Bubbled(
     continuation: Boolean,
     showCircle: Boolean,
     onNarrow: ((Long, Int, Int) -> Unit)?,
-    onCarry: ((Long, Int) -> Unit)?,
     onAskChatKeys: (() -> Unit)? = null,
     keyLost: Boolean = false,
     look: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
@@ -911,7 +909,7 @@ private fun Bubbled(
     // Сужение — кнопкой-цифрой со списком (В29): нажали цифру — под сообщением круги уже нынешнего.
     var narrowing by androidx.compose.runtime.remember(line.dedupKey) { androidx.compose.runtime.mutableStateOf(false) }
     val canNarrow = onNarrow != null && line.serverId > 0 && MessageCircle.narrowerThan(line.level).isNotEmpty()
-    Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, keyLost, look, onAvatar,
+    Bubbled(line, author, letter, face, strip, continuation, showCircle, onNarrow, onAskChatKeys, keyLost, look, onAvatar,
         narrowing = narrowing, onDigit = if (canNarrow) ({ narrowing = !narrowing }) else null, onNarrowed = { narrowing = false })
 }
 
@@ -925,7 +923,6 @@ private fun Bubbled(
     continuation: Boolean,
     showCircle: Boolean,
     onNarrow: ((Long, Int, Int) -> Unit)?,
-    onCarry: ((Long, Int) -> Unit)?,
     onAskChatKeys: (() -> Unit)?,
     keyLost: Boolean,
     look: io.tima.core.ui.AvatarLook,
@@ -936,7 +933,7 @@ private fun Bubbled(
 ) {
     // Подкладка — внутри пузыря, во всю его ширину (заказчик 2026-10-20; прежде — под пузырём).
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (line.outgoing) Alignment.End else Alignment.Start) {
-        BubbleOf(line, author, letter, face, strip, continuation, showCircle, onNarrow, onCarry, onAskChatKeys, keyLost, look, onAvatar, narrowing, onDigit, onNarrowed)
+        BubbleOf(line, author, letter, face, strip, continuation, showCircle, onNarrow, onAskChatKeys, keyLost, look, onAvatar, narrowing, onDigit, onNarrowed)
     }
 }
 
@@ -962,7 +959,6 @@ private fun BubbleOf(
     continuation: Boolean,
     showCircle: Boolean,
     onNarrow: ((Long, Int, Int) -> Unit)?,
-    onCarry: ((Long, Int) -> Unit)?,
     onAskChatKeys: (() -> Unit)?,
     keyLost: Boolean,
     look: io.tima.core.ui.AvatarLook,
@@ -1034,12 +1030,7 @@ private fun BubbleOf(
         else -> Chip(Tima.words.chat.decrypting, kind = ChipKind.Quiet)
     }
 
-    // Кнопка «Добавить себе» — в конце сообщения, у чужих реплик и только у выносимых.
-    // «Нельзя унести» показывается отсутствием кнопки, а не серой кнопкой с объяснением:
-    // место отдаётся тексту, а метка круга и так говорит, почему (макет, раздел 5).
-    if (onCarry != null && !line.outgoing && line.serverId > 0 && CarryToPage.canCarry(line.level)) {
-        CarryButton(roomy = roomAfter(line.text)) { onCarry(line.serverId, line.level) }
-    }
+    // «Добавить себе» убрана (ПЛАН-(СЦ) §1.18, 7–8; заказчик 2026-11-25): у страницы этой функции нет.
 
     // Список сужения — под сообщением, пока открыт цифрой. У неотправленного номера нет.
     if (narrowing && onNarrow != null && line.serverId > 0) {
@@ -1063,46 +1054,6 @@ private fun Unverified(body: @Composable () -> Unit) {
 
 /** Насколько приглушён текст непроверенного сообщения. */
 private const val UNVERIFIED_ALPHA = 0.6f
-
-/**
- * «Добавить себе» — полная и без слова.
- *
- * Кнопка конкурирует за место в конце сообщения: хватает ширины — стоит полная, не
- * хватает — остаётся круг с тем же знаком. Правый край у обеих общий, поэтому подмена
- * ничего не сдвигает (макет `уровень-сообщения.html`, раздел 5).
- *
- * Порог в знаках, а не в точках: точная ширина текста известна только при разметке, а
- * решение нужно принять до неё. Ошибка на границе безобидна — обе кнопки делают одно и то
- * же и стоят на одном месте.
- */
-@Composable
-private fun CarryButton(roomy: Boolean, onClick: () -> Unit) = Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.End,
-) {
-    if (roomy) {
-        Chip(Tima.words.chat.addToSelf, kind = ChipKind.Quiet, onClick = onClick)
-    } else {
-        // Тот же знак, что у метки круга: запись не скачивается, а уходит дальше.
-        ButtonCircle(onClick = onClick) { Arrow(Side.Right, color = Tima.colors.text2) }
-    }
-}
-
-/**
- * Хватает ли места в конце последней строки под слово.
- *
- * Считается по знакам: точная ширина текста известна только при разметке, а решение нужно
- * до неё. Ошибка на границе безобидна — обе кнопки делают одно и то же и стоят на одном
- * месте, меняется лишь то, переносится ли она на свою строку.
- */
-private fun roomAfter(text: String?): Boolean {
-    val tail = (text ?: return true).length % PER_LINE
-    return tail <= PER_LINE - WORD_ROOM
-}
-
-/** Знаков в строке пузыря и места под «Добавить себе» — оценка по макету. */
-private const val PER_LINE = 34
-private const val WORD_ROOM = 15
 
 /**
  * Круги, до которых можно сузить эту реплику.

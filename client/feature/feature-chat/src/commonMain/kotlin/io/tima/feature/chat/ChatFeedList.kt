@@ -1,6 +1,7 @@
 package io.tima.feature.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.input.pointer.isSecondaryPressed
@@ -69,7 +70,6 @@ import io.tima.domain.chat.RichContent
 import kotlinx.coroutines.launch
 import io.tima.domain.chat.letter
 import io.tima.domain.chat.line
-import io.tima.domain.chat.CarryToPage
 import io.tima.domain.chat.MessageCircle
 import io.tima.domain.chat.ChatLine
 import io.tima.domain.chat.KIND_SYSTEM
@@ -103,7 +103,6 @@ internal fun Feed(
     /** Показывать ли метку круга у реплик. По умолчанию нет — см. [ChatState.showCircles]. */
     showCircles: Boolean = false,
     onNarrow: ((Long, Int, Int) -> Unit)? = null,
-    onCarry: ((Long, Int) -> Unit)? = null,
     onAskChatKeys: (() -> Unit)? = null,
     /** Где аватар в группе (пробы «вид группы», 2026-10-07): «Вид» в «Социуме». */
     avatarLook: io.tima.core.ui.AvatarLook = io.tima.core.ui.AvatarLook.Free,
@@ -185,6 +184,8 @@ internal fun Feed(
         }
     }
     if (jumps != null) WatchLeaving(jumps, lines, listState)
+    // Лента канала без пузыря (ПЛАН-(СЦ) §1.18, СЦ37): запись во всю ширину, черта со временем вместо дня.
+    val records = LocalRecordLook.current
     // Нажатие на ссылку внутри сообщения — оно и есть «откуда» (ПЛАН-(БП)).
     val openOuter = LocalOpenMessage.current
     val flashColor = Tima.colors.activity.copy(alpha = 0.22f)
@@ -196,13 +197,15 @@ internal fun Feed(
         modifier = if (wrap) Modifier.fillMaxWidth() else Modifier.fillMaxSize(),
         state = listState,
         reverseLayout = true,
-        contentPadding = PaddingValues(
+        // Лента канала — без полей и зазоров: запись сама держит поля, кадр выходит к краям; снизу запас на высоту
+        // кнопки — в конце ленты «назад» стоит над ним, а не над пальцами последней записи.
+        contentPadding = if (records != null) PaddingValues(top = TimaSpacing.about2, bottom = RECORDS_TAIL) else PaddingValues(
             horizontal = TimaSpacing.about3,
             vertical = TimaSpacing.about4,
         ),
         // Зазор между репликами — вдвое меньше прежнего (заказчик 2026-10-07), везде; над репликой
         // с аватаром — прежний: аватар выступает в него вверх (см. отступ у реплики ниже).
-        verticalArrangement = Arrangement.spacedBy(TimaSpacing.about3 / 2, Alignment.Bottom),
+        verticalArrangement = Arrangement.spacedBy(if (records != null) 0.dp else TimaSpacing.about3 / 2, Alignment.Bottom),
     ) {
         // Порядок появления авторов — по первому сообщению в переписке (заказчик 2026-09-19):
         // список идёт новым сверху, поэтому считается с конца. Свои и владелец в счёт не идут —
@@ -223,6 +226,18 @@ internal fun Feed(
             Column(Modifier.fillMaxWidth()) {
             // Предыдущее по времени лежит НИЖЕ в списке: список идёт новым сверху.
             val previous = lines.getOrNull(index + 1)
+            if (records != null) {
+                Box(if (jumps != null && line.serverId > 0 && jumps.highlight == line.serverId) Modifier.background(flashColor) else Modifier) {
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        LocalOpenMessage provides { kind, chat, number ->
+                            if (jumps != null && line.serverId > 0) jumps.from = line.serverId
+                            openOuter(kind, chat, number)
+                        },
+                        LocalMessagePlace provides line.serverId.takeIf { it > 0 }?.let { MessagePlace(line.chatId, it) },
+                    ) { RecordItem(line, records, isNew = firstUnread > 0 && line.serverId == firstUnread) }
+                }
+                return@Column
+            }
             // Первое сообщение дня — над ним день (заказчик 2026-11-09): «Сегодня», «Вчера», «29 октября».
             if (days && (previous == null || !sameDay(previous.atMs, line.atMs))) DayDivider(line.atMs)
             if (firstUnread > 0 && line.serverId == firstUnread) NewMessagesDivider()
@@ -258,7 +273,6 @@ internal fun Feed(
                     previous?.senderId == line.senderId,
                 showCircle = showCircles,
                 onNarrow = onNarrow,
-                onCarry = onCarry,
                 onAskChatKeys = onAskChatKeys,
                 lostKeys = lostKeys,
                 onThread = onThread,
@@ -275,7 +289,13 @@ internal fun Feed(
         }
     }
     }
-    if (jumps != null) JumpButtons(jumps, lines, listState, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3))
+    if (jumps != null && records != null) {
+        // К3: кнопки ленты бледнеют в покое; у «вниз» — число новых ниже экрана (§1.18, 9).
+        val calm = rememberCalmAlpha(listState.isScrollInProgress)
+        val below = listState.firstVisibleItemIndex
+        val fresh = if (firstUnread <= 0) 0 else lines.take(below).count { it.serverId >= firstUnread }
+        JumpButtons(jumps, lines, listState, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3).alpha(calm), fresh = fresh)
+    } else if (jumps != null) JumpButtons(jumps, lines, listState, Modifier.align(Alignment.BottomEnd).padding(TimaSpacing.about3))
     // Дата при прокрутке (ПЛАН-(СЦ) СЦ8) — только в переписке, не в подокне одного сообщения.
     if (days) FloatingDay(lines, listState, jumps?.topCover ?: 0, Modifier.align(Alignment.TopCenter))
     }
@@ -310,6 +330,9 @@ internal fun PointerFeed(
         )
     }
 }
+
+/** Запас под последней записью канала — на высоту кнопки ленты (§1.18, 6). */
+private val RECORDS_TAIL = 58.dp
 
 /** За сколько строк до верха ленты просить ещё старых. */
 internal const val OLDER_AHEAD = 10
