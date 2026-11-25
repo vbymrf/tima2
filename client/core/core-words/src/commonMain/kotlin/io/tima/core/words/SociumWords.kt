@@ -287,7 +287,6 @@ interface SociumWords {
     val headerButtonAbout: String
     val chooseMany: String
     val recordActions: String
-    val fresh: String
     val recordPrev: String
     val recordNext: String
     val recordBack: String
@@ -575,7 +574,6 @@ object RussianSociumWords : SociumWords {
     override val headerButtonAbout = "значок переключения перед «⋮» — для всех каналов"
     override val chooseMany = "Выбрать несколько"
     override val recordActions = "Действия с записью"
-    override val fresh = "новых"
     override val recordPrev = "Предыдущая запись"
     override val recordNext = "Следующая запись"
     override val recordBack = "Назад — туда, откуда перешли"
@@ -859,7 +857,6 @@ object EnglishSociumWords : SociumWords {
     override val headerButtonAbout = "switch icon before «⋮» — for all channels"
     override val chooseMany = "Select several"
     override val recordActions = "Post actions"
-    override val fresh = "new"
     override val recordPrev = "Previous post"
     override val recordNext = "Next post"
     override val recordBack = "Back — to where you came from"
@@ -1143,7 +1140,6 @@ object SpanishSociumWords : SociumWords {
     override val headerButtonAbout = "icono de cambio antes de «⋮» — para todos los canales"
     override val chooseMany = "Seleccionar varias"
     override val recordActions = "Acciones con la publicación"
-    override val fresh = "nuevas"
     override val recordPrev = "Publicación anterior"
     override val recordNext = "Publicación siguiente"
     override val recordBack = "Atrás — a donde venías"

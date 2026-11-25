@@ -588,6 +588,7 @@ internal fun ArticleFeed(lines: List<ChatLine>, look: RecordLook, firstUnread: L
 /** Знаков у записи, которую «Статья» ставит посередине экрана. */
 private const val SHORT_CHARS = 280
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ArticlePanel(
     line: ChatLine,
@@ -638,11 +639,20 @@ private fun ArticlePanel(
             Spacer(Modifier.weight(1f))
             Row(Modifier.alpha(if (atLast) 0f else 1f), verticalAlignment = Alignment.CenterVertically) {
                 if (fresh > 0) {
-                    Caption(
-                        "$fresh", fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, lineOne = true,
-                        modifier = Modifier.background(colors.activity, CircleShape).padding(horizontal = 6.dp, vertical = 1.dp).testTag(RecordTags.FRESH),
-                    )
-                    Caption(" " + words.fresh, fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, lineOne = true)
+                    // «Новые записи: 5» (заказчик 2026-11-25, «4а#, записи»): слова, потом жёлтый значок с числом — склонять
+                    // не нужно. Тесно — число переносится под слова; «вниз» место не уступает (вес — у надписи).
+                    FlowRow(
+                        Modifier.weight(1f, fill = false),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Caption(words.newRecords + ":", fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, lineOne = true)
+                        Caption(
+                            "$fresh", fontSize = TimaType.sz6, weight = FontWeight.ExtraBold, lineOne = true,
+                            modifier = Modifier.background(colors.activity, CircleShape).padding(horizontal = 6.dp, vertical = 1.dp).testTag(RecordTags.FRESH),
+                        )
+                    }
                     Spacer(Modifier.width(6.dp))
                 }
                 PanelButton(RecordIcons.end, words.recordDown, RecordTags.END, enabled = !atLast, onClick = onEnd)
