@@ -73,3 +73,5 @@
 | PH-68 | preventive | ссылка, набранная adb в поле переписки, ушла обрезанной — «не открылось», 404 по обрывку номера | knowledge/phone.md | нет — «)» в поле и курсор перед ней, потом адрес |
 | PH-69 | preventive | `tap chat:input` — клавиатуры нет, набранное ушло в никуда, «НЕТ chat:send» | knowledge/phone.md | нет — нажать в поле по снимку, до набора `mInputShown=true` |
 | PH-70 | preventive | дерево экрана не снимается, команда висит; на снимке — экран блокировки | knowledge/phone.md | нет — росчерк вверх после пробуждения, `mCurrentFocus` — приложение |
+| PH-71 | preventive | нажатие строки «Каталога» открыло другую сущность | knowledge/phone.md | нет — строку искать заново по `content-desc` перед каждым нажатием |
+| PH-72 | diagnostic | фокус у окна ошибки чужого приложения, меток TIMA нет | knowledge/phone.md | нет — `android:id/aerr_close`, потом `am start` |
