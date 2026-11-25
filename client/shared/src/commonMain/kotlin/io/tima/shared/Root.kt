@@ -4692,6 +4692,9 @@ private fun App(
                     // та же панель у команды; шапка ведёт на страницу канала, как у группы («О канале» нет). Хранится на
                     // устройстве (СЦ22): сохранённое — сразу, пришедший отрезок заменяет сохранённый.
                     var posts by remember(current) { mutableStateOf<List<io.tima.domain.chat.ChannelFeedPost>?>(null) }
+                    // Ответ сервера получен (или его не будет — нет связи): по нему, а не по сохранённому, ищется первая
+                    // непрочитанная (живьём на Samsung, 283, 2026-11-25: сохранённое без новой записи — черты не было).
+                    var loaded by remember(current) { mutableStateOf(false) }
                     var tick by remember(current) { mutableStateOf(0) }
                     // Открыли на записи («Найти», «Показать в переписке») — сохранённое целиком, чтобы запись была в ленте.
                     var shown by remember(current) { mutableStateOf(if (current.jumpTo != null) 100_000 else 50) }
@@ -4713,6 +4716,7 @@ private fun App(
                         } else if (saved.isEmpty()) {
                             posts = emptyList()
                         }
+                        loaded = true
                         Journal.note(LogCode.NAV, "лента канала", "сохранено" to saved.size, "с сервера" to (got?.size ?: -1))
                     }
                     val role = roleOf("channel", current.channelId)
@@ -4757,13 +4761,18 @@ private fun App(
                     var pinnedId by remember(current) { mutableStateOf(0L) }
                     LaunchedEffect(current) { network.reactions.channelPin(current.channelId)?.let { pinnedId = it } }
                     // Первая непрочитанная — по последней записи, которую это устройство уже показывало (§1.18, 10).
+                    // Считается один раз за открытие, по ответу сервера; отметка «показано» идёт за новыми записями, пока
+                    // лента открыта, — пришедшее при открытой ленте в следующий раз новым не считается.
                     var firstUnread by remember(current) { mutableStateOf(-1L) }
-                    LaunchedEffect(current, list.isNotEmpty()) {
-                        if (firstUnread >= 0 || list.isEmpty()) return@LaunchedEffect
+                    val newest = list.maxOfOrNull { it.postId } ?: 0L
+                    LaunchedEffect(current, loaded, newest) {
+                        if (!loaded || newest <= 0) return@LaunchedEffect
                         val key = ChannelLookKeys.SEEN + current.channelId
-                        val seen = runCatching { environment.settings.all().first()[key] }.getOrNull()?.toLongOrNull() ?: 0L
-                        firstUnread = if (seen <= 0) 0L else list.filter { it.postId > seen }.minOfOrNull { it.postId } ?: 0L
-                        runCatching { environment.settings.put(key, list.maxOf { it.postId }.toString()) }
+                        if (firstUnread < 0) {
+                            val seen = runCatching { environment.settings.all().first()[key] }.getOrNull()?.toLongOrNull() ?: 0L
+                            firstUnread = if (seen <= 0) 0L else list.filter { it.postId > seen }.minOfOrNull { it.postId } ?: 0L
+                        }
+                        runCatching { environment.settings.put(key, newest.toString()) }
                     }
                     val reactionsOf: (ChatLine) -> io.tima.domain.chat.Reactions = { line ->
                         reactionsNow[line.serverId]
@@ -5244,8 +5253,14 @@ private fun App(
                             val id = current.id
                             val role = roleOf(kind, id)
                             // Число участников или подписчиков (§4б п. 9) — с сервера при входе на страницу.
+                            val inside = when (kind) {
+                                "group" -> socialState.mine.any { it.groupId == id }
+                                "community" -> socialState.communities.any { it.communityId == id }
+                                else -> socialState.channels.any { it.channelId == id }
+                            }
+                            // Вступил или вышел — число заново (2026-11-25: после «Подписаться» оставалось прежним).
                             var pageCount by remember(kind, id) { mutableStateOf<Int?>(null) }
-                            LaunchedEffect(kind, id) {
+                            LaunchedEffect(kind, id, inside) {
                                 val k = io.tima.domain.chat.EntityKind.fromWire(kind) ?: io.tima.domain.chat.EntityKind.Group
                                 pageCount = network.invites.counts(k, listOf(id))[id]
                             }
@@ -5255,11 +5270,6 @@ private fun App(
                             LaunchedEffect(kind, id) {
                                 val k = io.tima.domain.chat.EntityKind.fromWire(kind) ?: io.tima.domain.chat.EntityKind.Group
                                 network.invites.abouts(k, listOf(id))[id]?.let { pageAbout = it }
-                            }
-                            val inside = when (kind) {
-                                "group" -> socialState.mine.any { it.groupId == id }
-                                "community" -> socialState.communities.any { it.communityId == id }
-                                else -> socialState.channels.any { it.channelId == id }
                             }
                             val muted = "$kind:$id" in mutedAll
                             // Переписка с сущностью (СЦ16): заблокирована мной — пузырь говорит об этом.
